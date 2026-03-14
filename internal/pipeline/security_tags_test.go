@@ -48,6 +48,26 @@ func TestClassifySecurityRole(t *testing.T) {
 			wantRole: "crypto_operation",
 		},
 		{
+			name:     "rsa standalone matches crypto",
+			node:     &store.Node{Name: "rsa_encrypt", Label: "Function", FilePath: "security/keys.py"},
+			wantRole: "crypto_operation",
+		},
+		{
+			name:     "rsa substring should NOT match crypto",
+			node:     &store.Node{Name: "conversations_search_messages", Label: "Function", FilePath: "slack/slack_mcp.py"},
+			wantRole: "",
+		},
+		{
+			name:     "aes substring should NOT match crypto",
+			node:     &store.Node{Name: "diseases_lookup", Label: "Function", FilePath: "health/api.py"},
+			wantRole: "",
+		},
+		{
+			name:     "hmac standalone matches crypto",
+			node:     &store.Node{Name: "hmac_sign", Label: "Function", FilePath: "auth/tokens.py"},
+			wantRole: "crypto_operation",
+		},
+		{
 			name:     "ordinary function",
 			node:     &store.Node{Name: "formatDate", Label: "Function", FilePath: "util/time.go"},
 			wantRole: "",

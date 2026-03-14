@@ -92,12 +92,12 @@ func runUpdate(args []string) int {
 }
 
 // downloadAndVerify downloads the release asset and verifies its checksum.
+// Fails closed: if checksums cannot be downloaded or verified, the update is aborted.
 func downloadAndVerify(ctx context.Context, release *selfupdate.Release, assetName string, asset *selfupdate.Asset) ([]byte, error) {
 	fmt.Println("Downloading checksums...")
 	checksums, err := selfupdate.DownloadChecksums(ctx, release)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "warning: %v (skipping checksum verification)\n", err)
-		checksums = nil
+		return nil, fmt.Errorf("checksum verification required but failed: %w", err)
 	}
 
 	fmt.Printf("Downloading %s...\n", assetName)
@@ -106,16 +106,16 @@ func downloadAndVerify(ctx context.Context, release *selfupdate.Release, assetNa
 		return nil, fmt.Errorf("download: %w", err)
 	}
 
-	if checksums != nil {
-		if expected, ok := checksums[assetName]; ok {
-			hash := sha256.Sum256(tarballData)
-			actual := hex.EncodeToString(hash[:])
-			if actual != expected {
-				return nil, fmt.Errorf("checksum mismatch\n  expected: %s\n  actual:   %s", expected, actual)
-			}
-			fmt.Println("Checksum verified.")
-		}
+	expected, ok := checksums[assetName]
+	if !ok {
+		return nil, fmt.Errorf("no checksum found for %s in checksums.txt", assetName)
 	}
+	hash := sha256.Sum256(tarballData)
+	actual := hex.EncodeToString(hash[:])
+	if actual != expected {
+		return nil, fmt.Errorf("checksum mismatch\n  expected: %s\n  actual:   %s", expected, actual)
+	}
+	fmt.Println("Checksum verified.")
 
 	binaryData, err := extractBinaryFromTarGz(tarballData)
 	if err != nil {
@@ -165,7 +165,11 @@ func replaceBinary(binaryData []byte) error {
 	return nil
 }
 
+// maxBinarySize is the maximum allowed size for the extracted binary (200 MB).
+const maxBinarySize = 200 << 20
+
 // extractBinaryFromTarGz extracts the first regular file from a .tar.gz archive.
+// Rejects entries exceeding maxBinarySize to prevent decompression bombs.
 func extractBinaryFromTarGz(data []byte) ([]byte, error) {
 	gr, err := gzip.NewReader(bytes.NewReader(data))
 	if err != nil {
@@ -183,9 +187,15 @@ func extractBinaryFromTarGz(data []byte) ([]byte, error) {
 			return nil, fmt.Errorf("tar: %w", err)
 		}
 		if hdr.Typeflag == tar.TypeReg && strings.HasPrefix(filepath.Base(hdr.Name), "codebase-memory-mcp") {
-			content, err := io.ReadAll(tr)
+			if hdr.Size > maxBinarySize {
+				return nil, fmt.Errorf("binary size %d exceeds maximum %d bytes", hdr.Size, maxBinarySize)
+			}
+			content, err := io.ReadAll(io.LimitReader(tr, maxBinarySize+1))
 			if err != nil {
 				return nil, fmt.Errorf("read entry: %w", err)
+			}
+			if int64(len(content)) > maxBinarySize {
+				return nil, fmt.Errorf("binary size exceeds maximum %d bytes", maxBinarySize)
 			}
 			return content, nil
 		}

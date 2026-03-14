@@ -91,7 +91,10 @@ func (s *Server) handleSearchCode(_ context.Context, req *mcp.CallToolRequest) (
 			break
 		}
 
-		absPath := filepath.Join(root, relPath)
+		absPath, pathErr := safePath(root, relPath)
+		if pathErr != nil {
+			continue // skip files with paths that escape the project root
+		}
 		fileMatches := searchFile(absPath, relPath, params.pattern, params.re, params.isRegex, params.caseSensitive, fetchLimit-len(allMatches))
 		allMatches = append(allMatches, fileMatches...)
 	}

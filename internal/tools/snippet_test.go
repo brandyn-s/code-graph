@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/DeusData/codebase-memory-mcp/internal/store"
@@ -487,4 +488,66 @@ func TestSnippet_IncludeNeighbors_Enabled(t *testing.T) {
 	if !names["Run"] {
 		t.Error("expected Run in callee_names")
 	}
+}
+
+func TestSnippet_PathTraversalBlocked(t *testing.T) {
+	tmpDir := t.TempDir()
+	routerDir := filepath.Join(tmpDir, "db")
+	projRoot := filepath.Join(tmpDir, "project")
+
+	if err := os.MkdirAll(projRoot, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(projRoot, "main.go"), []byte("package main\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// Write a "secret" file OUTSIDE the project root
+	secretFile := filepath.Join(tmpDir, "secret.txt")
+	if err := os.WriteFile(secretFile, []byte("TOP SECRET DATA"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	router, err := store.NewRouterWithDir(routerDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(router.CloseAll)
+
+	projName := "traversal-test"
+	st, err := router.ForProject(projName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.UpsertProject(projName, projRoot); err != nil {
+		t.Fatal(err)
+	}
+
+	// Insert a node with a malicious FilePath that escapes the project root
+	_, _ = st.UpsertNode(&store.Node{
+		Project:       projName,
+		Label:         "Function",
+		Name:          "EvilFunc",
+		QualifiedName: projName + ".EvilFunc",
+		FilePath:      "../secret.txt", // traversal!
+		StartLine:     1,
+		EndLine:       1,
+	})
+
+	srv := &Server{
+		router:         router,
+		handlers:       make(map[string]mcp.ToolHandler),
+		sessionProject: projName,
+	}
+
+	result := callSnippetRaw(t, srv, projName+".EvilFunc")
+
+	// Must be an error - should NOT return the secret file content
+	if !result.IsError {
+		tc, ok := result.Content[0].(*mcp.TextContent)
+		if ok && strings.Contains(tc.Text, "TOP SECRET") {
+			t.Fatal("path traversal succeeded - secret file was read!")
+		}
+		return
+	}
+	// Error result is the expected outcome
 }

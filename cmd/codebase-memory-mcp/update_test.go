@@ -4,9 +4,15 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"context"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/DeusData/codebase-memory-mcp/internal/selfupdate"
 )
 
 func TestExtractBinaryFromTarGz(t *testing.T) {
@@ -100,5 +106,80 @@ func TestCopyFile_SourceNotFound(t *testing.T) {
 	err := copyFile(filepath.Join(dir, "nonexistent"), filepath.Join(dir, "dest"))
 	if err == nil {
 		t.Fatal("expected error for nonexistent source")
+	}
+}
+
+func TestDownloadAndVerify_FailsWithoutChecksums(t *testing.T) {
+	// Set up a server that serves the release asset but NOT checksums.txt
+	assetServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var buf bytes.Buffer
+		gw := gzip.NewWriter(&buf)
+		tw := tar.NewWriter(gw)
+		content := []byte("#!/bin/sh\necho codebase-memory-mcp test")
+		hdr := &tar.Header{
+			Name:     "codebase-memory-mcp",
+			Mode:     0o755,
+			Size:     int64(len(content)),
+			Typeflag: tar.TypeReg,
+		}
+		_ = tw.WriteHeader(hdr)
+		_, _ = tw.Write(content)
+		_ = tw.Close()
+		_ = gw.Close()
+		_, _ = w.Write(buf.Bytes())
+	}))
+	defer assetServer.Close()
+
+	// Allow test server URLs for download
+	origPrefixes := selfupdate.AllowedDownloadPrefixes
+	selfupdate.AllowedDownloadPrefixes = append(selfupdate.AllowedDownloadPrefixes, assetServer.URL)
+	t.Cleanup(func() { selfupdate.AllowedDownloadPrefixes = origPrefixes })
+
+	// Release with an asset but NO checksums.txt
+	release := &selfupdate.Release{
+		TagName: "v9.9.9",
+		Assets: []selfupdate.Asset{
+			{
+				Name:               "codebase-memory-mcp-linux-amd64.tar.gz",
+				BrowserDownloadURL: assetServer.URL + "/binary.tar.gz",
+				Size:               1024,
+			},
+		},
+	}
+
+	asset := &release.Assets[0]
+	_, err := downloadAndVerify(context.Background(), release, "codebase-memory-mcp-linux-amd64.tar.gz", asset)
+	if err == nil {
+		t.Fatal("expected error when checksums are unavailable, got nil")
+	}
+	if !strings.Contains(err.Error(), "checksum") {
+		t.Fatalf("expected checksum-related error, got: %v", err)
+	}
+}
+
+func TestExtractBinaryFromTarGz_RejectsOversizedEntry(t *testing.T) {
+	var buf bytes.Buffer
+	gw := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gw)
+
+	hdr := &tar.Header{
+		Name:     "codebase-memory-mcp",
+		Mode:     0o755,
+		Size:     300 * 1024 * 1024, // 300 MB - over the limit
+		Typeflag: tar.TypeReg,
+	}
+	if err := tw.WriteHeader(hdr); err != nil {
+		t.Fatal(err)
+	}
+	_, _ = tw.Write([]byte("fake"))
+	_ = tw.Close()
+	_ = gw.Close()
+
+	_, err := extractBinaryFromTarGz(buf.Bytes())
+	if err == nil {
+		t.Fatal("expected error for oversized tar entry")
+	}
+	if !strings.Contains(err.Error(), "exceeds") {
+		t.Fatalf("expected size-related error, got: %v", err)
 	}
 }

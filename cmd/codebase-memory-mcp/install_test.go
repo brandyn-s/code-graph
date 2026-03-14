@@ -642,6 +642,48 @@ func TestZedMCPUninstall(t *testing.T) {
 	}
 }
 
+func TestEditorMCPInstall_BackupsInvalidJSON(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "mcp.json")
+	binaryPath := "/usr/local/bin/codebase-memory-mcp"
+
+	// Write invalid JSON to the config
+	invalidJSON := `{"mcpServers": {"other-tool": {"command": "other"}} THIS IS BROKEN`
+	if err := os.WriteFile(configPath, []byte(invalidJSON), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := installConfig{dryRun: false}
+	installEditorMCP(binaryPath, configPath, "TestEditor", cfg)
+
+	// Verify a .bak file was created with the original content
+	bakPath := configPath + ".bak"
+	bakContent, err := os.ReadFile(bakPath)
+	if err != nil {
+		t.Fatalf("expected backup file at %s, got error: %v", bakPath, err)
+	}
+	if string(bakContent) != invalidJSON {
+		t.Errorf("backup content mismatch:\n  got:  %s\n  want: %s", string(bakContent), invalidJSON)
+	}
+
+	// Verify the config was overwritten with valid JSON containing our entry
+	newContent, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var root map[string]any
+	if err := json.Unmarshal(newContent, &root); err != nil {
+		t.Fatalf("new config should be valid JSON: %v", err)
+	}
+	servers, ok := root["mcpServers"].(map[string]any)
+	if !ok {
+		t.Fatal("expected mcpServers key")
+	}
+	if _, exists := servers["codebase-memory-mcp"]; !exists {
+		t.Fatal("expected codebase-memory-mcp server entry")
+	}
+}
+
 func TestRemoveOldMonolithicSkill(t *testing.T) {
 	home := t.TempDir()
 	setTestHome(t, home)

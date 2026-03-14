@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/DeusData/codebase-memory-mcp/internal/store"
@@ -102,7 +101,10 @@ func (s *Server) buildSnippetResponse(match *snippetMatch, includeNeighbors bool
 		return errResult(fmt.Sprintf("project not found: %s", foundProject)), nil
 	}
 
-	absPath := filepath.Join(proj.RootPath, node.FilePath)
+	absPath, pathErr := safePath(proj.RootPath, node.FilePath)
+	if pathErr != nil {
+		return errResult(fmt.Sprintf("path security check failed: %v", pathErr)), nil
+	}
 
 	// Read the source file and extract lines
 	source, readErr := readLines(absPath, node.StartLine, node.EndLine)

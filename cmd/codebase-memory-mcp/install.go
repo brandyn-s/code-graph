@@ -535,8 +535,14 @@ func installEditorMCP(binaryPath, configPath, editorName string, cfg installConf
 	root := make(map[string]any)
 	if data, err := os.ReadFile(configPath); err == nil {
 		if jsonErr := json.Unmarshal(data, &root); jsonErr != nil {
-			// File exists but is invalid JSON — back up and overwrite
-			fmt.Printf("  ⚠ Invalid JSON in %s, overwriting\n", configPath)
+			// File exists but is invalid JSON — back up before overwriting
+			bakPath := configPath + ".bak"
+			if bakErr := os.WriteFile(bakPath, data, 0o600); bakErr != nil {
+				fmt.Printf("  ⚠ Invalid JSON in %s and backup failed: %v\n", configPath, bakErr)
+				fmt.Printf("  → Fix the JSON manually or remove the file, then re-run install\n")
+				return
+			}
+			fmt.Printf("  ⚠ Invalid JSON in %s, backed up to %s\n", configPath, bakPath)
 			root = make(map[string]any)
 		}
 	}
@@ -664,7 +670,13 @@ func installVSCodeMCP(binaryPath, configPath string, cfg installConfig) {
 	root := make(map[string]any)
 	if data, err := os.ReadFile(configPath); err == nil {
 		if jsonErr := json.Unmarshal(data, &root); jsonErr != nil {
-			fmt.Printf("  ⚠ Invalid JSON in %s, overwriting\n", configPath)
+			bakPath := configPath + ".bak"
+			if bakErr := os.WriteFile(bakPath, data, 0o600); bakErr != nil {
+				fmt.Printf("  ⚠ Invalid JSON in %s and backup failed: %v\n", configPath, bakErr)
+				fmt.Printf("  → Fix the JSON manually or remove the file, then re-run install\n")
+				return
+			}
+			fmt.Printf("  ⚠ Invalid JSON in %s, backed up to %s\n", configPath, bakPath)
 			root = make(map[string]any)
 		}
 	}
@@ -770,7 +782,7 @@ func installZedMCP(binaryPath, configPath string, cfg installConfig) {
 	if data, err := os.ReadFile(configPath); err == nil {
 		if jsonErr := json.Unmarshal(data, &root); jsonErr != nil {
 			// Zed settings.json likely has other settings — don't overwrite on bad JSON
-			fmt.Printf("  ⚠ Invalid JSON in %s, skipping\n", configPath)
+			fmt.Printf("  ⚠ Invalid JSON in %s, skipping (fix manually)\n", configPath)
 			return
 		}
 	}

@@ -980,6 +980,96 @@ images:
 	assertEqual(t, envVars["SOURCE_ENTITY"], "$_SERVICE_NAME")
 }
 
+// --- Nix flake.lock parser tests ---
+
+func TestParseFlakeLock(t *testing.T) {
+	dir := t.TempDir()
+	flakeLock := filepath.Join(dir, "flake.lock")
+
+	content := `{
+  "nodes": {
+    "nixpkgs": {
+      "locked": {
+        "type": "github",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "abc123def456",
+        "lastModified": 1700000000
+      }
+    },
+    "rust-overlay": {
+      "locked": {
+        "type": "github",
+        "owner": "oxalica",
+        "repo": "rust-overlay",
+        "rev": "789def012345"
+      },
+      "inputs": {
+        "nixpkgs": "nixpkgs"
+      }
+    },
+    "root": {
+      "inputs": {
+        "nixpkgs": "nixpkgs",
+        "rust-overlay": "rust-overlay"
+      }
+    }
+  },
+  "root": "root",
+  "version": 7
+}`
+
+	if err := os.WriteFile(flakeLock, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	results := parseFlakeLock(flakeLock, "flake.lock")
+	if len(results) == 0 {
+		t.Fatal("expected infra nodes from flake.lock")
+	}
+
+	names := make(map[string]bool)
+	for _, r := range results {
+		inputName, _ := r.properties["input_name"].(string)
+		names[inputName] = true
+		if r.infraType != "nix-input" {
+			t.Errorf("expected infraType=nix-input, got %s", r.infraType)
+		}
+	}
+	if !names["nixpkgs"] {
+		t.Error("expected nixpkgs in parsed inputs")
+	}
+	if !names["rust-overlay"] {
+		t.Error("expected rust-overlay in parsed inputs")
+	}
+	if names["root"] {
+		t.Error("root node should be excluded from inputs")
+	}
+
+	for _, r := range results {
+		if r.properties["input_name"] == "nixpkgs" {
+			if r.properties["source_type"] != "github" {
+				t.Errorf("expected source_type=github, got %v", r.properties["source_type"])
+			}
+			if r.properties["owner"] != "NixOS" {
+				t.Errorf("expected owner=NixOS, got %v", r.properties["owner"])
+			}
+		}
+	}
+}
+
+func TestParseFlakeLock_InvalidJSON(t *testing.T) {
+	dir := t.TempDir()
+	flakeLock := filepath.Join(dir, "flake.lock")
+	if err := os.WriteFile(flakeLock, []byte("not json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	results := parseFlakeLock(flakeLock, "flake.lock")
+	if len(results) != 0 {
+		t.Errorf("expected 0 results for invalid JSON, got %d", len(results))
+	}
+}
+
 // --- helpers ---
 
 func writeTempFile(t *testing.T, name, content string) string {

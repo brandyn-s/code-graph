@@ -442,6 +442,7 @@ func (s *Server) registerTools() {
 	s.registerTraceTools()
 	s.registerDetectChanges()
 	s.registerArchitectureTools()
+	s.registerSecurityTools()
 }
 
 func (s *Server) registerArchitectureTools() {

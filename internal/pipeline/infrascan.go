@@ -2,6 +2,7 @@ package pipeline
 
 import (
 	"bufio"
+	"encoding/json"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -62,6 +63,10 @@ func (p *Pipeline) passInfraFiles() {
 	for _, inf := range infras {
 		p.upsertInfraNodes(inf)
 	}
+
+	// Create DEPENDS_ON edges for Nix flake inputs
+	p.createNixDependsOnEdges(infras)
+
 	slog.Info("pass4.infra", "nodes", len(infras))
 }
 
@@ -84,6 +89,8 @@ func parseInfraFile(absPath, relPath, name string) []infraFile {
 		return parseTerraformFile(absPath, relPath)
 	case isShellScript(lower, ext):
 		return parseShellScript(absPath, relPath)
+	case isFlakeLock(lower):
+		return parseFlakeLock(absPath, relPath)
 	default:
 		return nil
 	}
@@ -144,6 +151,10 @@ func (p *Pipeline) infraQN(relPath string, props map[string]any) string {
 	// Compose services get a per-service QN suffix
 	if sn, ok := props["service_name"].(string); ok && props["infra_type"] == "compose-service" {
 		return base + "::" + sn
+	}
+	// Nix inputs get a per-input QN suffix
+	if name, ok := props["input_name"].(string); ok && props["infra_type"] == "nix-input" {
+		return base + "::" + name
 	}
 	return base + ".__infra__"
 }
@@ -493,4 +504,147 @@ func collapseSpaces(s string) string {
 		}
 	}
 	return b.String()
+}
+
+// --- Nix flake.lock parser ---
+
+// isFlakeLock returns true for Nix flake.lock files.
+func isFlakeLock(name string) bool {
+	return name == "flake.lock"
+}
+
+// parseFlakeLock parses a Nix flake.lock (JSON v7 format) and extracts
+// input nodes with their source metadata (owner, repo, rev, type).
+func parseFlakeLock(absPath, relPath string) []infraFile {
+	data, err := os.ReadFile(absPath)
+	if err != nil {
+		return nil
+	}
+
+	var lock struct {
+		Nodes map[string]struct {
+			Locked *struct {
+				Type         string `json:"type"`
+				Owner        string `json:"owner"`
+				Repo         string `json:"repo"`
+				Rev          string `json:"rev"`
+				LastModified int64  `json:"lastModified"`
+			} `json:"locked"`
+			Inputs   map[string]any `json:"inputs"`
+			Original *struct {
+				Type  string `json:"type"`
+				Owner string `json:"owner"`
+				Repo  string `json:"repo"`
+			} `json:"original"`
+		} `json:"nodes"`
+		Root    string `json:"root"`
+		Version int    `json:"version"`
+	}
+
+	if err := json.Unmarshal(data, &lock); err != nil {
+		return nil
+	}
+
+	var results []infraFile
+	for name, node := range lock.Nodes {
+		if name == lock.Root {
+			continue
+		}
+		props := map[string]any{
+			"infra_type": "nix-input",
+			"input_name": name,
+		}
+		if node.Locked != nil {
+			props["source_type"] = node.Locked.Type
+			if node.Locked.Owner != "" {
+				props["owner"] = node.Locked.Owner
+			}
+			if node.Locked.Repo != "" {
+				props["repo"] = node.Locked.Repo
+			}
+			if node.Locked.Rev != "" {
+				props["rev"] = node.Locked.Rev
+			}
+		}
+		if len(node.Inputs) > 0 {
+			deps := make([]string, 0, len(node.Inputs))
+			for dep := range node.Inputs {
+				deps = append(deps, dep)
+			}
+			props["depends_on"] = deps
+		}
+		results = append(results, infraFile{
+			relPath:    relPath,
+			infraType:  "nix-input",
+			properties: props,
+		})
+	}
+	return results
+}
+
+// createNixDependsOnEdges resolves depends_on property lists into DEPENDS_ON edges
+// between NixInput nodes from the same flake.lock.
+func (p *Pipeline) createNixDependsOnEdges(infras []infraFile) {
+	inputQNs := make(map[string]string)
+	for _, inf := range infras {
+		if inf.infraType != "nix-input" {
+			continue
+		}
+		name, _ := inf.properties["input_name"].(string)
+		if name == "" {
+			continue
+		}
+		inputQNs[name] = p.infraQN(inf.relPath, inf.properties)
+	}
+
+	if len(inputQNs) == 0 {
+		return
+	}
+
+	qns := make([]string, 0, len(inputQNs))
+	for _, qn := range inputQNs {
+		qns = append(qns, qn)
+	}
+	idMap, err := p.Store.FindNodeIDsByQNs(p.ProjectName, qns)
+	if err != nil {
+		slog.Warn("nix.depends_on.resolve", "err", err)
+		return
+	}
+
+	edgeCount := 0
+	for _, inf := range infras {
+		if inf.infraType != "nix-input" {
+			continue
+		}
+		deps, ok := inf.properties["depends_on"].([]string)
+		if !ok || len(deps) == 0 {
+			continue
+		}
+		srcName, _ := inf.properties["input_name"].(string)
+		srcQN := inputQNs[srcName]
+		srcID, srcOK := idMap[srcQN]
+		if !srcOK {
+			continue
+		}
+		for _, dep := range deps {
+			tgtQN, exists := inputQNs[dep]
+			if !exists {
+				continue
+			}
+			tgtID, tgtOK := idMap[tgtQN]
+			if !tgtOK {
+				continue
+			}
+			_, _ = p.Store.InsertEdge(&store.Edge{
+				Project:  p.ProjectName,
+				SourceID: srcID,
+				TargetID: tgtID,
+				Type:     "DEPENDS_ON",
+			})
+			edgeCount++
+		}
+	}
+	if edgeCount > 0 {
+		slog.Info("nix.depends_on", "edges", edgeCount)
+	}
 }

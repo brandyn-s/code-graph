@@ -225,6 +225,28 @@ func scanNodes(rows *sql.Rows) ([]*Node, error) {
 	return result, rows.Err()
 }
 
+// FindNodesByProperty finds nodes with a specific JSON property value.
+// If label is non-empty, also filters by label.
+func (s *Store) FindNodesByProperty(project, label, propKey, propValue string) ([]*Node, error) {
+	var query string
+	var args []any
+	if label != "" {
+		query = `SELECT id, project, label, name, qualified_name, file_path, start_line, end_line, properties
+			FROM nodes WHERE project=? AND label=? AND json_extract(properties, '$.' || ?) = ?`
+		args = []any{project, label, propKey, propValue}
+	} else {
+		query = `SELECT id, project, label, name, qualified_name, file_path, start_line, end_line, properties
+			FROM nodes WHERE project=? AND json_extract(properties, '$.' || ?) = ?`
+		args = []any{project, propKey, propValue}
+	}
+	rows, err := s.q.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("find nodes by property: %w", err)
+	}
+	defer rows.Close()
+	return scanNodes(rows)
+}
+
 // Formula-derived batch size: SQLite has a 999 bind variable limit.
 const numNodeCols = 8
 const nodesBatchSize = 999 / numNodeCols // = 124

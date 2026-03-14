@@ -383,6 +383,10 @@ func (p *Pipeline) runPostFlushPasses(files []discover.FileInfo) error {
 	slog.Info("pass.timing", "pass", "githistory", "elapsed", time.Since(t))
 
 	t = time.Now()
+	p.passSecurityTags()
+	slog.Info("pass.timing", "pass", "security_tags", "elapsed", time.Since(t))
+
+	t = time.Now()
 	p.updateFileHashes(files)
 	slog.Info("pass.timing", "pass", "filehashes", "elapsed", time.Since(t))
 
@@ -418,7 +422,7 @@ func (p *Pipeline) logEdgeCounts() {
 		"TESTS", "TESTS_FILE", "INHERITS", "DECORATES", "USES_TYPE",
 		"THROWS", "RAISES", "READS", "WRITES", "CONFIGURES", "MEMBER_OF",
 		"HTTP_CALLS", "HANDLES", "ASYNC_CALLS", "IMPLEMENTS", "OVERRIDE",
-		"FILE_CHANGES_WITH", "CONTAINS_FILE", "CONTAINS_FOLDER", "CONTAINS_PACKAGE",
+		"FILE_CHANGES_WITH", "CONTAINS_FILE", "CONTAINS_FOLDER", "CONTAINS_PACKAGE", "DEPENDS_ON",
 	}
 	for _, edgeType := range edgeTypes {
 		count, err := p.Store.CountEdgesByType(p.ProjectName, edgeType)

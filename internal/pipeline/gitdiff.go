@@ -6,10 +6,15 @@ import (
 	"fmt"
 	"log/slog"
 	"os/exec"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
 )
+
+// validBranchName matches safe git ref names: alphanumeric, slashes, dots, hyphens, underscores.
+// Rejects anything that could be interpreted as a git flag (starting with -) or contain shell metacharacters.
+var validBranchName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9/_.\-]*$`)
 
 // DiffScope controls which changes to include.
 type DiffScope string
@@ -37,6 +42,9 @@ type ChangedHunk struct {
 
 // ParseGitDiffFiles runs git diff --name-status and returns changed files.
 func ParseGitDiffFiles(repoPath string, scope DiffScope, baseBranch string) ([]ChangedFile, error) {
+	if err := validateBranchName(scope, baseBranch); err != nil {
+		return nil, err
+	}
 	args := buildDiffArgs(scope, baseBranch)
 	args = append(args, "--name-status")
 	return parseDiffNameStatus(repoPath, args)
@@ -44,9 +52,20 @@ func ParseGitDiffFiles(repoPath string, scope DiffScope, baseBranch string) ([]C
 
 // ParseGitDiffHunks runs git diff --unified=0 and extracts changed line ranges.
 func ParseGitDiffHunks(repoPath string, scope DiffScope, baseBranch string) ([]ChangedHunk, error) {
+	if err := validateBranchName(scope, baseBranch); err != nil {
+		return nil, err
+	}
 	args := buildDiffArgs(scope, baseBranch)
 	args = append(args, "--unified=0")
 	return parseDiffHunks(repoPath, args)
+}
+
+// validateBranchName rejects invalid branch names to prevent git argument injection.
+func validateBranchName(scope DiffScope, baseBranch string) error {
+	if scope == DiffBranch && baseBranch != "" && !validBranchName.MatchString(baseBranch) {
+		return fmt.Errorf("invalid base_branch %q: must match [a-zA-Z0-9/_.-]", baseBranch)
+	}
+	return nil
 }
 
 func buildDiffArgs(scope DiffScope, baseBranch string) []string {

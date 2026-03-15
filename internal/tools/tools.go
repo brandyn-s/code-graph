@@ -455,7 +455,7 @@ func (s *Server) registerArchitectureTools() {
 			DestructiveHint: boolPtr(false),
 		},
 
-		Description: "Get codebase architecture overview. Returns structural analysis computed from the code graph. Call with aspects=['all'] for full orientation or select specific aspects for targeted queries. Available aspects: languages (language breakdown), packages (top packages with fan-in/out), entry_points (main/init functions), routes (HTTP endpoints with handlers), hotspots (most-called functions), boundaries (cross-package call volumes), services (cross-service HTTP/async links), layers (package-level layer classification — heuristic), clusters (community detection via Louvain algorithm on CALLS + HTTP_CALLS + ASYNC_CALLS — reveals hidden functional modules across packages and services), file_tree (condensed directory structure), adr (stored Architecture Decision Record — use manage_adr to create/update). Recommended: call this first when exploring an unfamiliar codebase.",
+		Description: "Get codebase architecture overview computed from the code graph. Call with aspects=['all'] for full orientation or select specific aspects. Available aspects: languages, packages (fan-in/out), entry_points, routes (HTTP endpoints), hotspots (most-called), boundaries (cross-package calls), services (cross-service links), layers (heuristic), clusters (Louvain community detection), file_tree, adr (stored Architecture Decision Record). Recommended first call when exploring an unfamiliar codebase.",
 		InputSchema: json.RawMessage(`{
 			"type": "object",
 			"properties": {
@@ -532,7 +532,7 @@ func (s *Server) registerIndexAndTraceTool() {
 			DestructiveHint: boolPtr(false),
 		},
 
-		Description: "Index a repository into the code graph. Parses source files with tree-sitter, extracts functions/classes/modules, resolves call relationships (CALLS), HTTP/async cross-service links, and git change coupling (FILE_CHANGES_WITH). Supports incremental reindex via content hashing. Auto-sync keeps the graph fresh after initial indexing. If repo_path is omitted, uses the session project root. Use mode='fast' for large repos (>50K files) - skips generated code, test fixtures, and large files (>512KB) for faster indexing at the cost of coverage.",
+		Description: "Index a repository into the code graph. Parses source files with tree-sitter, extracts functions/classes/modules, resolves call relationships (CALLS), HTTP/async cross-service links, and git change coupling (FILE_CHANGES_WITH). Supports incremental reindex via content hashing. Auto-sync keeps the graph fresh after initial indexing. If repo_path is omitted, uses the session project root. Use mode='fast' for large repos (>50K files) - skips generated code, test fixtures, and large files (>512KB) for faster indexing at the cost of coverage. Returns error if repo_path does not exist or contains no parseable source files.",
 		InputSchema: json.RawMessage(`{
 			"type": "object",
 			"properties": {
@@ -825,7 +825,7 @@ func (s *Server) registerProjectTools() {
 			DestructiveHint: boolPtr(false),
 		},
 
-		Description: "List all indexed projects with their node/edge counts, indexed_at timestamps, root paths, and database file locations. Returns all projects in a single response.",
+		Description: "List all indexed projects with their node/edge counts, indexed_at timestamps, root paths, and database file locations. Returns all projects in a single response (no pagination). Returns an empty array if no projects are indexed.",
 		InputSchema: json.RawMessage(`{"type": "object", "properties": {}}`),
 	}, s.handleListProjects)
 
@@ -838,7 +838,7 @@ func (s *Server) registerProjectTools() {
 			DestructiveHint: boolPtr(true),
 		},
 
-		Description: "Delete an indexed project and all its graph data (nodes, edges, file hashes). Removes the project's .db file. This action is irreversible.",
+		Description: "Delete an indexed project and all its graph data (nodes, edges, file hashes). Removes the project's .db file. This action is irreversible. Returns error if the project does not exist.",
 		InputSchema: json.RawMessage(`{
 			"type": "object",
 			"properties": {

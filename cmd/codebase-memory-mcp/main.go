@@ -187,7 +187,7 @@ Language support (64 languages):
 }
 
 func printHelpTools() {
-	fmt.Fprint(os.Stderr, `MCP tools (14):
+	fmt.Fprint(os.Stderr, `MCP tools (15):
 
   index_repository — Index a repo into the knowledge graph
     {"repo_path": "/path/to/repo", "mode": "full|fast"}
@@ -270,6 +270,10 @@ func printHelpTools() {
   ingest_traces — Ingest OpenTelemetry JSON traces
     {"traces": [...]}    (OTLP format spans)
     Validates HTTP_CALLS edges with runtime data, boosts confidence
+  query_security_surfaces — Query security-tagged code elements
+    {"role": "auth_boundary", "project": "my-project"}
+    role: auth_boundary, input_entry_point, sensitive_sink, crypto_operation (optional)
+    Returns nodes classified by security role for STIG/compliance evidence
 
 `)
 }

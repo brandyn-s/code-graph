@@ -11,6 +11,13 @@ import (
 func (s *Server) registerSecurityTools() {
 	s.addTool(&mcp.Tool{
 		Name:        "query_security_surfaces",
+		Annotations: &mcp.ToolAnnotations{
+			ReadOnlyHint:    true,
+			IdempotentHint:  true,
+			OpenWorldHint:   boolPtr(false),
+			DestructiveHint: boolPtr(false),
+		},
+
 		Description: "Query security-tagged code elements for compliance evidence. Returns functions classified as auth_boundary (authentication/authorization enforcement), input_entry_point (HTTP handlers, CLI entry points), sensitive_sink (database writes, file I/O, subprocess exec), or crypto_operation (encryption, hashing, signing). Use for STIG/compliance evidence: AC-3 -> auth_boundary, SI-10 -> input_entry_point + sensitive_sink, SC-13 -> crypto_operation. Pass role to filter, or omit for all roles.",
 		InputSchema: json.RawMessage(`{
 			"type": "object",

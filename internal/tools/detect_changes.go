@@ -15,6 +15,13 @@ import (
 func (s *Server) registerDetectChanges() {
 	s.addTool(&mcp.Tool{
 		Name:        "detect_changes",
+		Annotations: &mcp.ToolAnnotations{
+			ReadOnlyHint:    true,
+			IdempotentHint:  true,
+			OpenWorldHint:   boolPtr(false),
+			DestructiveHint: boolPtr(false),
+		},
+
 		Description: "Detect uncommitted or branch changes and map them to affected graph symbols + blast radius. Runs git diff, maps changed hunks to functions/classes in the graph, then traces inbound callers with risk classification (CRITICAL/HIGH/MEDIUM/LOW). Requires git in PATH. Risk is topology-based: hop 1=CRITICAL (direct callers), 2=HIGH, 3=MEDIUM, 4+=LOW.",
 		InputSchema: json.RawMessage(`{
 			"type": "object",

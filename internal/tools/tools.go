@@ -448,6 +448,13 @@ func (s *Server) registerTools() {
 func (s *Server) registerArchitectureTools() {
 	s.addTool(&mcp.Tool{
 		Name:        "get_architecture",
+		Annotations: &mcp.ToolAnnotations{
+			ReadOnlyHint:    true,
+			IdempotentHint:  true,
+			OpenWorldHint:   boolPtr(false),
+			DestructiveHint: boolPtr(false),
+		},
+
 		Description: "Get codebase architecture overview. Returns structural analysis computed from the code graph. Call with aspects=['all'] for full orientation or select specific aspects for targeted queries. Available aspects: languages (language breakdown), packages (top packages with fan-in/out), entry_points (main/init functions), routes (HTTP endpoints with handlers), hotspots (most-called functions), boundaries (cross-package call volumes), services (cross-service HTTP/async links), layers (package-level layer classification — heuristic), clusters (community detection via Louvain algorithm on CALLS + HTTP_CALLS + ASYNC_CALLS — reveals hidden functional modules across packages and services), file_tree (condensed directory structure), adr (stored Architecture Decision Record — use manage_adr to create/update). Recommended: call this first when exploring an unfamiliar codebase.",
 		InputSchema: json.RawMessage(`{
 			"type": "object",
@@ -467,7 +474,14 @@ func (s *Server) registerArchitectureTools() {
 
 	s.addTool(&mcp.Tool{
 		Name:        "manage_adr",
-		Description: "Manage the Architecture Decision Record (ADR) for a project. CRUD operations for a persistent, section-based architectural summary. Modes: get (retrieve full ADR or specific sections via include filter), store (create or fully replace — all 6 sections required), update (patch specific sections — only canonical keys accepted, unmentioned sections preserved), delete (remove ADR). Fixed sections in canonical order: PURPOSE, STACK, ARCHITECTURE, PATTERNS, TRADEOFFS, PHILOSOPHY. Max 8000 chars total. Validation: store rejects content missing any section; update rejects non-canonical keys. Use include=['STACK','PATTERNS'] with get to fetch only needed sections (saves tokens). PLAN ALIGNMENT: Before finalizing any implementation plan, fetch the ADR and validate the plan against it — check ARCHITECTURE for structural fit, PATTERNS for convention compliance, STACK for technology alignment, PHILOSOPHY for principle adherence. Flag conflicts before proceeding. For creating/replacing: explore the codebase first using get_architecture and graph tools, then enter plan mode to draft the ADR collaboratively with the user. Store only after user approval.",
+		Annotations: &mcp.ToolAnnotations{
+			ReadOnlyHint:    false,
+			IdempotentHint:  false,
+			OpenWorldHint:   boolPtr(false),
+			DestructiveHint: boolPtr(true),
+		},
+
+		Description: "Manage the Architecture Decision Record (ADR) for a project. CRUD operations for a persistent, section-based architectural summary. Modes: get (retrieve, optional include filter), store (create/replace - all 6 sections required), update (patch sections, unmentioned preserved), delete (remove ADR - this is irreversible). Fixed sections: PURPOSE, STACK, ARCHITECTURE, PATTERNS, TRADEOFFS, PHILOSOPHY. Max 8000 chars. Validation: store rejects missing sections; update rejects non-canonical keys. Use include=['STACK','PATTERNS'] with get to reduce token usage.",
 		InputSchema: json.RawMessage(`{
 			"type": "object",
 			"properties": {
@@ -511,7 +525,14 @@ func (s *Server) registerGraphTools() {
 func (s *Server) registerIndexAndTraceTool() {
 	s.addTool(&mcp.Tool{
 		Name:        "index_repository",
-		Description: "Index a repository into the code graph. Parses source files, extracts functions/classes/modules, resolves call relationships (CALLS), read references (USAGE), interface implementations (IMPLEMENTS + OVERRIDE), HTTP/async cross-service links, and git history change coupling (FILE_CHANGES_WITH). Supports incremental reindex via content hashing. Auto-sync keeps the graph fresh after initial indexing. If repo_path is omitted, uses the auto-detected session project root. Use mode='fast' for large repos (>50K files) — skips generated code, test fixtures, large files (>512KB), and non-source files for 30-50% faster indexing at the cost of some coverage.",
+		Annotations: &mcp.ToolAnnotations{
+			ReadOnlyHint:    false,
+			IdempotentHint:  true,
+			OpenWorldHint:   boolPtr(false),
+			DestructiveHint: boolPtr(false),
+		},
+
+		Description: "Index a repository into the code graph. Parses source files with tree-sitter, extracts functions/classes/modules, resolves call relationships (CALLS), HTTP/async cross-service links, and git change coupling (FILE_CHANGES_WITH). Supports incremental reindex via content hashing. Auto-sync keeps the graph fresh after initial indexing. If repo_path is omitted, uses the session project root. Use mode='fast' for large repos (>50K files) - skips generated code, test fixtures, and large files (>512KB) for faster indexing at the cost of coverage.",
 		InputSchema: json.RawMessage(`{
 			"type": "object",
 			"properties": {
@@ -530,7 +551,14 @@ func (s *Server) registerIndexAndTraceTool() {
 
 	s.addTool(&mcp.Tool{
 		Name:        "trace_call_path",
-		Description: "Trace the call path of a function (who calls it, what it calls). Requires exact function name — use search_graph first to find the exact name. Follow up with get_code_snippet to read the actual source code. Returns hop-by-hop callees/callers with edge types (CALLS, HTTP_CALLS, ASYNC_CALLS, USAGE, OVERRIDE). If the function is not found, returns suggestions of similar names — use the qualified_name from suggestions in a retry. Use depth=1 first, increase only if needed. Use direction='both' for full cross-service context — HTTP_CALLS edges from other services appear as inbound edges, so direction='outbound' alone misses cross-service callers. Best practice: search_graph(name_pattern='.*Order.*') → trace_call_path(function_name='processOrder') → get_code_snippet(qualified_name='...')",
+		Annotations: &mcp.ToolAnnotations{
+			ReadOnlyHint:    true,
+			IdempotentHint:  true,
+			OpenWorldHint:   boolPtr(false),
+			DestructiveHint: boolPtr(false),
+		},
+
+		Description: "Trace the call path of a function (who calls it, what it calls). Requires exact function name. Returns hop-by-hop callees/callers with edge types (CALLS, HTTP_CALLS, ASYNC_CALLS, USAGE, OVERRIDE). If not found, returns similar name suggestions - use the qualified_name from suggestions to retry. Use depth=1 first, increase only if needed. Use direction='both' for full cross-service context - HTTP_CALLS from other services appear as inbound edges, so direction='outbound' alone misses them.",
 		InputSchema: json.RawMessage(`{
 			"type": "object",
 			"properties": {
@@ -568,6 +596,13 @@ func (s *Server) registerIndexAndTraceTool() {
 func (s *Server) registerSchemaAndSnippetTools() {
 	s.addTool(&mcp.Tool{
 		Name:        "get_graph_schema",
+		Annotations: &mcp.ToolAnnotations{
+			ReadOnlyHint:    true,
+			IdempotentHint:  true,
+			OpenWorldHint:   boolPtr(false),
+			DestructiveHint: boolPtr(false),
+		},
+
 		Description: "Return the schema of the indexed code graph: node label counts, edge type counts, relationship patterns (e.g. Function-CALLS->Function), and sample function/class names. Use to understand what's in the graph before querying.",
 		InputSchema: json.RawMessage(`{
 			"type": "object",
@@ -582,7 +617,14 @@ func (s *Server) registerSchemaAndSnippetTools() {
 
 	s.addTool(&mcp.Tool{
 		Name:        "get_code_snippet",
-		Description: "Retrieve source code for a function/class by name with rich metadata. Accepts exact qualified name ('myproject.cmd.server.main.HandleRequest'), partial QN suffix ('main.HandleRequest'), or short name ('HandleRequest'). Returns source code, signature, return type, complexity, decorators, docstring, and caller/callee counts. Returns suggestions with status='ambiguous' when multiple matches found (no 'error' key in disambiguation responses). Use auto_resolve=true to let the tool pick the best match from <=2 candidates (returns alternatives for correction). Use include_neighbors=true to get caller/callee names alongside counts.",
+		Annotations: &mcp.ToolAnnotations{
+			ReadOnlyHint:    true,
+			IdempotentHint:  true,
+			OpenWorldHint:   boolPtr(false),
+			DestructiveHint: boolPtr(false),
+		},
+
+		Description: "Retrieve source code for a function/class by name with rich metadata. Accepts exact qualified name ('pkg.module.HandleRequest'), partial suffix ('module.HandleRequest'), or short name ('HandleRequest'). Returns source code, signature, return type, complexity, decorators, docstring, and caller/callee counts. Returns status='ambiguous' with suggestions when multiple matches found. Use auto_resolve=true to auto-pick from <=2 candidates. Use include_neighbors=true to get caller/callee name lists alongside counts.",
 		InputSchema: json.RawMessage(`{
 			"type": "object",
 			"properties": {
@@ -611,7 +653,14 @@ func (s *Server) registerSchemaAndSnippetTools() {
 func (s *Server) registerSearchTools() {
 	s.addTool(&mcp.Tool{
 		Name:        "search_graph",
-		Description: "Search the code knowledge graph for functions, classes, modules, routes, and other code elements. Search is case-insensitive by default (set case_sensitive=true for exact case). Best practice: use regex alternatives for broad matching — include abbreviations ('handler|hdlr|ctrl'), word forms ('sponsor|sponsoring|sponsored'), and synonyms ('delete|remove|drop'). One broad regex replaces multiple narrow searches. Returns nodes matching the criteria with their connectivity (in/out degree). Results are sorted by relevance by default (exact match first, prefix match second, then by connectivity). Community nodes are excluded by default. Pass exclude_labels: [] to include them. Best practice: Chain with trace_call_path and get_code_snippet for complete answers. Example workflow: search_graph(name_pattern='.*Order.*') → trace_call_path(function_name='processOrder') → get_code_snippet(qualified_name='...'). Returns 10 results per page (use offset to paginate, has_more indicates more pages). name_pattern and qn_pattern support full Go regex — one precise regex replaces multiple literal searches. See parameter descriptions for patterns. For dead code: use relationship='CALLS', direction='inbound', max_degree=0, exclude_entry_points=true. For fan-out: use relationship='CALLS', direction='outbound', min_degree=N. Route nodes: properties.handler contains the actual handler function name. Prefer this over query_graph for counting — no row cap. IMPORTANT: The 'relationship' filter counts how many edges of that type each node has (degree filtering) — it does NOT return the actual edges. To list cross-service HTTP_CALLS or ASYNC_CALLS edges with their properties, use query_graph with Cypher instead. Relationship types: CALLS, HTTP_CALLS, ASYNC_CALLS, IMPORTS, DEFINES, DEFINES_METHOD, HANDLES, CONTAINS_FILE, CONTAINS_FOLDER, CONTAINS_PACKAGE, IMPLEMENTS, OVERRIDE, USAGE, FILE_CHANGES_WITH.",
+		Annotations: &mcp.ToolAnnotations{
+			ReadOnlyHint:    true,
+			IdempotentHint:  true,
+			OpenWorldHint:   boolPtr(false),
+			DestructiveHint: boolPtr(false),
+		},
+
+		Description: "Search the code knowledge graph for functions, classes, modules, routes, and other code elements. Case-insensitive by default. Use regex alternatives for broad matching: 'handler|hdlr|ctrl'. Returns nodes with connectivity info (in/out degree), sorted by relevance. Supports filters: label, name_pattern (regex), qn_pattern, file_pattern (glob), relationship/direction/degree. Use max_degree=0 with exclude_entry_points=true for dead code detection. Returns 10 results per page (offset to paginate, has_more flag). Note: relationship filter counts edges (degree filtering) but does not return edges - use query_graph with Cypher for edge listings.",
 		InputSchema: json.RawMessage(`{
 			"type": "object",
 			"properties": {
@@ -688,7 +737,14 @@ func (s *Server) registerSearchTools() {
 
 	s.addTool(&mcp.Tool{
 		Name:        "search_code",
-		Description: "Search for text in source code files (like grep, scoped to indexed project). Search is case-insensitive by default (set case_sensitive=true for exact case). With regex=true, use alternatives for broad matching: 'TODO|FIXME|HACK|WORKAROUND' (issue markers), 'sponsor|sponsoring|sponsored' (word forms), 'import|require|include' (cross-language patterns). Returns matching lines with file path, line number, and context. Returns 10 matches per page — use offset to paginate, has_more indicates more pages. Use for: string literals, error messages, TODO comments, config values, import statements. Prefer search_graph for finding functions/classes by name — search_code is for text content that isn't in the graph.",
+		Annotations: &mcp.ToolAnnotations{
+			ReadOnlyHint:    true,
+			IdempotentHint:  true,
+			OpenWorldHint:   boolPtr(false),
+			DestructiveHint: boolPtr(false),
+		},
+
+		Description: "Search for text in source code files (like grep, scoped to indexed project). Case-insensitive by default. With regex=true, use alternatives for broad matching: 'TODO|FIXME|HACK'. Returns matching lines with file path, line number, and surrounding context. Returns 10 matches per page (offset to paginate, has_more flag). Use for string literals, error messages, TODO comments, config values, import statements. Prefer search_graph for finding functions/classes by structural name.",
 		InputSchema: json.RawMessage(`{
 			"type": "object",
 			"properties": {
@@ -729,7 +785,14 @@ func (s *Server) registerSearchTools() {
 func (s *Server) registerQueryTool() {
 	s.addTool(&mcp.Tool{
 		Name:        "query_graph",
-		Description: "Execute a Cypher-like graph query. String matching in WHERE is case-sensitive by default. For case-insensitive regex: use (?i) flag — WHERE f.name =~ '(?i)handler'. CONTAINS and STARTS WITH are always case-sensitive — use =~ with (?i) for case-insensitive substring matching: WHERE f.name =~ '(?i).*order.*'. Best practice: use regex alternatives for word form variance — WHERE f.name =~ '(?i)sponsor|sponsoring|sponsored'. Tip: prefer search_graph for simple name searches (case-insensitive by default) — use query_graph only when you need Cypher's relationship patterns or edge properties. Default row cap is 200 — use max_rows parameter to increase (up to 10000) for COUNT/aggregation queries on large codebases. Best for: relationship patterns, filtered joins, path queries, and edge property filtering. Supports WHERE on edge properties: r.url_path CONTAINS 'orders', r.confidence >= 0.6, r.method = 'POST', r.confidence_band = 'high', r.validated_by_trace = true, r.coupling_score >= 0.5. This is the correct tool for listing cross-service edges — use MATCH (a)-[r:HTTP_CALLS]->(b) RETURN a.name, b.name, r.url_path, r.confidence, r.confidence_band to see HTTP links with URLs and confidence scores (bands: high>=0.7, medium>=0.45, speculative>=0.25), or MATCH (a)-[r:ASYNC_CALLS]->(b) for async dispatch edges. For change coupling: MATCH (a)-[r:FILE_CHANGES_WITH]->(b) RETURN a.name, b.name, r.coupling_score, r.co_change_count. For interface method overrides: MATCH (s)-[r:OVERRIDE]->(i) to find struct methods implementing interface methods. For read references (callbacks, variable assignments): MATCH (a)-[r:USAGE]->(b). Always use LIMIT. Edge types: CALLS, HTTP_CALLS, ASYNC_CALLS, IMPORTS, DEFINES, DEFINES_METHOD, HANDLES, IMPLEMENTS, OVERRIDE, USAGE, FILE_CHANGES_WITH.",
+		Annotations: &mcp.ToolAnnotations{
+			ReadOnlyHint:    true,
+			IdempotentHint:  true,
+			OpenWorldHint:   boolPtr(false),
+			DestructiveHint: boolPtr(false),
+		},
+
+		Description: "Execute a Cypher-like graph query (read-only). String matching is case-sensitive; use =~ '(?i)pattern' for case-insensitive regex. Supports MATCH, WHERE, RETURN, ORDER BY, LIMIT, COUNT, DISTINCT, variable-length paths (*1..3). Default row cap 200 (max_rows up to 10000). Best for relationship patterns, filtered joins, path queries, and edge property filtering. Filterable edge properties: r.confidence, r.url_path, r.method, r.confidence_band, r.validated_by_trace, r.coupling_score. Edge types: CALLS, HTTP_CALLS, ASYNC_CALLS, IMPORTS, DEFINES, IMPLEMENTS, OVERRIDE, USAGE, FILE_CHANGES_WITH. Always use LIMIT.",
 		InputSchema: json.RawMessage(`{
 			"type": "object",
 			"properties": {
@@ -755,12 +818,26 @@ func (s *Server) registerQueryTool() {
 func (s *Server) registerProjectTools() {
 	s.addTool(&mcp.Tool{
 		Name:        "list_projects",
-		Description: "List all indexed projects with their indexed_at timestamp, root path, and node/edge counts.",
+		Annotations: &mcp.ToolAnnotations{
+			ReadOnlyHint:    true,
+			IdempotentHint:  true,
+			OpenWorldHint:   boolPtr(false),
+			DestructiveHint: boolPtr(false),
+		},
+
+		Description: "List all indexed projects with their node/edge counts, indexed_at timestamps, root paths, and database file locations. Returns all projects in a single response.",
 		InputSchema: json.RawMessage(`{"type": "object", "properties": {}}`),
 	}, s.handleListProjects)
 
 	s.addTool(&mcp.Tool{
 		Name:        "delete_project",
+		Annotations: &mcp.ToolAnnotations{
+			ReadOnlyHint:    false,
+			IdempotentHint:  true,
+			OpenWorldHint:   boolPtr(false),
+			DestructiveHint: boolPtr(true),
+		},
+
 		Description: "Delete an indexed project and all its graph data (nodes, edges, file hashes). Removes the project's .db file. This action is irreversible.",
 		InputSchema: json.RawMessage(`{
 			"type": "object",
@@ -776,6 +853,13 @@ func (s *Server) registerProjectTools() {
 
 	s.addTool(&mcp.Tool{
 		Name:        "index_status",
+		Annotations: &mcp.ToolAnnotations{
+			ReadOnlyHint:    true,
+			IdempotentHint:  true,
+			OpenWorldHint:   boolPtr(false),
+			DestructiveHint: boolPtr(false),
+		},
+
 		Description: "Check the indexing status of a project. Returns whether the project is indexed, currently indexing, or not found. Shows last indexed timestamp, node/edge counts, and whether the index is initial or incremental. Use this to check if the graph is ready for queries.",
 		InputSchema: json.RawMessage(`{
 			"type": "object",
@@ -896,6 +980,9 @@ func getBoolArg(args map[string]any, key string) bool {
 	}
 	return b
 }
+
+// boolPtr returns a pointer to a bool value. Used for optional ToolAnnotations fields.
+func boolPtr(b bool) *bool { return &b }
 
 // findNodeAcrossProjects searches for a node by simple name in the specified project.
 // Falls back to the session project if no filter is given.

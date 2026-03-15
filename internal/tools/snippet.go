@@ -25,9 +25,15 @@ func (s *Server) handleGetCodeSnippet(_ context.Context, req *mcp.CallToolReques
 		return errResult(err.Error()), nil
 	}
 
+	// Batch mode: qualified_names array
+	if rawNames, ok := args["qualified_names"]; ok {
+		return s.handleBatchSnippet(args, rawNames)
+	}
+
+	// Single mode: qualified_name string
 	qn := getStringArg(args, "qualified_name")
 	if qn == "" {
-		return errResult("qualified_name is required"), nil
+		return errResult("qualified_name or qualified_names is required"), nil
 	}
 
 	project := getStringArg(args, "project")
@@ -76,6 +82,137 @@ func (s *Server) handleGetCodeSnippet(_ context.Context, req *mcp.CallToolReques
 	}
 
 	return s.buildSnippetResponse(match, includeNeighbors, nil)
+}
+
+// handleBatchSnippet resolves multiple qualified names in a single call.
+// Returns an array of snippets (or error entries for names that couldn't be resolved).
+// Cap: 10 names per call to bound response size.
+func (s *Server) handleBatchSnippet(args map[string]any, rawNames any) (*mcp.CallToolResult, error) {
+	nameArr, ok := rawNames.([]any)
+	if !ok || len(nameArr) == 0 {
+		return errResult("qualified_names must be a non-empty array of strings"), nil
+	}
+	if len(nameArr) > 10 {
+		return errResult("qualified_names accepts at most 10 names per call"), nil
+	}
+
+	project := getStringArg(args, "project")
+	effectiveProject := s.resolveProjectName(project)
+	includeNeighbors := getBoolArg(args, "include_neighbors")
+
+	type batchEntry struct {
+		QualifiedName string `json:"qualified_name"`
+		Status        string `json:"status"` // "found", "ambiguous", "not_found"
+		// fields below only present when status == "found"
+		Name      string         `json:"name,omitempty"`
+		Label     string         `json:"label,omitempty"`
+		FilePath  string         `json:"file_path,omitempty"`
+		StartLine int            `json:"start_line,omitempty"`
+		EndLine   int            `json:"end_line,omitempty"`
+		Source    string         `json:"source,omitempty"`
+		Props     map[string]any `json:"properties,omitempty"`
+		Callers   int            `json:"callers,omitempty"`
+		Callees   int            `json:"callees,omitempty"`
+		// fields below only present when status != "found"
+		Message     string   `json:"message,omitempty"`
+		Suggestions []string `json:"suggestions,omitempty"`
+	}
+
+	results := make([]batchEntry, 0, len(nameArr))
+
+	for _, rawName := range nameArr {
+		qn, ok := rawName.(string)
+		if !ok || qn == "" {
+			continue
+		}
+
+		entry := batchEntry{QualifiedName: qn}
+
+		match, candidates, resolveErr := s.resolveSnippetNode(qn, effectiveProject)
+		if resolveErr != nil {
+			entry.Status = "not_found"
+			entry.Message = resolveErr.Error()
+			results = append(results, entry)
+			continue
+		}
+
+		// Auto-resolve ambiguous matches in batch mode (always)
+		if match == nil && len(candidates) > 0 {
+			if len(candidates) <= 2 {
+				match = s.autoResolveBest(candidates, effectiveProject)
+			}
+			if match == nil {
+				entry.Status = "ambiguous"
+				entry.Message = fmt.Sprintf("%d candidates found", len(candidates))
+				for _, c := range candidates {
+					entry.Suggestions = append(entry.Suggestions, c.QualifiedName)
+				}
+				results = append(results, entry)
+				continue
+			}
+		}
+
+		if match == nil {
+			entry.Status = "not_found"
+			entry.Message = "no matching node"
+			results = append(results, entry)
+			continue
+		}
+
+		// Found — read source
+		entry.Status = "found"
+		entry.Name = match.node.Name
+		entry.Label = match.node.Label
+		entry.FilePath = match.node.FilePath
+		entry.StartLine = match.node.StartLine
+		entry.EndLine = match.node.EndLine
+
+		// Properties
+		if len(match.node.Properties) > 0 {
+			entry.Props = match.node.Properties
+		}
+
+		// Read source code
+		st, stErr := s.router.ForProject(match.project)
+		if stErr == nil {
+			proj, _ := st.GetProject(match.project)
+			if proj != nil && match.node.FilePath != "" && match.node.StartLine > 0 {
+				absPath, pathErr := safePath(proj.RootPath, match.node.FilePath)
+				if pathErr == nil {
+					source, readErr := readLines(absPath, match.node.StartLine, match.node.EndLine)
+					if readErr == nil {
+						entry.Source = source
+					}
+				}
+			}
+			// Caller/callee counts
+			in, out := st.NodeDegree(match.node.ID)
+			entry.Callers = in
+			entry.Callees = out
+
+			if includeNeighbors {
+				callerNames, calleeNames := st.NodeNeighborNames(match.node.ID, 10)
+				if len(callerNames) > 0 || len(calleeNames) > 0 {
+					if entry.Props == nil {
+						entry.Props = make(map[string]any)
+					}
+					if len(callerNames) > 0 {
+						entry.Props["caller_names"] = callerNames
+					}
+					if len(calleeNames) > 0 {
+						entry.Props["callee_names"] = calleeNames
+					}
+				}
+			}
+		}
+
+		results = append(results, entry)
+	}
+
+	return jsonResult(map[string]any{
+		"count":   len(results),
+		"results": results,
+	}), nil
 }
 
 // buildSnippetResponse reads source and builds the enriched JSON response for a resolved match.

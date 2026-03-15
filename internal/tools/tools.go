@@ -586,6 +586,10 @@ func (s *Server) registerIndexAndTraceTool() {
 				"project": {
 					"type": "string",
 					"description": "Project to trace in. Defaults to session project."
+				},
+				"include_source": {
+					"type": "boolean",
+					"description": "Inline source code for the root node and hop nodes under 50 lines. Makes trace results self-contained without follow-up get_code_snippet calls. Default: false."
 				}
 			},
 			"required": ["function_name"]
@@ -624,13 +628,18 @@ func (s *Server) registerSchemaAndSnippetTools() {
 			DestructiveHint: boolPtr(false),
 		},
 
-		Description: "Retrieve source code for a function/class by name with rich metadata. Accepts exact qualified name ('pkg.module.HandleRequest'), partial suffix ('module.HandleRequest'), or short name ('HandleRequest'). Returns source code, signature, return type, complexity, decorators, docstring, and caller/callee counts. Returns status='ambiguous' with suggestions when multiple matches found. Use auto_resolve=true to auto-pick from <=2 candidates. Use include_neighbors=true to get caller/callee name lists alongside counts.",
+		Description: "Retrieve source code for a function/class by name. Single mode: pass qualified_name (string). Batch mode: pass qualified_names (array of up to 10 strings) to fetch multiple snippets in one call - eliminates round trips after search_graph or trace_call_path. Returns source code, signature, return type, complexity, decorators, docstring, and caller/callee counts. Returns status='ambiguous' with suggestions when multiple matches found.",
 		InputSchema: json.RawMessage(`{
 			"type": "object",
 			"properties": {
 				"qualified_name": {
 					"type": "string",
-					"description": "Name or qualified name of the function/class. Exact QN for precision, short name for discovery. Returns suggestions if ambiguous."
+					"description": "Name or qualified name of the function/class (single mode). Exact QN for precision, short name for discovery."
+				},
+				"qualified_names": {
+					"type": "array",
+					"items": {"type": "string"},
+					"description": "Array of names to resolve in batch (max 10). Each entry is resolved independently. Use after search_graph or trace_call_path to read multiple functions in one call."
 				},
 				"project": {
 					"type": "string",
@@ -638,14 +647,13 @@ func (s *Server) registerSchemaAndSnippetTools() {
 				},
 				"auto_resolve": {
 					"type": "boolean",
-					"description": "When true and <=2 ambiguous candidates exist, auto-pick the best match (highest degree, prefer non-test). Returns source with match_method='auto_best' and alternatives list. Default: false."
+					"description": "When true and <=2 ambiguous candidates exist, auto-pick the best match (highest degree, prefer non-test). Default: false."
 				},
 				"include_neighbors": {
 					"type": "boolean",
 					"description": "When true, include caller_names and callee_names arrays (up to 10 each) alongside the counts. Default: false."
 				}
-			},
-			"required": ["qualified_name"]
+			}
 		}`),
 	}, s.handleGetCodeSnippet)
 }
@@ -730,6 +738,10 @@ func (s *Server) registerSearchTools() {
 				"case_sensitive": {
 					"type": "boolean",
 					"description": "Match patterns case-sensitively. Default: false (case-insensitive). Set true for exact case matching."
+				},
+				"include_source": {
+					"type": "boolean",
+					"description": "Inline source code for functions/classes under 50 lines. Eliminates follow-up get_code_snippet calls. Default: false. Also includes node properties (signature, return_type, decorators) in results."
 				}
 			}
 		}`),

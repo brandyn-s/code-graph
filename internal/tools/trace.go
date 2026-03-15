@@ -36,6 +36,7 @@ func (s *Server) handleTraceCallPath(_ context.Context, req *mcp.CallToolRequest
 
 	riskLabels := getBoolArg(args, "risk_labels")
 	minConfidence := getFloatArg(args, "min_confidence", 0)
+	includeSource := getBoolArg(args, "include_source")
 
 	project := getStringArg(args, "project")
 	effectiveProject := s.resolveProjectName(project)
@@ -95,6 +96,14 @@ func (s *Server) handleTraceCallPath(_ context.Context, req *mcp.CallToolRequest
 		responseData["impact_summary"] = store.BuildImpactSummary(allVisited, allEdges)
 	}
 	responseData["module"] = s.getModuleInfo(st, rootNode, foundProject)
+
+	// Inline source for short functions in hop nodes and root
+	if includeSource {
+		proj, _ := st.GetProject(foundProject)
+		if proj != nil {
+			inlineTraceSource(responseData, proj.RootPath)
+		}
+	}
 	s.addIndexStatus(responseData)
 
 	result := jsonResult(responseData)
@@ -211,6 +220,9 @@ func buildHops(visited []*store.NodeHop) []hopEntry {
 			"name":           nh.Node.Name,
 			"qualified_name": nh.Node.QualifiedName,
 			"label":          nh.Node.Label,
+			"file_path":      nh.Node.FilePath,
+			"start_line":     nh.Node.StartLine,
+			"end_line":       nh.Node.EndLine,
 		}
 		if sig, ok := nh.Node.Properties["signature"]; ok {
 			info["signature"] = sig
@@ -234,6 +246,9 @@ func buildHopsWithRisk(visited []*store.NodeHop) []hopEntry {
 			"name":           nh.Node.Name,
 			"qualified_name": nh.Node.QualifiedName,
 			"label":          nh.Node.Label,
+			"file_path":      nh.Node.FilePath,
+			"start_line":     nh.Node.StartLine,
+			"end_line":       nh.Node.EndLine,
 			"risk":           string(store.HopToRisk(nh.Hop)),
 			"hop":            nh.Hop,
 		}
@@ -288,6 +303,48 @@ func (s *Server) findSimilarNodes(name, project string, limit int) []*store.Node
 		nodes[i] = r.Node
 	}
 	return nodes
+}
+
+// inlineTraceSource adds source code to the root node and hop nodes in the trace response.
+// Only inlines functions under maxSourceLines (defined in search.go).
+func inlineTraceSource(responseData map[string]any, rootPath string) {
+	// Inline root node source
+	if root, ok := responseData["root"].(map[string]any); ok {
+		inlineNodeSource(root, rootPath)
+	}
+
+	// Inline hop node sources
+	if hops, ok := responseData["hops"].([]hopEntry); ok {
+		for _, hop := range hops {
+			for _, node := range hop.Nodes {
+				inlineNodeSource(node, rootPath)
+			}
+		}
+	}
+}
+
+// inlineNodeSource reads and attaches source to a node info map if the function is short enough.
+func inlineNodeSource(nodeInfo map[string]any, rootPath string) {
+	filePath, _ := nodeInfo["file_path"].(string)
+	startF, _ := nodeInfo["start_line"].(int)
+	endF, _ := nodeInfo["end_line"].(int)
+
+	if filePath == "" || startF == 0 || endF == 0 {
+		return
+	}
+	if endF-startF > maxSourceLines {
+		return
+	}
+
+	absPath, pathErr := safePath(rootPath, filePath)
+	if pathErr != nil {
+		return
+	}
+	source, readErr := readLines(absPath, startF, endF)
+	if readErr != nil {
+		return
+	}
+	nodeInfo["source"] = source
 }
 
 func buildEdgeList(edges []store.EdgeInfo) []map[string]any {

@@ -3,10 +3,15 @@ package tools
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"github.com/DeusData/codebase-memory-mcp/internal/store"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
+
+// maxSourceLines is the upper bound for inline source inclusion.
+// Functions longer than this are omitted to keep response size reasonable.
+const maxSourceLines = 50
 
 func (s *Server) handleSearchGraph(_ context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	args, err := parseArgs(req)
@@ -44,6 +49,7 @@ func (s *Server) handleSearchGraph(_ context.Context, req *mcp.CallToolRequest) 
 	}
 
 	params.SortBy = getStringArg(args, "sort_by")
+	includeSource := getBoolArg(args, "include_source")
 
 	st, err := s.resolveStore(getStringArg(args, "project"))
 	if err != nil {
@@ -56,39 +62,62 @@ func (s *Server) handleSearchGraph(_ context.Context, req *mcp.CallToolRequest) 
 		projName = projects[0].Name
 	}
 
+	// Resolve project root for source reading
+	var rootPath string
+	if includeSource {
+		proj, _ := st.GetProject(projName)
+		if proj != nil {
+			rootPath = proj.RootPath
+		}
+	}
+
 	params.Project = projName
 	output, searchErr := st.Search(params)
 	if searchErr != nil {
 		return errResult(fmt.Sprintf("search: %v", searchErr)), nil
 	}
 
-	type resultEntry struct {
-		Project        string   `json:"project"`
-		Name           string   `json:"name"`
-		QualifiedName  string   `json:"qualified_name"`
-		Label          string   `json:"label"`
-		FilePath       string   `json:"file_path"`
-		StartLine      int      `json:"start_line"`
-		EndLine        int      `json:"end_line"`
-		InDegree       int      `json:"in_degree"`
-		OutDegree      int      `json:"out_degree"`
-		ConnectedNames []string `json:"connected_names,omitempty"`
-	}
-
-	results := make([]resultEntry, 0, len(output.Results))
+	results := make([]map[string]any, 0, len(output.Results))
 	for _, r := range output.Results {
-		results = append(results, resultEntry{
-			Project:        projName,
-			Name:           r.Node.Name,
-			QualifiedName:  r.Node.QualifiedName,
-			Label:          r.Node.Label,
-			FilePath:       r.Node.FilePath,
-			StartLine:      r.Node.StartLine,
-			EndLine:        r.Node.EndLine,
-			InDegree:       r.InDegree,
-			OutDegree:      r.OutDegree,
-			ConnectedNames: r.ConnectedNames,
-		})
+		entry := map[string]any{
+			"project":        projName,
+			"name":           r.Node.Name,
+			"qualified_name": r.Node.QualifiedName,
+			"label":          r.Node.Label,
+			"file_path":      r.Node.FilePath,
+			"start_line":     r.Node.StartLine,
+			"end_line":       r.Node.EndLine,
+			"in_degree":      r.InDegree,
+			"out_degree":     r.OutDegree,
+		}
+
+		if len(r.ConnectedNames) > 0 {
+			entry["connected_names"] = r.ConnectedNames
+		}
+
+		// Include non-empty node properties (signature, return_type, decorators, security_role, etc.)
+		for k, v := range r.Node.Properties {
+			if v != nil {
+				entry[k] = v
+			}
+		}
+
+		// Inline source for short functions when requested
+		if includeSource && rootPath != "" && r.Node.FilePath != "" &&
+			r.Node.StartLine > 0 && r.Node.EndLine > 0 &&
+			(r.Node.EndLine-r.Node.StartLine) <= maxSourceLines {
+			absPath, pathErr := safePath(rootPath, r.Node.FilePath)
+			if pathErr == nil {
+				source, readErr := readLines(absPath, r.Node.StartLine, r.Node.EndLine)
+				if readErr == nil {
+					entry["source"] = source
+				} else {
+					slog.Debug("search.include_source.skip", "file", r.Node.FilePath, "err", readErr)
+				}
+			}
+		}
+
+		results = append(results, entry)
 	}
 
 	responseData := map[string]any{

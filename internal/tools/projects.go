@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/DeusData/codebase-memory-mcp/internal/pipeline"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -184,6 +185,14 @@ func (s *Server) handleIndexStatus(_ context.Context, req *mcp.CallToolRequest) 
 		result["calls_lsp"] = lspCalls
 		result["calls_lsp_pct"] = math.Round(lspPct*10) / 10
 		result["calls_by_strategy"] = stats
+	}
+
+	// Enrichment version tracking
+	result["enrichment_version"] = proj.EnrichmentVersion
+	result["enrichment_current"] = pipeline.EnrichmentVersion
+	if proj.EnrichmentVersion != pipeline.EnrichmentVersion {
+		result["enrichment_stale"] = true
+		result["enrichment_hint"] = "Enrichment passes updated. Re-index with force=true to apply."
 	}
 
 	// If this is the session project and indexing is in progress

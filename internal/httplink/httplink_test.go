@@ -1442,6 +1442,70 @@ Route::get('/api/orders/{id}', [OrderController::class, 'show']);
 	}
 }
 
+func TestPythonDictGetNotRoute(t *testing.T) {
+	// Python dict.get(), session.get(), params.delete() etc. must NOT create Route nodes.
+	// The Express/Go/Ktor source-based extractors should only run on their own file types.
+	dir, err := os.MkdirTemp("", "httplink-pydict-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+
+	// Write a Python file with common dict/object .get()/.delete() calls
+	if err := os.MkdirAll(filepath.Join(dir, "app"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	pySource := `def configure(app, config, router, session, params):
+    db_url = config.get("database_url")
+    secret = app.get("secret_key")
+    prefix = router.get("api_prefix")
+    token = session.get("auth_token")
+    params.delete("old_param")
+    api.get("setting")
+    server.post("event_name")
+`
+	if err := os.WriteFile(filepath.Join(dir, "app", "settings.py"), []byte(pySource), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	s, err := store.OpenMemory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+
+	project := "testproj"
+	if err := s.UpsertProject(project, dir); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a Function node in a .py file with source lines matching Express/Go/Ktor patterns
+	_, _ = s.UpsertNode(&store.Node{
+		Project:       project,
+		Label:         "Function",
+		Name:          "configure",
+		QualifiedName: "testproj.app.settings.configure",
+		FilePath:      "app/settings.py",
+		StartLine:     1,
+		EndLine:       8,
+		Properties:    map[string]any{},
+	})
+
+	linker := New(s, project)
+	_, err = linker.Run()
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	routeNodes, _ := s.FindNodesByLabel(project, "Route")
+	if len(routeNodes) != 0 {
+		for _, rn := range routeNodes {
+			t.Logf("unexpected Route: %s (path=%v, method=%v)", rn.Name, rn.Properties["path"], rn.Properties["method"])
+		}
+		t.Fatalf("expected 0 Route nodes from Python dict.get() calls, got %d", len(routeNodes))
+	}
+}
+
 func TestIsTestNodeFiltering(t *testing.T) {
 	tests := []struct {
 		filePath string

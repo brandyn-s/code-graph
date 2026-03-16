@@ -18,13 +18,13 @@ func (s *Server) registerSecurityTools() {
 			DestructiveHint: boolPtr(false),
 		},
 
-		Description: "Query security-tagged code elements for compliance evidence. Returns functions classified as auth_boundary (authentication/authorization enforcement), input_entry_point (HTTP handlers, CLI entry points), sensitive_sink (database writes, file I/O, subprocess exec), or crypto_operation (encryption, hashing, signing). Use for STIG/compliance evidence: AC-3 -> auth_boundary, SI-10 -> input_entry_point + sensitive_sink, SC-13 -> crypto_operation. Pass role to filter, or omit for all roles.",
+		Description: "Query security-tagged code elements for compliance evidence. Returns functions classified as auth_boundary (authentication/authorization enforcement), input_entry_point (HTTP handlers, CLI entry points), sensitive_sink (database writes, file I/O, subprocess exec), crypto_operation (encryption, hashing, signing), privilege_escalation (setuid, assume_role, impersonation), session_management (session create/destroy, token refresh/revoke), or audit_logging (audit log writes, compliance logging). Use for STIG/compliance evidence: AC-3 -> auth_boundary, SI-10 -> input_entry_point + sensitive_sink, SC-13 -> crypto_operation, IA-2 -> privilege_escalation, SC-23 -> session_management, AU-2 -> audit_logging. Pass role to filter, or omit for all roles.",
 		InputSchema: json.RawMessage(`{
 			"type": "object",
 			"properties": {
 				"role": {
 					"type": "string",
-					"enum": ["auth_boundary", "input_entry_point", "sensitive_sink", "crypto_operation"],
+					"enum": ["auth_boundary", "input_entry_point", "sensitive_sink", "crypto_operation", "privilege_escalation", "session_management", "audit_logging"],
 					"description": "Filter by security role. Omit for all roles."
 				},
 				"project": {
@@ -60,7 +60,7 @@ func (s *Server) handleQuerySecuritySurfaces(_ context.Context, req *mcp.CallToo
 	roleFilter := getStringArg(args, "role")
 	limit := getIntArg(args, "limit", 20)
 
-	roles := []string{"auth_boundary", "input_entry_point", "sensitive_sink", "crypto_operation"}
+	roles := []string{"auth_boundary", "input_entry_point", "sensitive_sink", "crypto_operation", "privilege_escalation", "session_management", "audit_logging"}
 	if roleFilter != "" {
 		roles = []string{roleFilter}
 	}
@@ -112,6 +112,9 @@ func (s *Server) handleQuerySecuritySurfaces(_ context.Context, req *mcp.CallToo
 			"AC-3":  "Check auth_boundary nodes enforce access control on all input_entry_point paths",
 			"SI-10": "Verify input_entry_point nodes validate input before reaching sensitive_sink nodes",
 			"SC-13": "Confirm crypto_operation nodes use FIPS-approved algorithms",
+			"IA-2":  "Verify privilege_escalation nodes require multi-factor or re-authentication before elevation",
+			"SC-23": "Confirm session_management nodes enforce session authenticity and proper lifecycle (create/destroy/timeout)",
+			"AU-2":  "Verify audit_logging nodes capture required auditable events per organization-defined list",
 		},
 	}
 

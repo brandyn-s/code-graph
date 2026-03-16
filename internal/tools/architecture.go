@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/DeusData/codebase-memory-mcp/internal/store"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -154,7 +155,7 @@ func (s *Server) handleManageADR(_ context.Context, req *mcp.CallToolRequest) (*
 
 	mode := getStringArg(args, "mode")
 	if mode == "" {
-		return errResult("mode is required ('get', 'store', 'update', or 'delete')"), nil
+		return errResult("mode is required ('get', 'store', 'update', 'delete', or 'auto')"), nil
 	}
 
 	project := getStringArg(args, "project")
@@ -184,8 +185,10 @@ func (s *Server) handleManageADR(_ context.Context, req *mcp.CallToolRequest) (*
 		return s.handleADRUpdate(st, projName, sections)
 	case "delete":
 		return s.handleADRDelete(st, projName)
+	case "auto":
+		return s.handleADRAuto(st, projName)
 	default:
-		return errResult(fmt.Sprintf("invalid mode: %q (use 'get', 'store', 'update', or 'delete')", mode)), nil
+		return errResult(fmt.Sprintf("invalid mode: %q (use 'get', 'store', 'update', 'delete', or 'auto')", mode)), nil
 	}
 }
 
@@ -287,6 +290,150 @@ func (s *Server) handleADRDelete(st *store.Store, projName string) (*mcp.CallToo
 		"status":  "deleted",
 		"project": projName,
 	}), nil
+}
+
+func (s *Server) handleADRAuto(st *store.Store, projName string) (*mcp.CallToolResult, error) {
+	// Compute architecture analysis with all aspects.
+	info, err := st.GetArchitecture(projName, []string{"all"})
+	if err != nil {
+		return errResult(fmt.Sprintf("compute architecture: %v", err)), nil
+	}
+
+	// Get node and edge counts for the PURPOSE section.
+	nodeCount, _ := st.CountNodes(projName)
+	edgeCount, _ := st.CountEdges(projName)
+
+	// Build each section from the architecture data.
+	purpose := fmt.Sprintf("%s - Indexed codebase with %d nodes and %d edges.", projName, nodeCount, edgeCount)
+
+	stack := formatStackSection(info.Languages)
+	arch := formatArchitectureSection(info.Packages)
+	patterns := formatPatternsSection(info.Hotspots, info.EntryPoints, info.Routes)
+	tradeoffs := formatTradeoffsSection(info.Boundaries)
+	philosophy := "Auto-generated from codebase analysis. Review and refine each section to capture intent, constraints, and decisions that static analysis cannot infer."
+
+	// Render the full ADR content.
+	sections := map[string]string{
+		"PURPOSE":      purpose,
+		"STACK":        stack,
+		"ARCHITECTURE": arch,
+		"PATTERNS":     patterns,
+		"TRADEOFFS":    tradeoffs,
+		"PHILOSOPHY":   philosophy,
+	}
+	content := store.RenderADR(sections)
+
+	if len(content) > store.MaxADRLength() {
+		return errResult(fmt.Sprintf("auto-generated ADR too long (%d chars, max %d); index has too many symbols - use mode='store' with manual content", len(content), store.MaxADRLength())), nil
+	}
+
+	if err := st.StoreADR(projName, content); err != nil {
+		return errResult(fmt.Sprintf("store ADR: %v", err)), nil
+	}
+
+	return jsonResult(map[string]any{
+		"status":     "stored",
+		"project":    projName,
+		"mode":       "auto",
+		"updated_at": store.Now(),
+		"hint":       "Auto-generated ADR stored. Use manage_adr(mode='get') to review, then manage_adr(mode='update', sections={...}) to refine individual sections.",
+	}), nil
+}
+
+// formatStackSection builds the STACK section from language analysis.
+func formatStackSection(langs []store.LanguageCount) string {
+	if len(langs) == 0 {
+		return "No languages detected."
+	}
+	total := 0
+	for _, l := range langs {
+		total += l.FileCount
+	}
+	var lines []string
+	for _, l := range langs {
+		pct := 0.0
+		if total > 0 {
+			pct = float64(l.FileCount) / float64(total) * 100
+		}
+		lines = append(lines, fmt.Sprintf("- %s: %d files (%.0f%%)", l.Language, l.FileCount, pct))
+	}
+	return strings.Join(lines, "\n")
+}
+
+// formatArchitectureSection builds the ARCHITECTURE section from package analysis.
+func formatArchitectureSection(pkgs []store.PackageSummary) string {
+	if len(pkgs) == 0 {
+		return "No packages detected."
+	}
+	var lines []string
+	for _, p := range pkgs {
+		lines = append(lines, fmt.Sprintf("- %s: %d nodes, fan-in=%d, fan-out=%d", p.Name, p.NodeCount, p.FanIn, p.FanOut))
+	}
+	return strings.Join(lines, "\n")
+}
+
+// formatPatternsSection builds the PATTERNS section from hotspots, entry points, and routes.
+func formatPatternsSection(hotspots []store.HotspotFunction, entryPoints []store.EntryPointInfo, routes []store.RouteInfo) string {
+	var parts []string
+
+	if len(hotspots) > 0 {
+		parts = append(parts, "### Hotspots (most-called functions)")
+		limit := len(hotspots)
+		if limit > 5 {
+			limit = 5
+		}
+		for _, h := range hotspots[:limit] {
+			parts = append(parts, fmt.Sprintf("- %s (fan-in=%d)", h.QualifiedName, h.FanIn))
+		}
+	}
+
+	if len(entryPoints) > 0 {
+		parts = append(parts, "### Entry Points")
+		limit := len(entryPoints)
+		if limit > 5 {
+			limit = 5
+		}
+		for _, ep := range entryPoints[:limit] {
+			parts = append(parts, fmt.Sprintf("- %s (%s)", ep.Name, ep.File))
+		}
+	}
+
+	if len(routes) > 0 {
+		parts = append(parts, "### HTTP Routes")
+		limit := len(routes)
+		if limit > 5 {
+			limit = 5
+		}
+		for _, r := range routes[:limit] {
+			if r.Method != "" {
+				parts = append(parts, fmt.Sprintf("- %s %s -> %s", r.Method, r.Path, r.Handler))
+			} else {
+				parts = append(parts, fmt.Sprintf("- %s -> %s", r.Path, r.Handler))
+			}
+		}
+	}
+
+	if len(parts) == 0 {
+		return "No patterns detected."
+	}
+	return strings.Join(parts, "\n")
+}
+
+// formatTradeoffsSection builds the TRADEOFFS section from cross-package boundaries.
+func formatTradeoffsSection(boundaries []store.CrossPkgBoundary) string {
+	if len(boundaries) == 0 {
+		return "No cross-package boundaries detected."
+	}
+	var lines []string
+	lines = append(lines, "Cross-package call volumes (potential coupling):")
+	limit := len(boundaries)
+	if limit > 5 {
+		limit = 5
+	}
+	for _, b := range boundaries[:limit] {
+		lines = append(lines, fmt.Sprintf("- %s -> %s: %d calls", b.From, b.To, b.CallCount))
+	}
+	return strings.Join(lines, "\n")
 }
 
 // parseStringArray extracts a string array from tool arguments.

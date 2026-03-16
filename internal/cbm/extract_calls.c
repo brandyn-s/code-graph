@@ -232,6 +232,28 @@ static void walk_calls(CBMExtractCtx* ctx, TSNode node, const CBMLangSpec* spec)
                 call.callee_name = callee;
                 call.enclosing_func_qn = cbm_enclosing_func_qn_cached(ctx, node);
                 cbm_calls_push(&ctx->result->calls, ctx->arena, call);
+
+                // Python: Depends(func) — emit the argument as a call target too
+                if (ctx->language == CBM_LANG_PYTHON && strcmp(callee, "Depends") == 0) {
+                    TSNode args = ts_node_child_by_field_name(node, "arguments", 9);
+                    if (!ts_node_is_null(args)) {
+                        // First named child of argument_list is the dependency function
+                        uint32_t ncount = ts_node_named_child_count(args);
+                        if (ncount > 0) {
+                            TSNode first_arg = ts_node_named_child(args, 0);
+                            if (!ts_node_is_null(first_arg) &&
+                                strcmp(ts_node_type(first_arg), "identifier") == 0) {
+                                char* dep_name = cbm_node_text(ctx->arena, first_arg, ctx->source);
+                                if (dep_name && dep_name[0] && !cbm_is_keyword(dep_name, ctx->language)) {
+                                    CBMCall dep_call;
+                                    dep_call.callee_name = dep_name;
+                                    dep_call.enclosing_func_qn = call.enclosing_func_qn;
+                                    cbm_calls_push(&ctx->result->calls, ctx->arena, dep_call);
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
         // Don't recurse into call arguments for nested calls — the walk handles that
@@ -290,6 +312,27 @@ void handle_calls(CBMExtractCtx* ctx, TSNode node, const CBMLangSpec* spec, Walk
             call.callee_name = callee;
             call.enclosing_func_qn = state->enclosing_func_qn;
             cbm_calls_push(&ctx->result->calls, ctx->arena, call);
+
+            // Python: Depends(func) — emit the argument as a call target too
+            if (ctx->language == CBM_LANG_PYTHON && strcmp(callee, "Depends") == 0) {
+                TSNode args = ts_node_child_by_field_name(node, "arguments", 9);
+                if (!ts_node_is_null(args)) {
+                    uint32_t ncount = ts_node_named_child_count(args);
+                    if (ncount > 0) {
+                        TSNode first_arg = ts_node_named_child(args, 0);
+                        if (!ts_node_is_null(first_arg) &&
+                            strcmp(ts_node_type(first_arg), "identifier") == 0) {
+                            char* dep_name = cbm_node_text(ctx->arena, first_arg, ctx->source);
+                            if (dep_name && dep_name[0] && !cbm_is_keyword(dep_name, ctx->language)) {
+                                CBMCall dep_call;
+                                dep_call.callee_name = dep_name;
+                                dep_call.enclosing_func_qn = state->enclosing_func_qn;
+                                cbm_calls_push(&ctx->result->calls, ctx->arena, dep_call);
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 

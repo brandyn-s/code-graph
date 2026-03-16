@@ -55,6 +55,15 @@ func (s *Server) handleIndexRepository(ctx context.Context, req *mcp.CallToolReq
 		return errResult(fmt.Sprintf("store: %v", err)), nil
 	}
 
+	// If force=true, delete cached file hashes so classifyFiles treats all files as changed.
+	// This ensures post-flush enrichment passes (security tags, communities) run on all files.
+	forceReindex := getBoolArg(args, "force")
+	if forceReindex {
+		if err := st.DeleteFileHashes(projectName); err != nil {
+			return errResult(fmt.Sprintf("clearing file hashes: %v", err)), nil
+		}
+	}
+
 	// Run the indexing pipeline
 	p := pipeline.New(ctx, st, absPath, mode)
 	if err := p.Run(); err != nil {
@@ -80,11 +89,12 @@ func (s *Server) handleIndexRepository(ctx context.Context, req *mcp.CallToolReq
 	}
 
 	result := map[string]any{
-		"project":    projectName,
-		"mode":       string(mode),
-		"nodes":      nodeCount,
-		"edges":      edgeCount,
-		"indexed_at": indexedAt,
+		"project":       projectName,
+		"mode":          string(mode),
+		"force_reindex": forceReindex,
+		"nodes":         nodeCount,
+		"edges":         edgeCount,
+		"indexed_at":    indexedAt,
 	}
 
 	// Check for ADR presence and suggest creation if missing

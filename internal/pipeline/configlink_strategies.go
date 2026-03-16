@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DeusData/codebase-memory-mcp/internal/discover"
 	"github.com/DeusData/codebase-memory-mcp/internal/store"
 )
 
@@ -48,10 +49,15 @@ func (p *Pipeline) passConfigLinker() {
 	refEdges := p.matchConfigFileRefs()
 	slog.Info("configlinker.strategy", "name", "file_ref", "edges", len(refEdges), "elapsed", time.Since(t3))
 
-	all := make([]*store.Edge, 0, len(keyEdges)+len(depEdges)+len(refEdges))
+	t4 := time.Now()
+	tfEnvEdges := p.matchTerraformEnvVars()
+	slog.Info("configlinker.strategy", "name", "terraform_env", "edges", len(tfEnvEdges), "elapsed", time.Since(t4))
+
+	all := make([]*store.Edge, 0, len(keyEdges)+len(depEdges)+len(refEdges)+len(tfEnvEdges))
 	all = append(all, keyEdges...)
 	all = append(all, depEdges...)
 	all = append(all, refEdges...)
+	all = append(all, tfEnvEdges...)
 
 	if len(all) > 0 {
 		if err := p.Store.InsertEdgeBatch(all); err != nil {
@@ -63,6 +69,7 @@ func (p *Pipeline) passConfigLinker() {
 		"key_symbol", len(keyEdges),
 		"dep_import", len(depEdges),
 		"file_ref", len(refEdges),
+		"terraform_env", len(tfEnvEdges),
 		"total", len(all),
 		"elapsed", time.Since(t))
 }
@@ -389,6 +396,172 @@ func (p *Pipeline) matchConfigFileRefs() []*store.Edge {
 			})
 		}
 	}
+	return edges
+}
+
+// buildEnvReaders snapshots env var access data from the extraction cache
+// into p.envReaders. Must be called before extractionCache is released.
+func (p *Pipeline) buildEnvReaders() {
+	readers := make(map[string][]string)
+	for _, ext := range p.extractionCache {
+		if ext.Result == nil {
+			continue
+		}
+		for _, ea := range ext.Result.EnvAccesses {
+			if ea.EnvKey != "" && ea.EnclosingFuncQN != "" {
+				readers[ea.EnvKey] = append(readers[ea.EnvKey], ea.EnclosingFuncQN)
+			}
+		}
+	}
+	p.envReaders = readers
+	if len(readers) > 0 {
+		slog.Info("configlinker.env_readers", "keys", len(readers))
+	}
+}
+
+// --- Strategy 4: Terraform HCL Env Vars → Code Env Access ---
+
+// reTFEnvName matches `name = "ENV_VAR"` or `"name" = "ENV_VAR"` patterns inside
+// environment blocks in Terraform HCL files (e.g., container_definitions jsonencode).
+var reTFEnvName = regexp.MustCompile(`(?:"name"|name)\s*[=:]\s*"([A-Z][A-Z0-9_]*)"`)
+
+// reTFEnvBlock matches the start of an environment block or array in HCL.
+var reTFEnvBlock = regexp.MustCompile(`(?i)environment\s*[=:]\s*\[`)
+
+// extractTerraformEnvVars extracts environment variable names from a Terraform file.
+// It looks for `environment` blocks (typically inside container_definitions jsonencode)
+// and extracts `name = "VAR_NAME"` patterns from within those blocks.
+func extractTerraformEnvVars(content string) []string {
+	var envVars []string
+	seen := make(map[string]bool)
+
+	// Strategy: find `environment` array blocks and extract name fields within them.
+	// This handles the common ECS pattern:
+	//   container_definitions = jsonencode([{
+	//     environment = [
+	//       { name = "REDIS_URL", value = "redis://cache:6379" },
+	//     ]
+	//   }])
+	locs := reTFEnvBlock.FindAllStringIndex(content, -1)
+	for _, loc := range locs {
+		// Start scanning from the opening bracket of the environment array
+		start := loc[1] - 1 // position of '['
+		depth := 0
+		end := len(content)
+
+		// Find the matching closing bracket
+		for i := start; i < len(content); i++ {
+			switch content[i] {
+			case '[':
+				depth++
+			case ']':
+				depth--
+				if depth == 0 {
+					end = i + 1
+					goto found
+				}
+			}
+		}
+	found:
+		block := content[start:end]
+		matches := reTFEnvName.FindAllStringSubmatch(block, -1)
+		for _, m := range matches {
+			if len(m) >= 2 && !seen[m[1]] {
+				seen[m[1]] = true
+				envVars = append(envVars, m[1])
+			}
+		}
+	}
+
+	return envVars
+}
+
+// matchTerraformEnvVars links Terraform HCL env var definitions to functions
+// that read those env vars via os.environ/os.getenv/etc.
+// Uses p.envReaders which was built during the pre-flush semantic pass.
+func (p *Pipeline) matchTerraformEnvVars() []*store.Edge {
+	if len(p.envReaders) == 0 {
+		return nil
+	}
+
+	// Walk the repo looking for .tf files and extract env var names
+	type tfEnvFile struct {
+		relPath string
+		envVars []string
+	}
+	var tfFiles []tfEnvFile
+
+	_ = filepath.Walk(p.RepoPath, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			if discover.IGNORE_PATTERNS[info.Name()] {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if filepath.Ext(info.Name()) != ".tf" {
+			return nil
+		}
+		if info.Size() > 1<<20 {
+			return nil
+		}
+
+		data, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return nil
+		}
+
+		envVars := extractTerraformEnvVars(string(data))
+		if len(envVars) > 0 {
+			relPath, _ := filepath.Rel(p.RepoPath, path)
+			relPath = filepath.ToSlash(relPath)
+			tfFiles = append(tfFiles, tfEnvFile{relPath: relPath, envVars: envVars})
+		}
+		return nil
+	})
+
+	if len(tfFiles) == 0 {
+		return nil
+	}
+
+	// For each TF file, find the InfraFile node (or Module node) and create edges
+	var edges []*store.Edge
+	for _, tf := range tfFiles {
+		// Try to find the InfraFile node for this .tf file
+		infraQN := p.infraQN(tf.relPath, map[string]any{"infra_type": "terraform"})
+		sourceNode, err := p.Store.FindNodeByQN(p.ProjectName, infraQN)
+		if err != nil || sourceNode == nil {
+			continue
+		}
+
+		for _, envVar := range tf.envVars {
+			funcQNs, ok := p.envReaders[envVar]
+			if !ok {
+				continue
+			}
+			for _, funcQN := range funcQNs {
+				targetNode, findErr := p.Store.FindNodeByQN(p.ProjectName, funcQN)
+				if findErr != nil || targetNode == nil {
+					continue
+				}
+
+				edges = append(edges, &store.Edge{
+					Project:  p.ProjectName,
+					SourceID: sourceNode.ID,
+					TargetID: targetNode.ID,
+					Type:     "CONFIGURES",
+					Properties: map[string]any{
+						"strategy":   "terraform_env",
+						"confidence": 0.90,
+						"env_key":    envVar,
+					},
+				})
+			}
+		}
+	}
+
 	return edges
 }
 

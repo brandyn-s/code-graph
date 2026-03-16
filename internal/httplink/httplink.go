@@ -153,6 +153,29 @@ var expressReceiverAllowlist = map[string]bool{
 	"routes": true, "express": true, "route": true,
 }
 
+// File extension helpers to scope framework-specific route regexes.
+// Use filepath.Ext + ToLower for case-insensitive matching.
+func isGoFile(path string) bool {
+	return strings.ToLower(filepath.Ext(path)) == ".go"
+}
+
+func isJSFile(path string) bool {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".js", ".ts", ".jsx", ".tsx", ".mjs", ".cjs", ".mts", ".cts":
+		return true
+	}
+	return false
+}
+
+func isPHPFile(path string) bool {
+	return strings.ToLower(filepath.Ext(path)) == ".php"
+}
+
+func isKotlinFile(path string) bool {
+	ext := strings.ToLower(filepath.Ext(path))
+	return ext == ".kt" || ext == ".kts"
+}
+
 // Run executes the HTTP linking pass.
 func (l *Linker) Run() ([]HTTPLink, error) {
 	proj, err := l.store.GetProject(l.project)
@@ -375,14 +398,22 @@ func (l *Linker) discoverRoutes(rootPath string) []RouteHandler {
 		// C# ASP.NET: check attribute decorators
 		routes = append(routes, extractASPNetRoutes(f)...)
 
-		// Source-based route discovery (Go gin, Express.js, PHP Laravel, Kotlin Ktor)
+		// Source-based route discovery — each framework's regex only applies to its own file types
 		if f.FilePath != "" && f.StartLine > 0 && f.EndLine > 0 {
 			source := readSourceLines(rootPath, f.FilePath, f.StartLine, f.EndLine)
 			if source != "" {
-				routes = append(routes, extractGoRoutes(f, source)...)
-				routes = append(routes, extractExpressRoutes(f, source)...)
-				routes = append(routes, extractLaravelRoutes(f, source)...)
-				routes = append(routes, extractKtorRoutes(f, source)...)
+				if isGoFile(f.FilePath) {
+					routes = append(routes, extractGoRoutes(f, source)...)
+				}
+				if isJSFile(f.FilePath) {
+					routes = append(routes, extractExpressRoutes(f, source)...)
+				}
+				if isPHPFile(f.FilePath) {
+					routes = append(routes, extractLaravelRoutes(f, source)...)
+				}
+				if isKotlinFile(f.FilePath) {
+					routes = append(routes, extractKtorRoutes(f, source)...)
+				}
 			}
 		}
 

@@ -7,9 +7,10 @@ import (
 
 // Project represents an indexed project.
 type Project struct {
-	Name      string
-	IndexedAt string
-	RootPath  string
+	Name               string
+	IndexedAt          string
+	RootPath           string
+	EnrichmentVersion  string
 }
 
 // UpsertProject creates or updates a project record.
@@ -24,8 +25,8 @@ func (s *Store) UpsertProject(name, rootPath string) error {
 // GetProject returns a project by name.
 func (s *Store) GetProject(name string) (*Project, error) {
 	var p Project
-	err := s.q.QueryRow("SELECT name, indexed_at, root_path FROM projects WHERE name=?", name).
-		Scan(&p.Name, &p.IndexedAt, &p.RootPath)
+	err := s.q.QueryRow("SELECT name, indexed_at, root_path, enrichment_version FROM projects WHERE name=?", name).
+		Scan(&p.Name, &p.IndexedAt, &p.RootPath, &p.EnrichmentVersion)
 	if err != nil {
 		return nil, err
 	}
@@ -34,7 +35,7 @@ func (s *Store) GetProject(name string) (*Project, error) {
 
 // ListProjects returns all indexed projects.
 func (s *Store) ListProjects() ([]*Project, error) {
-	rows, err := s.q.Query("SELECT name, indexed_at, root_path FROM projects ORDER BY name")
+	rows, err := s.q.Query("SELECT name, indexed_at, root_path, enrichment_version FROM projects ORDER BY name")
 	if err != nil {
 		return nil, err
 	}
@@ -42,7 +43,7 @@ func (s *Store) ListProjects() ([]*Project, error) {
 	var result []*Project
 	for rows.Next() {
 		var p Project
-		if err := rows.Scan(&p.Name, &p.IndexedAt, &p.RootPath); err != nil {
+		if err := rows.Scan(&p.Name, &p.IndexedAt, &p.RootPath, &p.EnrichmentVersion); err != nil {
 			return nil, err
 		}
 		result = append(result, &p)
@@ -53,6 +54,12 @@ func (s *Store) ListProjects() ([]*Project, error) {
 // DeleteProject deletes a project and all associated data (CASCADE).
 func (s *Store) DeleteProject(name string) error {
 	_, err := s.q.Exec("DELETE FROM projects WHERE name=?", name)
+	return err
+}
+
+// SetEnrichmentVersion updates the enrichment_version for a project.
+func (s *Store) SetEnrichmentVersion(name, version string) error {
+	_, err := s.q.Exec("UPDATE projects SET enrichment_version=? WHERE name=?", version, name)
 	return err
 }
 

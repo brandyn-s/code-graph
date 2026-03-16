@@ -443,6 +443,9 @@ func (s *Server) registerTools() {
 	s.registerDetectChanges()
 	s.registerArchitectureTools()
 	s.registerSecurityTools()
+	s.registerDataFlowTool()
+	s.registerSTIGEvidenceTool()
+	s.registerHealthTool()
 }
 
 func (s *Server) registerArchitectureTools() {
@@ -481,14 +484,14 @@ func (s *Server) registerArchitectureTools() {
 			DestructiveHint: boolPtr(true),
 		},
 
-		Description: "Manage the Architecture Decision Record (ADR) for a project. CRUD operations for a persistent, section-based architectural summary. Modes: get (retrieve, optional include filter), store (create/replace - all 6 sections required), update (patch sections, unmentioned preserved), delete (remove ADR - this is irreversible). Fixed sections: PURPOSE, STACK, ARCHITECTURE, PATTERNS, TRADEOFFS, PHILOSOPHY. Max 8000 chars. Validation: store rejects missing sections; update rejects non-canonical keys. Use include=['STACK','PATTERNS'] with get to reduce token usage.",
+		Description: "Manage the Architecture Decision Record (ADR) for a project. CRUD operations for a persistent, section-based architectural summary. Modes: get (retrieve, optional include filter), store (create/replace - all 6 sections required), update (patch sections, unmentioned preserved), delete (remove ADR - this is irreversible), auto (compute from indexed graph and store - no content arg needed). Fixed sections: PURPOSE, STACK, ARCHITECTURE, PATTERNS, TRADEOFFS, PHILOSOPHY. Max 8000 chars. Validation: store rejects missing sections; update rejects non-canonical keys. Use include=['STACK','PATTERNS'] with get to reduce token usage.",
 		InputSchema: json.RawMessage(`{
 			"type": "object",
 			"properties": {
 				"mode": {
 					"type": "string",
-					"enum": ["get", "store", "update", "delete"],
-					"description": "Operation: 'get' retrieves ADR, 'store' creates/replaces (all 6 sections required), 'update' patches sections (canonical keys only), 'delete' removes."
+					"enum": ["get", "store", "update", "delete", "auto"],
+					"description": "Operation: 'get' retrieves ADR, 'store' creates/replaces (all 6 sections required), 'update' patches sections (canonical keys only), 'delete' removes, 'auto' computes from indexed graph and stores (no content needed)."
 				},
 				"project": {
 					"type": "string",
@@ -544,6 +547,10 @@ func (s *Server) registerIndexAndTraceTool() {
 					"type": "string",
 					"enum": ["full", "fast"],
 					"description": "Indexing mode. 'full' (default): parse all supported files. 'fast': aggressive filtering — skips generated code, test fixtures, docs, large files (>512KB), and non-source assets for faster indexing of large repos."
+				},
+				"force": {
+					"type": "boolean",
+					"description": "Force full re-index, ignoring cached file hashes. Use after deploying new enrichment features to ensure all post-flush passes run. Default: false."
 				}
 			}
 		}`),

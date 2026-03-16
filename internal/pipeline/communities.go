@@ -80,7 +80,7 @@ func louvainCommunities(adj map[int64]map[int64]bool, allNodes map[int64]bool) m
 		improved = louvainIteration(adj, nodeCommunity, nodeDegree, commSumTot, m)
 	}
 
-	return groupAndFilter(nodeCommunity)
+	return groupAndFilterMinSize(nodeCommunity, 3)
 }
 
 // louvainIteration runs one pass of greedy modularity optimization.
@@ -140,6 +140,13 @@ func louvainIteration(
 
 // groupAndFilter groups nodes by community and filters out singletons.
 func groupAndFilter(nodeCommunity map[int64]int) map[int][]int64 {
+	return groupAndFilterMinSize(nodeCommunity, 2)
+}
+
+// groupAndFilterMinSize groups nodes by community and filters out communities
+// smaller than minSize. This reduces noise from tiny clusters (singletons and
+// pairs) that the Louvain algorithm tends to produce on medium-sized repos.
+func groupAndFilterMinSize(nodeCommunity map[int64]int, minSize int) map[int][]int64 {
 	communities := make(map[int][]int64)
 	for nodeID, comm := range nodeCommunity {
 		communities[comm] = append(communities[comm], nodeID)
@@ -148,7 +155,7 @@ func groupAndFilter(nodeCommunity map[int64]int) map[int][]int64 {
 	filtered := make(map[int][]int64)
 	idx := 0
 	for _, members := range communities {
-		if len(members) >= 2 {
+		if len(members) >= minSize {
 			filtered[idx] = members
 			idx++
 		}

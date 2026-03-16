@@ -354,6 +354,13 @@ func (s *Store) initSchema() error {
 		_, _ = s.db.ExecContext(ctx, `ALTER TABLE file_hashes ADD COLUMN size INTEGER NOT NULL DEFAULT 0`)
 	}
 
+	// Migration: add enrichment_version column to projects for tracking enrichment pass versions.
+	var evCol int
+	_ = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM pragma_table_xinfo('projects') WHERE name='enrichment_version'`).Scan(&evCol)
+	if evCol == 0 {
+		_, _ = s.db.ExecContext(ctx, `ALTER TABLE projects ADD COLUMN enrichment_version TEXT NOT NULL DEFAULT ''`)
+	}
+
 	return nil
 }
 

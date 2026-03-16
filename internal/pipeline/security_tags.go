@@ -9,20 +9,28 @@ import (
 
 // Security role constants.
 const (
-	RoleAuthBoundary    = "auth_boundary"
-	RoleInputEntryPoint = "input_entry_point"
-	RoleSensitiveSink   = "sensitive_sink"
-	RoleCryptoOperation = "crypto_operation"
+	RoleAuthBoundary        = "auth_boundary"
+	RoleInputEntryPoint     = "input_entry_point"
+	RoleSensitiveSink       = "sensitive_sink"
+	RoleCryptoOperation     = "crypto_operation"
+	RolePrivilegeEscalation = "privilege_escalation"
+	RoleSessionManagement   = "session_management"
+	RoleAuditLogging        = "audit_logging"
 )
 
 var authNamePatterns = regexp.MustCompile(`(?i)(require_?auth|check_?auth|verify_?token|authenticate|authorize|is_?authenticated|validate_?session|check_?permission|require_?login)`)
 var authDecoratorPatterns = regexp.MustCompile(`(?i)(login_required|requires_auth|authenticated|authorize|permission_required|auth_required|protect|guard)`)
 var authFilePatterns = regexp.MustCompile(`(?i)(middleware[/\\]auth|auth[/\\]middleware|guards?[/\\]|policies[/\\])`)
-var entryPointDecorators = regexp.MustCompile(`(?i)(@app\.(get|post|put|delete|patch)|@router\.|@api_view|@(Get|Post|Put|Delete|Patch)Mapping|#\[axum::)`)
+var entryPointDecorators = regexp.MustCompile(`(?i)(@app\.(get|post|put|delete|patch)|@router\.|@api_view|@(Get|Post|Put|Delete|Patch)Mapping|#\[axum::|@\w+\.command|@celery\.task|@pytest\.fixture|@receiver\(|@\w+\.on_event|@(task|shared_task)\b)`)
 var sinkNamePatterns = regexp.MustCompile(`(?i)(execute_?query|exec_?sql|raw_?query|run_?command|subprocess|write_?file|remove_?file|send_?email)`)
 var sinkFilePatterns = regexp.MustCompile(`(?i)(db[/\\]|database[/\\]|repository[/\\]|repositories[/\\]|queries[/\\]|dal[/\\])`)
 var cryptoPatterns = regexp.MustCompile(`(?i)(encrypt|decrypt|hash_?password|sign_?token|verify_?signature|(?:^|[^a-zA-Z])(?:hmac|aes|rsa|pbkdf|argon|bcrypt|scrypt)(?:[^a-zA-Z]|$))`)
 var cryptoFilePatterns = regexp.MustCompile(`(?i)(crypto[/\\]|encryption[/\\]|certs?[/\\]|tls[/\\]|pki[/\\])`)
+var privEscPatterns = regexp.MustCompile(`(?i)(escalate_?privile|setuid|seteuid|setgid|sudo_?exec|become_?root|impersonate|assume_?role|sts_assume)`)
+var sessionPatterns = regexp.MustCompile(`(?i)(create_?session|destroy_?session|invalidate_?session|refresh_?token|revoke_?token|session_?store|set_?cookie|clear_?cookie)`)
+var sessionFilePatterns = regexp.MustCompile(`(?i)(session[/\\]|sessions[/\\])`)
+var auditPatterns = regexp.MustCompile(`(?i)(audit_?log|write_?audit|log_?event|record_?event|compliance_?log|security_?log)`)
+var auditFilePatterns = regexp.MustCompile(`(?i)(audit[/\\]|auditing[/\\]|compliance[/\\])`)
 
 // classifySecurityRole determines the security role for a node based on its
 // name, decorators, file path, and label. Returns empty string if no role matches.
@@ -56,6 +64,16 @@ func classifySecurityRole(n *store.Node) string {
 
 	if cryptoPatterns.MatchString(name) || cryptoFilePatterns.MatchString(filePath) {
 		return RoleCryptoOperation
+	}
+
+	if privEscPatterns.MatchString(name) {
+		return RolePrivilegeEscalation
+	}
+	if sessionPatterns.MatchString(name) || sessionFilePatterns.MatchString(filePath) {
+		return RoleSessionManagement
+	}
+	if auditPatterns.MatchString(name) || auditFilePatterns.MatchString(filePath) {
+		return RoleAuditLogging
 	}
 
 	if sinkNamePatterns.MatchString(name) || sinkFilePatterns.MatchString(filePath) {

@@ -263,6 +263,49 @@ func TestFileHashes(t *testing.T) {
 	}
 }
 
+func TestDeleteFileHashes(t *testing.T) {
+	s, err := OpenMemory()
+	if err != nil {
+		t.Fatalf("OpenMemory: %v", err)
+	}
+	defer s.Close()
+
+	if err := s.UpsertProject("test", "/tmp/test"); err != nil {
+		t.Fatalf("UpsertProject: %v", err)
+	}
+
+	// Insert multiple file hashes
+	if err := s.UpsertFileHash("test", "main.go", "abc123", 1000000, 512); err != nil {
+		t.Fatalf("UpsertFileHash main.go: %v", err)
+	}
+	if err := s.UpsertFileHash("test", "util.go", "def456", 2000000, 1024); err != nil {
+		t.Fatalf("UpsertFileHash util.go: %v", err)
+	}
+
+	// Verify they exist
+	hashes, err := s.GetFileHashes("test")
+	if err != nil {
+		t.Fatalf("GetFileHashes: %v", err)
+	}
+	if len(hashes) != 2 {
+		t.Fatalf("expected 2 hashes, got %d", len(hashes))
+	}
+
+	// Delete all hashes for the project
+	if err := s.DeleteFileHashes("test"); err != nil {
+		t.Fatalf("DeleteFileHashes: %v", err)
+	}
+
+	// Verify they are gone
+	hashes, err = s.GetFileHashes("test")
+	if err != nil {
+		t.Fatalf("GetFileHashes after delete: %v", err)
+	}
+	if len(hashes) != 0 {
+		t.Errorf("expected 0 hashes after DeleteFileHashes, got %d", len(hashes))
+	}
+}
+
 func TestSearch(t *testing.T) {
 	s, err := OpenMemory()
 	if err != nil {

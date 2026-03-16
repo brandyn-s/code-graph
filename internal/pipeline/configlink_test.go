@@ -223,6 +223,239 @@ func loadData() {
 	}
 }
 
+// --- Strategy 4: Terraform HCL Env Vars ---
+
+func TestExtractTerraformEnvVars_ECSPattern(t *testing.T) {
+	hclContent := `resource "aws_ecs_task_definition" "app" {
+  container_definitions = jsonencode([{
+    name  = "app"
+    image = "myapp:latest"
+    environment = [
+      { name = "REDIS_URL", value = "redis://cache:6379" },
+      { name = "DB_HOST", value = "postgres:5432" },
+    ]
+  }])
+}`
+	vars := extractTerraformEnvVars(hclContent)
+	if len(vars) != 2 {
+		t.Fatalf("expected 2 env vars, got %d: %v", len(vars), vars)
+	}
+
+	found := make(map[string]bool)
+	for _, v := range vars {
+		found[v] = true
+	}
+	if !found["REDIS_URL"] {
+		t.Error("expected REDIS_URL in extracted env vars")
+	}
+	if !found["DB_HOST"] {
+		t.Error("expected DB_HOST in extracted env vars")
+	}
+}
+
+func TestExtractTerraformEnvVars_MultipleContainers(t *testing.T) {
+	hclContent := `resource "aws_ecs_task_definition" "app" {
+  container_definitions = jsonencode([
+    {
+      name  = "app"
+      environment = [
+        { name = "APP_PORT", value = "8080" },
+      ]
+    },
+    {
+      name  = "sidecar"
+      environment = [
+        { name = "SIDECAR_MODE", value = "proxy" },
+      ]
+    }
+  ])
+}`
+	vars := extractTerraformEnvVars(hclContent)
+	if len(vars) != 2 {
+		t.Fatalf("expected 2 env vars, got %d: %v", len(vars), vars)
+	}
+
+	found := make(map[string]bool)
+	for _, v := range vars {
+		found[v] = true
+	}
+	if !found["APP_PORT"] {
+		t.Error("expected APP_PORT")
+	}
+	if !found["SIDECAR_MODE"] {
+		t.Error("expected SIDECAR_MODE")
+	}
+}
+
+func TestExtractTerraformEnvVars_NoDuplicates(t *testing.T) {
+	// Same env var appearing in two environment blocks
+	hclContent := `resource "aws_ecs_task_definition" "a" {
+  container_definitions = jsonencode([{
+    environment = [
+      { name = "SHARED_KEY", value = "val1" },
+    ]
+  }])
+}
+
+resource "aws_ecs_task_definition" "b" {
+  container_definitions = jsonencode([{
+    environment = [
+      { name = "SHARED_KEY", value = "val2" },
+    ]
+  }])
+}`
+	vars := extractTerraformEnvVars(hclContent)
+	if len(vars) != 1 {
+		t.Fatalf("expected 1 unique env var, got %d: %v", len(vars), vars)
+	}
+	if vars[0] != "SHARED_KEY" {
+		t.Errorf("expected SHARED_KEY, got %s", vars[0])
+	}
+}
+
+func TestExtractTerraformEnvVars_NoEnvironmentBlock(t *testing.T) {
+	hclContent := `resource "aws_ecs_task_definition" "app" {
+  container_definitions = jsonencode([{
+    name  = "app"
+    image = "myapp:latest"
+  }])
+}
+
+variable "region" {
+  default = "us-east-1"
+}`
+	vars := extractTerraformEnvVars(hclContent)
+	if len(vars) != 0 {
+		t.Errorf("expected 0 env vars from file without environment block, got %d: %v", len(vars), vars)
+	}
+}
+
+func TestExtractTerraformEnvVars_QuotedNameKey(t *testing.T) {
+	// JSON-style with quoted keys
+	hclContent := `resource "aws_ecs_task_definition" "app" {
+  container_definitions = jsonencode([{
+    environment = [
+      { "name" = "LOG_LEVEL", "value" = "debug" },
+    ]
+  }])
+}`
+	vars := extractTerraformEnvVars(hclContent)
+	if len(vars) != 1 {
+		t.Fatalf("expected 1 env var, got %d: %v", len(vars), vars)
+	}
+	if vars[0] != "LOG_LEVEL" {
+		t.Errorf("expected LOG_LEVEL, got %s", vars[0])
+	}
+}
+
+func TestExtractTerraformEnvVars_IgnoresLowercaseNames(t *testing.T) {
+	// The regex only matches UPPER_CASE env var names
+	hclContent := `resource "aws_ecs_task_definition" "app" {
+  container_definitions = jsonencode([{
+    environment = [
+      { name = "VALID_VAR", value = "yes" },
+      { name = "lowercase_var", value = "no" },
+    ]
+  }])
+}`
+	vars := extractTerraformEnvVars(hclContent)
+	if len(vars) != 1 {
+		t.Fatalf("expected 1 env var (only uppercase), got %d: %v", len(vars), vars)
+	}
+	if vars[0] != "VALID_VAR" {
+		t.Errorf("expected VALID_VAR, got %s", vars[0])
+	}
+}
+
+func TestTerraformEnvVars_IntegrationWithPython(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create a Terraform file with ECS container_definitions
+	writeFile(t, filepath.Join(dir, "ecs.tf"), `resource "aws_ecs_task_definition" "app" {
+  family = "myapp"
+  container_definitions = jsonencode([{
+    name  = "app"
+    image = "myapp:latest"
+    environment = [
+      { name = "REDIS_URL", value = "redis://cache:6379" },
+      { name = "LOG_LEVEL", value = "info" },
+    ]
+  }])
+}
+`)
+
+	// Create a Python file that reads REDIS_URL
+	writeFile(t, filepath.Join(dir, "app.py"), `import os
+
+def connect_cache():
+    url = os.getenv("REDIS_URL")
+    return url
+
+def get_log_level():
+    return os.environ.get("LOG_LEVEL", "info")
+`)
+
+	edges := runAndGetConfigures(t, dir)
+
+	// Look for terraform_env strategy edges
+	var tfEnvEdges []*store.Edge
+	for _, e := range edges {
+		if e.Properties["strategy"] == "terraform_env" {
+			tfEnvEdges = append(tfEnvEdges, e)
+		}
+	}
+
+	t.Logf("total CONFIGURES edges: %d, terraform_env edges: %d", len(edges), len(tfEnvEdges))
+	for _, e := range tfEnvEdges {
+		t.Logf("  terraform_env: env_key=%v confidence=%v source=%d target=%d",
+			e.Properties["env_key"], e.Properties["confidence"], e.SourceID, e.TargetID)
+	}
+
+	// We expect edges linking ecs.tf -> connect_cache (REDIS_URL) and ecs.tf -> get_log_level (LOG_LEVEL)
+	envKeysFound := make(map[string]bool)
+	for _, e := range tfEnvEdges {
+		key, _ := e.Properties["env_key"].(string)
+		envKeysFound[key] = true
+	}
+
+	if !envKeysFound["REDIS_URL"] {
+		t.Error("expected terraform_env CONFIGURES edge for REDIS_URL")
+	}
+	if !envKeysFound["LOG_LEVEL"] {
+		t.Error("expected terraform_env CONFIGURES edge for LOG_LEVEL")
+	}
+}
+
+func TestTerraformEnvVars_NoMatchWhenNoAccess(t *testing.T) {
+	dir := t.TempDir()
+
+	// TF file with env vars
+	writeFile(t, filepath.Join(dir, "ecs.tf"), `resource "aws_ecs_task_definition" "app" {
+  container_definitions = jsonencode([{
+    environment = [
+      { name = "SPECIAL_VAR", value = "something" },
+    ]
+  }])
+}
+`)
+
+	// Go file that does NOT access SPECIAL_VAR
+	writeFile(t, filepath.Join(dir, "main.go"), `package main
+
+func main() {
+	println("hello")
+}
+`)
+
+	edges := runAndGetConfigures(t, dir)
+	for _, e := range edges {
+		if e.Properties["strategy"] == "terraform_env" {
+			t.Errorf("expected no terraform_env edges when code doesn't access the env var, got env_key=%v",
+				e.Properties["env_key"])
+		}
+	}
+}
+
 // --- Helpers ---
 
 func runAndGetConfigures(t *testing.T, dir string) []*store.Edge {

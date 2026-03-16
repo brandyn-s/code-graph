@@ -27,6 +27,12 @@ import (
 	"github.com/DeusData/codebase-memory-mcp/internal/store"
 )
 
+// EnrichmentVersion tracks the version of post-flush enrichment passes.
+// Bump this manually whenever enrichment logic changes (new security roles,
+// community detection params, HTTP link patterns, etc.). The index_status
+// tool compares the stored version against this constant to detect stale enrichment.
+const EnrichmentVersion = "2026.03.16.1"
+
 // Pipeline orchestrates the 3-pass indexing of a repository.
 type Pipeline struct {
 	ctx         context.Context
@@ -47,6 +53,9 @@ type Pipeline struct {
 	returnTypes ReturnTypeMap
 	// goLSPIdx indexes Go cross-file definitions for LSP resolution in pass3
 	goLSPIdx *goLSPDefIndex
+	// envReaders maps env var key -> list of function QNs that read it.
+	// Built during semantic passes (pre-flush) for use in post-flush config linking.
+	envReaders map[string][]string
 }
 
 // New creates a new Pipeline.
@@ -387,11 +396,24 @@ func (p *Pipeline) runPostFlushPasses(files []discover.FileInfo) error {
 	slog.Info("pass.timing", "pass", "security_tags", "elapsed", time.Since(t))
 
 	t = time.Now()
+	p.passOPALinker()
+	slog.Info("pass.timing", "pass", "opa_linker", "elapsed", time.Since(t))
+
+	t = time.Now()
+	p.passLockfileDeps()
+	slog.Info("pass.timing", "pass", "lockfile_deps", "elapsed", time.Since(t))
+
+	t = time.Now()
 	p.updateFileHashes(files)
 	slog.Info("pass.timing", "pass", "filehashes", "elapsed", time.Since(t))
 
 	// Observability: per-edge-type counts
 	p.logEdgeCounts()
+
+	// Record the enrichment version so index_status can detect stale enrichment.
+	if err := p.Store.SetEnrichmentVersion(p.ProjectName, EnrichmentVersion); err != nil {
+		slog.Warn("pipeline.enrichment_version.err", "err", err)
+	}
 
 	return nil
 }
@@ -413,6 +435,10 @@ func (p *Pipeline) runSemanticEdgePasses() {
 	t = time.Now()
 	p.passConfigures()
 	slog.Info("pass.timing", "pass", "configures", "elapsed", time.Since(t))
+
+	// Snapshot env var readers from extraction cache before it's released.
+	// Used by passConfigLinker's terraform_env strategy in post-flush phase.
+	p.buildEnvReaders()
 }
 
 // logEdgeCounts logs the count of each edge type for observability.
@@ -423,6 +449,7 @@ func (p *Pipeline) logEdgeCounts() {
 		"THROWS", "RAISES", "READS", "WRITES", "CONFIGURES", "MEMBER_OF",
 		"HTTP_CALLS", "HANDLES", "ASYNC_CALLS", "IMPLEMENTS", "OVERRIDE",
 		"FILE_CHANGES_WITH", "CONTAINS_FILE", "CONTAINS_FOLDER", "CONTAINS_PACKAGE", "DEPENDS_ON",
+		"POLICY_GATES",
 	}
 	for _, edgeType := range edgeTypes {
 		count, err := p.Store.CountEdgesByType(p.ProjectName, edgeType)
@@ -517,6 +544,7 @@ func (p *Pipeline) runIncrementalPasses(
 	p.passThrows()
 	p.passReadsWrites()
 	p.passConfigures()
+	p.buildEnvReaders()
 	p.releaseExtractionFields(fieldsPostSemantic)
 	if err := p.checkCancel(); err != nil {
 		return err
@@ -550,11 +578,17 @@ func (p *Pipeline) runIncrementalPasses(
 	p.passConfigLinker()
 	p.passImplements()
 	p.passGitHistory()
+	p.passOPALinker()
 
 	p.updateFileHashes(allFiles)
 
 	// Observability
 	p.logEdgeCounts()
+
+	// Record the enrichment version so index_status can detect stale enrichment.
+	if err := p.Store.SetEnrichmentVersion(p.ProjectName, EnrichmentVersion); err != nil {
+		slog.Warn("pipeline.enrichment_version.err", "err", err)
+	}
 
 	return nil
 }

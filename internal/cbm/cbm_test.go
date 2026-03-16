@@ -60,6 +60,41 @@ func main() {
 	}
 }
 
+func TestPythonFastAPIDependsTracked(t *testing.T) {
+	source := []byte(`
+from fastapi import Depends
+
+def get_db():
+    return Database()
+
+def get_current_user(db = Depends(get_db)):
+    return db.get_user()
+
+@app.get("/items")
+def list_items(user = Depends(get_current_user)):
+    return items
+`)
+	result, err := ExtractFile(source, lang.Python, "test", "app/routes.py")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify Depends() arguments appear as calls
+	dependsCalls := map[string]bool{}
+	for _, c := range result.Calls {
+		t.Logf("Call: callee=%q enclosing=%q", c.CalleeName, c.EnclosingFuncQN)
+		if c.CalleeName == "get_db" || c.CalleeName == "get_current_user" {
+			dependsCalls[c.CalleeName] = true
+		}
+	}
+	if !dependsCalls["get_db"] {
+		t.Errorf("get_db not found in calls via Depends(). All calls: %v", result.Calls)
+	}
+	if !dependsCalls["get_current_user"] {
+		t.Errorf("get_current_user not found in calls via Depends(). All calls: %v", result.Calls)
+	}
+}
+
 func TestJSArrowFunction(t *testing.T) {
 	source := []byte(`const greet = (name) => {
   return "Hello " + name;

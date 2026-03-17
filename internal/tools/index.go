@@ -3,6 +3,8 @@ package tools
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"os"
 	"path/filepath"
 
 	"github.com/DeusData/codebase-memory-mcp/internal/discover"
@@ -19,7 +21,14 @@ func (s *Server) handleIndexRepository(ctx context.Context, req *mcp.CallToolReq
 
 	repoPath := getStringArg(args, "repo_path")
 	if repoPath == "" {
+		repoPath = getStringArg(args, "path") // accept both "repo_path" and "path"
+	}
+	if repoPath == "" {
 		repoPath = s.sessionRoot // auto-detected from session
+		if repoPath != "" {
+			slog.Info("index.fallback_to_session_root", "path", repoPath,
+				"hint", "no repo_path or path argument provided, using session root")
+		}
 	}
 	if repoPath == "" {
 		return errResult("repo_path is required (no session root detected)"), nil
@@ -43,6 +52,14 @@ func (s *Server) handleIndexRepository(ctx context.Context, req *mcp.CallToolReq
 		return errResult(fmt.Sprintf("invalid path: %v", err)), nil
 	}
 
+	// Validate path exists and is a directory before committing to a long index
+	if info, statErr := os.Stat(absPath); statErr != nil {
+		return errResult(fmt.Sprintf("path does not exist: %s", absPath)), nil
+	} else if !info.IsDir() {
+		return errResult(fmt.Sprintf("path is not a directory: %s", absPath)), nil
+	}
+	slog.Info("index.resolved_path", "input", repoPath, "absolute", absPath)
+
 	projectName := pipeline.ProjectNameFromPath(absPath)
 
 	// Lock to prevent concurrent indexing with auto-sync watcher
@@ -64,8 +81,12 @@ func (s *Server) handleIndexRepository(ctx context.Context, req *mcp.CallToolReq
 		}
 	}
 
-	// Run the indexing pipeline
+	// Run the indexing pipeline with progress reporting
 	p := pipeline.New(ctx, st, absPath, mode)
+	p.Progress = func(phase string, pct int, detail string) {
+		slog.Info("index.progress", "project", projectName, "phase", phase, "pct", pct, "detail", detail)
+		_ = st.SetIndexProgress(projectName, phase, pct, detail)
+	}
 	if err := p.Run(); err != nil {
 		return errResult(fmt.Sprintf("indexing failed: %v", err)), nil
 	}

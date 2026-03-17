@@ -361,6 +361,15 @@ func (s *Store) initSchema() error {
 		_, _ = s.db.ExecContext(ctx, `ALTER TABLE projects ADD COLUMN enrichment_version TEXT NOT NULL DEFAULT ''`)
 	}
 
+	// Migration: add index progress columns for live progress reporting.
+	var ipCol int
+	_ = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM pragma_table_xinfo('projects') WHERE name='index_phase'`).Scan(&ipCol)
+	if ipCol == 0 {
+		_, _ = s.db.ExecContext(ctx, `ALTER TABLE projects ADD COLUMN index_phase TEXT NOT NULL DEFAULT ''`)
+		_, _ = s.db.ExecContext(ctx, `ALTER TABLE projects ADD COLUMN index_pct INTEGER NOT NULL DEFAULT 0`)
+		_, _ = s.db.ExecContext(ctx, `ALTER TABLE projects ADD COLUMN index_detail TEXT NOT NULL DEFAULT ''`)
+	}
+
 	return nil
 }
 

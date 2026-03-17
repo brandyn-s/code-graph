@@ -63,6 +63,21 @@ func (s *Store) SetEnrichmentVersion(name, version string) error {
 	return err
 }
 
+// SetIndexProgress updates the live index progress for a project.
+func (s *Store) SetIndexProgress(name, phase string, pct int, detail string) error {
+	_, err := s.q.Exec("UPDATE projects SET index_phase=?, index_pct=?, index_detail=? WHERE name=?",
+		phase, pct, detail, name)
+	return err
+}
+
+// GetIndexProgress returns the live index progress for a project.
+func (s *Store) GetIndexProgress(name string) (phase string, pct int, detail string, err error) {
+	err = s.q.QueryRow(
+		"SELECT COALESCE(index_phase,''), COALESCE(index_pct,0), COALESCE(index_detail,'') FROM projects WHERE name=?",
+		name).Scan(&phase, &pct, &detail)
+	return
+}
+
 // FileHash represents a stored file content hash with stat metadata for incremental reindex.
 type FileHash struct {
 	Project string

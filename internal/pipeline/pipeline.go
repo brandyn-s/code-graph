@@ -33,6 +33,14 @@ import (
 // tool compares the stored version against this constant to detect stale enrichment.
 const EnrichmentVersion = "2026.03.16.1"
 
+// ProgressCallback is called between pipeline phases to report indexing progress.
+// phase: "discover", "structure", "definitions", "calls", "flush", "tests",
+//
+//	"communities", "http_links", "security_tags", "opa_linker", "lockfile_deps", "complete"
+//
+// pct: 0-100 overall percent estimate. detail: human-readable status string.
+type ProgressCallback func(phase string, pct int, detail string)
+
 // Pipeline orchestrates the 3-pass indexing of a repository.
 type Pipeline struct {
 	ctx         context.Context
@@ -40,6 +48,9 @@ type Pipeline struct {
 	RepoPath    string
 	ProjectName string
 	Mode        discover.IndexMode
+	// Progress is called between pipeline phases to report indexing progress.
+	// May be nil if no progress reporting is needed.
+	Progress ProgressCallback
 	// buf holds all nodes/edges in memory during full-index passes 1-14.
 	// nil during incremental mode and post-flush passes 15-18.
 	buf *GraphBuffer
@@ -56,6 +67,13 @@ type Pipeline struct {
 	// envReaders maps env var key -> list of function QNs that read it.
 	// Built during semantic passes (pre-flush) for use in post-flush config linking.
 	envReaders map[string][]string
+}
+
+// reportProgress safely calls the progress callback if set.
+func (p *Pipeline) reportProgress(phase string, pct int, detail string) {
+	if p.Progress != nil {
+		p.Progress(phase, pct, detail)
+	}
 }
 
 // New creates a new Pipeline.
@@ -197,6 +215,7 @@ func (p *Pipeline) Run() error {
 		return fmt.Errorf("discover: %w", err)
 	}
 	slog.Info("pipeline.discovered", "files", len(files))
+	p.reportProgress("discover", 5, fmt.Sprintf("%d files discovered", len(files)))
 	logHeapStats("pre_index")
 
 	// Use MEMORY journal mode during fresh indexing for faster bulk writes.
@@ -271,6 +290,7 @@ func (p *Pipeline) runFullPasses(files []discover.FileInfo) error {
 		return fmt.Errorf("pass1 structure: %w", err)
 	}
 	slog.Info("pass.timing", "pass", "structure", "elapsed", time.Since(t))
+	p.reportProgress("structure", 10, fmt.Sprintf("%d files structured", len(files)))
 	if err := p.checkCancel(); err != nil {
 		return err
 	}
@@ -278,6 +298,7 @@ func (p *Pipeline) runFullPasses(files []discover.FileInfo) error {
 	t = time.Now()
 	p.passDefinitions(files) // includes Variable extraction + enrichment
 	slog.Info("pass.timing", "pass", "definitions", "elapsed", time.Since(t))
+	p.reportProgress("definitions", 30, fmt.Sprintf("%d files parsed", len(files)))
 	logHeapStats("post_definitions")
 	if err := p.checkCancel(); err != nil {
 		return err
@@ -308,6 +329,7 @@ func (p *Pipeline) runFullPasses(files []discover.FileInfo) error {
 	t = time.Now()
 	p.passImports()
 	slog.Info("pass.timing", "pass", "imports", "elapsed", time.Since(t))
+	p.reportProgress("imports", 45, "import maps built")
 	if err := p.checkCancel(); err != nil {
 		return err
 	}
@@ -320,6 +342,7 @@ func (p *Pipeline) runFullPasses(files []discover.FileInfo) error {
 	}
 	p.passCalls()
 	slog.Info("pass.timing", "pass", "calls", "elapsed", time.Since(t))
+	p.reportProgress("calls", 60, "call targets resolved")
 	// Release heavy fields no longer needed after call resolution.
 	// Definitions + Calls + TypeAssigns + Imports dominate extractionCache memory
 	// (~160 KB/file → 16 GB for 100K-file repos). Nil them to halve peak RSS.
@@ -355,6 +378,7 @@ func (p *Pipeline) runFullPasses(files []discover.FileInfo) error {
 	logHeapStats("post_cleanup")
 
 	// Flush in-memory buffer to SQLite with deferred index creation.
+	p.reportProgress("flush", 72, "writing graph to SQLite")
 	if err := p.buf.FlushTo(p.ctx, p.Store); err != nil {
 		return fmt.Errorf("graph_buffer flush: %w", err)
 	}
@@ -366,10 +390,12 @@ func (p *Pipeline) runFullPasses(files []discover.FileInfo) error {
 
 // runPostFlushPasses runs passes that require SQLite indexes (post graph-buffer flush).
 func (p *Pipeline) runPostFlushPasses(files []discover.FileInfo) error {
+	p.reportProgress("tests", 75, "resolving test edges")
 	t := time.Now()
 	p.passTests() // TESTS/TESTS_FILE edges (DB-only)
 	slog.Info("pass.timing", "pass", "tests", "elapsed", time.Since(t))
 
+	p.reportProgress("communities", 78, "detecting communities")
 	t = time.Now()
 	p.passCommunities() // Community nodes + MEMBER_OF edges (DB-only)
 	slog.Info("pass.timing", "pass", "communities", "elapsed", time.Since(t))
@@ -377,32 +403,39 @@ func (p *Pipeline) runPostFlushPasses(files []discover.FileInfo) error {
 		return err
 	}
 
+	p.reportProgress("http_links", 82, "linking HTTP routes")
 	t = time.Now()
 	if err := p.passHTTPLinks(); err != nil {
 		slog.Warn("pass.httplink.err", "err", err)
 	}
 	slog.Info("pass.timing", "pass", "httplinks", "elapsed", time.Since(t))
 
+	p.reportProgress("config_linker", 86, "linking config to code")
 	t = time.Now()
 	p.passConfigLinker()
 	slog.Info("pass.timing", "pass", "configlinker", "elapsed", time.Since(t))
 
+	p.reportProgress("git_history", 89, "analyzing git history")
 	t = time.Now()
 	p.passGitHistory()
 	slog.Info("pass.timing", "pass", "githistory", "elapsed", time.Since(t))
 
+	p.reportProgress("security_tags", 92, "assigning security roles")
 	t = time.Now()
 	p.passSecurityTags()
 	slog.Info("pass.timing", "pass", "security_tags", "elapsed", time.Since(t))
 
+	p.reportProgress("opa_linker", 94, "linking OPA policies")
 	t = time.Now()
 	p.passOPALinker()
 	slog.Info("pass.timing", "pass", "opa_linker", "elapsed", time.Since(t))
 
+	p.reportProgress("lockfile_deps", 96, "parsing lockfile deps")
 	t = time.Now()
 	p.passLockfileDeps()
 	slog.Info("pass.timing", "pass", "lockfile_deps", "elapsed", time.Since(t))
 
+	p.reportProgress("file_hashes", 98, "updating file hashes")
 	t = time.Now()
 	p.updateFileHashes(files)
 	slog.Info("pass.timing", "pass", "filehashes", "elapsed", time.Since(t))
@@ -415,6 +448,7 @@ func (p *Pipeline) runPostFlushPasses(files []discover.FileInfo) error {
 		slog.Warn("pipeline.enrichment_version.err", "err", err)
 	}
 
+	p.reportProgress("complete", 100, "indexing complete")
 	return nil
 }
 

@@ -195,6 +195,16 @@ func (s *Server) handleIndexStatus(_ context.Context, req *mcp.CallToolRequest) 
 		result["enrichment_hint"] = "Enrichment passes updated. Re-index with force=true to apply."
 	}
 
+	// Live index progress from SQLite (set by pipeline progress callback)
+	phase, pct, detail, _ := st.GetIndexProgress(projectName)
+	if phase != "" && phase != "complete" {
+		result["index_progress"] = map[string]any{
+			"phase":   phase,
+			"percent": pct,
+			"detail":  detail,
+		}
+	}
+
 	// If this is the session project and indexing is in progress
 	if isSessionProject && currentStatus == "indexing" {
 		result["status"] = "indexing"

@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/DeusData/codebase-memory-mcp/internal/discover"
 	"github.com/DeusData/codebase-memory-mcp/internal/store"
 )
 
@@ -57,10 +58,9 @@ func (p *Pipeline) passOPALinker() {
 		if err != nil {
 			return nil // skip inaccessible entries
 		}
-		// Skip hidden directories and common non-source directories.
+		// Skip ignored directories (same patterns as discover/infrascan).
 		if d.IsDir() {
-			base := d.Name()
-			if strings.HasPrefix(base, ".") || base == "node_modules" || base == "vendor" || base == "__pycache__" {
+			if discover.IGNORE_PATTERNS[d.Name()] {
 				return filepath.SkipDir
 			}
 			return nil

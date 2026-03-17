@@ -1131,7 +1131,7 @@ type parseResult struct {
 
 // progressTicker logs a progress line every 5 seconds for long-running parallel phases.
 // Returns a stop function that must be called when the phase completes.
-func progressTicker(project, phase string, counter *atomic.Int64, total int, basePct int) func() {
+func progressTicker(project, phase string, counter *atomic.Int64, total, basePct int) func() {
 	done := make(chan struct{})
 	go func() {
 		ticker := time.NewTicker(5 * time.Second)

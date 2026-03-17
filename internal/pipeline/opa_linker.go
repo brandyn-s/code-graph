@@ -56,7 +56,7 @@ func (p *Pipeline) passOPALinker() {
 
 	err := filepath.WalkDir(p.RepoPath, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
-			return nil // skip inaccessible entries
+			return nil //nolint:nilerr // WHY: WalkDir callback - skip inaccessible entries
 		}
 		// Skip ignored directories (same patterns as discover/infrascan).
 		if d.IsDir() {

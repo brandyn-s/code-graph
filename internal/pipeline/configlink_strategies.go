@@ -510,7 +510,7 @@ func (p *Pipeline) matchTerraformEnvVars() []*store.Edge {
 
 		data, readErr := os.ReadFile(path)
 		if readErr != nil {
-			return nil
+			return nil //nolint:nilerr // WHY: WalkDir callback - skip unreadable files
 		}
 
 		envVars := extractTerraformEnvVars(string(data))

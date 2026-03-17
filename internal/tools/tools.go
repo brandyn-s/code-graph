@@ -450,7 +450,7 @@ func (s *Server) registerTools() {
 
 func (s *Server) registerArchitectureTools() {
 	s.addTool(&mcp.Tool{
-		Name:        "get_architecture",
+		Name: "get_architecture",
 		Annotations: &mcp.ToolAnnotations{
 			ReadOnlyHint:    true,
 			IdempotentHint:  true,
@@ -476,7 +476,7 @@ func (s *Server) registerArchitectureTools() {
 	}, s.handleGetArchitecture)
 
 	s.addTool(&mcp.Tool{
-		Name:        "manage_adr",
+		Name: "manage_adr",
 		Annotations: &mcp.ToolAnnotations{
 			ReadOnlyHint:    false,
 			IdempotentHint:  false,
@@ -527,7 +527,7 @@ func (s *Server) registerGraphTools() {
 
 func (s *Server) registerIndexAndTraceTool() {
 	s.addTool(&mcp.Tool{
-		Name:        "index_repository",
+		Name: "index_repository",
 		Annotations: &mcp.ToolAnnotations{
 			ReadOnlyHint:    false,
 			IdempotentHint:  true,
@@ -557,7 +557,7 @@ func (s *Server) registerIndexAndTraceTool() {
 	}, s.handleIndexRepository)
 
 	s.addTool(&mcp.Tool{
-		Name:        "trace_call_path",
+		Name: "trace_call_path",
 		Annotations: &mcp.ToolAnnotations{
 			ReadOnlyHint:    true,
 			IdempotentHint:  true,
@@ -606,7 +606,7 @@ func (s *Server) registerIndexAndTraceTool() {
 
 func (s *Server) registerSchemaAndSnippetTools() {
 	s.addTool(&mcp.Tool{
-		Name:        "get_graph_schema",
+		Name: "get_graph_schema",
 		Annotations: &mcp.ToolAnnotations{
 			ReadOnlyHint:    true,
 			IdempotentHint:  true,
@@ -627,7 +627,7 @@ func (s *Server) registerSchemaAndSnippetTools() {
 	}, s.handleGetGraphSchema)
 
 	s.addTool(&mcp.Tool{
-		Name:        "get_code_snippet",
+		Name: "get_code_snippet",
 		Annotations: &mcp.ToolAnnotations{
 			ReadOnlyHint:    true,
 			IdempotentHint:  true,
@@ -667,7 +667,7 @@ func (s *Server) registerSchemaAndSnippetTools() {
 
 func (s *Server) registerSearchTools() {
 	s.addTool(&mcp.Tool{
-		Name:        "search_graph",
+		Name: "search_graph",
 		Annotations: &mcp.ToolAnnotations{
 			ReadOnlyHint:    true,
 			IdempotentHint:  true,
@@ -755,7 +755,7 @@ func (s *Server) registerSearchTools() {
 	}, s.handleSearchGraph)
 
 	s.addTool(&mcp.Tool{
-		Name:        "search_code",
+		Name: "search_code",
 		Annotations: &mcp.ToolAnnotations{
 			ReadOnlyHint:    true,
 			IdempotentHint:  true,
@@ -803,7 +803,7 @@ func (s *Server) registerSearchTools() {
 
 func (s *Server) registerQueryTool() {
 	s.addTool(&mcp.Tool{
-		Name:        "query_graph",
+		Name: "query_graph",
 		Annotations: &mcp.ToolAnnotations{
 			ReadOnlyHint:    true,
 			IdempotentHint:  true,
@@ -836,7 +836,7 @@ func (s *Server) registerQueryTool() {
 // registerProjectTools registers tools for project management.
 func (s *Server) registerProjectTools() {
 	s.addTool(&mcp.Tool{
-		Name:        "list_projects",
+		Name: "list_projects",
 		Annotations: &mcp.ToolAnnotations{
 			ReadOnlyHint:    true,
 			IdempotentHint:  true,
@@ -849,7 +849,7 @@ func (s *Server) registerProjectTools() {
 	}, s.handleListProjects)
 
 	s.addTool(&mcp.Tool{
-		Name:        "delete_project",
+		Name: "delete_project",
 		Annotations: &mcp.ToolAnnotations{
 			ReadOnlyHint:    false,
 			IdempotentHint:  true,
@@ -871,7 +871,7 @@ func (s *Server) registerProjectTools() {
 	}, s.handleDeleteProject)
 
 	s.addTool(&mcp.Tool{
-		Name:        "index_status",
+		Name: "index_status",
 		Annotations: &mcp.ToolAnnotations{
 			ReadOnlyHint:    true,
 			IdempotentHint:  true,

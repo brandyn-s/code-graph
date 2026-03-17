@@ -14,7 +14,7 @@ import (
 
 func (s *Server) registerDetectChanges() {
 	s.addTool(&mcp.Tool{
-		Name:        "detect_changes",
+		Name: "detect_changes",
 		Annotations: &mcp.ToolAnnotations{
 			ReadOnlyHint:    true,
 			IdempotentHint:  true,

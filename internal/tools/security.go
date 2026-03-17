@@ -10,7 +10,7 @@ import (
 
 func (s *Server) registerSecurityTools() {
 	s.addTool(&mcp.Tool{
-		Name:        "query_security_surfaces",
+		Name: "query_security_surfaces",
 		Annotations: &mcp.ToolAnnotations{
 			ReadOnlyHint:    true,
 			IdempotentHint:  true,

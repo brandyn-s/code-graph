@@ -109,17 +109,17 @@ func (s *Server) handleIndexHealth(ctx context.Context, req *mcp.CallToolRequest
 	enrichmentStale := proj.EnrichmentVersion != pipeline.EnrichmentVersion
 
 	responseData := map[string]any{
-		"project":             effectiveProject,
-		"files_on_disk":       len(diskFiles),
-		"files_indexed":       len(indexedHashes),
-		"missing_from_index":  len(missingFiles),
-		"orphaned_in_index":   len(orphanedFiles),
-		"nodes":               nodeCount,
-		"edges":               edgeCount,
-		"enrichment_version":  proj.EnrichmentVersion,
-		"enrichment_current":  pipeline.EnrichmentVersion,
-		"enrichment_stale":    enrichmentStale,
-		"indexed_at":          proj.IndexedAt,
+		"project":            effectiveProject,
+		"files_on_disk":      len(diskFiles),
+		"files_indexed":      len(indexedHashes),
+		"missing_from_index": len(missingFiles),
+		"orphaned_in_index":  len(orphanedFiles),
+		"nodes":              nodeCount,
+		"edges":              edgeCount,
+		"enrichment_version": proj.EnrichmentVersion,
+		"enrichment_current": pipeline.EnrichmentVersion,
+		"enrichment_stale":   enrichmentStale,
+		"indexed_at":         proj.IndexedAt,
 	}
 
 	// Include file lists if small enough to be useful

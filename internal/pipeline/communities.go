@@ -138,11 +138,6 @@ func louvainIteration(
 	return improved
 }
 
-// groupAndFilter groups nodes by community and filters out singletons.
-func groupAndFilter(nodeCommunity map[int64]int) map[int][]int64 {
-	return groupAndFilterMinSize(nodeCommunity, 2)
-}
-
 // groupAndFilterMinSize groups nodes by community and filters out communities
 // smaller than minSize. This reduces noise from tiny clusters (singletons and
 // pairs) that the Louvain algorithm tends to produce on medium-sized repos.

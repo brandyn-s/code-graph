@@ -7,10 +7,10 @@ import (
 
 // Project represents an indexed project.
 type Project struct {
-	Name               string
-	IndexedAt          string
-	RootPath           string
-	EnrichmentVersion  string
+	Name              string
+	IndexedAt         string
+	RootPath          string
+	EnrichmentVersion string
 }
 
 // UpsertProject creates or updates a project record.

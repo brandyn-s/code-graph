@@ -140,7 +140,6 @@ func Shutdown() {
 	C.cbm_shutdown()
 }
 
-
 // ProfileStats holds accumulated profiling data from C extraction.
 type ProfileStats struct {
 	ParseNs   uint64
@@ -219,9 +218,9 @@ var languageToC = map[lang.Language]C.CBMLanguage{
 	lang.GLSL:       C.CBM_LANG_GLSL,
 	lang.INI:        C.CBM_LANG_INI,
 	// Scientific/math languages
-	lang.MATLAB: C.CBM_LANG_MATLAB,
-	lang.Lean:   C.CBM_LANG_LEAN,
-	lang.FORM:   C.CBM_LANG_FORM,
+	lang.MATLAB:  C.CBM_LANG_MATLAB,
+	lang.Lean:    C.CBM_LANG_LEAN,
+	lang.FORM:    C.CBM_LANG_FORM,
 	lang.Magma:   C.CBM_LANG_MAGMA,
 	lang.Wolfram: C.CBM_LANG_WOLFRAM,
 }
@@ -292,8 +291,8 @@ func convertResult(r *C.CBMFileResult) *FileResult {
 				Decorators:    goStringSlice(d.decorators),
 				BaseClasses:   goStringSlice(d.base_classes),
 				ParamNames:    goStringSlice(d.param_names),
-			ParamTypes:    goStringSlice(d.param_types),
-			ReturnTypes:   goStringSlice(d.return_types),
+				ParamTypes:    goStringSlice(d.param_types),
+				ReturnTypes:   goStringSlice(d.return_types),
 				Complexity:    int(d.complexity),
 				Lines:         int(d.lines),
 				IsExported:    bool(d.is_exported),

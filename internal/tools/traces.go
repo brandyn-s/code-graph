@@ -11,7 +11,7 @@ import (
 
 func (s *Server) registerTraceTools() {
 	s.addTool(&mcp.Tool{
-		Name:        "ingest_traces",
+		Name: "ingest_traces",
 		Annotations: &mcp.ToolAnnotations{
 			ReadOnlyHint:    false,
 			IdempotentHint:  false,
@@ -53,7 +53,7 @@ func (s *Server) handleIngestTraces(_ context.Context, req *mcp.CallToolRequest)
 	// Resolve to absolute path and validate it doesn't escape via traversal.
 	absPath, pathErr := filepath.Abs(filePath)
 	if pathErr != nil {
-		return errResult("invalid file_path: " + pathErr.Error()), nil
+		return errResult("invalid file_path: " + pathErr.Error()), nil //nolint:nilerr // WHY: MCP handler contract returns tool errors in result, Go error is always nil
 	}
 	filePath = absPath
 

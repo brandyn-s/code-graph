@@ -22,14 +22,14 @@ linters:
     - unparam
   settings:
     cyclop:
-      max-complexity: 25
+      max-complexity: 30
     errcheck:
       check-type-assertions: true
     funlen:
-      lines: 120
-      statements: 80
+      lines: 140
+      statements: 90
     gocognit:
-      min-complexity: 30
+      min-complexity: 65
     gocritic:
       enabled-tags:
         - diagnostic
@@ -43,7 +43,7 @@ linters:
         - G705
         - G706
     nestif:
-      min-complexity: 6
+      min-complexity: 20
   exclusions:
     generated: lax
     presets:

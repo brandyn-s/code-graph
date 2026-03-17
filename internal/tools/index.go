@@ -85,7 +85,6 @@ func (s *Server) handleIndexRepository(ctx context.Context, req *mcp.CallToolReq
 	p := pipeline.New(ctx, st, absPath, mode)
 	p.Progress = func(phase string, pct int, detail string) {
 		slog.Info("index.progress", "project", projectName, "phase", phase, "pct", pct, "detail", detail)
-		_ = st.SetIndexProgress(projectName, phase, pct, detail)
 	}
 	if err := p.Run(); err != nil {
 		return errResult(fmt.Sprintf("indexing failed: %v", err)), nil

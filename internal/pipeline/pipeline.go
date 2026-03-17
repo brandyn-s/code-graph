@@ -14,6 +14,7 @@ import (
 	"runtime/debug"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/zeebo/xxh3"
@@ -304,10 +305,12 @@ func (p *Pipeline) runFullPasses(files []discover.FileInfo) error {
 		return err
 	}
 
+	p.reportProgress("decorator_tags", 32, "discovering decorator tags")
 	t = time.Now()
 	p.passDecoratorTags() // auto-discover decorator semantic tags
 	slog.Info("pass.timing", "pass", "decorator_tags", "elapsed", time.Since(t))
 
+	p.reportProgress("registry", 34, "building symbol registry")
 	t = time.Now()
 	p.buildRegistry() // includes Variable label
 	slog.Info("pass.timing", "pass", "registry", "elapsed", time.Since(t))
@@ -315,10 +318,12 @@ func (p *Pipeline) runFullPasses(files []discover.FileInfo) error {
 		return err
 	}
 
+	p.reportProgress("inherits", 36, "resolving inheritance edges")
 	t = time.Now()
 	p.passInherits() // INHERITS edges from base_classes
 	slog.Info("pass.timing", "pass", "inherits", "elapsed", time.Since(t))
 
+	p.reportProgress("decorates", 38, "resolving decorator edges")
 	t = time.Now()
 	p.passDecorates() // DECORATES edges from decorators
 	slog.Info("pass.timing", "pass", "decorates", "elapsed", time.Since(t))
@@ -326,10 +331,11 @@ func (p *Pipeline) runFullPasses(files []discover.FileInfo) error {
 		return err
 	}
 
+	p.reportProgress("imports", 40, "building import maps")
 	t = time.Now()
 	p.passImports()
 	slog.Info("pass.timing", "pass", "imports", "elapsed", time.Since(t))
-	p.reportProgress("imports", 45, "import maps built")
+	p.reportProgress("imports", 42, "import maps built")
 	if err := p.checkCancel(); err != nil {
 		return err
 	}
@@ -353,9 +359,11 @@ func (p *Pipeline) runFullPasses(files []discover.FileInfo) error {
 		return err
 	}
 
+	p.reportProgress("usages", 60, "resolving usage edges")
 	t = time.Now()
 	p.passUsages()
 	slog.Info("pass.timing", "pass", "usages", "elapsed", time.Since(t))
+	p.reportProgress("usages", 62, "usage edges resolved")
 	p.releaseExtractionFields(fieldsPostUsages)
 	if err := p.checkCancel(); err != nil {
 		return err
@@ -370,6 +378,7 @@ func (p *Pipeline) runFullPasses(files []discover.FileInfo) error {
 
 	// passImplements needs extractionCache for Rust impl traits,
 	// so it must run before cleanupASTCache.
+	p.reportProgress("implements", 72, "resolving interface implementations")
 	t = time.Now()
 	p.passImplements()
 	slog.Info("pass.timing", "pass", "implements", "elapsed", time.Since(t))
@@ -454,22 +463,27 @@ func (p *Pipeline) runPostFlushPasses(files []discover.FileInfo) error {
 
 // runSemanticEdgePasses runs the semantic edge passes (USES_TYPE, THROWS, READS/WRITES, CONFIGURES).
 func (p *Pipeline) runSemanticEdgePasses() {
+	p.reportProgress("semantic:uses_type", 62, "resolving type references")
 	t := time.Now()
 	p.passUsesType()
 	slog.Info("pass.timing", "pass", "usestype", "elapsed", time.Since(t))
 
+	p.reportProgress("semantic:throws", 65, "resolving throw/raise edges")
 	t = time.Now()
 	p.passThrows()
 	slog.Info("pass.timing", "pass", "throws", "elapsed", time.Since(t))
 
+	p.reportProgress("semantic:readwrite", 67, "resolving read/write edges")
 	t = time.Now()
 	p.passReadsWrites()
 	slog.Info("pass.timing", "pass", "readwrite", "elapsed", time.Since(t))
 
+	p.reportProgress("semantic:configures", 69, "resolving config edges")
 	t = time.Now()
 	p.passConfigures()
 	slog.Info("pass.timing", "pass", "configures", "elapsed", time.Since(t))
 
+	p.reportProgress("semantic:env_readers", 71, "building env reader snapshot")
 	// Snapshot env var readers from extraction cache before it's released.
 	// Used by passConfigLinker's terraform_env strategy in post-flush phase.
 	p.buildEnvReaders()
@@ -1152,6 +1166,27 @@ func (p *Pipeline) passDefinitions(files []discover.FileInfo) {
 	pool := newAdaptivePool(runtime.NumCPU())
 	go pool.monitor(p.ctx)
 
+	var parsed atomic.Int64
+	totalFiles := len(parseableFiles)
+	lastReportedPct := 10 // structure pass already reported 10%
+
+	// Time-based progress ticker: log every 5s so long phases aren't silent
+	tickDone := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				done := int(parsed.Load())
+				pct := 10 + (done*10)/totalFiles
+				slog.Info("index.progress", "project", p.ProjectName, "phase", "definitions:parse", "pct", pct, "detail", fmt.Sprintf("%d/%d files parsed", done, totalFiles))
+			case <-tickDone:
+				return
+			}
+		}
+	}()
+
 	var wg sync.WaitGroup
 	for i, f := range parseableFiles {
 		pool.acquire()
@@ -1164,10 +1199,19 @@ func (p *Pipeline) passDefinitions(files []discover.FileInfo) {
 			}
 			results[i] = cbmParseFile(p.ProjectName, f)
 			pf.advance(i + 1)
+			done := int(parsed.Add(1))
+			// Report progress every ~5% of files (10% -> 20% range)
+			pct := 10 + (done*10)/totalFiles // maps [0, totalFiles] to [10, 20]
+			if pct > lastReportedPct && pct <= 20 {
+				lastReportedPct = pct
+				p.reportProgress("definitions:parse", pct, fmt.Sprintf("%d/%d files parsed", done, totalFiles))
+			}
 		}()
 	}
 	wg.Wait()
 	pool.stop()
+	close(tickDone)
+	p.reportProgress("definitions:parse", 20, fmt.Sprintf("%d files parsed", totalFiles))
 	slog.Info("pass2.stage1.extract", "files", len(parseableFiles), "elapsed", time.Since(t1))
 
 	// Log C-side parse vs extraction breakdown
@@ -1212,6 +1256,7 @@ func (p *Pipeline) passDefinitions(files []discover.FileInfo) {
 	}
 
 	slog.Info("pass2.stage2.collect", "nodes", len(allNodes), "edges", len(allPendingEdges), "elapsed", time.Since(t2))
+	p.reportProgress("definitions:collect", 23, fmt.Sprintf("%d nodes, %d edges collected", len(allNodes), len(allPendingEdges)))
 
 	// Batch insert all nodes
 	t3 := time.Now()
@@ -1221,6 +1266,7 @@ func (p *Pipeline) passDefinitions(files []discover.FileInfo) {
 		return
 	}
 	slog.Info("pass2.stage3.upsert_nodes", "nodes", len(allNodes), "elapsed", time.Since(t3))
+	p.reportProgress("definitions:upsert", 26, fmt.Sprintf("%d nodes upserted", len(allNodes)))
 
 	// Resolve pending edges to real edges using the ID map
 	t4 := time.Now()
@@ -1334,6 +1380,27 @@ func (p *Pipeline) passCalls() {
 		numWorkers = len(files)
 	}
 
+	var resolved atomic.Int64
+	totalCallFiles := len(files)
+	lastCallPct := 45
+
+	// Time-based progress ticker for call resolution
+	callTickDone := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				done := int(resolved.Load())
+				pct := 45 + (done*10)/totalCallFiles
+				slog.Info("index.progress", "project", p.ProjectName, "phase", "calls:resolve", "pct", pct, "detail", fmt.Sprintf("%d/%d files resolved", done, totalCallFiles))
+			case <-callTickDone:
+				return
+			}
+		}
+	}()
+
 	g, gctx := errgroup.WithContext(p.ctx)
 	g.SetLimit(numWorkers)
 	for i, fe := range files {
@@ -1350,12 +1417,22 @@ func (p *Pipeline) passCalls() {
 				fe.ext.Result.Definitions = nil
 				fe.ext.Result.Imports = nil
 			}
+			done := int(resolved.Add(1))
+			// Report progress every ~5% of files (45% -> 55% range)
+			pct := 45 + (done*10)/totalCallFiles
+			if pct > lastCallPct && pct <= 55 {
+				lastCallPct = pct
+				p.reportProgress("calls:resolve", pct, fmt.Sprintf("%d/%d files resolved", done, totalCallFiles))
+			}
 			return nil
 		})
 	}
 	_ = g.Wait()
+	close(callTickDone)
+	p.reportProgress("calls:resolve", 55, fmt.Sprintf("%d files resolved", totalCallFiles))
 
 	// Stage 2: Batch QN→ID resolution + batch edge insert
+	p.reportProgress("calls:flush", 57, "flushing call edges to graph")
 	p.flushResolvedEdges(results)
 }
 

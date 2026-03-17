@@ -1129,6 +1129,27 @@ type parseResult struct {
 	Err          error
 }
 
+// progressTicker logs a progress line every 5 seconds for long-running parallel phases.
+// Returns a stop function that must be called when the phase completes.
+func progressTicker(project, phase string, counter *atomic.Int64, total int, basePct int) func() {
+	done := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				n := int(counter.Load())
+				pct := basePct + (n*10)/total
+				slog.Info("index.progress", "project", project, "phase", phase, "pct", pct, "detail", fmt.Sprintf("%d/%d files", n, total))
+			case <-done:
+				return
+			}
+		}
+	}()
+	return func() { close(done) }
+}
+
 // passDefinitions extracts definitions from each file via CBM (C extraction library).
 // Uses parallel extraction (Stage 1) followed by sequential batch DB writes (Stage 2).
 func (p *Pipeline) passDefinitions(files []discover.FileInfo) {
@@ -1169,23 +1190,7 @@ func (p *Pipeline) passDefinitions(files []discover.FileInfo) {
 	var parsed atomic.Int64
 	totalFiles := len(parseableFiles)
 	lastReportedPct := 10 // structure pass already reported 10%
-
-	// Time-based progress ticker: log every 5s so long phases aren't silent
-	tickDone := make(chan struct{})
-	go func() {
-		ticker := time.NewTicker(5 * time.Second)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				done := int(parsed.Load())
-				pct := 10 + (done*10)/totalFiles
-				slog.Info("index.progress", "project", p.ProjectName, "phase", "definitions:parse", "pct", pct, "detail", fmt.Sprintf("%d/%d files parsed", done, totalFiles))
-			case <-tickDone:
-				return
-			}
-		}
-	}()
+	stopTicker := progressTicker(p.ProjectName, "definitions:parse", &parsed, totalFiles, 10)
 
 	var wg sync.WaitGroup
 	for i, f := range parseableFiles {
@@ -1210,7 +1215,7 @@ func (p *Pipeline) passDefinitions(files []discover.FileInfo) {
 	}
 	wg.Wait()
 	pool.stop()
-	close(tickDone)
+	stopTicker()
 	p.reportProgress("definitions:parse", 20, fmt.Sprintf("%d files parsed", totalFiles))
 	slog.Info("pass2.stage1.extract", "files", len(parseableFiles), "elapsed", time.Since(t1))
 
@@ -1383,23 +1388,7 @@ func (p *Pipeline) passCalls() {
 	var resolved atomic.Int64
 	totalCallFiles := len(files)
 	lastCallPct := 45
-
-	// Time-based progress ticker for call resolution
-	callTickDone := make(chan struct{})
-	go func() {
-		ticker := time.NewTicker(5 * time.Second)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				done := int(resolved.Load())
-				pct := 45 + (done*10)/totalCallFiles
-				slog.Info("index.progress", "project", p.ProjectName, "phase", "calls:resolve", "pct", pct, "detail", fmt.Sprintf("%d/%d files resolved", done, totalCallFiles))
-			case <-callTickDone:
-				return
-			}
-		}
-	}()
+	stopCallTicker := progressTicker(p.ProjectName, "calls:resolve", &resolved, totalCallFiles, 45)
 
 	g, gctx := errgroup.WithContext(p.ctx)
 	g.SetLimit(numWorkers)
@@ -1428,7 +1417,7 @@ func (p *Pipeline) passCalls() {
 		})
 	}
 	_ = g.Wait()
-	close(callTickDone)
+	stopCallTicker()
 	p.reportProgress("calls:resolve", 55, fmt.Sprintf("%d files resolved", totalCallFiles))
 
 	// Stage 2: Batch QN→ID resolution + batch edge insert

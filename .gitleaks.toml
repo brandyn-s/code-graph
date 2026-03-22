@@ -1,0 +1,16 @@
+title = "code-graph gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+  description = "False positives in infrascan test fixtures (intentional dummy credentials for scanner testing)"
+
+  [[allowlist.commits]]
+  hash = "860e80c88f4f3d5c1f095b7aa14bcf8c2e340a9e"
+
+  [[allowlist.commits]]
+  hash = "147059a63470bf82766bfc0aa2bd54baf0623744"
+
+  [[allowlist.paths]]
+  regex = '''internal/pipeline/infrascan_test\.go'''

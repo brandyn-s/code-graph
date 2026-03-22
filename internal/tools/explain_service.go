@@ -32,9 +32,48 @@ func (s *Server) registerExplainServiceTool() {
 					"description": "Project to search in. Defaults to session project."
 				}
 			},
-			"required": ["service"]
+			"required": ["service"],
+			"additionalProperties": false
 		}`),
 	}, s.handleExplainService)
+}
+
+// edgeConfidence extracts the confidence score from an edge's properties.
+// Returns 1.0 for edges without a confidence property (e.g., HTTP_CALLS, TESTS).
+func edgeConfidence(e *store.Edge) float64 {
+	if e.Properties == nil {
+		return 1.0
+	}
+	if c, ok := e.Properties["confidence"].(float64); ok {
+		return c
+	}
+	return 1.0
+}
+
+// commonMethodNames are method/function names too generic to be reliable call targets.
+// Tree-sitter fuzzy matching resolves these to whichever crate defines a function
+// with that name, producing false cross-service dependencies.
+var commonMethodNames = map[string]bool{
+	"ok": true, "map": true, "into": true, "from": true, "new": true,
+	"default": true, "clone": true, "fmt": true, "drop": true, "try_from": true,
+	"try_into": true, "as_ref": true, "as_mut": true, "deref": true,
+	"error": true, "debug": true, "info": true, "warn": true, "trace": true,
+	"clamp": true, "min": true, "max": true, "abs": true, "len": true,
+	"get": true, "set": true, "push": true, "pop": true, "append": true,
+	"insert": true, "remove": true, "contains": true, "is_empty": true,
+	"unwrap": true, "expect": true, "write": true, "read": true, "flush": true,
+	"close": true, "open": true, "run": true, "start": true, "stop": true,
+	"init": true, "setup": true, "update": true, "reset": true,
+	"next": true, "iter": true, "collect": true, "filter": true, "find": true,
+	"search": true, "sort": true, "reverse": true,
+	"to_string": true, "to_owned": true, "parse": true,
+	"print": true, "println": true, "format": true, "display": true,
+	"plot": true, "store": true, "load": true, "save": true, "send": true,
+	"is_some": true, "is_none": true, "is_ok": true, "is_err": true,
+	"fill": true, "matches": true, "zip": true, "take": true, "skip": true,
+	"eq": true, "ne": true, "cmp": true, "hash": true, "encode": true, "decode": true,
+	"lock": true, "unlock": true, "recv": true, "spawn": true, "join": true,
+	"poll": true, "await": true, "and_then": true, "or_else": true, "map_err": true,
 }
 
 func (s *Server) handleExplainService(_ context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -116,12 +155,15 @@ func (s *Server) handleExplainService(_ context.Context, req *mcp.CallToolReques
 		}
 	}
 
-	// Cross-service dependencies
+	// Cross-service dependencies (filtered by confidence + common-name blocklist)
+	const minConfidence = 0.3
+
 	type crossDep struct {
-		From     string `json:"from_function"`
-		To       string `json:"to_function"`
-		ToCrate  string `json:"to_crate"`
-		EdgeType string `json:"edge_type"`
+		From       string  `json:"from_function"`
+		To         string  `json:"to_function"`
+		ToCrate    string  `json:"to_crate"`
+		EdgeType   string  `json:"edge_type"`
+		Confidence float64 `json:"confidence"`
 	}
 	var depsOut, depsIn []crossDep
 	depOutSeen := make(map[string]bool)
@@ -137,15 +179,22 @@ func (s *Server) handleExplainService(_ context.Context, req *mcp.CallToolReques
 				if serviceIDs[e.TargetID] {
 					continue
 				}
+				conf := edgeConfidence(e)
+				if conf < minConfidence {
+					continue
+				}
 				target, _ := st.FindNodeByID(e.TargetID)
 				if target == nil || target.FilePath == "" {
+					continue
+				}
+				if commonMethodNames[strings.ToLower(target.Name)] {
 					continue
 				}
 				toCrate := extractTopLevelCrate(target.FilePath)
 				key := n.Name + "->" + target.Name + "@" + toCrate
 				if !depOutSeen[key] && len(depsOut) < 20 {
 					depOutSeen[key] = true
-					depsOut = append(depsOut, crossDep{From: n.Name, To: target.Name, ToCrate: toCrate, EdgeType: edgeType})
+					depsOut = append(depsOut, crossDep{From: n.Name, To: target.Name, ToCrate: toCrate, EdgeType: edgeType, Confidence: conf})
 				}
 			}
 		}
@@ -155,15 +204,22 @@ func (s *Server) handleExplainService(_ context.Context, req *mcp.CallToolReques
 				if serviceIDs[e.SourceID] {
 					continue
 				}
+				conf := edgeConfidence(e)
+				if conf < minConfidence {
+					continue
+				}
 				source, _ := st.FindNodeByID(e.SourceID)
 				if source == nil || source.FilePath == "" {
+					continue
+				}
+				if commonMethodNames[strings.ToLower(n.Name)] {
 					continue
 				}
 				fromCrate := extractTopLevelCrate(source.FilePath)
 				key := source.Name + "@" + fromCrate + "->" + n.Name
 				if !depInSeen[key] && len(depsIn) < 20 {
 					depInSeen[key] = true
-					depsIn = append(depsIn, crossDep{From: source.Name, To: n.Name, ToCrate: fromCrate, EdgeType: edgeType})
+					depsIn = append(depsIn, crossDep{From: source.Name, To: n.Name, ToCrate: fromCrate, EdgeType: edgeType, Confidence: conf})
 				}
 			}
 		}

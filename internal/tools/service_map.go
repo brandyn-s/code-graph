@@ -12,19 +12,20 @@ import (
 )
 
 var domainPatterns = map[string][]string{
-	"navigation":     {"anavd", "sbfd", "modspewd", "odometerd", "garminaisd", "compassd", "adsbd", "cloudadsbd"},
-	"perception":     {"trackerd", "cropsd", "radd", "libfuser", "libtracker"},
-	"autonomy":       {"controlsd", "planner", "appliedd", "trajd", "paddled", "ebrake"},
-	"propulsion":     {"pentad", "powerctl", "powerd"},
-	"safety":         {"saftd", "capnd", "alertgen"},
-	"communications": {"telem-bridge", "pubmsg", "zynoh", "apid"},
-	"recording":      {"doomper", "mcapestry", "mcap", "libreplay", "foxglove"},
-	"management":     {"sysmanager", "configd", "stated", "logmand", "vmond", "prometheusd", "assetman", "assetdiscovery", "device-registry"},
-	"calibration":    {"calibration", "mast-bringup", "septentrio", "bringup"},
-	"infrastructure": {"redacted-platform-terraform", "nix", "auth-gateway", "headscale", "aws-auth"},
-	"ui":             {"ship-os", "sartv"},
-	"simulation":     {"libsim", "sim_core", "hitlman", "dojo"},
-	"data":           {"mcs_rs", "gimme", "nominal", "torchyd"},
+	"navigation":     {"anavd", "sbfd", "sbfmon", "modspewd", "odometerd", "garminaisd", "compassd", "adsbd", "cloudadsbd", "nmeaconvd", "seastated"},
+	"perception":     {"trackerd", "cropsd", "radd", "libfuser", "libtracker", "fuserd", "cameractl", "procrustesd"},
+	"autonomy":       {"controlsd", "planner", "appliedd", "trajd", "paddled", "ebrake", "missiond", "emcond", "emconctl", "fthrottle", "gandropd"},
+	"propulsion":     {"pentad", "powerctl", "powerd", "xcpwrctl", "pdmctl"},
+	"safety":         {"saftd", "capnd", "alertgen", "battmond"},
+	"communications": {"telem-bridge", "pubmsg", "zynoh", "apid", "mithril-apid", "takd", "submsg", "snarfd", "canstatd"},
+	"recording":      {"doomper", "mcapestry", "mcap", "libreplay", "foxglove", "luplog", "replayer"},
+	"management":     {"sysmanager", "configd", "stated", "logmand", "vmond", "vmon", "prometheusd", "assetman", "assetdiscovery", "device-registry", "hvacd", "netmand", "reloadd", "swarmd", "cluster-swarmd", "sysman-sidecar", "redacted-platform-manager", "remediated", "sysdiag"},
+	"calibration":    {"calibration", "mast-bringup", "septentrio", "bringup", "ball-bringup", "ball-api", "registration-helper", "vitesse-switch", "thales_vlink_flasher"},
+	"infrastructure": {"redacted-platform-terraform", "terraform", "nix", "nxb", "auth-gateway", "headscale", "aws-auth", "ssh-cert", "release-tools", "release-image-store", "isengard"},
+	"ui":             {"ship-os", "sartv", "mirror-galadriel", "voyeur", "uxv"},
+	"simulation":     {"libsim", "sim_core", "hitlman", "dojo", "simd", "seaval", "hitl-tests"},
+	"data":           {"mcs_rs", "gimme", "nominal", "torchyd", "torchy-compare", "torchy-regression", "ml-data", "ml-datasets", "ml-embedding", "ml-train", "boat-tokenizer", "timemachine"},
+	"testing":        {"test-reader", "test-writer", "test-scenarios"},
 }
 
 func classifyDomain(serviceName string) string {
@@ -51,7 +52,7 @@ func (s *Server) registerServiceMapTool() {
 			OpenWorldHint:   boolPtr(false),
 			DestructiveHint: boolPtr(false),
 		},
-		Description: "Get a domain-organized map of all services in the codebase. Groups services into domains (navigation, perception, autonomy, propulsion, safety, communications, recording, management, calibration, infrastructure, simulation, data, ui). Shows each service's size, routes, security surfaces, and which other services it communicates with. Designed for understanding the overall system architecture.",
+		Description: "Get a domain-organized map of all services in the codebase. Groups services into domains (navigation, perception, autonomy, propulsion, safety, communications, recording, management, calibration, data, simulation, infrastructure, ui, testing). Shows each service's size, routes, security surfaces, and which other services it communicates with. Cross-service dependencies are filtered to medium+ confidence edges only.",
 		InputSchema: json.RawMessage(`{
 			"type": "object",
 			"properties": {
@@ -146,7 +147,9 @@ func (s *Server) handleServiceMap(_ context.Context, req *mcp.CallToolRequest) (
 			}
 		}
 
-		// Cross-crate dependencies (limited scan)
+		// Cross-crate dependencies (limited scan, confidence-filtered + blocklist)
+		const svcMapMinConf = 0.3
+
 		crateIDs := make(map[int64]bool, len(nodes))
 		for _, n := range nodes {
 			crateIDs[n.ID] = true
@@ -167,8 +170,14 @@ func (s *Server) handleServiceMap(_ context.Context, req *mcp.CallToolRequest) (
 					if crateIDs[e.TargetID] {
 						continue
 					}
+					if edgeConfidence(e) < svcMapMinConf {
+						continue
+					}
 					target, _ := st.FindNodeByID(e.TargetID)
 					if target == nil || target.FilePath == "" {
+						continue
+					}
+					if commonMethodNames[strings.ToLower(target.Name)] {
 						continue
 					}
 					toCrate := extractTopLevelCrate(target.FilePath)
@@ -212,7 +221,7 @@ func (s *Server) handleServiceMap(_ context.Context, req *mcp.CallToolRequest) (
 
 	domainOrder := []string{"navigation", "perception", "autonomy", "propulsion", "safety",
 		"communications", "recording", "management", "calibration", "data",
-		"simulation", "infrastructure", "ui", "library", "other"}
+		"simulation", "infrastructure", "ui", "testing", "library", "other"}
 
 	type domainGroup struct {
 		Domain   string        `json:"domain"`

@@ -25,13 +25,13 @@ func (s *Server) registerSecurityTools() {
 			DestructiveHint: boolPtr(false),
 		},
 
-		Description: "Query security-tagged code elements for compliance evidence. Returns functions classified by security_role (auth_boundary, input_entry_point, sensitive_sink, crypto_operation, privilege_escalation, session_management, audit_logging) with granular security_subtype (e.g. sql_query, shell_exec, file_write for sinks; http_handler, cli_entry for entry points; encryption, hashing, signing for crypto). Use mode='tainted_paths' to find all call paths from input_entry_point nodes to sensitive_sink nodes — produces SI-10 STIG evidence directly. STIG mapping: AC-3 -> auth_boundary, SI-10 -> tainted_paths, SC-13 -> crypto_operation, IA-2 -> privilege_escalation, SC-23 -> session_management, AU-2 -> audit_logging.",
+		Description: "Query security-tagged code elements for compliance evidence. Returns functions classified by security_role (auth_boundary, input_entry_point, sensitive_sink, crypto_operation, privilege_escalation, session_management, audit_logging, sanitizer) with granular security_subtype. Use mode='tainted_paths' to find call paths from entry points to sinks — annotates each path as 'sanitized' or 'unsanitized' based on whether a sanitizer/auth_boundary node exists on the path. Sources are refined: main() functions are replaced by their first-hop callees that handle external input. STIG mapping: AC-3 -> auth_boundary, SI-10 -> tainted_paths, SC-13 -> crypto_operation.",
 		InputSchema: json.RawMessage(`{
 			"type": "object",
 			"properties": {
 				"role": {
 					"type": "string",
-					"enum": ["auth_boundary", "input_entry_point", "sensitive_sink", "crypto_operation", "privilege_escalation", "session_management", "audit_logging"],
+					"enum": ["auth_boundary", "input_entry_point", "sensitive_sink", "crypto_operation", "privilege_escalation", "session_management", "audit_logging", "sanitizer"],
 					"description": "Filter by security role. Omit for all roles. Ignored when mode='tainted_paths'."
 				},
 				"mode": {
@@ -89,7 +89,7 @@ func (s *Server) handleSurfacesQuery(st *store.Store, projName string, args map[
 	roleFilter := getStringArg(args, "role")
 	limit := getIntArg(args, "limit", 20)
 
-	roles := []string{"auth_boundary", "input_entry_point", "sensitive_sink", "crypto_operation", "privilege_escalation", "session_management", "audit_logging"}
+	roles := []string{"auth_boundary", "input_entry_point", "sensitive_sink", "crypto_operation", "privilege_escalation", "session_management", "audit_logging", "sanitizer"}
 	if roleFilter != "" {
 		roles = []string{roleFilter}
 	}
@@ -154,6 +154,8 @@ func (s *Server) handleSurfacesQuery(st *store.Store, projName string, args map[
 }
 
 // handleTaintedPaths finds call paths from input_entry_point nodes to sensitive_sink nodes.
+// Sources are refined: main() functions are replaced by their first-hop callees that handle
+// external input. Each path is annotated as sanitized/unsanitized based on intermediate nodes.
 func (s *Server) handleTaintedPaths(st *store.Store, projName string, args map[string]any) (*mcp.CallToolResult, error) {
 	maxPaths := getIntArg(args, "limit", 50)
 	depth := getIntArg(args, "depth", 4)
@@ -164,7 +166,6 @@ func (s *Server) handleTaintedPaths(st *store.Store, projName string, args map[s
 		depth = 6
 	}
 
-	// exclude_tests defaults to true
 	excludeTests := true
 	if v, ok := args["exclude_tests"]; ok {
 		if b, ok := v.(bool); ok {
@@ -172,53 +173,68 @@ func (s *Server) handleTaintedPaths(st *store.Store, projName string, args map[s
 		}
 	}
 
-	// Find all source nodes (input_entry_point)
+	// Find all entry points
 	allSources, err := st.FindNodesByProperty(projName, "", "security_role", "input_entry_point")
 	if err != nil {
 		return errResult(fmt.Sprintf("find sources: %v", err)), nil
 	}
 
-	// Build sink ID set
 	allSinks, err := st.FindNodesByProperty(projName, "", "security_role", "sensitive_sink")
 	if err != nil {
 		return errResult(fmt.Sprintf("find sinks: %v", err)), nil
 	}
 
-	// Filter out test code if requested
 	sources := filterTestNodes(allSources, excludeTests)
 	sinks := filterTestNodes(allSinks, excludeTests)
+
+	// Source refinement: replace main() with first-hop callees that handle external input.
+	// main() is too coarse — the actual trust boundary is the first function receiving external data.
+	refined := refineSources(st, sources)
+
+	// Build sanitizer ID set for path annotation
+	allSanitizers, _ := st.FindNodesByProperty(projName, "", "security_role", "sanitizer")
+	allAuthBoundaries, _ := st.FindNodesByProperty(projName, "", "security_role", "auth_boundary")
+	sanitizerIDs := make(map[int64]string, len(allSanitizers)+len(allAuthBoundaries))
+	for _, n := range allSanitizers {
+		sanitizerIDs[n.ID] = n.Name
+	}
+	for _, n := range allAuthBoundaries {
+		sanitizerIDs[n.ID] = n.Name
+	}
 
 	sinkIDs := make(map[int64]*store.Node, len(sinks))
 	for _, sink := range sinks {
 		sinkIDs[sink.ID] = sink
 	}
 
-	if len(sources) == 0 || len(sinks) == 0 {
+	if len(refined) == 0 || len(sinks) == 0 {
 		return jsonResult(map[string]any{
 			"tainted_paths": []any{},
-			"sources":       len(sources),
+			"sources":       len(refined),
 			"sinks":         len(sinks),
-			"message":       "No tainted paths found (need both input_entry_point and sensitive_sink nodes)",
+			"sanitizers":    len(sanitizerIDs),
+			"message":       "No tainted paths found",
 		}), nil
 	}
 
 	type taintedPath struct {
-		SourceName    string `json:"source_name"`
-		SourceQN      string `json:"source_qn"`
-		SourceSubtype string `json:"source_subtype,omitempty"`
-		SourceFile    string `json:"source_file"`
-		SinkName      string `json:"sink_name"`
-		SinkQN        string `json:"sink_qn"`
-		SinkSubtype   string `json:"sink_subtype,omitempty"`
-		SinkFile      string `json:"sink_file"`
-		Hops          int    `json:"hops"`
-		PathNodes     []string `json:"path_via,omitempty"`
+		SourceName    string   `json:"source_name"`
+		SourceQN      string   `json:"source_qn"`
+		SourceSubtype string   `json:"source_subtype,omitempty"`
+		SourceFile    string   `json:"source_file"`
+		SinkName      string   `json:"sink_name"`
+		SinkQN        string   `json:"sink_qn"`
+		SinkSubtype   string   `json:"sink_subtype,omitempty"`
+		SinkFile      string   `json:"sink_file"`
+		Hops          int      `json:"hops"`
+		Sanitized     bool     `json:"sanitized"`
+		SanitizedBy   string   `json:"sanitized_by,omitempty"`
 	}
 
 	edgeTypes := []string{"CALLS", "HTTP_CALLS", "ASYNC_CALLS"}
 	var paths []taintedPath
 
-	for _, src := range sources {
+	for _, src := range refined {
 		if len(paths) >= maxPaths {
 			break
 		}
@@ -240,6 +256,9 @@ func (s *Server) handleTaintedPaths(st *store.Store, projName string, args map[s
 			srcSubtype, _ := src.Properties["security_subtype"].(string)
 			sinkSubtype, _ := nh.Node.Properties["security_subtype"].(string)
 
+			// Check if any intermediate node on the BFS path is a sanitizer
+			sanitized, sanitizedBy := checkPathSanitized(result.Visited, nh.Hop, src.ID, nh.Node.ID, sanitizerIDs)
+
 			paths = append(paths, taintedPath{
 				SourceName:    src.Name,
 				SourceQN:      src.QualifiedName,
@@ -250,21 +269,127 @@ func (s *Server) handleTaintedPaths(st *store.Store, projName string, args map[s
 				SinkSubtype:   sinkSubtype,
 				SinkFile:      nh.Node.FilePath,
 				Hops:          nh.Hop,
+				Sanitized:     sanitized,
+				SanitizedBy:   sanitizedBy,
 			})
 		}
 	}
 
+	// Count sanitized vs unsanitized
+	sanitizedCount := 0
+	for _, p := range paths {
+		if p.Sanitized {
+			sanitizedCount++
+		}
+	}
+
 	responseData := map[string]any{
-		"tainted_paths":  paths,
-		"sources":        len(sources),
-		"sinks":          len(sinks),
-		"paths_found":    len(paths),
-		"max_depth":      depth,
-		"exclude_tests":  excludeTests,
-		"stig_hint":      "SI-10: Each tainted path represents user input reaching a sensitive sink. Verify input validation exists on the path (check for auth_boundary nodes between source and sink).",
+		"tainted_paths":    paths,
+		"sources":          len(refined),
+		"sources_original": len(sources),
+		"sinks":            len(sinks),
+		"sanitizers":       len(sanitizerIDs),
+		"paths_found":      len(paths),
+		"paths_sanitized":  sanitizedCount,
+		"paths_unsanitized": len(paths) - sanitizedCount,
+		"max_depth":        depth,
+		"exclude_tests":    excludeTests,
+		"stig_hint":        "SI-10: Unsanitized paths represent user input reaching sensitive sinks without validation. Sanitized paths pass through a sanitizer or auth_boundary node.",
 	}
 
 	return jsonResult(responseData), nil
+}
+
+// refineSources replaces main() entry points with their first-hop callees that
+// handle external input (handlers, parsers, readers). Non-main entry points
+// (HTTP handlers, Route nodes) are kept as-is.
+func refineSources(st *store.Store, sources []*store.Node) []*store.Node {
+	var refined []*store.Node
+	seen := make(map[int64]bool)
+
+	for _, src := range sources {
+		if src.Name != "main" && src.Name != "Main" {
+			// Non-main entry points are already specific enough
+			if !seen[src.ID] {
+				seen[src.ID] = true
+				refined = append(refined, src)
+			}
+			continue
+		}
+
+		// For main(), find first-hop callees and use them as sources instead
+		edges, err := st.FindEdgesBySourceAndType(src.ID, "CALLS")
+		if err != nil || len(edges) == 0 {
+			// Can't resolve callees — keep main as fallback
+			if !seen[src.ID] {
+				seen[src.ID] = true
+				refined = append(refined, src)
+			}
+			continue
+		}
+
+		added := 0
+		for _, e := range edges {
+			callee, findErr := st.FindNodeByID(e.TargetID)
+			if findErr != nil || callee == nil {
+				continue
+			}
+			if seen[callee.ID] {
+				continue
+			}
+			// Skip trivial callees (init, setup, logging, defer-only functions)
+			if isInfraCallee(callee.Name) {
+				continue
+			}
+			seen[callee.ID] = true
+			// Inherit the entry point role for BFS purposes
+			if callee.Properties == nil {
+				callee.Properties = map[string]any{}
+			}
+			if _, hasRole := callee.Properties["security_subtype"]; !hasRole {
+				callee.Properties["security_subtype"] = "trust_boundary"
+			}
+			refined = append(refined, callee)
+			added++
+		}
+
+		// If no suitable callees found, keep main
+		if added == 0 && !seen[src.ID] {
+			seen[src.ID] = true
+			refined = append(refined, src)
+		}
+	}
+
+	return refined
+}
+
+// isInfraCallee returns true for infrastructure/boilerplate function names
+// that don't handle external input (logging setup, init, etc.).
+var infraCalleePattern = regexp.MustCompile(`(?i)^(init|setup|configure|log_?init|set_?logger|set_?log|debug_?setup|env_?logger|tracing_?init|panic_?hook|signal_?handler|defer_|cleanup|shutdown|close|drop)$`)
+
+func isInfraCallee(name string) bool {
+	return infraCalleePattern.MatchString(name)
+}
+
+// checkPathSanitized checks whether any node on the BFS path between source and
+// sink has a sanitizer or auth_boundary role. Uses the BFS visited list — nodes
+// at intermediate hops (between 1 and sinkHop-1) are candidates.
+func checkPathSanitized(visited []*store.NodeHop, sinkHop int, sourceID, sinkID int64, sanitizerIDs map[int64]string) (bool, string) {
+	if sinkHop <= 1 {
+		return false, "" // Direct call, no intermediate nodes
+	}
+	for _, nh := range visited {
+		if nh.Node.ID == sourceID || nh.Node.ID == sinkID {
+			continue
+		}
+		if nh.Hop >= sinkHop {
+			continue
+		}
+		if name, ok := sanitizerIDs[nh.Node.ID]; ok {
+			return true, name
+		}
+	}
+	return false, ""
 }
 
 // filterTestNodes removes test files and test functions from a node list.

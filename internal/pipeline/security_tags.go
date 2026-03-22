@@ -16,6 +16,7 @@ const (
 	RolePrivilegeEscalation = "privilege_escalation"
 	RoleSessionManagement   = "session_management"
 	RoleAuditLogging        = "audit_logging"
+	RoleSanitizer           = "sanitizer"
 )
 
 // Security subtype constants — granular classification within each role.
@@ -41,6 +42,12 @@ const (
 
 	// auth_boundary subtypes
 	SubtypeAuthCheck = "auth_check"
+
+	// sanitizer subtypes
+	SubtypeInputValidation = "input_validation"
+	SubtypeTypeCheck       = "type_check"
+	SubtypeEscapeEncode    = "escape_encode"
+	SubtypeBoundsCheck     = "bounds_check"
 )
 
 var authNamePatterns = regexp.MustCompile(`(?i)(require_?auth|check_?auth|verify_?token|authenticate|authorize|is_?authenticated|validate_?session|check_?permission|require_?login)`)
@@ -60,6 +67,14 @@ var sessionPatterns = regexp.MustCompile(`(?i)(create_?session|destroy_?session|
 var sessionFilePatterns = regexp.MustCompile(`(?i)(session[/\\]|sessions[/\\])`)
 var auditPatterns = regexp.MustCompile(`(?i)(audit_?log|write_?audit|log_?event|record_?event|compliance_?log|security_?log)`)
 var auditFilePatterns = regexp.MustCompile(`(?i)(audit[/\\]|auditing[/\\]|compliance[/\\])`)
+var sanitizerNamePatterns = regexp.MustCompile(`(?i)(^validate_|^sanitize_|^escape_|^encode_|^clean_|^normalize_|^check_bounds|^verify_|^assert_valid|^ensure_|^parse_int|^parse_uint|^parse_float|^parse_uuid|^parse_id|^parse_bool|^try_from|^from_str|_validator$|_sanitizer$|_checker$)`)
+var sanitizerFilePatterns = regexp.MustCompile(`(?i)(valid(at(e|or|ion))?[/\\]|sanitiz(e|er)[/\\]|input[_-]?check)`)
+
+// Subtype patterns for sanitizer subtypes.
+var subtypeInputValidationPatterns = regexp.MustCompile(`(?i)(^validate_|^sanitize_|^clean_|^normalize_|_validator$|_sanitizer$|^ensure_valid|^check_input|^verify_input)`)
+var subtypeTypeCheckPatterns = regexp.MustCompile(`(?i)(^parse_int|^parse_uint|^parse_float|^parse_uuid|^parse_id|^parse_bool|^try_from|^from_str|^to_int|^to_float|^as_int|_type_check|^coerce_|^cast_)`)
+var subtypeEscapeEncodePatterns = regexp.MustCompile(`(?i)(^escape_|^encode_|^quote_|^html_escape|^url_encode|^sql_escape|^shell_escape|^xml_escape)`)
+var subtypeBoundsCheckPatterns = regexp.MustCompile(`(?i)(^check_bounds|^check_range|^check_length|^check_size|^clamp|^limit_|^cap_|^constrain|^assert_in_range)`)
 
 // Subtype patterns for granular classification within roles.
 var subtypeSQLPatterns = regexp.MustCompile(`(?i)(execute_?query|exec_?sql|raw_?query|query_?row|prepare_?statement|sql\.Open|sqlx::query|diesel::insert|sea_orm.*insert|rusqlite.*execute)`)
@@ -120,6 +135,10 @@ func classifySecurityRole(n *store.Node) string {
 	}
 	if auditPatterns.MatchString(name) || auditFilePatterns.MatchString(filePath) {
 		return RoleAuditLogging
+	}
+
+	if sanitizerNamePatterns.MatchString(name) || sanitizerFilePatterns.MatchString(filePath) {
+		return RoleSanitizer
 	}
 
 	if sinkNamePatterns.MatchString(name) {
@@ -222,6 +241,18 @@ func classifySecuritySubtype(n *store.Node, role string) string {
 
 	case RoleAuthBoundary:
 		return SubtypeAuthCheck
+
+	case RoleSanitizer:
+		if subtypeEscapeEncodePatterns.MatchString(name) {
+			return SubtypeEscapeEncode
+		}
+		if subtypeTypeCheckPatterns.MatchString(name) {
+			return SubtypeTypeCheck
+		}
+		if subtypeBoundsCheckPatterns.MatchString(name) {
+			return SubtypeBoundsCheck
+		}
+		return SubtypeInputValidation
 	}
 
 	return ""

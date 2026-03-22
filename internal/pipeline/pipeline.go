@@ -424,6 +424,11 @@ func (p *Pipeline) runPostFlushPasses(files []discover.FileInfo) error {
 	p.passConfigLinker()
 	slog.Info("pass.timing", "pass", "configlinker", "elapsed", time.Since(t))
 
+	p.reportProgress("envvar_nodes", 87, "creating env var nodes")
+	t = time.Now()
+	p.passEnvVarNodes()
+	slog.Info("pass.timing", "pass", "envvar_nodes", "elapsed", time.Since(t))
+
 	p.reportProgress("git_history", 89, "analyzing git history")
 	t = time.Now()
 	p.passGitHistory()
@@ -488,10 +493,6 @@ func (p *Pipeline) runSemanticEdgePasses() {
 	// Used by passConfigLinker's terraform_env strategy in post-flush phase.
 	p.buildEnvReaders()
 
-	p.reportProgress("semantic:envvar_nodes", 72, "creating env var nodes")
-	t = time.Now()
-	p.passEnvVarNodes()
-	slog.Info("pass.timing", "pass", "envvar_nodes", "elapsed", time.Since(t))
 }
 
 // logEdgeCounts logs the count of each edge type for observability.
@@ -598,7 +599,6 @@ func (p *Pipeline) runIncrementalPasses(
 	p.passReadsWrites()
 	p.passConfigures()
 	p.buildEnvReaders()
-	p.passEnvVarNodes()
 	p.releaseExtractionFields(fieldsPostSemantic)
 	if err := p.checkCancel(); err != nil {
 		return err
@@ -630,6 +630,9 @@ func (p *Pipeline) runIncrementalPasses(
 		slog.Warn("pass.httplink.err", "err", err)
 	}
 	p.passConfigLinker()
+	_ = p.Store.DeleteEdgesByType(p.ProjectName, "READS_ENV")
+	_ = p.Store.DeleteNodesByLabel(p.ProjectName, "EnvVar")
+	p.passEnvVarNodes()
 	p.passImplements()
 	p.passGitHistory()
 	p.passOPALinker()

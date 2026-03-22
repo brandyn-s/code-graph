@@ -487,6 +487,11 @@ func (p *Pipeline) runSemanticEdgePasses() {
 	// Snapshot env var readers from extraction cache before it's released.
 	// Used by passConfigLinker's terraform_env strategy in post-flush phase.
 	p.buildEnvReaders()
+
+	p.reportProgress("semantic:envvar_nodes", 72, "creating env var nodes")
+	t = time.Now()
+	p.passEnvVarNodes()
+	slog.Info("pass.timing", "pass", "envvar_nodes", "elapsed", time.Since(t))
 }
 
 // logEdgeCounts logs the count of each edge type for observability.
@@ -593,6 +598,7 @@ func (p *Pipeline) runIncrementalPasses(
 	p.passReadsWrites()
 	p.passConfigures()
 	p.buildEnvReaders()
+	p.passEnvVarNodes()
 	p.releaseExtractionFields(fieldsPostSemantic)
 	if err := p.checkCancel(); err != nil {
 		return err

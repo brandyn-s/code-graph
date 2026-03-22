@@ -18,6 +18,30 @@ const (
 	RoleAuditLogging        = "audit_logging"
 )
 
+// Security subtype constants — granular classification within each role.
+const (
+	// input_entry_point subtypes
+	SubtypeHTTPHandler      = "http_handler"
+	SubtypeCLIEntry         = "cli_entry"
+	SubtypeGRPCHandler      = "grpc_handler"
+	SubtypeWebSocketHandler = "websocket_handler"
+
+	// sensitive_sink subtypes
+	SubtypeSQLQuery   = "sql_query"
+	SubtypeShellExec  = "shell_exec"
+	SubtypeFileWrite  = "file_write"
+	SubtypeNetworkSend = "network_send"
+
+	// crypto_operation subtypes
+	SubtypeEncryption    = "encryption"
+	SubtypeHashing       = "hashing"
+	SubtypeSigning       = "signing"
+	SubtypeKeyGeneration = "key_generation"
+
+	// auth_boundary subtypes
+	SubtypeAuthCheck = "auth_check"
+)
+
 var authNamePatterns = regexp.MustCompile(`(?i)(require_?auth|check_?auth|verify_?token|authenticate|authorize|is_?authenticated|validate_?session|check_?permission|require_?login)`)
 var authDecoratorPatterns = regexp.MustCompile(`(?i)(login_required|requires_auth|authenticated|authorize|permission_required|auth_required|protect|guard)`)
 var authFilePatterns = regexp.MustCompile(`(?i)(middleware[/\\]auth|auth[/\\]middleware|guards?[/\\]|policies[/\\])`)
@@ -31,6 +55,18 @@ var sessionPatterns = regexp.MustCompile(`(?i)(create_?session|destroy_?session|
 var sessionFilePatterns = regexp.MustCompile(`(?i)(session[/\\]|sessions[/\\])`)
 var auditPatterns = regexp.MustCompile(`(?i)(audit_?log|write_?audit|log_?event|record_?event|compliance_?log|security_?log)`)
 var auditFilePatterns = regexp.MustCompile(`(?i)(audit[/\\]|auditing[/\\]|compliance[/\\])`)
+
+// Subtype patterns for granular classification within roles.
+var subtypeSQLPatterns = regexp.MustCompile(`(?i)(execute_?query|exec_?sql|raw_?query|query_?row|prepare_?statement|sql\.Open)`)
+var subtypeShellPatterns = regexp.MustCompile(`(?i)(run_?command|subprocess|exec\.Command|os\.system|popen|shell_exec|child_process)`)
+var subtypeFileWritePatterns = regexp.MustCompile(`(?i)(write_?file|remove_?file|os\.Create|os\.Remove|os\.WriteFile|unlink|truncate|fwrite)`)
+var subtypeNetworkSendPatterns = regexp.MustCompile(`(?i)(send_?email|http\.Post|fetch|send_?request|smtp|net\.Dial)`)
+var subtypeGRPCPatterns = regexp.MustCompile(`(?i)(grpc|RegisterService|pb\.Register|\.proto)`)
+var subtypeWebSocketPatterns = regexp.MustCompile(`(?i)(websocket|ws_handler|on_?message|upgrade_?connection)`)
+var subtypeEncryptPatterns = regexp.MustCompile(`(?i)(encrypt|decrypt|(?:^|[^a-zA-Z])(?:aes|rsa|chacha)(?:[^a-zA-Z]|$))`)
+var subtypeHashPatterns = regexp.MustCompile(`(?i)(hash|(?:^|[^a-zA-Z])(?:sha256|sha512|md5|blake|pbkdf|argon|bcrypt|scrypt)(?:[^a-zA-Z]|$))`)
+var subtypeSignPatterns = regexp.MustCompile(`(?i)(sign|verify_?signature|(?:^|[^a-zA-Z])(?:hmac|ed25519|ecdsa)(?:[^a-zA-Z]|$))`)
+var subtypeKeyGenPatterns = regexp.MustCompile(`(?i)(generate_?key|new_?key|key_?pair|keygen)`)
 
 // classifySecurityRole determines the security role for a node based on its
 // name, decorators, file path, and label. Returns empty string if no role matches.
@@ -105,8 +141,75 @@ func nodeDecorators(n *store.Node) []string {
 	return result
 }
 
+// classifySecuritySubtype returns a granular subtype for a node within its security role.
+// Returns empty string if no subtype matches (the role alone is still valid).
+func classifySecuritySubtype(n *store.Node, role string) string {
+	name := n.Name
+	decorators := nodeDecorators(n)
+
+	switch role {
+	case RoleInputEntryPoint:
+		if n.Label == "Route" {
+			return SubtypeHTTPHandler
+		}
+		for _, dec := range decorators {
+			if subtypeGRPCPatterns.MatchString(dec) {
+				return SubtypeGRPCHandler
+			}
+			if subtypeWebSocketPatterns.MatchString(dec) {
+				return SubtypeWebSocketHandler
+			}
+		}
+		if subtypeGRPCPatterns.MatchString(name) || subtypeGRPCPatterns.MatchString(n.FilePath) {
+			return SubtypeGRPCHandler
+		}
+		if subtypeWebSocketPatterns.MatchString(name) {
+			return SubtypeWebSocketHandler
+		}
+		if name == "main" || name == "Main" {
+			return SubtypeCLIEntry
+		}
+		return SubtypeHTTPHandler
+
+	case RoleSensitiveSink:
+		if subtypeSQLPatterns.MatchString(name) {
+			return SubtypeSQLQuery
+		}
+		if subtypeShellPatterns.MatchString(name) {
+			return SubtypeShellExec
+		}
+		if subtypeFileWritePatterns.MatchString(name) {
+			return SubtypeFileWrite
+		}
+		if subtypeNetworkSendPatterns.MatchString(name) {
+			return SubtypeNetworkSend
+		}
+		return ""
+
+	case RoleCryptoOperation:
+		if subtypeKeyGenPatterns.MatchString(name) {
+			return SubtypeKeyGeneration
+		}
+		if subtypeSignPatterns.MatchString(name) {
+			return SubtypeSigning
+		}
+		if subtypeHashPatterns.MatchString(name) {
+			return SubtypeHashing
+		}
+		if subtypeEncryptPatterns.MatchString(name) {
+			return SubtypeEncryption
+		}
+		return ""
+
+	case RoleAuthBoundary:
+		return SubtypeAuthCheck
+	}
+
+	return ""
+}
+
 // passSecurityTags enriches Function/Method/Class/Route nodes with security_role
-// properties based on pattern matching. Runs as a post-flush pass.
+// and security_subtype properties based on pattern matching. Runs as a post-flush pass.
 func (p *Pipeline) passSecurityTags() {
 	labels := []string{"Function", "Method", "Class", "Route"}
 	tagged := 0
@@ -125,6 +228,9 @@ func (p *Pipeline) passSecurityTags() {
 				n.Properties = map[string]any{}
 			}
 			n.Properties["security_role"] = role
+			if subtype := classifySecuritySubtype(n, role); subtype != "" {
+				n.Properties["security_subtype"] = subtype
+			}
 			_, _ = p.Store.UpsertNode(n)
 			tagged++
 		}

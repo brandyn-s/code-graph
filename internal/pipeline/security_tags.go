@@ -27,10 +27,11 @@ const (
 	SubtypeWebSocketHandler = "websocket_handler"
 
 	// sensitive_sink subtypes
-	SubtypeSQLQuery   = "sql_query"
-	SubtypeShellExec  = "shell_exec"
-	SubtypeFileWrite  = "file_write"
+	SubtypeSQLQuery    = "sql_query"
+	SubtypeShellExec   = "shell_exec"
+	SubtypeFileWrite   = "file_write"
 	SubtypeNetworkSend = "network_send"
+	SubtypeHardwareIO  = "hardware_io"
 
 	// crypto_operation subtypes
 	SubtypeEncryption    = "encryption"
@@ -45,9 +46,10 @@ const (
 var authNamePatterns = regexp.MustCompile(`(?i)(require_?auth|check_?auth|verify_?token|authenticate|authorize|is_?authenticated|validate_?session|check_?permission|require_?login)`)
 var authDecoratorPatterns = regexp.MustCompile(`(?i)(login_required|requires_auth|authenticated|authorize|permission_required|auth_required|protect|guard)`)
 var authFilePatterns = regexp.MustCompile(`(?i)(middleware[/\\]auth|auth[/\\]middleware|guards?[/\\]|policies[/\\])`)
-var entryPointDecorators = regexp.MustCompile(`(?i)(@app\.(get|post|put|delete|patch)|@router\.|@api_view|@(Get|Post|Put|Delete|Patch)Mapping|#\[axum::|@\w+\.command|@celery\.task|@pytest\.fixture|@receiver\(|@\w+\.on_event|@(task|shared_task)\b)`)
-var sinkNamePatterns = regexp.MustCompile(`(?i)(execute_?query|exec_?sql|raw_?query|run_?command|subprocess|write_?file|remove_?file|send_?email)`)
+var entryPointDecorators = regexp.MustCompile(`(?i)(@app\.(get|post|put|delete|patch)|@router\.|@api_view|@(Get|Post|Put|Delete|Patch)Mapping|#\[axum::|#\[actix_web::|#\[rocket::(get|post|put|delete)|@\w+\.command|@celery\.task|@pytest\.fixture|@receiver\(|@\w+\.on_event|@(task|shared_task)\b)`)
+var sinkNamePatterns = regexp.MustCompile(`(?i)(execute_?query|exec_?sql|raw_?query|run_?command|subprocess|write_?file|remove_?file|send_?email|write_all|send_?frame|write_?frame|execute|spawn|std::process|Command::new|remove_dir|remove_dir_all|set_permissions|File::create|OpenOptions)`)
 var sinkFilePatterns = regexp.MustCompile(`(?i)(db[/\\]|database[/\\]|repository[/\\]|repositories[/\\]|queries[/\\]|dal[/\\])`)
+var sinkExcludeNames = regexp.MustCompile(`^(unwrap|expect|clone|default|new|fmt|from|into|as_ref|as_mut|deref|drop|len|is_empty|to_string|to_owned|display|debug|eq|ne|cmp|hash|index|iter|map|filter|fold|collect|ok|err|some|none|test_\w+)$`)
 var cryptoPatterns = regexp.MustCompile(`(?i)(encrypt|decrypt|hash_?password|sign_?token|verify_?signature|(?:^|[^a-zA-Z])(?:hmac|aes|rsa|pbkdf|argon|bcrypt|scrypt)(?:[^a-zA-Z]|$))`)
 var cryptoFilePatterns = regexp.MustCompile(`(?i)(crypto[/\\]|encryption[/\\]|certs?[/\\]|tls[/\\]|pki[/\\])`)
 var privEscPatterns = regexp.MustCompile(`(?i)(escalate_?privile|setuid|seteuid|setgid|sudo_?exec|become_?root|impersonate|assume_?role|sts_assume)`)
@@ -57,10 +59,11 @@ var auditPatterns = regexp.MustCompile(`(?i)(audit_?log|write_?audit|log_?event|
 var auditFilePatterns = regexp.MustCompile(`(?i)(audit[/\\]|auditing[/\\]|compliance[/\\])`)
 
 // Subtype patterns for granular classification within roles.
-var subtypeSQLPatterns = regexp.MustCompile(`(?i)(execute_?query|exec_?sql|raw_?query|query_?row|prepare_?statement|sql\.Open)`)
-var subtypeShellPatterns = regexp.MustCompile(`(?i)(run_?command|subprocess|exec\.Command|os\.system|popen|shell_exec|child_process)`)
-var subtypeFileWritePatterns = regexp.MustCompile(`(?i)(write_?file|remove_?file|os\.Create|os\.Remove|os\.WriteFile|unlink|truncate|fwrite)`)
-var subtypeNetworkSendPatterns = regexp.MustCompile(`(?i)(send_?email|http\.Post|fetch|send_?request|smtp|net\.Dial)`)
+var subtypeSQLPatterns = regexp.MustCompile(`(?i)(execute_?query|exec_?sql|raw_?query|query_?row|prepare_?statement|sql\.Open|sqlx::query|diesel::insert|sea_orm.*insert|rusqlite.*execute)`)
+var subtypeShellPatterns = regexp.MustCompile(`(?i)(run_?command|subprocess|exec\.Command|os\.system|popen|shell_exec|child_process|Command::new|std::process|spawn|process::Command)`)
+var subtypeFileWritePatterns = regexp.MustCompile(`(?i)(write_?file|remove_?file|os\.Create|os\.Remove|os\.WriteFile|unlink|truncate|fwrite|write_all|File::create|OpenOptions|remove_dir|remove_dir_all|set_permissions|std::fs::write|tokio::fs::write)`)
+var subtypeNetworkSendPatterns = regexp.MustCompile(`(?i)(send_?email|http\.Post|fetch|send_?request|smtp|net\.Dial|TcpStream|UdpSocket|hyper::Client|reqwest|connect|send_?to|send_?msg)`)
+var subtypeHardwareIOPatterns = regexp.MustCompile(`(?i)(send_?frame|write_?frame|can_?write|can_?send|socketcan|canbus|serial_?write|gpio_?write|spi_?transfer|i2c_?write|ioctl)`)
 var subtypeGRPCPatterns = regexp.MustCompile(`(?i)(grpc|RegisterService|pb\.Register|\.proto)`)
 var subtypeWebSocketPatterns = regexp.MustCompile(`(?i)(websocket|ws_handler|on_?message|upgrade_?connection)`)
 var subtypeEncryptPatterns = regexp.MustCompile(`(?i)(encrypt|decrypt|(?:^|[^a-zA-Z])(?:aes|rsa|chacha)(?:[^a-zA-Z]|$))`)
@@ -112,7 +115,7 @@ func classifySecurityRole(n *store.Node) string {
 		return RoleAuditLogging
 	}
 
-	if sinkNamePatterns.MatchString(name) || sinkFilePatterns.MatchString(filePath) {
+	if sinkNamePatterns.MatchString(name) || (sinkFilePatterns.MatchString(filePath) && !sinkExcludeNames.MatchString(name)) {
 		return RoleSensitiveSink
 	}
 
@@ -172,6 +175,9 @@ func classifySecuritySubtype(n *store.Node, role string) string {
 		return SubtypeHTTPHandler
 
 	case RoleSensitiveSink:
+		if subtypeHardwareIOPatterns.MatchString(name) {
+			return SubtypeHardwareIO
+		}
 		if subtypeSQLPatterns.MatchString(name) {
 			return SubtypeSQLQuery
 		}

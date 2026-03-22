@@ -448,6 +448,10 @@ func (s *Server) registerTools() {
 	s.registerHealthTool()
 	s.registerReviewContextTool()
 	s.registerVisualizeTool()
+	s.registerAffectedTestsTool()
+	s.registerCyclesTool()
+	s.registerExplainTool()
+	s.registerChangeCouplingTool()
 }
 
 func (s *Server) registerArchitectureTools() {

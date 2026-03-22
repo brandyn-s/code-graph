@@ -248,16 +248,6 @@ func (s *Server) handleExplainService(_ context.Context, req *mcp.CallToolReques
 	return jsonResult(result), nil
 }
 
-// extractTopLevelCrate extracts the first path segment (top-level crate/package name).
-func extractTopLevelCrate(path string) string {
-	path = strings.ReplaceAll(path, "\\", "/")
-	idx := strings.Index(path, "/")
-	if idx < 0 {
-		return path
-	}
-	return path[:idx]
-}
-
 func svcFileLanguage(path string) string {
 	idx := strings.LastIndex(path, ".")
 	if idx < 0 {

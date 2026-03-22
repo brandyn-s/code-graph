@@ -446,6 +446,8 @@ func (s *Server) registerTools() {
 	s.registerDataFlowTool()
 	s.registerSTIGEvidenceTool()
 	s.registerHealthTool()
+	s.registerReviewContextTool()
+	s.registerVisualizeTool()
 }
 
 func (s *Server) registerArchitectureTools() {

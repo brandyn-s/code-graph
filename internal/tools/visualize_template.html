@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>/*PROJECT_NAME*/ — Code Graph</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0d1117; color: #c9d1d9; overflow: hidden; }
+#header { position: fixed; top: 0; left: 0; right: 0; height: 48px; background: #161b22; border-bottom: 1px solid #30363d; display: flex; align-items: center; padding: 0 16px; z-index: 10; gap: 16px; }
+#header h1 { font-size: 14px; font-weight: 600; color: #f0f6fc; white-space: nowrap; }
+#header .stats { font-size: 12px; color: #8b949e; white-space: nowrap; }
+#search { background: #0d1117; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; padding: 4px 12px; font-size: 13px; width: 240px; outline: none; }
+#search:focus { border-color: #58a6ff; }
+#controls { position: fixed; top: 48px; left: 0; width: 220px; bottom: 0; background: #161b22; border-right: 1px solid #30363d; padding: 12px; overflow-y: auto; z-index: 5; }
+#controls h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #8b949e; margin-bottom: 8px; }
+#controls label { display: flex; align-items: center; gap: 6px; font-size: 12px; margin-bottom: 4px; cursor: pointer; }
+#controls input[type="checkbox"] { accent-color: #58a6ff; }
+.legend { margin-top: 16px; }
+.legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; margin-bottom: 3px; }
+.legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+#graph { position: fixed; top: 48px; left: 220px; right: 0; bottom: 0; }
+#detail { position: fixed; bottom: 16px; right: 16px; width: 320px; background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; display: none; z-index: 10; font-size: 13px; }
+#detail h3 { font-size: 14px; color: #f0f6fc; margin-bottom: 8px; }
+#detail .field { margin-bottom: 4px; }
+#detail .label { color: #8b949e; font-size: 11px; }
+#detail .value { color: #c9d1d9; }
+svg text { font-size: 10px; fill: #8b949e; pointer-events: none; }
+.node circle { stroke-width: 1.5px; cursor: pointer; }
+.node circle:hover { stroke-width: 3px; }
+.node.highlighted circle { stroke: #f0f6fc; stroke-width: 3px; }
+.node.dimmed { opacity: 0.15; }
+.link { stroke-opacity: 0.4; fill: none; }
+.link.dimmed { stroke-opacity: 0.05; }
+.link.highlighted { stroke-opacity: 0.9; stroke-width: 2px; }
+</style>
+</head>
+<body>
+
+<div id="header">
+  <h1>/*PROJECT_NAME*/</h1>
+  <span class="stats">/*NODE_COUNT*/ nodes · /*EDGE_COUNT*/ edges</span>
+  <input id="search" type="text" placeholder="Search nodes..." autocomplete="off">
+</div>
+
+<div id="controls">
+  <h3>Edge Types</h3>
+  <div id="edge-toggles"></div>
+  <div class="legend">
+    <h3>Node Types</h3>
+    <div id="node-legend"></div>
+  </div>
+</div>
+
+<div id="graph"></div>
+
+<div id="detail">
+  <h3 id="detail-name"></h3>
+  <div class="field"><span class="label">Type: </span><span class="value" id="detail-label"></span></div>
+  <div class="field"><span class="label">File: </span><span class="value" id="detail-file"></span></div>
+  <div class="field"><span class="label">Line: </span><span class="value" id="detail-line"></span></div>
+  <div class="field"><span class="label">Connections: </span><span class="value" id="detail-connections"></span></div>
+</div>
+
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script>
+const nodes = /*NODES_DATA*/;
+const edges = /*EDGES_DATA*/;
+const edgeTypes = /*EDGE_TYPES*/;
+
+const labelColors = {
+  Function: '#58a6ff', Class: '#3fb950', Method: '#d2a8ff',
+  Interface: '#f0883e', Route: '#f778ba', Module: '#79c0ff',
+  File: '#8b949e', Package: '#56d4dd', Enum: '#e3b341',
+  Type: '#b392f0', Folder: '#6e7681'
+};
+
+const edgeColors = {
+  CALLS: '#484f58', HTTP_CALLS: '#f778ba', ASYNC_CALLS: '#d2a8ff',
+  IMPORTS: '#238636', IMPLEMENTS: '#f0883e', DEFINES: '#30363d',
+  DEFINES_METHOD: '#30363d', TESTS: '#3fb950', USAGE: '#6e7681',
+  HANDLES: '#56d4dd', CONFIGURES: '#e3b341', POLICY_GATES: '#da3633'
+};
+
+// Build edge type toggles
+const toggleContainer = document.getElementById('edge-toggles');
+const activeEdgeTypes = new Set(edgeTypes);
+edgeTypes.sort().forEach(type => {
+  const label = document.createElement('label');
+  const cb = document.createElement('input');
+  cb.type = 'checkbox'; cb.checked = true; cb.dataset.type = type;
+  cb.addEventListener('change', () => {
+    if (cb.checked) activeEdgeTypes.add(type); else activeEdgeTypes.delete(type);
+    updateVisibility();
+  });
+  const dot = document.createElement('span');
+  dot.style.cssText = 'width:8px;height:8px;border-radius:50%;background:' + (edgeColors[type]||'#484f58') + ';flex-shrink:0';
+  label.appendChild(cb); label.appendChild(dot); label.appendChild(document.createTextNode(' ' + type));
+  toggleContainer.appendChild(label);
+});
+
+// Build node legend
+const legendContainer = document.getElementById('node-legend');
+const seenLabels = new Set(nodes.map(n => n.label));
+[...seenLabels].sort().forEach(label => {
+  const item = document.createElement('div'); item.className = 'legend-item';
+  const dot = document.createElement('span'); dot.className = 'legend-dot';
+  dot.style.background = labelColors[label] || '#8b949e';
+  item.appendChild(dot); item.appendChild(document.createTextNode(label));
+  legendContainer.appendChild(item);
+});
+
+// D3 force-directed graph
+const container = document.getElementById('graph');
+const width = container.clientWidth, height = container.clientHeight;
+
+const svg = d3.select('#graph').append('svg')
+  .attr('width', width).attr('height', height);
+
+const g = svg.append('g');
+
+svg.call(d3.zoom().scaleExtent([0.1, 8]).on('zoom', e => g.attr('transform', e.transform)));
+
+// Precompute degree for node sizing
+const degreeMap = new Map();
+nodes.forEach(n => degreeMap.set(n.id, 0));
+edges.forEach(e => {
+  degreeMap.set(e.source, (degreeMap.get(e.source)||0) + 1);
+  degreeMap.set(e.target, (degreeMap.get(e.target)||0) + 1);
+});
+
+const simulation = d3.forceSimulation(nodes)
+  .force('link', d3.forceLink(edges).id(d => d.id).distance(60).strength(0.3))
+  .force('charge', d3.forceManyBody().strength(-120).distanceMax(300))
+  .force('center', d3.forceCenter(width / 2, height / 2))
+  .force('collision', d3.forceCollide(12));
+
+const link = g.append('g').selectAll('line')
+  .data(edges).join('line')
+  .attr('class', 'link')
+  .attr('stroke', d => edgeColors[d.type] || '#484f58')
+  .attr('stroke-width', 1);
+
+const node = g.append('g').selectAll('g')
+  .data(nodes).join('g')
+  .attr('class', 'node')
+  .call(d3.drag()
+    .on('start', (e, d) => { if (!e.active) simulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
+    .on('drag', (e, d) => { d.fx = e.x; d.fy = e.y; })
+    .on('end', (e, d) => { if (!e.active) simulation.alphaTarget(0); d.fx = null; d.fy = null; })
+  );
+
+node.append('circle')
+  .attr('r', d => Math.max(4, Math.min(14, 4 + Math.sqrt(degreeMap.get(d.id) || 0) * 1.5)))
+  .attr('fill', d => labelColors[d.label] || '#8b949e')
+  .attr('stroke', d => {
+    const c = d3.color(labelColors[d.label] || '#8b949e');
+    return c ? c.darker(0.5) : '#6e7681';
+  });
+
+node.append('text')
+  .attr('dx', 14).attr('dy', 4)
+  .text(d => d.name.length > 25 ? d.name.slice(0, 22) + '...' : d.name);
+
+simulation.on('tick', () => {
+  link
+    .attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+    .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+  node.attr('transform', d => 'translate(' + d.x + ',' + d.y + ')');
+});
+
+// Click node to show detail panel
+node.on('click', (event, d) => {
+  event.stopPropagation();
+  const detail = document.getElementById('detail');
+  detail.style.display = 'block';
+  document.getElementById('detail-name').textContent = d.name;
+  document.getElementById('detail-label').textContent = d.label;
+  document.getElementById('detail-file').textContent = d.file || '\u2014';
+  document.getElementById('detail-line').textContent = d.line || '\u2014';
+  const inCount = edges.filter(e => (e.target === d || (e.target && e.target.id === d.id))).length;
+  const outCount = edges.filter(e => (e.source === d || (e.source && e.source.id === d.id))).length;
+  document.getElementById('detail-connections').textContent = inCount + ' in, ' + outCount + ' out';
+
+  // Highlight connected nodes
+  const connectedIds = new Set([d.id]);
+  edges.forEach(e => {
+    const sid = e.source.id !== undefined ? e.source.id : e.source;
+    const tid = e.target.id !== undefined ? e.target.id : e.target;
+    if (sid === d.id) connectedIds.add(tid);
+    if (tid === d.id) connectedIds.add(sid);
+  });
+  node.classed('highlighted', n => n.id === d.id)
+      .classed('dimmed', n => !connectedIds.has(n.id));
+  link.classed('highlighted', l => {
+    const s = l.source.id !== undefined ? l.source.id : l.source;
+    const t = l.target.id !== undefined ? l.target.id : l.target;
+    return s === d.id || t === d.id;
+  }).classed('dimmed', l => {
+    const s = l.source.id !== undefined ? l.source.id : l.source;
+    const t = l.target.id !== undefined ? l.target.id : l.target;
+    return s !== d.id && t !== d.id;
+  });
+});
+
+// Click background to reset
+svg.on('click', () => {
+  document.getElementById('detail').style.display = 'none';
+  node.classed('highlighted', false).classed('dimmed', false);
+  link.classed('highlighted', false).classed('dimmed', false);
+});
+
+// Search
+document.getElementById('search').addEventListener('input', e => {
+  const q = e.target.value.toLowerCase();
+  if (!q) {
+    node.classed('highlighted', false).classed('dimmed', false);
+    link.classed('dimmed', false);
+    return;
+  }
+  const matchIds = new Set(nodes.filter(n => n.name.toLowerCase().includes(q)).map(n => n.id));
+  node.classed('highlighted', d => matchIds.has(d.id))
+      .classed('dimmed', d => !matchIds.has(d.id));
+  link.classed('dimmed', d => {
+    const s = d.source.id !== undefined ? d.source.id : d.source;
+    const t = d.target.id !== undefined ? d.target.id : d.target;
+    return !matchIds.has(s) && !matchIds.has(t);
+  });
+});
+
+function updateVisibility() {
+  link.style('display', d => activeEdgeTypes.has(d.type) ? null : 'none');
+}
+</script>
+</body>
+</html>

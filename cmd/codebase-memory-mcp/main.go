@@ -187,7 +187,7 @@ Language support (64 languages):
 }
 
 func printHelpTools() {
-	fmt.Fprint(os.Stderr, `MCP tools (15):
+	fmt.Fprint(os.Stderr, `MCP tools (17):
 
   index_repository — Index a repo into the knowledge graph
     {"repo_path": "/path/to/repo", "mode": "full|fast"}
@@ -274,6 +274,16 @@ func printHelpTools() {
     {"role": "auth_boundary", "project": "my-project"}
     role: auth_boundary, input_entry_point, sensitive_sink, crypto_operation (optional)
     Returns nodes classified by security role for STIG/compliance evidence
+
+  get_review_context — Token-optimized review summary from git changes
+    {"scope": "all", "depth": 3, "max_tokens": 500}
+    Runs detect_changes internally, distills blast radius, test gaps,
+    dependency chains, cross-service impacts into compact markdown (~200-500 tokens)
+
+  visualize — Generate interactive D3.js graph visualization
+    {"project": "my-project", "max_nodes": 500, "file_pattern": "*.go"}
+    Writes a self-contained HTML file with force-directed graph, edge-type
+    toggles, search/highlight, and click-to-inspect panel
 
 `)
 }
@@ -450,6 +460,12 @@ func printSummary(toolName, text, dbPath string) {
 		printIndexStatusSummary(data)
 	case "detect_changes":
 		printDetectChangesSummary(data)
+	case "get_review_context":
+		// Review context returns markdown text, not JSON — handled by text fallback
+		fmt.Println(text)
+		return
+	case "visualize":
+		printVisualizeSummary(data)
 	default:
 		// Fallback: pretty-print the JSON
 		printRawJSON(text)
@@ -793,6 +809,21 @@ func jsonInt(v any) int {
 		return n
 	default:
 		return 0
+	}
+}
+
+func printVisualizeSummary(data map[string]any) {
+	outputPath, _ := data["output_path"].(string)
+	nodes := jsonInt(data["nodes"])
+	edges := jsonInt(data["edges"])
+	fmt.Printf("Graph written to %s\n", outputPath)
+	fmt.Printf("  %d nodes, %d edges\n", nodes, edges)
+	if types, ok := data["edge_types"].([]any); ok && len(types) > 0 {
+		names := make([]string, len(types))
+		for i, t := range types {
+			names[i], _ = t.(string)
+		}
+		fmt.Printf("  edge types: %s\n", strings.Join(names, ", "))
 	}
 }
 

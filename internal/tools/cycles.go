@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/DeusData/codebase-memory-mcp/internal/store"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -19,14 +20,14 @@ func (s *Server) registerCyclesTool() {
 			OpenWorldHint:   boolPtr(false),
 			DestructiveHint: boolPtr(false),
 		},
-		Description: "Detect circular dependencies between packages or modules. Finds cycles where package A depends on B depends on C depends on A, indicating architectural coupling that should be broken. Reports each cycle with the packages involved and the edge types (CALLS, IMPORTS, HTTP_CALLS) that form it. Use for architecture reviews, refactoring planning, and preventing new cycles.",
+		Description: "Detect circular dependencies between crates, packages, or files. Default 'crate' level uses the top-level directory (e.g., 'doomper', 'libtracker') as the unit — best for monorepos. Reports each cycle with the crates involved. Use for architecture reviews and preventing new circular dependencies.",
 		InputSchema: json.RawMessage(`{
 			"type": "object",
 			"properties": {
 				"level": {
 					"type": "string",
-					"enum": ["package", "file"],
-					"description": "Granularity: 'package' (default) for package-level cycles, 'file' for file-level cycles. Package-level is faster and more actionable."
+					"enum": ["crate", "package", "file"],
+					"description": "Granularity: 'crate' (default) for top-level directory cycles, 'package' for submodule-level, 'file' for file-level. Crate-level is fastest and most actionable for monorepos."
 				},
 				"project": {
 					"type": "string",
@@ -34,7 +35,7 @@ func (s *Server) registerCyclesTool() {
 				},
 				"max_depth": {
 					"type": "integer",
-					"description": "Maximum cycle length to detect (2-8, default 5). Longer cycles take more time."
+					"description": "Maximum cycle length to detect (2-6, default 4). Longer cycles take more time."
 				}
 			}
 		}`),
@@ -60,27 +61,24 @@ func (s *Server) handleDetectCycles(_ context.Context, req *mcp.CallToolRequest)
 
 	level := getStringArg(args, "level")
 	if level == "" {
-		level = "package"
+		level = "crate"
 	}
-	maxDepth := getIntArg(args, "max_depth", 5)
+	maxDepth := getIntArg(args, "max_depth", 4)
 	if maxDepth < 2 {
 		maxDepth = 2
 	}
-	if maxDepth > 8 {
-		maxDepth = 8
+	if maxDepth > 6 {
+		maxDepth = 6
 	}
 
-	// Build package/file dependency graph from edges
 	edgeTypes := []string{"CALLS", "IMPORTS", "HTTP_CALLS", "ASYNC_CALLS"}
 	depGraph := buildDependencyGraph(st, projName, level, edgeTypes)
 
-	// Find cycles using DFS
 	cycles := findCycles(depGraph, maxDepth)
 
 	type cycleResult struct {
-		Nodes     []string `json:"nodes"`
-		Length    int      `json:"length"`
-		EdgeTypes []string `json:"edge_types,omitempty"`
+		Nodes  []string `json:"nodes"`
+		Length int      `json:"length"`
 	}
 
 	var results []cycleResult
@@ -91,16 +89,31 @@ func (s *Server) handleDetectCycles(_ context.Context, req *mcp.CallToolRequest)
 		})
 	}
 
-	// Sort by length (shorter cycles are more actionable)
 	sort.Slice(results, func(i, j int) bool {
-		return results[i].Length < results[j].Length
+		if results[i].Length != results[j].Length {
+			return results[i].Length < results[j].Length
+		}
+		return fmt.Sprint(results[i].Nodes) < fmt.Sprint(results[j].Nodes)
 	})
+
+	// Cap output at 100 cycles
+	truncated := false
+	if len(results) > 100 {
+		results = results[:100]
+		truncated = true
+	}
 
 	responseData := map[string]any{
 		"cycles":       results,
 		"cycles_found": len(results),
 		"level":        level,
 		"max_depth":    maxDepth,
+		"graph_nodes":  len(depGraph),
+	}
+
+	if truncated {
+		responseData["truncated"] = true
+		responseData["hint"] = "Results capped at 100 cycles. Use a smaller max_depth or 'crate' level to reduce results."
 	}
 
 	if len(results) == 0 {
@@ -110,12 +123,7 @@ func (s *Server) handleDetectCycles(_ context.Context, req *mcp.CallToolRequest)
 	return jsonResult(responseData), nil
 }
 
-// depEdge represents a directed dependency between two containers (packages or files).
-type depEdge struct {
-	from, to string
-}
-
-// buildDependencyGraph builds a package-level or file-level dependency graph.
+// buildDependencyGraph builds a dependency graph at the specified granularity.
 func buildDependencyGraph(st *store.Store, project, level string, edgeTypes []string) map[string]map[string]bool {
 	graph := make(map[string]map[string]bool)
 
@@ -132,10 +140,14 @@ func buildDependencyGraph(st *store.Store, project, level string, edgeTypes []st
 			}
 
 			var fromContainer, toContainer string
-			if level == "package" {
-				fromContainer = extractPackage(src.QualifiedName)
-				toContainer = extractPackage(tgt.QualifiedName)
-			} else {
+			switch level {
+			case "crate":
+				fromContainer = extractTopLevelCrate(src.FilePath)
+				toContainer = extractTopLevelCrate(tgt.FilePath)
+			case "package":
+				fromContainer = extractSubpackage(src.FilePath)
+				toContainer = extractSubpackage(tgt.FilePath)
+			case "file":
 				fromContainer = src.FilePath
 				toContainer = tgt.FilePath
 			}
@@ -154,60 +166,26 @@ func buildDependencyGraph(st *store.Store, project, level string, edgeTypes []st
 	return graph
 }
 
-// extractPackage extracts the package component from a qualified name.
-// E.g., "project.internal.store.Store.FindNode" -> "internal.store"
-func extractPackage(qn string) string {
-	parts := splitQN(qn)
-	if len(parts) < 3 {
-		return ""
+// extractSubpackage extracts the first two path segments as the subpackage.
+// E.g., "doomper/src/recorder.rs" -> "doomper/src"
+func extractSubpackage(path string) string {
+	path = strings.ReplaceAll(path, "\\", "/")
+	parts := strings.SplitN(path, "/", 4)
+	if len(parts) < 2 {
+		return path
 	}
-	// Skip project prefix and node name suffix, take the middle as package
-	// Heuristic: everything between the first and last two segments
-	if len(parts) <= 3 {
-		return parts[1]
+	if len(parts) >= 3 {
+		return parts[0] + "/" + parts[1]
 	}
-	// Join middle segments as the package path
-	end := len(parts) - 1
-	if end > 4 {
-		end = 4 // Cap package depth to avoid overly specific paths
-	}
-	pkg := ""
-	for i := 1; i < end; i++ {
-		if pkg != "" {
-			pkg += "."
-		}
-		pkg += parts[i]
-	}
-	return pkg
-}
-
-// splitQN splits a qualified name by dots.
-func splitQN(qn string) []string {
-	var parts []string
-	current := ""
-	for _, c := range qn {
-		if c == '.' {
-			if current != "" {
-				parts = append(parts, current)
-			}
-			current = ""
-		} else {
-			current += string(c)
-		}
-	}
-	if current != "" {
-		parts = append(parts, current)
-	}
-	return parts
+	return parts[0]
 }
 
 // findCycles uses iterative DFS to find all unique cycles up to maxDepth.
 func findCycles(graph map[string]map[string]bool, maxDepth int) [][]string {
 	var cycles [][]string
-	seen := make(map[string]bool) // canonical cycle key -> already reported
+	seen := make(map[string]bool)
 
 	for startNode := range graph {
-		// DFS stack: each entry is (current_node, path_so_far)
 		type frame struct {
 			node string
 			path []string
@@ -222,13 +200,10 @@ func findCycles(graph map[string]map[string]bool, maxDepth int) [][]string {
 				continue
 			}
 
-			neighbors := graph[f.node]
-			for next := range neighbors {
+			for next := range graph[f.node] {
 				if next == startNode && len(f.path) >= 2 {
-					// Found a cycle back to start
 					cycle := make([]string, len(f.path))
 					copy(cycle, f.path)
-
 					key := canonicalCycleKey(cycle)
 					if !seen[key] {
 						seen[key] = true
@@ -237,7 +212,6 @@ func findCycles(graph map[string]map[string]bool, maxDepth int) [][]string {
 					continue
 				}
 
-				// Don't revisit nodes in the current path
 				inPath := false
 				for _, p := range f.path {
 					if p == next {
@@ -260,21 +234,17 @@ func findCycles(graph map[string]map[string]bool, maxDepth int) [][]string {
 	return cycles
 }
 
-// canonicalCycleKey produces a canonical string for a cycle so we can dedup
-// rotations (A->B->C == B->C->A == C->A->B).
+// canonicalCycleKey deduplicates rotations of the same cycle.
 func canonicalCycleKey(cycle []string) string {
 	if len(cycle) == 0 {
 		return ""
 	}
-
-	// Find the lexicographically smallest rotation
 	minIdx := 0
 	for i := 1; i < len(cycle); i++ {
 		if cycle[i] < cycle[minIdx] {
 			minIdx = i
 		}
 	}
-
 	key := ""
 	for i := 0; i < len(cycle); i++ {
 		idx := (minIdx + i) % len(cycle)

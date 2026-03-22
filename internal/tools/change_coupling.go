@@ -19,7 +19,7 @@ func (s *Server) registerChangeCouplingTool() {
 			OpenWorldHint:   boolPtr(false),
 			DestructiveHint: boolPtr(false),
 		},
-		Description: "Analyze which files always change together based on git history (FILE_CHANGES_WITH edges). Groups couplings as 'logical' (same package — expected) or 'accidental' (cross-package — architectural smell). Accidental coupling indicates hidden dependencies the architecture doesn't express. Use for architecture reviews, refactoring planning, and detecting architectural drift.",
+		Description: "Analyze which files always change together based on git history (FILE_CHANGES_WITH edges). Classifies couplings using the top-level crate/package (first path segment): 'logical' if both files are in the same crate, 'accidental' if they're in different crates. Accidental cross-crate coupling indicates hidden dependencies. Use for architecture reviews, refactoring planning, and detecting architectural drift.",
 		InputSchema: json.RawMessage(`{
 			"type": "object",
 			"properties": {
@@ -34,6 +34,10 @@ func (s *Server) registerChangeCouplingTool() {
 				"limit": {
 					"type": "integer",
 					"description": "Maximum number of couplings to return (default 30)"
+				},
+				"cross_crate_only": {
+					"type": "boolean",
+					"description": "Only show cross-crate (accidental) couplings (default true). Set false to include same-crate couplings."
 				}
 			}
 		}`),
@@ -59,21 +63,26 @@ func (s *Server) handleChangeCoupling(_ context.Context, req *mcp.CallToolReques
 
 	minScore := getFloatArg(args, "min_score", 0.3)
 	limit := getIntArg(args, "limit", 30)
+	crossCrateOnly := true
+	if v, ok := args["cross_crate_only"]; ok {
+		if b, ok := v.(bool); ok {
+			crossCrateOnly = b
+		}
+	}
 
-	// Get all FILE_CHANGES_WITH edges
 	edges, err := st.FindEdgesByType(projName, "FILE_CHANGES_WITH")
 	if err != nil {
 		return errResult(fmt.Sprintf("query edges: %v", err)), nil
 	}
 
 	type coupling struct {
-		File1      string  `json:"file1"`
-		File2      string  `json:"file2"`
-		Score      float64 `json:"coupling_score"`
-		Package1   string  `json:"package1"`
-		Package2   string  `json:"package2"`
-		SamePackage bool   `json:"same_package"`
-		Category   string  `json:"category"` // "logical" or "accidental"
+		File1       string  `json:"file1"`
+		File2       string  `json:"file2"`
+		Score       float64 `json:"coupling_score"`
+		Crate1      string  `json:"crate1"`
+		Crate2      string  `json:"crate2"`
+		SameCrate   bool    `json:"same_crate"`
+		Category    string  `json:"category"`
 	}
 
 	var couplings []coupling
@@ -95,30 +104,34 @@ func (s *Server) handleChangeCoupling(_ context.Context, req *mcp.CallToolReques
 			continue
 		}
 
-		pkg1 := extractFileDir(src.FilePath)
-		pkg2 := extractFileDir(tgt.FilePath)
-		samePackage := pkg1 == pkg2
+		crate1 := extractTopLevelCrate(src.FilePath)
+		crate2 := extractTopLevelCrate(tgt.FilePath)
+		sameCrate := crate1 == crate2
+
+		if crossCrateOnly && sameCrate {
+			continue
+		}
 
 		category := "logical"
-		if !samePackage {
+		if !sameCrate {
 			category = "accidental"
 		}
 
 		couplings = append(couplings, coupling{
-			File1:       src.FilePath,
-			File2:       tgt.FilePath,
-			Score:       score,
-			Package1:    pkg1,
-			Package2:    pkg2,
-			SamePackage: samePackage,
-			Category:    category,
+			File1:     src.FilePath,
+			File2:     tgt.FilePath,
+			Score:     score,
+			Crate1:    crate1,
+			Crate2:    crate2,
+			SameCrate: sameCrate,
+			Category:  category,
 		})
 	}
 
-	// Sort: accidental first (higher priority), then by score descending
+	// Sort: accidental first, then by score descending
 	sort.Slice(couplings, func(i, j int) bool {
 		if couplings[i].Category != couplings[j].Category {
-			return couplings[i].Category == "accidental" // accidental first
+			return couplings[i].Category == "accidental"
 		}
 		return couplings[i].Score > couplings[j].Score
 	})
@@ -127,7 +140,6 @@ func (s *Server) handleChangeCoupling(_ context.Context, req *mcp.CallToolReques
 		couplings = couplings[:limit]
 	}
 
-	// Count by category
 	accidental, logical := 0, 0
 	for _, c := range couplings {
 		if c.Category == "accidental" {
@@ -137,28 +149,55 @@ func (s *Server) handleChangeCoupling(_ context.Context, req *mcp.CallToolReques
 		}
 	}
 
+	// Summarize cross-crate pairs
+	cratePairs := make(map[string]int)
+	for _, c := range couplings {
+		if c.Category == "accidental" {
+			pair := c.Crate1 + " <-> " + c.Crate2
+			if c.Crate1 > c.Crate2 {
+				pair = c.Crate2 + " <-> " + c.Crate1
+			}
+			cratePairs[pair]++
+		}
+	}
+	type cratePairSummary struct {
+		Pair  string `json:"pair"`
+		Count int    `json:"file_pairs"`
+	}
+	var pairSummary []cratePairSummary
+	for pair, count := range cratePairs {
+		pairSummary = append(pairSummary, cratePairSummary{Pair: pair, Count: count})
+	}
+	sort.Slice(pairSummary, func(i, j int) bool {
+		return pairSummary[i].Count > pairSummary[j].Count
+	})
+
 	responseData := map[string]any{
-		"couplings":          couplings,
-		"total":              len(couplings),
-		"accidental_count":   accidental,
-		"logical_count":      logical,
-		"min_score":          minScore,
+		"couplings":        couplings,
+		"total":            len(couplings),
+		"accidental_count": accidental,
+		"logical_count":    logical,
+		"cross_crate_only": crossCrateOnly,
+		"min_score":        minScore,
 	}
 
-	if accidental > 0 {
-		responseData["hint"] = fmt.Sprintf("%d accidental coupling(s) found — files in different packages that frequently change together. These indicate hidden dependencies the architecture doesn't express. Consider extracting shared logic into a common package.", accidental)
+	if len(pairSummary) > 0 {
+		responseData["crate_pairs"] = pairSummary
+		responseData["hint"] = fmt.Sprintf("%d cross-crate coupling(s) across %d crate pairs. These are files in different top-level packages that frequently change together.", accidental, len(pairSummary))
 	}
 
 	return jsonResult(responseData), nil
 }
 
-// extractFileDir extracts the directory component from a file path.
-func extractFileDir(path string) string {
-	// Normalize separators
+// extractTopLevelCrate extracts the first path segment (top-level crate/package name).
+// E.g., "doomper/src/recorder.rs" -> "doomper"
+//       "ship-os/src/components/layout/Navigation.tsx" -> "ship-os"
+//       "redacted-platform-terraform/core/modules/environment/main.tf" -> "redacted-platform-terraform"
+func extractTopLevelCrate(path string) string {
 	path = strings.ReplaceAll(path, "\\", "/")
-	idx := strings.LastIndex(path, "/")
+	idx := strings.Index(path, "/")
 	if idx < 0 {
-		return ""
+		return path
 	}
 	return path[:idx]
 }

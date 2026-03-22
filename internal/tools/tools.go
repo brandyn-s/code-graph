@@ -452,6 +452,9 @@ func (s *Server) registerTools() {
 	s.registerCyclesTool()
 	s.registerExplainTool()
 	s.registerChangeCouplingTool()
+	s.registerExplainServiceTool()
+	s.registerServiceMapTool()
+	s.registerDiffServicesTool()
 }
 
 func (s *Server) registerArchitectureTools() {

@@ -47,9 +47,12 @@ var authNamePatterns = regexp.MustCompile(`(?i)(require_?auth|check_?auth|verify
 var authDecoratorPatterns = regexp.MustCompile(`(?i)(login_required|requires_auth|authenticated|authorize|permission_required|auth_required|protect|guard)`)
 var authFilePatterns = regexp.MustCompile(`(?i)(middleware[/\\]auth|auth[/\\]middleware|guards?[/\\]|policies[/\\])`)
 var entryPointDecorators = regexp.MustCompile(`(?i)(@app\.(get|post|put|delete|patch)|@router\.|@api_view|@(Get|Post|Put|Delete|Patch)Mapping|#\[axum::|#\[actix_web::|#\[rocket::(get|post|put|delete)|@\w+\.command|@celery\.task|@pytest\.fixture|@receiver\(|@\w+\.on_event|@(task|shared_task)\b)`)
+var entryPointNamePatterns = regexp.MustCompile(`(?i)(^handle_|_handler$|^on_request|^on_message|^process_request|^serve_|^dispatch_|^route_)`)
+var entryPointFilePatterns = regexp.MustCompile(`(?i)(handler[s]?[/\\]|route[s]?[/\\]|endpoint[s]?[/\\]|api[/\\]|server[/\\].*handler|controller[s]?[/\\])`)
 var sinkNamePatterns = regexp.MustCompile(`(?i)(execute_?query|exec_?sql|raw_?query|run_?command|subprocess|write_?file|remove_?file|send_?email|write_all|send_?frame|write_?frame|execute|spawn|std::process|Command::new|remove_dir|remove_dir_all|set_permissions|File::create|OpenOptions)`)
 var sinkFilePatterns = regexp.MustCompile(`(?i)(db[/\\]|database[/\\]|repository[/\\]|repositories[/\\]|queries[/\\]|dal[/\\])`)
 var sinkExcludeNames = regexp.MustCompile(`^(unwrap|expect|clone|default|new|fmt|from|into|as_ref|as_mut|deref|drop|len|is_empty|to_string|to_owned|display|debug|eq|ne|cmp|hash|index|iter|map|filter|fold|collect|ok|err|some|none|test_\w+)$`)
+var sinkFileNameHint = regexp.MustCompile(`(?i)(query|exec|insert|update|delete|upsert|write|save|store|put|remove|create|drop|truncate|migrate|commit|rollback|transact|persist|flush)`)
 var cryptoPatterns = regexp.MustCompile(`(?i)(encrypt|decrypt|hash_?password|sign_?token|verify_?signature|(?:^|[^a-zA-Z])(?:hmac|aes|rsa|pbkdf|argon|bcrypt|scrypt)(?:[^a-zA-Z]|$))`)
 var cryptoFilePatterns = regexp.MustCompile(`(?i)(crypto[/\\]|encryption[/\\]|certs?[/\\]|tls[/\\]|pki[/\\])`)
 var privEscPatterns = regexp.MustCompile(`(?i)(escalate_?privile|setuid|seteuid|setgid|sudo_?exec|become_?root|impersonate|assume_?role|sts_assume)`)
@@ -95,6 +98,10 @@ func classifySecurityRole(n *store.Node) string {
 	if name == "main" || name == "Main" {
 		return RoleInputEntryPoint
 	}
+	// Rust handler functions: named *_handler, handle_*, or in handler/routes files
+	if entryPointNamePatterns.MatchString(name) || entryPointFilePatterns.MatchString(filePath) {
+		return RoleInputEntryPoint
+	}
 	for _, dec := range decorators {
 		if entryPointDecorators.MatchString(dec) {
 			return RoleInputEntryPoint
@@ -115,7 +122,10 @@ func classifySecurityRole(n *store.Node) string {
 		return RoleAuditLogging
 	}
 
-	if sinkNamePatterns.MatchString(name) || (sinkFilePatterns.MatchString(filePath) && !sinkExcludeNames.MatchString(name)) {
+	if sinkNamePatterns.MatchString(name) {
+		return RoleSensitiveSink
+	}
+	if sinkFilePatterns.MatchString(filePath) && !sinkExcludeNames.MatchString(name) && sinkFileNameHint.MatchString(name) {
 		return RoleSensitiveSink
 	}
 
@@ -171,6 +181,9 @@ func classifySecuritySubtype(n *store.Node, role string) string {
 		}
 		if name == "main" || name == "Main" {
 			return SubtypeCLIEntry
+		}
+		if entryPointNamePatterns.MatchString(name) || entryPointFilePatterns.MatchString(n.FilePath) {
+			return SubtypeHTTPHandler
 		}
 		return SubtypeHTTPHandler
 

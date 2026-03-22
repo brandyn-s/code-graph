@@ -5,10 +5,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"regexp"
+	"strings"
 
 	"github.com/DeusData/codebase-memory-mcp/internal/store"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
+
+var testFilePattern = regexp.MustCompile(`(?i)(_test\.(go|rs|py|ts|js)|test_\w+\.(py|rs)|tests?[/\\]|__tests__[/\\]|spec[/\\]|_spec\.(rb|ts|js))`)
+var testNamePattern = regexp.MustCompile(`(?i)^(test_|Test[A-Z])`)
 
 func (s *Server) registerSecurityTools() {
 	s.addTool(&mcp.Tool{
@@ -45,6 +50,10 @@ func (s *Server) registerSecurityTools() {
 				"depth": {
 					"type": "integer",
 					"description": "Max BFS depth for tainted_paths mode (1-6, default 4)"
+				},
+				"exclude_tests": {
+					"type": "boolean",
+					"description": "Exclude test files and test functions from sources and sinks (default true). Set false to include test code in taint analysis."
 				}
 			}
 		}`),
@@ -155,17 +164,30 @@ func (s *Server) handleTaintedPaths(st *store.Store, projName string, args map[s
 		depth = 6
 	}
 
+	// exclude_tests defaults to true
+	excludeTests := true
+	if v, ok := args["exclude_tests"]; ok {
+		if b, ok := v.(bool); ok {
+			excludeTests = b
+		}
+	}
+
 	// Find all source nodes (input_entry_point)
-	sources, err := st.FindNodesByProperty(projName, "", "security_role", "input_entry_point")
+	allSources, err := st.FindNodesByProperty(projName, "", "security_role", "input_entry_point")
 	if err != nil {
 		return errResult(fmt.Sprintf("find sources: %v", err)), nil
 	}
 
 	// Build sink ID set
-	sinks, err := st.FindNodesByProperty(projName, "", "security_role", "sensitive_sink")
+	allSinks, err := st.FindNodesByProperty(projName, "", "security_role", "sensitive_sink")
 	if err != nil {
 		return errResult(fmt.Sprintf("find sinks: %v", err)), nil
 	}
+
+	// Filter out test code if requested
+	sources := filterTestNodes(allSources, excludeTests)
+	sinks := filterTestNodes(allSinks, excludeTests)
+
 	sinkIDs := make(map[int64]*store.Node, len(sinks))
 	for _, sink := range sinks {
 		sinkIDs[sink.ID] = sink
@@ -233,13 +255,42 @@ func (s *Server) handleTaintedPaths(st *store.Store, projName string, args map[s
 	}
 
 	responseData := map[string]any{
-		"tainted_paths": paths,
-		"sources":       len(sources),
-		"sinks":         len(sinks),
-		"paths_found":   len(paths),
-		"max_depth":     depth,
-		"stig_hint":     "SI-10: Each tainted path represents user input reaching a sensitive sink. Verify input validation exists on the path (check for auth_boundary nodes between source and sink).",
+		"tainted_paths":  paths,
+		"sources":        len(sources),
+		"sinks":          len(sinks),
+		"paths_found":    len(paths),
+		"max_depth":      depth,
+		"exclude_tests":  excludeTests,
+		"stig_hint":      "SI-10: Each tainted path represents user input reaching a sensitive sink. Verify input validation exists on the path (check for auth_boundary nodes between source and sink).",
 	}
 
 	return jsonResult(responseData), nil
+}
+
+// filterTestNodes removes test files and test functions from a node list.
+func filterTestNodes(nodes []*store.Node, exclude bool) []*store.Node {
+	if !exclude {
+		return nodes
+	}
+	filtered := make([]*store.Node, 0, len(nodes))
+	for _, n := range nodes {
+		if !isTestNode(n) {
+			filtered = append(filtered, n)
+		}
+	}
+	return filtered
+}
+
+// isTestNode returns true if the node is in a test file or has a test function name.
+func isTestNode(n *store.Node) bool {
+	if testFilePattern.MatchString(n.FilePath) {
+		return true
+	}
+	if testNamePattern.MatchString(n.Name) {
+		return true
+	}
+	if strings.Contains(n.QualifiedName, ".test.") || strings.Contains(n.QualifiedName, ".tests.") {
+		return true
+	}
+	return false
 }

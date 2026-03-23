@@ -36,13 +36,14 @@ var releaseURL = "https://api.github.com/repos/DeusData/codebase-memory-mcp/rele
 
 // Server wraps the MCP server with tool handlers.
 type Server struct {
-	mcp      *mcp.Server
-	router   *store.StoreRouter
-	config   *store.ConfigStore
-	watcher  *watcher.Watcher
-	ctx      context.Context // server lifetime context — cancelled on shutdown
-	indexMu  sync.Mutex
-	handlers map[string]mcp.ToolHandler
+	mcp        *mcp.Server
+	router     *store.StoreRouter
+	config     *store.ConfigStore
+	watcher    *watcher.Watcher
+	queryCache *store.QueryCache
+	ctx        context.Context // server lifetime context — cancelled on shutdown
+	indexMu    sync.Mutex
+	handlers   map[string]mcp.ToolHandler
 
 	// Session-aware fields (set once via sync.Once, then immutable)
 	sessionOnce    sync.Once
@@ -65,8 +66,9 @@ func WithConfig(c *store.ConfigStore) ServerOption {
 // NewServer creates a new MCP server with all tools registered.
 func NewServer(r *store.StoreRouter, opts ...ServerOption) *Server {
 	srv := &Server{
-		router:   r,
-		handlers: make(map[string]mcp.ToolHandler),
+		router:     r,
+		queryCache: store.NewQueryCache(200, 5*time.Minute),
+		handlers:   make(map[string]mcp.ToolHandler),
 	}
 	for _, opt := range opts {
 		opt(srv)
@@ -108,7 +110,11 @@ func (s *Server) syncProject(ctx context.Context, projectName, rootPath string) 
 		return fmt.Errorf("store for %s: %w", projectName, err)
 	}
 	p := pipeline.New(ctx, st, rootPath, discover.ModeFull)
-	return p.Run()
+	if err := p.Run(); err != nil {
+		return err
+	}
+	s.queryCache.Invalidate()
+	return nil
 }
 
 // MCPServer returns the underlying MCP server.

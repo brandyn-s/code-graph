@@ -19,12 +19,21 @@ func (s *Server) handleQueryGraph(_ context.Context, req *mcp.CallToolRequest) (
 		return errResult("missing required 'query' parameter"), nil
 	}
 
+	maxRows := getIntArg(args, "max_rows", 0)
+	cacheKey := fmt.Sprintf("cypher:%s:%s:%d", getStringArg(args, "project"), query, maxRows)
+
+	if cached, ok := s.queryCache.Get(cacheKey); ok {
+		res := jsonResult(cached)
+		s.addUpdateNotice(res)
+		return res, nil
+	}
+
 	st, err := s.resolveStore(getStringArg(args, "project"))
 	if err != nil {
 		return errResult(fmt.Sprintf("resolve store: %v", err)), nil
 	}
 
-	exec := &cypher.Executor{Store: st, MaxRows: getIntArg(args, "max_rows", 0)}
+	exec := &cypher.Executor{Store: st, MaxRows: maxRows}
 	result, err := exec.Execute(query)
 	if err != nil {
 		return errResult(fmt.Sprintf("query error: %v", err)), nil
@@ -36,6 +45,8 @@ func (s *Server) handleQueryGraph(_ context.Context, req *mcp.CallToolRequest) (
 		"total":   len(result.Rows),
 	}
 	s.addIndexStatus(responseData)
+
+	s.queryCache.Set(cacheKey, responseData)
 
 	res := jsonResult(responseData)
 	s.addUpdateNotice(res)

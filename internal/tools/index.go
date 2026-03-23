@@ -90,6 +90,9 @@ func (s *Server) handleIndexRepository(ctx context.Context, req *mcp.CallToolReq
 		return errResult(fmt.Sprintf("indexing failed: %v", err)), nil
 	}
 
+	// Invalidate query cache — indexed data has changed.
+	s.queryCache.Invalidate()
+
 	// Add to watcher so auto-sync keeps this project fresh.
 	s.watcher.Watch(projectName, absPath)
 

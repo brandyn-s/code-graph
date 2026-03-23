@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/DeusData/codebase-memory-mcp/internal/store"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -50,6 +51,21 @@ func (s *Server) handleSearchGraph(_ context.Context, req *mcp.CallToolRequest) 
 
 	params.SortBy = getStringArg(args, "sort_by")
 	includeSource := getBoolArg(args, "include_source")
+
+	// Build cache key from all filter params that affect results
+	cacheKey := fmt.Sprintf("search:%s:%s:%s:%s:%s:%s:%s:%d:%d:%d:%d:%t:%t:%s:%s:%t:%t",
+		getStringArg(args, "project"), params.Label, params.NamePattern, params.QNPattern,
+		params.FilePattern, params.Relationship, params.Direction,
+		params.MinDegree, params.MaxDegree, params.Limit, params.Offset,
+		params.ExcludeEntryPoints, params.IncludeConnected,
+		strings.Join(params.ExcludeLabels, ","), params.SortBy,
+		params.CaseSensitive, includeSource)
+
+	if cached, ok := s.queryCache.Get(cacheKey); ok {
+		result := jsonResult(cached)
+		s.addUpdateNotice(result)
+		return result, nil
+	}
 
 	st, err := s.resolveStore(getStringArg(args, "project"))
 	if err != nil {
@@ -128,6 +144,8 @@ func (s *Server) handleSearchGraph(_ context.Context, req *mcp.CallToolRequest) 
 		"results":  results,
 	}
 	s.addIndexStatus(responseData)
+
+	s.queryCache.Set(cacheKey, responseData)
 
 	result := jsonResult(responseData)
 	s.addUpdateNotice(result)

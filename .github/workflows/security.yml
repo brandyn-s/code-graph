@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   gitleaks:
-    uses: redacted-org/.github/.github/workflows/gitleaks.yml@046634c3af06da81debda91a1aa23729510f5057 # main
+    uses: redacted-org/.github/.github/workflows/gitleaks.yml@main
     permissions:
       contents: read
       security-events: write
@@ -21,7 +21,7 @@ jobs:
       pull-requests: write
 
   opengrep:
-    uses: redacted-org/.github/.github/workflows/opengrep.yml@046634c3af06da81debda91a1aa23729510f5057 # main
+    uses: redacted-org/.github/.github/workflows/opengrep.yml@main
     permissions:
       contents: read
       security-events: write
@@ -29,7 +29,7 @@ jobs:
       pull-requests: write
 
   trivy:
-    uses: redacted-org/.github/.github/workflows/trivy.yml@046634c3af06da81debda91a1aa23729510f5057 # main
+    uses: redacted-org/.github/.github/workflows/trivy.yml@main
     permissions:
       contents: read
       security-events: write
@@ -37,7 +37,7 @@ jobs:
       pull-requests: write
 
   checkov:
-    uses: redacted-org/.github/.github/workflows/checkov.yml@046634c3af06da81debda91a1aa23729510f5057 # main
+    uses: redacted-org/.github/.github/workflows/checkov.yml@main
     permissions:
       contents: read
       security-events: write

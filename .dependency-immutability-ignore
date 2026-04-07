@@ -1,4 +1,10 @@
 # Exempt internal org shared workflows from SHA pinning.
 # External Actions (actions/checkout, github/codeql-action, etc.) remain enforced.
+# Even with SHA pins, these exemptions remain as fallback — the .github repo's
+# sync-workflows mechanism can overwrite SHA pins back to @main.
 redacted-org/.github/.github/workflows
 redacted-org/.github/.github/workflows
+
+# Vendored tree-sitter grammars — build-time grammar generators, not runtime
+# Node dependencies. Lockfiles add maintenance churn without security benefit.
+Node project detected but no lockfile found

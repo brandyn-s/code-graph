@@ -1,9 +1,12 @@
 package tools
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -20,7 +23,7 @@ func (s *Server) registerRelevantContextTool() {
 			OpenWorldHint:   boolPtr(false),
 			DestructiveHint: boolPtr(false),
 		},
-		Description: "Given target files being modified, return a token-budgeted list of related files the LLM should read. Uses the code graph to find callers, callees, tests, and change-coupled files. Returns files ranked by relevance with estimated token costs, fitting within the specified budget. Use before making changes to ensure you read the right context without wasting tokens on irrelevant files.",
+		Description: "CALL THIS BEFORE editing code in an indexed project. Given target files, returns the minimal set of related files you need to read — callers, callees, tests, and change-coupled files — ranked by relevance within a token budget. With include_content=true, returns file contents directly so you don't need separate Read calls. Prevents wasting tokens on irrelevant files and missing files that would cause regressions.",
 		InputSchema: json.RawMessage(`{
 			"type": "object",
 			"properties": {
@@ -32,6 +35,10 @@ func (s *Server) registerRelevantContextTool() {
 				"token_budget": {
 					"type": "integer",
 					"description": "Maximum total tokens to include (default 8000). Files are added highest-priority first until budget is exhausted."
+				},
+				"include_content": {
+					"type": "boolean",
+					"description": "If true, inline file contents in the response (up to token budget). Eliminates the need for separate Read calls. Default: false."
 				},
 				"project": {
 					"type": "string",
@@ -50,6 +57,7 @@ type contextFile struct {
 	Priority     int    `json:"priority"`
 	TokenEst     int    `json:"token_estimate"`
 	Symbols      int    `json:"symbols"`
+	Content      string `json:"content,omitempty"`
 }
 
 func (s *Server) handleRelevantContext(_ context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -67,10 +75,21 @@ func (s *Server) handleRelevantContext(_ context.Context, req *mcp.CallToolReque
 	if tokenBudget < 500 {
 		tokenBudget = 500
 	}
+	includeContent := getBoolArg(args, "include_content")
 
 	st, err := s.resolveStore(getStringArg(args, "project"))
 	if err != nil {
 		return errResult(fmt.Sprintf("resolve store: %v", err)), nil
+	}
+
+	// Resolve repo root for reading file contents
+	var repoRoot string
+	if includeContent {
+		repoRoot, err = s.resolveProjectRoot(getStringArg(args, "project"))
+		if err != nil {
+			// Fall back to no content if root can't be resolved
+			includeContent = false
+		}
 	}
 
 	projName := s.resolveProjectName(getStringArg(args, "project"))
@@ -213,6 +232,16 @@ func (s *Server) handleRelevantContext(_ context.Context, req *mcp.CallToolReque
 		}
 	}
 
+	// Read file contents if requested
+	if includeContent && repoRoot != "" {
+		for _, cf := range selected {
+			content, readErr := readWholeFile(filepath.Join(repoRoot, cf.File))
+			if readErr == nil {
+				cf.Content = content
+			}
+		}
+	}
+
 	// Summary stats
 	byRelationship := make(map[string]int)
 	for _, cf := range selected {
@@ -230,6 +259,7 @@ func (s *Server) handleRelevantContext(_ context.Context, req *mcp.CallToolReque
 		"token_budget":     tokenBudget,
 		"total_candidates": len(result),
 		"by_relationship":  byRelationship,
+		"include_content":  includeContent,
 		"summary": fmt.Sprintf(
 			"%d files selected (%d tokens), %d excluded over budget. Relationships: %v",
 			len(selected), usedTokens, len(excluded), byRelationship,
@@ -366,6 +396,30 @@ func findChangeCoupledFiles(st *store.Store, project string, targetFiles []strin
 		}
 	}
 	return coupled
+}
+
+// readWholeFile reads a file's full content, capped at 64KB to prevent memory issues.
+func readWholeFile(path string) (string, error) {
+	const maxSize = 64 * 1024
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+
+	var sb strings.Builder
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 0, maxSize), maxSize)
+	lineNum := 0
+	for scanner.Scan() {
+		lineNum++
+		fmt.Fprintf(&sb, "%4d | %s\n", lineNum, scanner.Text())
+		if sb.Len() > maxSize {
+			fmt.Fprintf(&sb, "... (truncated at %d lines)\n", lineNum)
+			break
+		}
+	}
+	return sb.String(), scanner.Err()
 }
 
 // getStringSliceArg extracts a string array argument from parsed args.

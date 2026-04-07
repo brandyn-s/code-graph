@@ -76,7 +76,7 @@ var commonMethodNames = map[string]bool{
 	"poll": true, "await": true, "and_then": true, "or_else": true, "map_err": true,
 }
 
-//nolint:gocognit // multi-phase service analysis — complexity is inherent in the cross-cutting queries
+//nolint:gocognit,cyclop // multi-phase service analysis — complexity is inherent in the cross-cutting queries
 func (s *Server) handleExplainService(_ context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	args, err := parseArgs(req)
 	if err != nil {

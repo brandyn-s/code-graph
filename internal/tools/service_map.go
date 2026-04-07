@@ -69,7 +69,7 @@ func (s *Server) registerServiceMapTool() {
 	}, s.handleServiceMap)
 }
 
-//nolint:gocognit // multi-phase service topology — entry points, dependencies, cross-service calls, graph construction
+//nolint:gocognit,cyclop // multi-phase service topology — entry points, dependencies, cross-service calls, graph construction
 func (s *Server) handleServiceMap(_ context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	args, err := parseArgs(req)
 	if err != nil {

@@ -97,7 +97,7 @@ func (s *Server) handleExplainSymbol(_ context.Context, req *mcp.CallToolRequest
 }
 
 //nolint:cyclop // aggregates many optional graph queries into one response — splitting would scatter the logic
-func buildExplanation(st *store.Store, node *store.Node, projName string) map[string]any {
+func buildExplanation(st *store.Store, node *store.Node, _ string) map[string]any {
 	result := map[string]any{
 		"name":           node.Name,
 		"qualified_name": node.QualifiedName,

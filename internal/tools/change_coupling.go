@@ -191,8 +191,9 @@ func (s *Server) handleChangeCoupling(_ context.Context, req *mcp.CallToolReques
 
 // extractTopLevelCrate extracts the first path segment (top-level crate/package name).
 // E.g., "doomper/src/recorder.rs" -> "doomper"
-//       "ship-os/src/components/layout/Navigation.tsx" -> "ship-os"
-//       "redacted-platform-terraform/core/modules/environment/main.tf" -> "redacted-platform-terraform"
+//
+//	"ship-os/src/components/layout/Navigation.tsx" -> "ship-os"
+//	"redacted-platform-terraform/core/modules/environment/main.tf" -> "redacted-platform-terraform"
 func extractTopLevelCrate(path string) string {
 	path = strings.ReplaceAll(path, "\\", "/")
 	idx := strings.Index(path, "/")

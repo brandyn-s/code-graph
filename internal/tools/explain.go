@@ -54,7 +54,7 @@ func (s *Server) handleExplainSymbol(_ context.Context, req *mcp.CallToolRequest
 		// Try qualified name suffix match
 		st, storeErr := s.resolveStore(project)
 		if storeErr != nil {
-			return errResult(err.Error()), nil
+			return errResult(err.Error()), nil //nolint:nilerr // MCP pattern: user-facing error result
 		}
 		resolvedProj := s.resolveProjectName(project)
 		projects, _ := st.ListProjects()
@@ -63,7 +63,7 @@ func (s *Server) handleExplainSymbol(_ context.Context, req *mcp.CallToolRequest
 		}
 		nodes, findErr := st.FindNodesByQNSuffix(resolvedProj, name)
 		if findErr != nil || len(nodes) == 0 {
-			return errResult(fmt.Sprintf("symbol not found: %s", name)), nil
+			return errResult(fmt.Sprintf("symbol not found: %s", name)), nil //nolint:nilerr // MCP pattern: user-facing error result
 		}
 		if len(nodes) > 5 {
 			// Too ambiguous
@@ -96,6 +96,7 @@ func (s *Server) handleExplainSymbol(_ context.Context, req *mcp.CallToolRequest
 	return jsonResult(explanation), nil
 }
 
+//nolint:cyclop // aggregates many optional graph queries into one response — splitting would scatter the logic
 func buildExplanation(st *store.Store, node *store.Node, projName string) map[string]any {
 	result := map[string]any{
 		"name":           node.Name,

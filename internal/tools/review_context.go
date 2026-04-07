@@ -183,7 +183,7 @@ func traceOutboundDeps(st *store.Store, symbols []*store.Node) []depChainEntry {
 	return result
 }
 
-// buildReviewMarkdown constructs the token-optimized markdown summary.
+//nolint:cyclop // aggregates change data into structured markdown — splitting would fragment the output logic
 func buildReviewMarkdown(
 	files []pipeline.ChangedFile,
 	symbols []*store.Node,

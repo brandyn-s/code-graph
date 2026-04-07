@@ -76,6 +76,7 @@ var commonMethodNames = map[string]bool{
 	"poll": true, "await": true, "and_then": true, "or_else": true, "map_err": true,
 }
 
+//nolint:gocognit // multi-phase service analysis — complexity is inherent in the cross-cutting queries
 func (s *Server) handleExplainService(_ context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	args, err := parseArgs(req)
 	if err != nil {
@@ -273,12 +274,12 @@ func (s *Server) handleExplainService(_ context.Context, req *mcp.CallToolReques
 	}
 
 	result := map[string]any{
-		"service":    service,
-		"file_count": len(files),
-		"node_count": len(serviceNodes),
-		"languages":  langCounts,
-		"functions":  totalFunctions,
-		"test_edges": testCount,
+		"service":            service,
+		"file_count":         len(files),
+		"node_count":         len(serviceNodes),
+		"languages":          langCounts,
+		"functions":          totalFunctions,
+		"test_edges":         testCount,
 		"untested_functions": untestedFunctions,
 	}
 	if len(entryPoints) > 0 {

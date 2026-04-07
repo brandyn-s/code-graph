@@ -104,7 +104,7 @@ func TestRelevantContextFindsCallersCalleesTests(t *testing.T) {
 		t.Fatal("expected nodes in src/auth.rs")
 	}
 
-	var targetNodeIDs []int64
+	targetNodeIDs := make([]int64, 0, len(nodes))
 	for _, n := range nodes {
 		targetNodeIDs = append(targetNodeIDs, n.ID)
 	}
@@ -194,7 +194,7 @@ func TestRelevantContextRespectsTokenBudget(t *testing.T) {
 	files := []string{"src/auth.rs"}
 
 	nodes, _ := st.FindNodesByFile(projName, "src/auth.rs")
-	var targetNodeIDs []int64
+	targetNodeIDs := make([]int64, 0, len(nodes))
 	for _, n := range nodes {
 		targetNodeIDs = append(targetNodeIDs, n.ID)
 	}

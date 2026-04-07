@@ -83,9 +83,9 @@ func (s *Server) handleAffectedTests(_ context.Context, req *mcp.CallToolRequest
 	changedSymbols := mapChangesToSymbols(st, projName, changedFiles, hunks)
 
 	type affectedTest struct {
-		TestName  string `json:"test_name"`
-		TestQN    string `json:"test_qn"`
-		TestFile  string `json:"test_file"`
+		TestName     string `json:"test_name"`
+		TestQN       string `json:"test_qn"`
+		TestFile     string `json:"test_file"`
 		CoversSymbol string `json:"covers_symbol"`
 	}
 

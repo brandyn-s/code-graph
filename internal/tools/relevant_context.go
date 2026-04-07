@@ -60,6 +60,7 @@ type contextFile struct {
 	Content      string `json:"content,omitempty"`
 }
 
+//nolint:gocognit // multi-phase context gathering — files, callers, callees, tests, coupling, content inlining
 func (s *Server) handleRelevantContext(_ context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	args, err := parseArgs(req)
 	if err != nil {

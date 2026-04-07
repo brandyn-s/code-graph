@@ -20,7 +20,7 @@ func TestQueryCacheHitAndMiss(t *testing.T) {
 	if !hit {
 		t.Fatal("expected hit after Set")
 	}
-	nodes := result.([]Node)
+	nodes := result.([]Node) //nolint:errcheck // test: panics on type mismatch
 	if len(nodes) != 1 || nodes[0].Name != "authenticate" {
 		t.Fatalf("unexpected result: %v", nodes)
 	}

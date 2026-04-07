@@ -76,13 +76,13 @@ func (s *Server) handleChangeCoupling(_ context.Context, req *mcp.CallToolReques
 	}
 
 	type coupling struct {
-		File1       string  `json:"file1"`
-		File2       string  `json:"file2"`
-		Score       float64 `json:"coupling_score"`
-		Crate1      string  `json:"crate1"`
-		Crate2      string  `json:"crate2"`
-		SameCrate   bool    `json:"same_crate"`
-		Category    string  `json:"category"`
+		File1     string  `json:"file1"`
+		File2     string  `json:"file2"`
+		Score     float64 `json:"coupling_score"`
+		Crate1    string  `json:"crate1"`
+		Crate2    string  `json:"crate2"`
+		SameCrate bool    `json:"same_crate"`
+		Category  string  `json:"category"`
 	}
 
 	var couplings []coupling

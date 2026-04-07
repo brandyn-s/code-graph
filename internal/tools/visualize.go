@@ -56,6 +56,7 @@ func (s *Server) registerVisualizeTool() {
 	}, s.handleVisualize)
 }
 
+//nolint:funlen // builds HTML visualization with graph data, styles, and interactivity
 func (s *Server) handleVisualize(_ context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	args, err := parseArgs(req)
 	if err != nil {
@@ -76,7 +77,7 @@ func (s *Server) handleVisualize(_ context.Context, req *mcp.CallToolRequest) (*
 
 	proj, err := st.GetProject(projName)
 	if err != nil || proj == nil {
-		return errResult(fmt.Sprintf("project %q not found", projName)), nil
+		return errResult(fmt.Sprintf("project %q not found", projName)), nil //nolint:nilerr // MCP pattern: user-facing error result
 	}
 
 	filePattern := getStringArg(args, "file_pattern")
@@ -215,7 +216,7 @@ func (s *Server) handleVisualize(_ context.Context, req *mcp.CallToolRequest) (*
 		}
 	}
 
-	if writeErr := os.WriteFile(outputPath, []byte(html), 0644); writeErr != nil { //nolint:gosec // output path from trusted tool input
+	if writeErr := os.WriteFile(outputPath, []byte(html), 0o644); writeErr != nil { //nolint:gosec // output path from trusted tool input
 		return errResult(fmt.Sprintf("write file: %v", writeErr)), nil
 	}
 

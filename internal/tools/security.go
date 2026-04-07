@@ -218,17 +218,17 @@ func (s *Server) handleTaintedPaths(st *store.Store, projName string, args map[s
 	}
 
 	type taintedPath struct {
-		SourceName    string   `json:"source_name"`
-		SourceQN      string   `json:"source_qn"`
-		SourceSubtype string   `json:"source_subtype,omitempty"`
-		SourceFile    string   `json:"source_file"`
-		SinkName      string   `json:"sink_name"`
-		SinkQN        string   `json:"sink_qn"`
-		SinkSubtype   string   `json:"sink_subtype,omitempty"`
-		SinkFile      string   `json:"sink_file"`
-		Hops          int      `json:"hops"`
-		Sanitized     bool     `json:"sanitized"`
-		SanitizedBy   string   `json:"sanitized_by,omitempty"`
+		SourceName    string `json:"source_name"`
+		SourceQN      string `json:"source_qn"`
+		SourceSubtype string `json:"source_subtype,omitempty"`
+		SourceFile    string `json:"source_file"`
+		SinkName      string `json:"sink_name"`
+		SinkQN        string `json:"sink_qn"`
+		SinkSubtype   string `json:"sink_subtype,omitempty"`
+		SinkFile      string `json:"sink_file"`
+		Hops          int    `json:"hops"`
+		Sanitized     bool   `json:"sanitized"`
+		SanitizedBy   string `json:"sanitized_by,omitempty"`
 	}
 
 	edgeTypes := []string{"CALLS", "HTTP_CALLS", "ASYNC_CALLS"}
@@ -277,24 +277,24 @@ func (s *Server) handleTaintedPaths(st *store.Store, projName string, args map[s
 
 	// Count sanitized vs unsanitized
 	sanitizedCount := 0
-	for _, p := range paths {
-		if p.Sanitized {
+	for i := range paths {
+		if paths[i].Sanitized {
 			sanitizedCount++
 		}
 	}
 
 	responseData := map[string]any{
-		"tainted_paths":    paths,
-		"sources":          len(refined),
-		"sources_original": len(sources),
-		"sinks":            len(sinks),
-		"sanitizers":       len(sanitizerIDs),
-		"paths_found":      len(paths),
-		"paths_sanitized":  sanitizedCount,
+		"tainted_paths":     paths,
+		"sources":           len(refined),
+		"sources_original":  len(sources),
+		"sinks":             len(sinks),
+		"sanitizers":        len(sanitizerIDs),
+		"paths_found":       len(paths),
+		"paths_sanitized":   sanitizedCount,
 		"paths_unsanitized": len(paths) - sanitizedCount,
-		"max_depth":        depth,
-		"exclude_tests":    excludeTests,
-		"stig_hint":        "SI-10: Unsanitized paths represent user input reaching sensitive sinks without validation. Sanitized paths pass through a sanitizer or auth_boundary node.",
+		"max_depth":         depth,
+		"exclude_tests":     excludeTests,
+		"stig_hint":         "SI-10: Unsanitized paths represent user input reaching sensitive sinks without validation. Sanitized paths pass through a sanitizer or auth_boundary node.",
 	}
 
 	return jsonResult(responseData), nil
@@ -374,7 +374,7 @@ func isInfraCallee(name string) bool {
 // checkPathSanitized checks whether any node on the BFS path between source and
 // sink has a sanitizer or auth_boundary role. Uses the BFS visited list — nodes
 // at intermediate hops (between 1 and sinkHop-1) are candidates.
-func checkPathSanitized(visited []*store.NodeHop, sinkHop int, sourceID, sinkID int64, sanitizerIDs map[int64]string) (bool, string) {
+func checkPathSanitized(visited []*store.NodeHop, sinkHop int, sourceID, sinkID int64, sanitizerIDs map[int64]string) (sanitized bool, sanitizerName string) {
 	if sinkHop <= 1 {
 		return false, "" // Direct call, no intermediate nodes
 	}

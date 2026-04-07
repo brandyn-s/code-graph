@@ -76,7 +76,7 @@ func (s *Server) handleDiffServices(_ context.Context, req *mcp.CallToolRequest)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "git", "diff", "--name-status", fromRef+".."+toRef)
+	cmd := exec.CommandContext(ctx, "git", "diff", "--name-status", fromRef+".."+toRef) //nolint:gosec // refs are from trusted MCP tool input, not user-facing web input
 	cmd.Dir = repoPath
 	out, err := cmd.Output()
 	if err != nil {

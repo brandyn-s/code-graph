@@ -71,7 +71,6 @@ var sanitizerNamePatterns = regexp.MustCompile(`(?i)(^validate_|^sanitize_|^esca
 var sanitizerFilePatterns = regexp.MustCompile(`(?i)(valid(at(e|or|ion))?[/\\]|sanitiz(e|er)[/\\]|input[_-]?check)`)
 
 // Subtype patterns for sanitizer subtypes.
-var subtypeInputValidationPatterns = regexp.MustCompile(`(?i)(^validate_|^sanitize_|^clean_|^normalize_|_validator$|_sanitizer$|^ensure_valid|^check_input|^verify_input)`)
 var subtypeTypeCheckPatterns = regexp.MustCompile(`(?i)(^parse_int|^parse_uint|^parse_float|^parse_uuid|^parse_id|^parse_bool|^try_from|^from_str|^to_int|^to_float|^as_int|_type_check|^coerce_|^cast_)`)
 var subtypeEscapeEncodePatterns = regexp.MustCompile(`(?i)(^escape_|^encode_|^quote_|^html_escape|^url_encode|^sql_escape|^shell_escape|^xml_escape)`)
 var subtypeBoundsCheckPatterns = regexp.MustCompile(`(?i)(^check_bounds|^check_range|^check_length|^check_size|^clamp|^limit_|^cap_|^constrain|^assert_in_range)`)

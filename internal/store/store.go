@@ -370,6 +370,14 @@ func (s *Store) initSchema() error {
 		_, _ = s.db.ExecContext(ctx, `ALTER TABLE projects ADD COLUMN index_detail TEXT NOT NULL DEFAULT ''`)
 	}
 
+	// Migration: node_embeddings table for Voyage AI semantic search.
+	_, _ = s.db.ExecContext(ctx, `
+		CREATE TABLE IF NOT EXISTS node_embeddings (
+			node_id INTEGER PRIMARY KEY REFERENCES nodes(id) ON DELETE CASCADE,
+			model TEXT NOT NULL,
+			embedding BLOB NOT NULL
+		)`)
+
 	return nil
 }
 

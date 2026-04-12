@@ -683,6 +683,43 @@ func (s *Server) registerSchemaAndSnippetTools() {
 
 func (s *Server) registerSearchTools() {
 	s.addTool(&mcp.Tool{
+		Name: "search_code_semantic",
+		Annotations: &mcp.ToolAnnotations{
+			ReadOnlyHint:    true,
+			IdempotentHint:  true,
+			OpenWorldHint:   boolPtr(false),
+			DestructiveHint: boolPtr(false),
+		},
+		Description: "Semantic code search using Voyage AI embeddings. Find code by natural language description — 'authentication middleware', 'GPS parsing logic', 'battery monitoring'. Unlike search_code (grep) and search_graph (structural), this understands meaning. Requires VOYAGE_API_KEY and a prior index_repository run. Returns functions, classes, structs ranked by semantic similarity. Use file_pattern and label filters to narrow scope.",
+		InputSchema: json.RawMessage(`{
+			"type": "object",
+			"properties": {
+				"query": {
+					"type": "string",
+					"description": "Natural language search query. Describe what the code does, not exact keywords."
+				},
+				"project": {
+					"type": "string",
+					"description": "Project to search in. Defaults to session project."
+				},
+				"limit": {
+					"type": "integer",
+					"description": "Maximum results (default 10, max 50)"
+				},
+				"file_pattern": {
+					"type": "string",
+					"description": "Glob pattern to filter files (e.g. '*.rs', 'src/**')"
+				},
+				"label": {
+					"type": "string",
+					"description": "Node label filter: Function, Method, Class, Struct, Interface, Trait, Enum, Module, Type"
+				}
+			},
+			"required": ["query"]
+		}`),
+	}, s.handleSearchCodeSemantic)
+
+	s.addTool(&mcp.Tool{
 		Name: "search_graph",
 		Annotations: &mcp.ToolAnnotations{
 			ReadOnlyHint:    true,

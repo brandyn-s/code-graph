@@ -449,6 +449,11 @@ func (p *Pipeline) runPostFlushPasses(files []discover.FileInfo) error {
 	p.passLockfileDeps()
 	slog.Info("pass.timing", "pass", "lockfile_deps", "elapsed", time.Since(t))
 
+	p.reportProgress("embeddings", 97, "generating embeddings")
+	t = time.Now()
+	p.passEmbeddings()
+	slog.Info("pass.timing", "pass", "embeddings", "elapsed", time.Since(t))
+
 	p.reportProgress("file_hashes", 98, "updating file hashes")
 	t = time.Now()
 	p.updateFileHashes(files)

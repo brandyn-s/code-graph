@@ -557,11 +557,34 @@ static const char** extract_param_names(CBMArena* a, TSNode params, const char* 
                  strcmp(pk, "simple_parameter") == 0 || strcmp(pk, "typed_parameter") == 0) {
             TSNode nm = ts_node_child_by_field_name(param, "name", 4);
             if (ts_node_is_null(nm)) nm = ts_node_child_by_field_name(param, "pattern", 7);
+            // Python typed_parameter has no "name" field — first named child is the identifier
+            if (ts_node_is_null(nm)) nm = ts_node_named_child(param, 0);
             if (!ts_node_is_null(nm)) {
                 if (strcmp(ts_node_type(nm), "identifier") == 0 ||
                     strcmp(ts_node_type(nm), "simple_identifier") == 0) {
                     name_text = cbm_node_text(a, nm, source);
                 }
+            }
+        }
+        // Bare identifier (Python simple params, JS params)
+        else if (strcmp(pk, "identifier") == 0) {
+            name_text = cbm_node_text(a, param, source);
+        }
+        // Python typed_default_parameter: name: type = default
+        else if (strcmp(pk, "typed_default_parameter") == 0) {
+            TSNode nm = ts_node_child_by_field_name(param, "name", 4);
+            if (!ts_node_is_null(nm)) name_text = cbm_node_text(a, nm, source);
+        }
+        // Python default_parameter: name = default
+        else if (strcmp(pk, "default_parameter") == 0) {
+            TSNode nm = ts_node_child_by_field_name(param, "name", 4);
+            if (!ts_node_is_null(nm)) name_text = cbm_node_text(a, nm, source);
+        }
+        // JS assignment_pattern: name = default
+        else if (strcmp(pk, "assignment_pattern") == 0) {
+            TSNode left = ts_node_child_by_field_name(param, "left", 4);
+            if (!ts_node_is_null(left) && strcmp(ts_node_type(left), "identifier") == 0) {
+                name_text = cbm_node_text(a, left, source);
             }
         }
 
@@ -727,7 +750,7 @@ static const char** extract_param_types(CBMArena* a, TSNode params, const char* 
             if (strcmp(pk, "formal_parameter") == 0 || strcmp(pk, "parameter") == 0 ||
                 strcmp(pk, "parameter_declaration") == 0 || strcmp(pk, "spread_parameter") == 0 ||
                 strcmp(pk, "simple_parameter") == 0 || strcmp(pk, "variadic_parameter") == 0 ||
-                strcmp(pk, "typed_parameter") == 0) {
+                strcmp(pk, "typed_parameter") == 0 || strcmp(pk, "typed_default_parameter") == 0) {
                 TSNode tn = ts_node_child_by_field_name(param, "type", 4);
                 if (!ts_node_is_null(tn)) {
                     type_text = cbm_node_text(a, tn, source);

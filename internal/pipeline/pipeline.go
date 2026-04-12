@@ -331,6 +331,11 @@ func (p *Pipeline) runFullPasses(files []discover.FileInfo) error {
 		return err
 	}
 
+	p.reportProgress("dataflow", 39, "creating parameter nodes")
+	t = time.Now()
+	p.passDataflow() // Parameter nodes + PARAMETER_OF edges
+	slog.Info("pass.timing", "pass", "dataflow", "elapsed", time.Since(t))
+
 	p.reportProgress("imports", 40, "building import maps")
 	t = time.Now()
 	p.passImports()
@@ -508,7 +513,7 @@ func (p *Pipeline) logEdgeCounts() {
 		"THROWS", "RAISES", "READS", "WRITES", "CONFIGURES", "MEMBER_OF",
 		"HTTP_CALLS", "HANDLES", "ASYNC_CALLS", "IMPLEMENTS", "OVERRIDE",
 		"FILE_CHANGES_WITH", "CONTAINS_FILE", "CONTAINS_FOLDER", "CONTAINS_PACKAGE", "DEPENDS_ON",
-		"POLICY_GATES",
+		"POLICY_GATES", "PARAMETER_OF",
 	}
 	for _, edgeType := range edgeTypes {
 		count, err := p.Store.CountEdgesByType(p.ProjectName, edgeType)
@@ -621,6 +626,10 @@ func (p *Pipeline) runIncrementalPasses(
 
 	_ = p.Store.DeleteEdgesByType(p.ProjectName, "DECORATES")
 	p.passDecorates()
+
+	_ = p.Store.DeleteEdgesByType(p.ProjectName, "PARAMETER_OF")
+	_ = p.Store.DeleteNodesByLabel(p.ProjectName, "Parameter")
+	p.passDataflow()
 
 	// Community detection: delete old communities and MEMBER_OF, re-run
 	_ = p.Store.DeleteEdgesByType(p.ProjectName, "MEMBER_OF")

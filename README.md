@@ -20,6 +20,32 @@ The graph persists in SQLite across sessions. Index once, query forever (with au
 
 Indexing a repository runs through 7 sequential passes, each building on the previous:
 
+```mermaid
+flowchart TD
+    A[Source Files] --> B["1. Structure Pass<br/>tree-sitter AST → nodes"]
+    B --> C["2. Definition Pass<br/>params, returns, decorators"]
+    C --> D["3. Call Resolution<br/>CALLS, ASYNC_CALLS edges"]
+    D --> E["4. HTTP Linking<br/>REST route → call site matching"]
+    E --> F["5. OPA Policy<br/>POLICY_GATES edges"]
+    F --> G["6. Community Detection<br/>Louvain clustering"]
+    G --> H["7. Test Linking<br/>TESTS edges"]
+    H --> I[(SQLite Graph<br/>WAL mode)]
+```
+
+
+```mermaid
+flowchart TD
+    A[Source Files] --> B["1. Structure Pass<br/>tree-sitter AST → nodes"]
+    B --> C["2. Definition Pass<br/>params, returns, decorators"]
+    C --> D["3. Call Resolution<br/>CALLS, ASYNC_CALLS edges"]
+    D --> E["4. HTTP Linking<br/>REST route → call site matching"]
+    E --> F["5. OPA Policy<br/>POLICY_GATES edges"]
+    F --> G["6. Community Detection<br/>Louvain clustering"]
+    G --> H["7. Test Linking<br/>TESTS edges"]
+    H --> I[(SQLite Graph<br/>WAL mode)]
+```
+
+
 1. **Structure pass**: tree-sitter parses every file into an AST. Extracts packages, files, modules, classes, functions, methods, interfaces, enums, and type definitions as graph nodes. Creates `CONTAINS_*` and `DEFINES` edges for the containment hierarchy.
 
 2. **Definition pass**: Resolves function/method definitions with parameters, return types, and decorators. Go gets enhanced LSP-style type resolution for cross-package calls.
@@ -154,6 +180,192 @@ See [BENCHMARK.md](BENCHMARK.md) for the full per-language breakdown with detail
 | `ingest_traces` | Import OpenTelemetry traces for HTTP_CALLS validation |
 | `visualize` | HTML graph visualization of node neighborhoods |
 
+## Examples
+
+### Cypher query — what does `main` call?
+
+```cypher
+MATCH (f:Function)-[:CALLS]->(g:Function)
+WHERE f.name = 'main'
+RETURN f.name, g.name, g.file
+LIMIT 5
+```
+
+**Actual output** (from code-graph's own codebase):
+```
+f.name  | g.name            | g.file
+--------|-------------------|-------
+main    | printTopLevelHelp  |
+main    | runInstall         |
+main    | runUninstall       |
+main    | runUpdate          |
+main    | runConfig          |
+```
+
+One query, 5 rows, ~200 tokens. The equivalent grep would search every file for "main" and return thousands of matches including comments, string literals, and variable names.
+
+### Call trace — who calls `_auth_headers`?
+
+```
+trace_call_path(function_name="_auth_headers", direction="inbound", depth=2)
+```
+
+**Actual output** (from mcp-servers repo, 2,725 nodes):
+```
+_auth_headers (msgraph/msgraph_mcp.py)
+├── hop 1 (direct callers):
+│   ├── _graph_get
+│   ├── _graph_post
+│   ├── _graph_patch
+│   ├── _graph_delete
+│   └── _graph_get_all
+└── hop 2 (callers of callers):
+    ├── graph_request        ← the generic MCP tool handler
+    ├── graph_mutate         ← the write MCP tool handler
+    ├── list_users           ← 93 specific MCP tools that
+    ├── get_user               call through _graph_get/post
+    ├── list_groups
+    ├── list_sign_ins
+    ├── list_audit_logs
+    └── ... (90+ more functions)
+```
+
+This reveals the full dependency tree: `_auth_headers` is called by 5 HTTP helpers, which are called by 93 MCP tool functions. Changing `_auth_headers` has a blast radius of 98 functions — information that's invisible to grep.
+
+### Architecture overview
+
+```
+get_architecture(project="mcp-servers")
+```
+
+**Actual output:**
+```
+Project: mcp-servers
+Nodes: 2,725 | Edges: 4,230
+
+Node types:
+  Function: 1,316    Method: 90
+  Section:  523       Class:  34
+  Variable: 469       File:   113
+
+Edge types:
+  CALLS:          2,443    DEFINES:       1,315
+  USAGE:            167    DEFINES_METHOD:   90
+  TESTS:             34    IMPORTS:           5
+```
+
+In one call: the shape of the entire codebase. 1,316 functions, 2,443 call edges, 34 test edges. An AI agent now knows this is a function-heavy Python repo with minimal class hierarchy.
+
+### Search the graph — find functions matching a pattern
+
+```
+search_graph(label="Function", name_pattern="auth", include_connected=true, limit=3)
+```
+
+**Actual output:**
+```json
+[
+  {"name": "_auth_headers", "file": "msgraph/msgraph_mcp.py", "in_degree": 5, "out_degree": 1},
+  {"name": "_auth_headers", "file": "workspace-provisioner/clients/graph.py", "in_degree": 3, "out_degree": 1},
+  {"name": "_build_oauth", "file": "shared/mcp_http.py", "in_degree": 2, "out_degree": 2}
+]
+```
+
+Structural search: finds functions by name pattern and immediately shows their connectivity (in_degree = callers, out_degree = callees). High in_degree = widely used. High out_degree = complex function.
+
+## Examples
+
+### Cypher query — what does `main` call?
+
+```cypher
+MATCH (f:Function)-[:CALLS]->(g:Function)
+WHERE f.name = 'main'
+RETURN f.name, g.name, g.file
+LIMIT 5
+```
+
+**Actual output** (from code-graph's own codebase):
+```
+f.name  | g.name            | g.file
+--------|-------------------|-------
+main    | printTopLevelHelp  |
+main    | runInstall         |
+main    | runUninstall       |
+main    | runUpdate          |
+main    | runConfig          |
+```
+
+One query, 5 rows, ~200 tokens. The equivalent grep would search every file for "main" and return thousands of matches including comments, string literals, and variable names.
+
+### Call trace — who calls `_auth_headers`?
+
+```
+trace_call_path(function_name="_auth_headers", direction="inbound", depth=2)
+```
+
+**Actual output** (from mcp-servers repo, 2,725 nodes):
+```
+_auth_headers (msgraph/msgraph_mcp.py)
+├── hop 1 (direct callers):
+│   ├── _graph_get
+│   ├── _graph_post
+│   ├── _graph_patch
+│   ├── _graph_delete
+│   └── _graph_get_all
+└── hop 2 (callers of callers):
+    ├── graph_request        ← the generic MCP tool handler
+    ├── graph_mutate         ← the write MCP tool handler
+    ├── list_users           ← 93 specific MCP tools that
+    ├── get_user               call through _graph_get/post
+    ├── list_groups
+    ├── list_sign_ins
+    ├── list_audit_logs
+    └── ... (90+ more functions)
+```
+
+This reveals the full dependency tree: `_auth_headers` is called by 5 HTTP helpers, which are called by 93 MCP tool functions. Changing `_auth_headers` has a blast radius of 98 functions — information that's invisible to grep.
+
+### Architecture overview
+
+```
+get_architecture(project="mcp-servers")
+```
+
+**Actual output:**
+```
+Project: mcp-servers
+Nodes: 2,725 | Edges: 4,230
+
+Node types:
+  Function: 1,316    Method: 90
+  Section:  523       Class:  34
+  Variable: 469       File:   113
+
+Edge types:
+  CALLS:          2,443    DEFINES:       1,315
+  USAGE:            167    DEFINES_METHOD:   90
+  TESTS:             34    IMPORTS:           5
+```
+
+In one call: the shape of the entire codebase. 1,316 functions, 2,443 call edges, 34 test edges. An AI agent now knows this is a function-heavy Python repo with minimal class hierarchy.
+
+### Search the graph — find functions matching a pattern
+
+```
+search_graph(label="Function", name_pattern="auth", include_connected=true, limit=3)
+```
+
+**Actual output:**
+```json
+[
+  {"name": "_auth_headers", "file": "msgraph/msgraph_mcp.py", "in_degree": 5, "out_degree": 1},
+  {"name": "_auth_headers", "file": "workspace-provisioner/clients/graph.py", "in_degree": 3, "out_degree": 1},
+  {"name": "_build_oauth", "file": "shared/mcp_http.py", "in_degree": 2, "out_degree": 2}
+]
+```
+
+Structural search: finds functions by name pattern and immediately shows their connectivity (in_degree = callers, out_degree = callees). High in_degree = widely used. High out_degree = complex function.
+
 ## What It's Good For
 
 - **"What calls this?"** — Trace inbound callers to any function, across files and packages
@@ -187,6 +399,56 @@ These tools are complementary — **code-search finds by meaning, code-graph fin
 | "How does error handling work?" | Both — code-search finds patterns, code-graph traces flows |
 
 The `get_relevant_context` tool bridges both: given files you plan to modify, it returns callers, callees, tests, and change-coupled files — everything an AI agent needs to make a safe change, in ~500 tokens instead of ~80K.
+
+## Troubleshooting
+
+| Problem | Cause | Fix |
+|---------|-------|-----|
+| **"function not found"** on trace | Function name doesn't match exactly (case-sensitive) | Use `search_graph(name_pattern="auth")` first to find the exact name |
+| **Empty Cypher results** | Wrong project or missing `project` parameter | Add `project` parameter. Run `list_projects` to see available names. |
+| **0 CALLS edges** for a function | Abstract method, built-in, or external dependency call | Expected — code-graph traces static AST calls, not dynamic dispatch. Use `search_graph(include_connected=true)` for alternative connectivity info. |
+| **Indexing hangs on large repo** | Large repo (>50K files) takes time | Scope to subdirectory. `index_repository(path="/repo/src")` instead of `/repo`. |
+| **Stale graph after code changes** | Auto-sync interval hasn't triggered yet | Background watcher polls at adaptive intervals. Force refresh: `index_repository` with same path. |
+| **"Cypher IS NOT NULL not supported"** | Parser limitation | Use alternative: `MATCH (f:Function) WHERE f.params <> '' RETURN f.name` or filter client-side. |
+| **200-row cap on query results** | Default `max_rows` limit | Add `max_rows: 1000` parameter to `query_graph`. Aggregations (COUNT) may undercount at default cap. |
+
+## Comparison to Alternatives
+
+| Tool | Strengths | Limitations | When to use instead of code-graph |
+|------|-----------|-------------|-----------------------------------|
+| **LSP (gopls, rust-analyzer, Pyright)** | Real-time, type-aware, handles dynamic dispatch | Single-language, requires editor, no cross-repo | Real-time navigation within a single language in your IDE. |
+| **ctags / Universal Ctags** | Fast symbol indexing, multi-language | No call graph, no structural queries, just definitions | Quick symbol lookup when you need "where is X defined?" |
+| **Sourcetrail** (discontinued) | Beautiful interactive graph visualization | No longer maintained (archived 2021), no CLI/MCP integration | Historical reference only — code-graph fills this gap. |
+| **CodeQL** | Deep interprocedural taint analysis, security-focused | Requires database build (minutes), query language learning curve | Security vulnerability hunting with data flow analysis. |
+| **code-search** | Semantic/meaning-based search, handles "find auth code" | No structural understanding — can't trace calls or detect dead code | "Where is the auth code?" not "What calls the auth code?" |
+| **grep / ripgrep** | Instant text search, regex, no indexing | No understanding of code structure — "main" matches everything | You know the exact string and need instant results. |
+
+**code-graph is best when**: You need to understand code *structure* — call chains, dependencies, blast radius, dead code, test coverage. It's designed for questions about *relationships* between code, not finding code by content.
+
+## Troubleshooting
+
+| Problem | Cause | Fix |
+|---------|-------|-----|
+| **"function not found"** on trace | Function name doesn't match exactly (case-sensitive) | Use `search_graph(name_pattern="auth")` first to find the exact name |
+| **Empty Cypher results** | Wrong project or missing `project` parameter | Add `project` parameter. Run `list_projects` to see available names. |
+| **0 CALLS edges** for a function | Abstract method, built-in, or external dependency call | Expected — code-graph traces static AST calls, not dynamic dispatch. Use `search_graph(include_connected=true)` for alternative connectivity info. |
+| **Indexing hangs on large repo** | Large repo (>50K files) takes time | Scope to subdirectory. `index_repository(path="/repo/src")` instead of `/repo`. |
+| **Stale graph after code changes** | Auto-sync interval hasn't triggered yet | Background watcher polls at adaptive intervals. Force refresh: `index_repository` with same path. |
+| **"Cypher IS NOT NULL not supported"** | Parser limitation | Use alternative: `MATCH (f:Function) WHERE f.params <> '' RETURN f.name` or filter client-side. |
+| **200-row cap on query results** | Default `max_rows` limit | Add `max_rows: 1000` parameter to `query_graph`. Aggregations (COUNT) may undercount at default cap. |
+
+## Comparison to Alternatives
+
+| Tool | Strengths | Limitations | When to use instead of code-graph |
+|------|-----------|-------------|-----------------------------------|
+| **LSP (gopls, rust-analyzer, Pyright)** | Real-time, type-aware, handles dynamic dispatch | Single-language, requires editor, no cross-repo | Real-time navigation within a single language in your IDE. |
+| **ctags / Universal Ctags** | Fast symbol indexing, multi-language | No call graph, no structural queries, just definitions | Quick symbol lookup when you need "where is X defined?" |
+| **Sourcetrail** (discontinued) | Beautiful interactive graph visualization | No longer maintained (archived 2021), no CLI/MCP integration | Historical reference only — code-graph fills this gap. |
+| **CodeQL** | Deep interprocedural taint analysis, security-focused | Requires database build (minutes), query language learning curve | Security vulnerability hunting with data flow analysis. |
+| **code-search** | Semantic/meaning-based search, handles "find auth code" | No structural understanding — can't trace calls or detect dead code | "Where is the auth code?" not "What calls the auth code?" |
+| **grep / ripgrep** | Instant text search, regex, no indexing | No understanding of code structure — "main" matches everything | You know the exact string and need instant results. |
+
+**code-graph is best when**: You need to understand code *structure* — call chains, dependencies, blast radius, dead code, test coverage. It's designed for questions about *relationships* between code, not finding code by content.
 
 ## Setup
 

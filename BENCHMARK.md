@@ -1,5 +1,20 @@
 # Codebase Memory MCP -- v0.3.0 Language Benchmark
 
+## Why This Benchmark Exists
+
+A code knowledge graph is only useful if it accurately represents the codebase it indexes. If function calls are missed, dead code detection gives false positives. If inheritance isn't traced, type hierarchy queries return incomplete results. If indexing fails on certain languages, those parts of the codebase become invisible.
+
+This benchmark tests code-graph against **35 real open-source repos** spanning 27 programming languages and 8 config/markup languages. Each language gets 12 standardized questions (4 for config languages) covering the full tool surface: indexing, discovery, pattern search, code snippets, text search, call tracing (inbound and outbound), Cypher queries, property extraction, inheritance, and directory listing.
+
+The benchmark is run on real repos (Django, ripgrep, NestJS, Laravel, Neovim, etc.), not synthetic test data. This means the scores reflect actual real-world performance, including edge cases from production codebases.
+
+**How to read the scores:**
+- **100% (Tier 1)**: Every question answered correctly on first or second attempt. The tool fully understands this language's structure.
+- **75-89% (Tier 2)**: Most questions answered correctly. Typical deductions are for property extraction (parameter types not extracted) or trace limitations (abstract methods have no outbound calls).
+- **<75% (Tier 3)**: Core operations work but language-specific patterns cause gaps (Haskell function composition, OCaml module functors).
+- **PARTIAL (0.5)**: The tool returned results but they were incomplete or required an alternative approach.
+- **N/A**: The question doesn't apply to this language (e.g., inheritance for C, classes for Bash).
+
 ## Methodology
 
 - **63 languages** (27 programming + 8 config/markup), 12 questions each (4 for config languages)

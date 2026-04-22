@@ -34,8 +34,10 @@ Thumbs.db
 memory/
 reference/
 
-# Phase 0 benchmark outputs (captured baselines, not source)
+# Phase 0 benchmark outputs (captured baselines and transcript corpora; regenerable)
 bench/baseline_*.json
 bench/after_*.json
 bench/smoke.json
+bench/transcripts_*.jsonl
+bench/sample_*.jsonl
 bench/__pycache__/

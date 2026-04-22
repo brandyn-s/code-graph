@@ -54,7 +54,8 @@ python bench/harness.py --output bench/baseline.json \
 | `questions.json` | 20-question standard suite (Q1-Q12 baseline, Q13-Q20 feature probes) |
 | `harness.py` | Runs the suite against a binary, emits JSON |
 | `compare.py` | Diff two JSON baselines |
-| `baseline_YYYY-MM-DD.json` | Captured baselines (gitignored in .gitignore after first commit) |
+| `transcripts.py` | **Phase 0b** — scans `~/.claude/projects/` for Claude Code sessions that used `mcp__code-search__*` or `mcp__code-graph__*` tools, writes one JSONL record per session with tool-call sequence and token totals. Used as the A/B population for PR 3 (PreToolUse hook effectiveness) and PR 4/7 agent-answer quality. |
+| `baseline_YYYY-MM-DD.json`, `transcripts_YYYY-MM-DD.jsonl` | Captured outputs (gitignored; regenerate on demand) |
 
 ## What the harness captures per question
 
@@ -157,8 +158,55 @@ Captured in `fixtures.json`. A baseline run prints a WARN if any fixture's HEAD 
 
 3. **Q19 and Q20 already pass on current source.** `explain_symbol` and `get_review_context` exist. PR 4 and PR 5's scope is additive enhancement to these existing tools (rationale extraction; graph-diff inclusion) rather than building from scratch.
 
+## Phase 0b — transcript replay corpus
+
+Reads Claude Code session transcripts from `~/.claude/projects/` and
+summarizes every session that invoked `mcp__code-search__*` or
+`mcp__code-graph__*` tools. One JSONL record per qualifying session.
+
+### Usage
+
+```bash
+# default: last 14 days, write bench/transcripts_YYYY-MM-DD.jsonl, print stats
+python bench/transcripts.py --stats
+
+# dry-run — count without writing
+python bench/transcripts.py --count-only
+
+# custom window + output
+python bench/transcripts.py --days 30 --output bench/scan.jsonl
+
+# sample N random sessions (seed=42) for hand-labeling outcomes
+python bench/transcripts.py --sample 30 --output bench/sample_hand-label.jsonl
+```
+
+### Baseline captured 2026-04-22 (14-day window, 299 transcripts scanned)
+
+| Metric | Value |
+|---|---:|
+| Qualifying sessions (≥10 tool calls + uses code-search or code-graph) | **30** (25 main + 5 subagent) |
+| MCP usage mix | 19 use both, 9 code-search only, 2 code-graph only |
+| Median tool calls per session | 295 |
+| Total tool calls in corpus | 12,171 |
+| **Pre-graph grep rate** | **23/30 = 76.7%** |
+| Total tokens in corpus | 7.85 billion (input + output + cache) |
+
+### What `pre_graph_grep` measures
+
+For each session we compute `first_graph_call_index` = the position of the
+first `mcp__code-search__*` or `mcp__code-graph__*` tool call. If *any*
+`Glob`/`Grep`/`Read` call precedes that index, the session counts as
+"pre-graph grep" (the behavior PR 3's PreToolUse hook aims to reduce). On
+the current main-branch baseline, **76.7% of sessions** exhibit this.
+
+### A/B usage (post-PR-3)
+
+After PR 3 ships, re-run `transcripts.py` over the next 14-day window and
+compare `pre_graph_grep` rate. Target delta: ≥40 pp reduction (baseline
+76.7% → target ≤ 37%). Stop-ship criterion for PR 3 is met only if the
+delta is observable across a meaningfully-sized sample (≥30 sessions).
+
 ## Follow-up PRs
 
-- Phase 0b: transcript replay corpus extractor (separate PR)
 - Phase 0c: PR ground-truth set (separate PR)
 - CI integration: gate feature PRs on `compare.py` output (future)

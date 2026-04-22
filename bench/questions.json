@@ -1,0 +1,227 @@
+{
+  "description": "20-question standard suite. Q1-Q12 extend the existing BENCHMARK.md methodology. Q13-Q20 are capability probes for the 7 feature PRs — pre-merge they return N/A; post-merge the harness captures the first real value.",
+  "questions": [
+    {
+      "id": "Q1",
+      "category": "indexing",
+      "tool": "get_graph_schema",
+      "args": {},
+      "expect_contains": ["node_labels", "relationship_types"],
+      "feature_pr": null
+    },
+    {
+      "id": "Q2",
+      "category": "discovery",
+      "tool": "search_graph",
+      "args": {"label": "Function", "limit": 10},
+      "expect_min_results": 1,
+      "feature_pr": null
+    },
+    {
+      "id": "Q3",
+      "category": "discovery",
+      "tool": "search_graph",
+      "args": {"label": "Class", "limit": 10},
+      "expect_min_results": 0,
+      "feature_pr": null
+    },
+    {
+      "id": "Q4",
+      "category": "pattern",
+      "tool": "search_graph",
+      "args_per_repo": {
+        "mcp-servers": {"label": "Function", "name_pattern": ".*auth.*", "limit": 10},
+        "rmf-corsair": {"label": "Function", "name_pattern": ".*assess.*", "limit": 10},
+        "mcp-infra": {"label": "Function", "name_pattern": ".*deploy.*", "limit": 10},
+        "code-graph": {"label": "Function", "name_pattern": ".*query.*", "limit": 10}
+      },
+      "note": "Per-repo name_patterns are chosen to match each codebase's domain vocabulary. Not a blanket pattern — rmf-corsair Rust functions don't use 'config' in names (they use 'assess_*' for RMF assessments)",
+      "expect_min_results": 1,
+      "feature_pr": null
+    },
+    {
+      "id": "Q5",
+      "category": "code",
+      "tool": "get_code_snippet",
+      "args_per_repo": {
+        "mcp-servers": {"qualified_name_hint": "_auth_headers"},
+        "rmf-corsair": {"qualified_name_hint": "main"},
+        "mcp-infra": {"qualified_name_hint": "main"},
+        "code-graph": {"qualified_name_hint": "main"}
+      },
+      "expect_non_empty": true,
+      "feature_pr": null,
+      "note": "harness resolves qualified_name via search_graph first"
+    },
+    {
+      "id": "Q6",
+      "category": "search",
+      "tool": "search_code",
+      "args_per_repo": {
+        "mcp-servers": {"pattern": "authentication"},
+        "rmf-corsair": {"pattern": "configuration"},
+        "mcp-infra": {"pattern": "terraform"},
+        "code-graph": {"pattern": "Cypher"}
+      },
+      "expect_min_results": 1,
+      "feature_pr": null
+    },
+    {
+      "id": "Q7",
+      "category": "trace",
+      "tool": "trace_call_path",
+      "args_per_repo": {
+        "mcp-servers": {"function_name": "_auth_headers", "direction": "outbound", "depth": 2},
+        "rmf-corsair": {"function_name": "main", "direction": "outbound", "depth": 2},
+        "mcp-infra": {"function_name": "main", "direction": "outbound", "depth": 2},
+        "code-graph": {"function_name": "main", "direction": "outbound", "depth": 2}
+      },
+      "expect_min_results": 1,
+      "feature_pr": null
+    },
+    {
+      "id": "Q8",
+      "category": "trace",
+      "tool": "trace_call_path",
+      "args_per_repo": {
+        "mcp-servers": {"function_name": "_auth_headers", "direction": "inbound", "depth": 2},
+        "rmf-corsair": {"function_name": "main", "direction": "inbound", "depth": 2},
+        "mcp-infra": {"function_name": "main", "direction": "inbound", "depth": 2},
+        "code-graph": {"function_name": "main", "direction": "inbound", "depth": 2}
+      },
+      "expect_min_results": 0,
+      "feature_pr": null,
+      "note": "main() has no callers — 0 results is correct"
+    },
+    {
+      "id": "Q9",
+      "category": "cypher",
+      "tool": "query_graph",
+      "args": {"query": "MATCH (f:Function)-[r:CALLS]->(g:Function) RETURN f.name, g.name LIMIT 10"},
+      "expect_min_results": 1,
+      "feature_pr": null
+    },
+    {
+      "id": "Q10",
+      "category": "enrich",
+      "tool": "query_graph",
+      "args": {"query": "MATCH (f:Function) RETURN f.name, f.params LIMIT 5"},
+      "expect_min_results": 0,
+      "feature_pr": null,
+      "note": "known gap per BENCHMARK.md — params extracted for some langs only. '<>' not supported by current Cypher parser, so we return raw and let result inspection reveal empty vs filled params"
+    },
+    {
+      "id": "Q11",
+      "category": "oop",
+      "tool": "query_graph",
+      "args": {"query": "MATCH (c:Class)-[r:INHERITS]->(p:Class) RETURN c.name, p.name LIMIT 5"},
+      "expect_min_results": 0,
+      "feature_pr": null
+    },
+    {
+      "id": "Q12",
+      "category": "files",
+      "tool": "search_graph",
+      "args": {"label": "File", "limit": 20},
+      "expect_min_results": 1,
+      "feature_pr": null,
+      "note": "original list_directory tool removed in current binary; search_graph(label=File) is the structural equivalent"
+    },
+    {
+      "id": "Q13",
+      "category": "confidence",
+      "tool": "query_graph",
+      "args": {"query": "MATCH (f)-[r:CALLS]->(g) WHERE r.confidence = 'EXTRACTED' RETURN f.name, g.name LIMIT 5"},
+      "expect_min_results": null,
+      "feature_pr": "PR1",
+      "pre_merge_result": "expected_error: 'confidence' property does not exist",
+      "post_merge_criterion": "EXTRACTED >=60%, INFERRED+AMBIGUOUS combined >=10% across all CALLS edges"
+    },
+    {
+      "id": "Q14",
+      "category": "community",
+      "tool": "get_architecture",
+      "args": {},
+      "expect_contains": ["clusters"],
+      "feature_pr": "PR2",
+      "pre_merge_result": "clusters + per-cluster cohesion ALREADY present in current source (finding from Phase 0 baseline). Remaining PR 2 scope: verify oversized-community split threshold (25% of graph nodes). Post-Phase 0 analysis: PR 2 may be downgraded to XS or dropped entirely if split logic is already in place.",
+      "post_merge_criterion": "max cluster size <=25% of assigned nodes; median cohesion >=0.3; split pass verified to fire on synthetic >25% input"
+    },
+    {
+      "id": "Q15",
+      "category": "orientation",
+      "tool": "_file_check",
+      "args_per_repo": {
+        "mcp-servers": {"path": "~/Documents/GitHub/mcp-servers/ARCHITECTURE_REPORT.md"},
+        "rmf-corsair": {"path": "~/Documents/GitHub/rmf-corsair/ARCHITECTURE_REPORT.md"},
+        "mcp-infra": {"path": "~/Documents/GitHub/mcp-infra/ARCHITECTURE_REPORT.md"},
+        "code-graph": {"path": "~/Documents/GitHub/code-graph/ARCHITECTURE_REPORT.md"}
+      },
+      "feature_pr": "PR3",
+      "post_merge_criterion": "file exists; contains 'God Nodes', 'Communities', 'Suggested Questions' sections"
+    },
+    {
+      "id": "Q16",
+      "category": "rationale",
+      "tool": "find_rationale",
+      "args": {"kind": "SAFETY", "limit": 20},
+      "feature_pr": "PR4",
+      "pre_merge_result": "expected_error: tool 'find_rationale' not found",
+      "post_merge_criterion": "returns >=1 on rmf-corsair (Rust unsafe blocks); precision on 20 random samples >=80%"
+    },
+    {
+      "id": "Q17",
+      "category": "diff",
+      "tool": "diff_graph",
+      "args_per_repo": {
+        "mcp-servers": {"project": "mcp-servers", "from_sha": "HEAD~5", "to_sha": "HEAD"},
+        "rmf-corsair": {"project": "rmf-corsair", "from_sha": "HEAD~5", "to_sha": "HEAD"},
+        "mcp-infra": {"project": "mcp-infra", "from_sha": "HEAD~5", "to_sha": "HEAD"},
+        "code-graph": {"project": "code-graph", "from_sha": "HEAD~5", "to_sha": "HEAD"}
+      },
+      "feature_pr": "PR5",
+      "pre_merge_result": "expected_error: tool 'diff_graph' not found",
+      "post_merge_criterion": "returns structured diff; precision vs pr_groundtruth.jsonl >=80%"
+    },
+    {
+      "id": "Q18",
+      "category": "similarity",
+      "tool": "find_similar_functions",
+      "args_per_repo": {
+        "mcp-servers": {"name": "_auth_headers", "limit": 10},
+        "rmf-corsair": {"name": "main", "limit": 10},
+        "mcp-infra": {"name": "main", "limit": 10},
+        "code-graph": {"name": "main", "limit": 10}
+      },
+      "feature_pr": "PR7",
+      "pre_merge_result": "expected_error: tool 'find_similar_functions' not found",
+      "post_merge_criterion": "returns results for mcp-servers _auth_headers; precision on 20 random samples >=70% at chosen threshold"
+    },
+    {
+      "id": "Q19",
+      "category": "explain_rationale",
+      "tool": "explain_symbol",
+      "args_per_repo": {
+        "mcp-servers": {"name": "_auth_headers"},
+        "rmf-corsair": {"name": "main"},
+        "mcp-infra": {"name": "main"},
+        "code-graph": {"name": "main"}
+      },
+      "feature_pr": "PR4",
+      "post_merge_criterion": "output contains 'Why:' or rationale section when applicable function has rationale comments"
+    },
+    {
+      "id": "Q20",
+      "category": "diff_in_review",
+      "tool": "get_review_context",
+      "args_per_repo": {
+        "mcp-servers": {"files": ["README.md"]},
+        "rmf-corsair": {"files": ["README.md"]},
+        "mcp-infra": {"files": ["README.md"]},
+        "code-graph": {"files": ["README.md"]}
+      },
+      "feature_pr": "PR5",
+      "post_merge_criterion": "output includes graph_diff section when base/head SHAs available"
+    }
+  ]
+}

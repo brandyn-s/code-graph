@@ -33,3 +33,9 @@ Thumbs.db
 # Local project memory (Claude Code auto-memory)
 memory/
 reference/
+
+# Phase 0 benchmark outputs (captured baselines, not source)
+bench/baseline_*.json
+bench/after_*.json
+bench/smoke.json
+bench/__pycache__/

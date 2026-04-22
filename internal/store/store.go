@@ -14,10 +14,19 @@ import (
 )
 
 // Querier abstracts *sql.DB and *sql.Tx so store methods work in both contexts.
+// Both variants support the Context-accepting counterparts; we expose them so
+// callers inside a WithTransaction block can honor caller cancellation without
+// reaching past the tx (which would ask the single-connection pool for a
+// second connection and deadlock on the write lock).
 type Querier interface {
 	Exec(query string, args ...any) (sql.Result, error)
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 	Query(query string, args ...any) (*sql.Rows, error)
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
 	QueryRow(query string, args ...any) *sql.Row
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+	Prepare(query string) (*sql.Stmt, error)
+	PrepareContext(ctx context.Context, query string) (*sql.Stmt, error)
 }
 
 // Store wraps a SQLite connection for graph storage.
@@ -254,8 +263,21 @@ func (s *Store) Close() error {
 }
 
 // DB returns the underlying sql.DB (for advanced queries).
+//
+// Prefer Q() for query execution inside pipeline passes: Q() returns the
+// active querier (either *sql.DB or *sql.Tx), which honors the surrounding
+// transaction. Using DB() from code running under WithTransaction bypasses
+// the tx and asks the single-connection pool for another connection, which
+// blocks indefinitely on the write lock held by the outer tx.
 func (s *Store) DB() *sql.DB {
 	return s.db
+}
+
+// Q returns the active Querier. Inside WithTransaction, this is the tx; at
+// other times, it is the raw *sql.DB. Passes should use Q for ad-hoc queries
+// so they participate in whatever transaction their caller set up.
+func (s *Store) Q() Querier {
+	return s.q
 }
 
 // DBPath returns the filesystem path to the SQLite database.

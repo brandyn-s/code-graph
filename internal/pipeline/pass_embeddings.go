@@ -75,8 +75,15 @@ func (p *Pipeline) passEmbeddings() {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	// Fetch embeddable nodes
-	rows, err := p.Store.DB().QueryContext(ctx,
+	// Fetch embeddable nodes via the store's active Querier. Using Q() rather
+	// than DB() is load-bearing: the pipeline runs inside Store.WithTransaction
+	// (see pipeline.go Run()), which sets s.q to the outer *sql.Tx. Going
+	// through DB() asks the SetMaxOpenConns(1) pool for a second connection
+	// and deadlocks waiting for the write lock held by that same tx. This
+	// deadlock was the root cause of TestMemoryStability hanging on main and
+	// of observed multi-minute stalls at "phase=embeddings pct=97" during
+	// live indexing runs (2026-04-22).
+	rows, err := p.Store.Q().QueryContext(ctx,
 		`SELECT id, label, name, qualified_name, file_path, properties
 		 FROM nodes
 		 WHERE project = ? AND label IN (?, ?, ?, ?, ?, ?, ?, ?, ?)

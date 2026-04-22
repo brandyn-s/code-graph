@@ -46,15 +46,23 @@ func (s *Store) UpsertEmbedding(nodeID int64, model string, vec []float32) error
 	return err
 }
 
-// UpsertEmbeddingBatch stores embeddings for multiple nodes in a single transaction.
+// UpsertEmbeddingBatch stores embeddings for multiple nodes.
+//
+// Uses the store's active Querier (s.q) rather than calling s.db.Begin() so
+// that when this is invoked from inside Store.WithTransaction (as the whole
+// indexing pipeline does), the writes participate in the outer tx instead of
+// opening a nested one. A nested tx on the SetMaxOpenConns(1) pool deadlocks
+// waiting for the write lock held by the outer tx — this was the root cause
+// of TestMemoryStability hanging and of the multi-minute stalls observed at
+// "phase=embeddings pct=97" during live indexing (2026-04-22).
+//
+// When called outside a tx (s.q == s.db), each prepared Exec auto-commits.
+// That is fine for this call site: UpsertEmbeddingBatch is invoked from the
+// embeddings pass which runs inside the pipeline's WithTransaction; the only
+// other caller would be ad-hoc tooling where atomicity across 64 rows is
+// not a correctness requirement.
 func (s *Store) UpsertEmbeddingBatch(nodeIDs []int64, model string, vecs [][]float32) error {
-	tx, err := s.db.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
-	stmt, err := tx.Prepare(
+	stmt, err := s.q.Prepare(
 		`INSERT INTO node_embeddings (node_id, model, embedding)
 		 VALUES (?, ?, ?)
 		 ON CONFLICT(node_id) DO UPDATE SET model=excluded.model, embedding=excluded.embedding`)
@@ -69,7 +77,7 @@ func (s *Store) UpsertEmbeddingBatch(nodeIDs []int64, model string, vecs [][]flo
 			return err
 		}
 	}
-	return tx.Commit()
+	return nil
 }
 
 // CosineSearch finds the top-k nodes most similar to the query vector.

@@ -321,6 +321,9 @@ func (l *Linker) linkHandlerToRoute(handlerNode *store.Node, routeID int64, rout
 		SourceID: handlerNode.ID,
 		TargetID: routeID,
 		Type:     "HANDLES",
+		Properties: map[string]any{
+			"confidence_tier": store.ConfidenceInferred,
+		},
 	}); edgeErr != nil {
 		// FK failures expected: LastInsertId() can return stale IDs for upserted Route nodes
 		slog.Info("httplink.handles_edge.skip", "route", routeQN)
@@ -1310,6 +1313,7 @@ func (l *Linker) matchAndLink(routes []RouteHandler, callSites []HTTPCallSite) [
 					"url_path":        cs.Path,
 					"confidence":      score,
 					"confidence_band": band,
+					"confidence_tier": store.ConfidenceInferred,
 				}
 				if rh.Method != "" {
 					props["method"] = rh.Method
@@ -1801,7 +1805,8 @@ func (l *Linker) createRegistrationCallEdges(routes []RouteHandler) {
 			TargetID: handler.ID,
 			Type:     "CALLS",
 			Properties: map[string]any{
-				"via": "route_registration",
+				"via":             "route_registration",
+				"confidence_tier": store.ConfidenceInferred,
 			},
 		})
 		count++

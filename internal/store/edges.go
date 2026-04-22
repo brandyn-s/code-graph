@@ -7,6 +7,57 @@ import (
 	"strings"
 )
 
+// Edge confidence tier. Stored in Edge.Properties["confidence_tier"]; the
+// generated column `confidence_tier_gen` on the edges table (see store.go
+// initSchema) surfaces this value as a first-class, indexable field so
+// Cypher queries can filter with `WHERE r.confidence_tier = 'X'`. Absent
+// properties default to EXTRACTED at the column level via COALESCE.
+//
+// Note on naming: the property key is `confidence_tier` (not `confidence`)
+// to avoid collision with the pre-existing numeric `confidence` property
+// used by configlink_strategies.go for per-strategy heuristic scores.
+// The tier is categorical; the legacy score is continuous.
+//
+// EXTRACTED
+//   Direct, source-proven relationship. The AST literally says the
+//   edge exists (a function call expression, an import statement, a
+//   class definition). This is the default for any edge whose creator
+//   does not set a confidence_tier property.
+//
+// INFERRED
+//   Relationship deduced via static reasoning beyond the raw AST:
+//   interface satisfaction by method-set matching, inherited methods
+//   across class hierarchies, an HTTP caller matched to a route
+//   handler, a test function matched to its production target via a
+//   naming heuristic. Still high-signal, but a grammar change or a
+//   refactor could invalidate it.
+//
+// AMBIGUOUS
+//   Relationship asserted via a fuzzy match that may be wrong. A
+//   config file whose values happen to match a variable name, a git
+//   file-coupling metric below a high-confidence threshold, a
+//   parameterized URL path that could match multiple routes. Useful
+//   for suggestion-surface tools; filter these out for automated
+//   blast-radius calculations.
+const (
+	ConfidenceExtracted = "EXTRACTED"
+	ConfidenceInferred  = "INFERRED"
+	ConfidenceAmbiguous = "AMBIGUOUS"
+)
+
+// ConfidenceTier returns the stored confidence tier for an edge, defaulting
+// to EXTRACTED when the property is absent (e.g. edges created before this
+// column was introduced, or by passes that do not set it).
+func (e *Edge) ConfidenceTier() string {
+	if e == nil || e.Properties == nil {
+		return ConfidenceExtracted
+	}
+	if v, ok := e.Properties["confidence_tier"].(string); ok && v != "" {
+		return v
+	}
+	return ConfidenceExtracted
+}
+
 // InsertEdge inserts an edge (dedup by source_id, target_id, type).
 func (s *Store) InsertEdge(e *Edge) (int64, error) {
 	res, err := s.q.Exec(`

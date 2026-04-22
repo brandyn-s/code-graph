@@ -368,6 +368,28 @@ func (s *Store) initSchema() error {
 	// Index on generated column (safe to CREATE IF NOT EXISTS)
 	_, _ = s.db.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_edges_url_path ON edges(project, url_path_gen)`)
 
+	// Migration: add confidence_tier_gen generated column to edges. Reads
+	// the "confidence_tier" key out of properties JSON and falls back to
+	// EXTRACTED when absent, so existing rows (and passes that haven't
+	// been updated to set confidence_tier) are treated as source-proven
+	// by default.
+	//
+	// Lets Cypher queries filter via `WHERE r.confidence_tier = 'INFERRED'`
+	// without scanning the JSON blob on every row.
+	//
+	// The key is `confidence_tier` (not `confidence`) to avoid colliding
+	// with the pre-existing numeric `confidence` score used by
+	// configlink_strategies.go.
+	var confCol int
+	_ = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM pragma_table_xinfo('edges') WHERE name='confidence_tier_gen'`).Scan(&confCol)
+	if confCol == 0 {
+		_, err = s.db.ExecContext(ctx, `ALTER TABLE edges ADD COLUMN confidence_tier_gen TEXT GENERATED ALWAYS AS (COALESCE(json_extract(properties, '$.confidence_tier'), 'EXTRACTED'))`)
+		if err != nil {
+			slog.Warn("schema.confidence_tier_gen.skip", "err", err)
+		}
+	}
+	_, _ = s.db.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_edges_confidence_tier ON edges(project, confidence_tier_gen)`)
+
 	// Migration: add mtime_ns and size columns to file_hashes for stat pre-filtering.
 	var mtimeCol int
 	_ = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM pragma_table_xinfo('file_hashes') WHERE name='mtime_ns'`).Scan(&mtimeCol)

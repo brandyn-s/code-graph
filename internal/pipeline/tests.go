@@ -74,6 +74,9 @@ func (p *Pipeline) createTestsEdges() int {
 			SourceID: srcNode.ID,
 			TargetID: tgtNode.ID,
 			Type:     "TESTS",
+			Properties: map[string]any{
+				"confidence_tier": store.ConfidenceInferred,
+			},
 		})
 	}
 
@@ -114,6 +117,9 @@ func (p *Pipeline) createTestsFileEdges() int {
 					SourceID: testMod.ID,
 					TargetID: prodMod.ID,
 					Type:     "TESTS_FILE",
+					Properties: map[string]any{
+						"confidence_tier": store.ConfidenceInferred,
+					},
 				})
 				continue
 			}
@@ -133,6 +139,9 @@ func (p *Pipeline) createTestsFileEdges() int {
 					SourceID: testMod.ID,
 					TargetID: targetNode.ID,
 					Type:     "TESTS_FILE",
+					Properties: map[string]any{
+						"confidence_tier": store.ConfidenceInferred,
+					},
 				})
 			}
 		}

@@ -202,6 +202,7 @@ func (p *Pipeline) createCouplingEdges(couplings []ChangeCoupling) int {
 				"total_changes_a": c.TotalChangesA,
 				"total_changes_b": c.TotalChangesB,
 				"coupling_score":  c.CouplingScore,
+				"confidence_tier": store.ConfidenceAmbiguous,
 			},
 		})
 		if err == nil {

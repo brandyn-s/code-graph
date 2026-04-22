@@ -52,6 +52,9 @@ func (p *Pipeline) passInherits() {
 					SourceID: n.ID,
 					TargetID: targetNode.ID,
 					Type:     "INHERITS",
+					Properties: map[string]any{
+						"confidence_tier": store.ConfidenceInferred,
+					},
 				})
 				count++
 			}

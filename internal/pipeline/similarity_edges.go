@@ -1,6 +1,7 @@
 package pipeline
 
 import (
+	"fmt"
 	"log/slog"
 	"os"
 	"strconv"
@@ -66,12 +67,29 @@ func (p *Pipeline) passSimilarityEdges() {
 		return
 	}
 
+	// Pre-build an in-memory structural adjacency map ONCE for the entire
+	// pass. Before this change the hop filter hit SQLite twice per hop per
+	// candidate pair (FindEdgesBySourceIDs + FindEdgesByTargetIDs): on
+	// mcp-servers (1637 embedded nodes, topK*3=15 candidates each) that
+	// was ~150k SQL queries in the hot path, dominating runtime at ~5-12
+	// minutes. With the map in hand, withinHopsFromMap is a pure in-memory
+	// BFS bounded by maxHops * average_degree — microseconds per pair.
+	var adjacency map[int64]map[int64]struct{}
+	if skipHops > 0 {
+		adjacency, err = p.buildStructuralAdjacency()
+		if err != nil {
+			slog.Warn("pass.similarity.adjacency.err", "err", err, "hint", "falling back to skip_hops=0 (no structural filter)")
+			skipHops = 0
+		}
+	}
+
 	slog.Info("pass.similarity.start",
 		"embedded_nodes", len(embeddedIDs),
 		"threshold", threshold,
 		"top_k", topK,
 		"skip_hops", skipHops,
-		"note", "O(N^2) cosine — expect ~100s per 1000 embedded nodes on a modern CPU; skip_hops filter adds BFS cost")
+		"adjacency_nodes", len(adjacency),
+		"note", "O(N^2) cosine dominates runtime; in-memory BFS adds negligible per-pair cost")
 
 	// Deduplicate edges across the unordered pair (a,b) == (b,a). Track
 	// written pairs by sorted IDs so a batch of N similarity queries from
@@ -117,12 +135,7 @@ func (p *Pipeline) passSimilarityEdges() {
 				continue
 			}
 
-			if withinHops, err := p.pairWithinStructuralHops(sourceID, c.NodeID, skipHops); err != nil {
-				// Treat graph-walk failure as "do not emit" rather than blocking
-				// the whole pass — a best-effort filter.
-				slog.Debug("pass.similarity.walk.err", "err", err)
-				continue
-			} else if withinHops {
+			if skipHops > 0 && withinHopsFromMap(adjacency, sourceID, c.NodeID, skipHops) {
 				continue // already structurally connected — uninteresting
 			}
 
@@ -151,19 +164,14 @@ func (p *Pipeline) passSimilarityEdges() {
 		"source_nodes_considered", len(embeddedIDs))
 }
 
-// pairWithinStructuralHops returns true iff there is a path of length
-// <= maxHops between a and b along any edge direction, using the existing
-// CALLS / IMPORTS / USAGE / DEFINES / DEFINES_METHOD / MEMBER_OF edges.
-// Small BFS on the already-populated edges table; maxHops is small
-// (default 3) so total node visits are bounded.
-func (p *Pipeline) pairWithinStructuralHops(a, b int64, maxHops int) (bool, error) {
-	if a == b {
-		return true, nil
-	}
-	if maxHops <= 0 {
-		return false, nil
-	}
-
+// buildStructuralAdjacency materializes an in-memory undirected
+// adjacency map over the structural edge types, used by the similarity
+// pass's "already-connected within N hops?" filter. Loaded once at
+// pass start so per-pair BFS is a pure in-memory walk.
+//
+// Memory footprint: on mcp-servers' 6,222 nodes × ~4 average structural
+// neighbors ≈ 25k map entries ≈ <1 MB. Negligible vs the embedding cache.
+func (p *Pipeline) buildStructuralAdjacency() (map[int64]map[int64]struct{}, error) {
 	structuralTypes := []string{
 		"CALLS", "ASYNC_CALLS",
 		"IMPORTS", "USAGE",
@@ -171,58 +179,57 @@ func (p *Pipeline) pairWithinStructuralHops(a, b int64, maxHops int) (bool, erro
 		"MEMBER_OF",
 	}
 
-	visited := map[int64]bool{a: true}
-	frontier := []int64{a}
-
-	for depth := 0; depth < maxHops; depth++ {
-		if len(frontier) == 0 {
-			break
+	adj := make(map[int64]map[int64]struct{})
+	add := func(a, b int64) {
+		if adj[a] == nil {
+			adj[a] = make(map[int64]struct{})
 		}
-
-		// Pull edges outbound from the current frontier (we accept either
-		// direction for the structural-connectivity check, since we only
-		// want to exclude "already discoverable" pairs — directionality
-		// doesn't matter for that).
-		nextFrontier := frontier[:0:0]
-		byID, err := p.Store.FindEdgesBySourceIDs(frontier, structuralTypes)
-		if err != nil {
-			return false, err
-		}
-		for _, edges := range byID {
-			for _, e := range edges {
-				if e.TargetID == b {
-					return true, nil
-				}
-				if !visited[e.TargetID] {
-					visited[e.TargetID] = true
-					nextFrontier = append(nextFrontier, e.TargetID)
-				}
-			}
-		}
-
-		// Also pull inbound edges — catches "these two functions share a
-		// common caller" as a short-path connection, which we want to
-		// count as structurally related.
-		byTarget, err := p.Store.FindEdgesByTargetIDs(frontier, structuralTypes)
-		if err != nil {
-			return false, err
-		}
-		for _, edges := range byTarget {
-			for _, e := range edges {
-				if e.SourceID == b {
-					return true, nil
-				}
-				if !visited[e.SourceID] {
-					visited[e.SourceID] = true
-					nextFrontier = append(nextFrontier, e.SourceID)
-				}
-			}
-		}
-
-		frontier = nextFrontier
+		adj[a][b] = struct{}{}
 	}
 
-	return false, nil
+	for _, t := range structuralTypes {
+		edges, err := p.Store.FindEdgesByType(p.ProjectName, t)
+		if err != nil {
+			return nil, fmt.Errorf("load %s edges: %w", t, err)
+		}
+		for _, e := range edges {
+			add(e.SourceID, e.TargetID)
+			add(e.TargetID, e.SourceID) // undirected for this filter
+		}
+	}
+	return adj, nil
+}
+
+// withinHopsFromMap returns true iff there is a path of length <= maxHops
+// between a and b in the in-memory adjacency map. Bounded BFS; runs in
+// microseconds per pair, replacing 6 SQL queries per hop that the old
+// pairWithinStructuralHops did.
+func withinHopsFromMap(adj map[int64]map[int64]struct{}, a, b int64, maxHops int) bool {
+	if a == b {
+		return true
+	}
+	if maxHops <= 0 || adj == nil {
+		return false
+	}
+	visited := map[int64]struct{}{a: {}}
+	frontier := []int64{a}
+	for hop := 0; hop < maxHops && len(frontier) > 0; hop++ {
+		var next []int64
+		for _, cur := range frontier {
+			for neighbor := range adj[cur] {
+				if neighbor == b {
+					return true
+				}
+				if _, seen := visited[neighbor]; seen {
+					continue
+				}
+				visited[neighbor] = struct{}{}
+				next = append(next, neighbor)
+			}
+		}
+		frontier = next
+	}
+	return false
 }
 
 // similarityEdgesEnabled returns true when the opt-in env var is set to

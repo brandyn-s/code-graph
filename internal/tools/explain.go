@@ -178,6 +178,37 @@ func buildExplanation(st *store.Store, node *store.Node, _ string) map[string]an
 		result["test_hint"] = "No tests found covering this symbol."
 	}
 
+	// Rationale (WHY / NOTE / HACK / SAFETY / TODO / etc.) attached to this
+	// symbol by passRationale. The edge direction is rationale -> subject,
+	// so the subject (this node) is the TARGET of RATIONALE_FOR edges.
+	// Answers "why was this written the way it was?" without requiring the
+	// caller to grep for nearby annotations.
+	rationaleEdges, _ := st.FindEdgesByTargetAndType(node.ID, "RATIONALE_FOR")
+	if len(rationaleEdges) > 0 {
+		rationales := make([]map[string]any, 0, len(rationaleEdges))
+		for i, e := range rationaleEdges {
+			if i >= 10 {
+				break
+			}
+			rNode, findErr := st.FindNodeByID(e.SourceID)
+			if findErr != nil || rNode == nil {
+				continue
+			}
+			kind, _ := rNode.Properties["kind"].(string)
+			text, _ := rNode.Properties["text"].(string)
+			rationales = append(rationales, map[string]any{
+				"kind":      kind,
+				"text":      text,
+				"file_path": rNode.FilePath,
+				"line":      rNode.StartLine,
+			})
+		}
+		if len(rationales) > 0 {
+			result["rationale"] = rationales
+			result["rationale_count"] = len(rationaleEdges)
+		}
+	}
+
 	// Env vars read by this function
 	envEdges, _ := st.FindEdgesBySourceAndType(node.ID, "READS_ENV")
 	if len(envEdges) > 0 {

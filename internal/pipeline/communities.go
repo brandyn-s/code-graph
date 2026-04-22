@@ -42,6 +42,40 @@ func (p *Pipeline) passCommunities() {
 
 	// Create Community nodes + MEMBER_OF edges
 	communityCount, memberOfCount := p.storeCommunities(communities)
+
+	// Observability: warn when any detected community exceeds 25% of assigned
+	// members. That is the graphify-project "oversized community" threshold —
+	// graphify triggers a second-pass Leiden split at this boundary to avoid
+	// a degenerate "everything in one giant cluster" failure mode on small
+	// graphs. Empirically on redacted fixtures (mcp-servers, mcp-infra,
+	// rmf-corsair, code-graph) the largest community is always <18% of
+	// assigned members, so no split is needed. If that ever changes — a new
+	// repo with skewed structure, a grammar regression collapsing the call
+	// graph — this warning surfaces it in logs instead of the oversized
+	// cluster silently degrading downstream consumers (orientation report,
+	// suggested-question generation).
+	totalAssigned := 0
+	for _, members := range communities {
+		totalAssigned += len(members)
+	}
+	if totalAssigned > 0 {
+		maxMembers := 0
+		for _, members := range communities {
+			if len(members) > maxMembers {
+				maxMembers = len(members)
+			}
+		}
+		maxPct := float64(maxMembers) / float64(totalAssigned)
+		if maxPct > 0.25 {
+			slog.Warn("pass.communities.oversized_cluster",
+				"max_members", maxMembers,
+				"total_assigned", totalAssigned,
+				"pct_of_assigned", maxPct,
+				"threshold", 0.25,
+				"hint", "a single community covers >25% of the graph — Louvain likely collapsed into one dominant cluster. Consider a stricter resolution parameter or a follow-up split pass.")
+		}
+	}
+
 	slog.Info("pass.communities.done", "communities", communityCount, "member_of", memberOfCount)
 }
 

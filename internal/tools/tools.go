@@ -464,6 +464,40 @@ func (s *Server) registerTools() {
 	s.registerRelevantContextTool()
 	s.registerGenerateReportTool()
 	s.registerFindSimilarFunctionsTool()
+	s.registerFindRationaleTool()
+}
+
+// registerFindRationaleTool surfaces the Rationale nodes produced by
+// passRationale. Primary use: compliance audits ("list every SAFETY:
+// justification across the Rust code") and code-review context.
+func (s *Server) registerFindRationaleTool() {
+	s.addTool(&mcp.Tool{
+		Name: "find_rationale",
+		Annotations: &mcp.ToolAnnotations{
+			ReadOnlyHint:    true,
+			IdempotentHint:  true,
+			OpenWorldHint:   boolPtr(false),
+			DestructiveHint: boolPtr(false),
+		},
+		Description: "Return WHY/NOTE/HACK/SAFETY/TODO/FIXME/IMPORTANT/XXX comment annotations extracted from source, with their enclosing Function/Method/Class subject and file:line location. Filter by kind to audit a specific marker category. Useful for compliance passes (every unsafe justification, every documented HACK) and for surfacing design rationale in code review.",
+		InputSchema: json.RawMessage(`{
+			"type": "object",
+			"properties": {
+				"project": {
+					"type": "string",
+					"description": "Project name (optional — uses session project if omitted)"
+				},
+				"kind": {
+					"type": "string",
+					"description": "Filter by marker kind. One of WHY, NOTE, HACK, SAFETY, TODO, FIXME, IMPORTANT, XXX. Omit to return all kinds."
+				},
+				"limit": {
+					"type": "integer",
+					"description": "Max rationale entries to return (1-500, default 50)"
+				}
+			}
+		}`),
+	}, s.handleFindRationale)
 }
 
 // registerFindSimilarFunctionsTool adds find_similar_functions — cosine

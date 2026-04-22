@@ -454,6 +454,15 @@ func (p *Pipeline) runPostFlushPasses(files []discover.FileInfo) error {
 	p.passLockfileDeps()
 	slog.Info("pass.timing", "pass", "lockfile_deps", "elapsed", time.Since(t))
 
+	// Rationale extraction is cheap (regex line scan) and runs before
+	// embeddings so the Rationale nodes are embeddable if the later
+	// pass decides to include them. Scans the same files the extraction
+	// cache already tracks.
+	p.reportProgress("rationale", 96, "extracting WHY/NOTE/HACK/SAFETY comments")
+	t = time.Now()
+	p.passRationale()
+	slog.Info("pass.timing", "pass", "rationale", "elapsed", time.Since(t))
+
 	p.reportProgress("embeddings", 97, "generating embeddings")
 	t = time.Now()
 	p.passEmbeddings()

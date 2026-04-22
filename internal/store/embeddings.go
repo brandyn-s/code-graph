@@ -36,9 +36,12 @@ type embeddingCache struct {
 var embedCache = &embeddingCache{}
 
 // UpsertEmbedding stores or updates the embedding vector for a node.
+// Uses s.q (the active Querier) so this can run inside Store.WithTransaction
+// without deadlocking on the single-connection pool — same pattern as
+// UpsertEmbeddingBatch (see comment there for the deadlock story).
 func (s *Store) UpsertEmbedding(nodeID int64, model string, vec []float32) error {
 	blob := float32sToBlob(vec)
-	_, err := s.db.ExecContext(context.Background(),
+	_, err := s.q.ExecContext(context.Background(),
 		`INSERT INTO node_embeddings (node_id, model, embedding)
 		 VALUES (?, ?, ?)
 		 ON CONFLICT(node_id) DO UPDATE SET model=excluded.model, embedding=excluded.embedding`,
@@ -147,6 +150,106 @@ func (s *Store) CosineSearch(project string, queryVec []float32, limit int) ([]E
 	return results, nil
 }
 
+// FindSimilarNodes returns the top-k embedded nodes most cosine-similar to
+// the given node's own embedding, excluding the node itself. Returns
+// nil, nil when the node has no embedding or no other embeddings exist
+// for the project.
+//
+// Reuses the same in-memory, L2-normalized embedding cache that
+// CosineSearch uses, so repeated calls across all nodes in a pass do not
+// re-scan SQLite. The cost is O(N * dim) per query where N is embedded
+// nodes in the project — ~546 nodes × 2048-dim embeddings on rmf-corsair
+// measures at <1ms per query on a modern CPU.
+func (s *Store) FindSimilarNodes(project string, nodeID int64, limit int) ([]EmbeddingResult, error) {
+	embedCache.mu.RLock()
+	if !embedCache.loaded || embedCache.project != project {
+		embedCache.mu.RUnlock()
+		if err := s.loadEmbeddingCache(project); err != nil {
+			return nil, err
+		}
+		embedCache.mu.RLock()
+	}
+	defer embedCache.mu.RUnlock()
+
+	n := len(embedCache.nodeIDs)
+	if n < 2 {
+		return nil, nil
+	}
+
+	// Locate the query node's index in the cache.
+	queryIdx := -1
+	for i, id := range embedCache.nodeIDs {
+		if id == nodeID {
+			queryIdx = i
+			break
+		}
+	}
+	if queryIdx == -1 {
+		return nil, nil // node has no embedding
+	}
+	queryVec := embedCache.vectors[queryIdx]
+
+	// Dot product against every other vector (cache vectors are already
+	// L2-normalized when loaded — see loadEmbeddingCache), skipping self.
+	type scored struct {
+		idx   int
+		score float64
+	}
+	scores := make([]scored, 0, n-1)
+	for i := 0; i < n; i++ {
+		if i == queryIdx {
+			continue
+		}
+		var dot float32
+		vec := embedCache.vectors[i]
+		for j := 0; j < embedCache.dim && j < len(queryVec); j++ {
+			dot += vec[j] * queryVec[j]
+		}
+		scores = append(scores, scored{idx: i, score: float64(dot)})
+	}
+
+	sort.Slice(scores, func(a, b int) bool {
+		return scores[a].score > scores[b].score
+	})
+
+	if limit > len(scores) {
+		limit = len(scores)
+	}
+	results := make([]EmbeddingResult, limit)
+	for i := 0; i < limit; i++ {
+		idx := scores[i].idx
+		results[i] = EmbeddingResult{
+			NodeID:   embedCache.nodeIDs[idx],
+			Name:     embedCache.names[idx],
+			QName:    embedCache.qnames[idx],
+			Label:    embedCache.labels[idx],
+			FilePath: embedCache.files[idx],
+			Score:    scores[i].score,
+		}
+	}
+	return results, nil
+}
+
+// IterEmbeddedNodeIDs returns the list of node IDs that currently have
+// embeddings for this project, loading the cache if needed. Enables the
+// similarity pass to enumerate every embedded node without re-querying
+// SQLite.
+func (s *Store) IterEmbeddedNodeIDs(project string) ([]int64, error) {
+	embedCache.mu.RLock()
+	if !embedCache.loaded || embedCache.project != project {
+		embedCache.mu.RUnlock()
+		if err := s.loadEmbeddingCache(project); err != nil {
+			return nil, err
+		}
+		embedCache.mu.RLock()
+	}
+	defer embedCache.mu.RUnlock()
+
+	out := make([]int64, len(embedCache.nodeIDs))
+	copy(out, embedCache.nodeIDs)
+	return out, nil
+}
+
 // InvalidateEmbeddingCache clears the in-memory cache (call after reindex).
 func (s *Store) InvalidateEmbeddingCache() {
 	embedCache.mu.Lock()
@@ -157,9 +260,11 @@ func (s *Store) InvalidateEmbeddingCache() {
 }
 
 // EmbeddingCount returns the number of embeddings stored for a project.
+// Uses s.q so callers inside Store.WithTransaction don't deadlock on the
+// single-connection pool.
 func (s *Store) EmbeddingCount(project string) (int, error) {
 	var count int
-	err := s.db.QueryRowContext(context.Background(),
+	err := s.q.QueryRowContext(context.Background(),
 		`SELECT COUNT(*) FROM node_embeddings ne
 		 JOIN nodes n ON ne.node_id = n.id
 		 WHERE n.project = ?`, project).Scan(&count)
@@ -167,11 +272,13 @@ func (s *Store) EmbeddingCount(project string) (int, error) {
 }
 
 // loadEmbeddingCache loads all embeddings for a project into memory.
+// Uses s.q so callers inside Store.WithTransaction don't deadlock on the
+// single-connection pool.
 func (s *Store) loadEmbeddingCache(project string) error {
 	embedCache.mu.Lock()
 	defer embedCache.mu.Unlock()
 
-	rows, err := s.db.QueryContext(context.Background(),
+	rows, err := s.q.QueryContext(context.Background(),
 		`SELECT n.id, n.name, n.qualified_name, n.label, n.file_path, ne.embedding
 		 FROM node_embeddings ne
 		 JOIN nodes n ON ne.node_id = n.id

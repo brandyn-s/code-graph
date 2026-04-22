@@ -459,6 +459,14 @@ func (p *Pipeline) runPostFlushPasses(files []discover.FileInfo) error {
 	p.passEmbeddings()
 	slog.Info("pass.timing", "pass", "embeddings", "elapsed", time.Since(t))
 
+	// Similarity edges must run after embeddings (needs vectors) and before
+	// file_hashes (purely observational). Gated by ENABLE_SIMILARITY_EDGES
+	// — see similarity_edges.go for why this is off by default.
+	p.reportProgress("similarity", 97, "emitting similarity edges")
+	t = time.Now()
+	p.passSimilarityEdges()
+	slog.Info("pass.timing", "pass", "similarity", "elapsed", time.Since(t))
+
 	p.reportProgress("file_hashes", 98, "updating file hashes")
 	t = time.Now()
 	p.updateFileHashes(files)

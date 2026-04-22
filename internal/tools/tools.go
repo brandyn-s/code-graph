@@ -463,6 +463,45 @@ func (s *Server) registerTools() {
 	s.registerDiffServicesTool()
 	s.registerRelevantContextTool()
 	s.registerGenerateReportTool()
+	s.registerFindSimilarFunctionsTool()
+}
+
+// registerFindSimilarFunctionsTool adds find_similar_functions — cosine
+// top-K over Voyage embeddings, primary use case: "is this function's
+// logic duplicated elsewhere?"
+func (s *Server) registerFindSimilarFunctionsTool() {
+	s.addTool(&mcp.Tool{
+		Name: "find_similar_functions",
+		Annotations: &mcp.ToolAnnotations{
+			ReadOnlyHint:    true,
+			IdempotentHint:  true,
+			OpenWorldHint:   boolPtr(false),
+			DestructiveHint: boolPtr(false),
+		},
+		Description: "Return the top-K functions/methods most cosine-similar to a given function's Voyage embedding. Useful for finding refactor candidates (two functions solving the same problem without a shared call path) and duplicated patterns. Requires embeddings to be populated — run index_repository with VOYAGE_API_KEY set first.",
+		InputSchema: json.RawMessage(`{
+			"type": "object",
+			"properties": {
+				"name": {
+					"type": "string",
+					"description": "Function name (exact Name match) or fully-qualified name. Ambiguous names produce a picker error listing candidates."
+				},
+				"project": {
+					"type": "string",
+					"description": "Project name (optional — uses session project if omitted)"
+				},
+				"limit": {
+					"type": "integer",
+					"description": "Max number of matches to return (1-50, default 10)"
+				},
+				"threshold": {
+					"type": "number",
+					"description": "Minimum cosine similarity score (0.0-1.0) — common values: 0.85 for \"worth investigating\", 0.92 for \"probable copy-paste\". Default 0.0 (return top-K regardless of score)."
+				}
+			},
+			"required": ["name"]
+		}`),
+	}, s.handleFindSimilarFunctions)
 }
 
 // registerGenerateReportTool adds the generate_report MCP tool — writes

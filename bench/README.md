@@ -206,6 +206,56 @@ compare `pre_graph_grep` rate. Target delta: ≥40 pp reduction (baseline
 76.7% → target ≤ 37%). Stop-ship criterion for PR 3 is met only if the
 delta is observable across a meaningfully-sized sample (≥30 sessions).
 
+## Measuring PR 3 (PreToolUse orientation hook) — A/B protocol
+
+Script: `bench/compare_pregrep.py` — compares the `pre_graph_grep` rate
+between a baseline corpus (pre-install) and a post-install corpus.
+
+### Protocol
+
+1. Capture a baseline (already done in PR #51 — **76.7%** on 14-day
+   window, 30 qualifying sessions):
+   ```bash
+   python bench/transcripts.py --output bench/transcripts_pre.jsonl
+   ```
+2. Install the hook in your live Claude Code environment:
+   ```bash
+   codebase-memory-mcp install
+   # writes ~/.claude/hooks/codebase-memory-orientation.sh and
+   # registers a PreToolUse matcher Glob|Grep in ~/.claude/settings.json
+   ```
+3. Restart Claude Code.
+4. Use Claude Code normally for ≥14 days (comparable sample to
+   baseline).
+5. Capture the post-install corpus:
+   ```bash
+   python bench/transcripts.py --output bench/transcripts_post.jsonl
+   ```
+6. Run the comparison:
+   ```bash
+   python bench/compare_pregrep.py \
+     --baseline bench/transcripts_pre.jsonl \
+     --post     bench/transcripts_post.jsonl
+   ```
+   Or without a pre-corpus file, against the flat baseline rate:
+   ```bash
+   python bench/compare_pregrep.py \
+     --post bench/transcripts_post.jsonl \
+     --baseline-rate 0.767
+   ```
+
+### Stop-ship criteria (PR 3)
+
+- Post `pre_graph_grep` rate ≤ **37%** AND
+- Delta ≥ **40 percentage points** AND
+- Post corpus size ≥ **30** qualifying sessions
+
+Script exits 0 on PASS, 1 on FAIL, and prints a per-session-length
+breakdown (short / medium / long) so you can see whether the hook
+helps long sessions more than short ones — an expected pattern,
+since long sessions have more Glob/Grep opportunities for the hook
+to fire on.
+
 ## Follow-up PRs
 
 - Phase 0c: PR ground-truth set (separate PR)

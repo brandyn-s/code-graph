@@ -22,7 +22,7 @@ type semanticMatch struct {
 
 // handleSearchCodeSemantic handles the search_code_semantic MCP tool.
 // Uses Voyage AI embeddings for natural language code search.
-func (s *Server) handleSearchCodeSemantic(_ context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+func (s *Server) handleSearchCodeSemantic(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	args, err := parseArgs(req)
 	if err != nil {
 		return errResult(err.Error()), nil
@@ -67,7 +67,7 @@ func (s *Server) handleSearchCodeSemantic(_ context.Context, req *mcp.CallToolRe
 		return errResult("VOYAGE_API_KEY not set. Cannot perform semantic search."), nil
 	}
 
-	queryVec, err := vc.EmbedSingle(query, "query")
+	queryVec, err := vc.EmbedSingle(ctx, query, "query")
 	if err != nil {
 		slog.Warn("semantic_search.embed.err", "err", err)
 		return errResult(fmt.Sprintf("Failed to embed query: %v", err)), nil

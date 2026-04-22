@@ -2,7 +2,9 @@ package pipeline
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -62,10 +64,18 @@ func NewVoyageClient() *VoyageClient {
 
 // EmbedBatch embeds a batch of texts and returns their vectors.
 // inputType should be "document" for indexing, "query" for search.
-func (vc *VoyageClient) EmbedBatch(texts []string, inputType string) ([][]float32, error) {
+// Honors ctx cancellation: returns ctx.Err() promptly instead of continuing
+// retries through batches when the caller's deadline has passed.
+func (vc *VoyageClient) EmbedBatch(ctx context.Context, texts []string, inputType string) ([][]float32, error) {
 	var allVecs [][]float32
 
 	for i := 0; i < len(texts); i += voyageBatchSize {
+		// Check cancellation before starting each inner batch so a stalled
+		// outer context doesn't burn through the entire queue.
+		if err := ctx.Err(); err != nil {
+			return allVecs, err
+		}
+
 		end := i + voyageBatchSize
 		if end > len(texts) {
 			end = len(texts)
@@ -73,12 +83,17 @@ func (vc *VoyageClient) EmbedBatch(texts []string, inputType string) ([][]float3
 		batch := texts[i:end]
 
 		if i > 0 {
-			time.Sleep(voyageBatchDelay)
+			// Use a context-aware sleep: fail fast on cancellation.
+			select {
+			case <-ctx.Done():
+				return allVecs, ctx.Err()
+			case <-time.After(voyageBatchDelay):
+			}
 		}
 
-		vecs, err := vc.embedSingleBatch(batch, inputType)
+		vecs, err := vc.embedSingleBatch(ctx, batch, inputType)
 		if err != nil {
-			return nil, fmt.Errorf("batch %d-%d: %w", i, end, err)
+			return allVecs, fmt.Errorf("batch %d-%d: %w", i, end, err)
 		}
 		allVecs = append(allVecs, vecs...)
 	}
@@ -87,8 +102,8 @@ func (vc *VoyageClient) EmbedBatch(texts []string, inputType string) ([][]float3
 }
 
 // EmbedSingle embeds a single text and returns the vector.
-func (vc *VoyageClient) EmbedSingle(text string, inputType string) ([]float32, error) {
-	vecs, err := vc.embedSingleBatch([]string{text}, inputType)
+func (vc *VoyageClient) EmbedSingle(ctx context.Context, text string, inputType string) ([]float32, error) {
+	vecs, err := vc.embedSingleBatch(ctx, []string{text}, inputType)
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +113,7 @@ func (vc *VoyageClient) EmbedSingle(text string, inputType string) ([]float32, e
 	return vecs[0], nil
 }
 
-func (vc *VoyageClient) embedSingleBatch(texts []string, inputType string) ([][]float32, error) {
+func (vc *VoyageClient) embedSingleBatch(ctx context.Context, texts []string, inputType string) ([][]float32, error) {
 	reqBody := voyageEmbedRequest{
 		Input: texts,
 		Model: vc.model,
@@ -113,7 +128,12 @@ func (vc *VoyageClient) embedSingleBatch(texts []string, inputType string) ([][]
 	}
 
 	for attempt := 0; attempt < 4; attempt++ {
-		req, err := http.NewRequest("POST", voyageEmbedURL, bytes.NewReader(bodyBytes))
+		// Bail out on ctx cancellation before spending another retry/sleep.
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+
+		req, err := http.NewRequestWithContext(ctx, "POST", voyageEmbedURL, bytes.NewReader(bodyBytes))
 		if err != nil {
 			return nil, err
 		}
@@ -122,10 +142,19 @@ func (vc *VoyageClient) embedSingleBatch(texts []string, inputType string) ([][]
 
 		resp, err := vc.client.Do(req)
 		if err != nil {
+			// Don't retry if the caller cancelled — surface the context error
+			// immediately so higher layers can decide.
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				return nil, err
+			}
 			if attempt < 3 {
 				wait := time.Duration(1<<attempt) * time.Second
 				slog.Warn("voyage.request.err", "err", err, "attempt", attempt+1, "wait", wait)
-				time.Sleep(wait)
+				select {
+				case <-ctx.Done():
+					return nil, ctx.Err()
+				case <-time.After(wait):
+				}
 				continue
 			}
 			return nil, err
@@ -141,7 +170,11 @@ func (vc *VoyageClient) embedSingleBatch(texts []string, inputType string) ([][]
 					wait = time.Duration(1<<attempt) * time.Second
 				}
 				slog.Warn("voyage.api.retry", "status", resp.StatusCode, "attempt", attempt+1, "wait", wait)
-				time.Sleep(wait)
+				select {
+				case <-ctx.Done():
+					return nil, ctx.Err()
+				case <-time.After(wait):
+				}
 				continue
 			}
 			return nil, fmt.Errorf("Voyage API error %d: %s", resp.StatusCode, string(body))

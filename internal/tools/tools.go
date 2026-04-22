@@ -462,6 +462,32 @@ func (s *Server) registerTools() {
 	s.registerServiceMapTool()
 	s.registerDiffServicesTool()
 	s.registerRelevantContextTool()
+	s.registerGenerateReportTool()
+}
+
+// registerGenerateReportTool adds the generate_report MCP tool — writes
+// ARCHITECTURE_REPORT.md to the repo root for always-on orientation via
+// the PreToolUse hook installed by `codebase-memory-mcp install`.
+func (s *Server) registerGenerateReportTool() {
+	s.addTool(&mcp.Tool{
+		Name: "generate_report",
+		Annotations: &mcp.ToolAnnotations{
+			ReadOnlyHint:    false, // writes a file to the repo root
+			IdempotentHint:  true,
+			OpenWorldHint:   boolPtr(false),
+			DestructiveHint: boolPtr(false),
+		},
+		Description: "Write ARCHITECTURE_REPORT.md to the repo root — a one-page orientation doc (god nodes, communities + cohesion, cross-package boundaries, 5 suggested questions) derived from the indexed graph. Auto-runs at the end of index_repository; call manually to regenerate without reindexing. Intended to be read by coding assistants before Glob/Grep on an unfamiliar codebase.",
+		InputSchema: json.RawMessage(`{
+			"type": "object",
+			"properties": {
+				"project": {
+					"type": "string",
+					"description": "Project name (optional — uses session project if omitted)"
+				}
+			}
+		}`),
+	}, s.handleGenerateReport)
 }
 
 func (s *Server) registerArchitectureTools() {

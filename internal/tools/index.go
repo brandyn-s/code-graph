@@ -96,6 +96,20 @@ func (s *Server) handleIndexRepository(ctx context.Context, req *mcp.CallToolReq
 	// Add to watcher so auto-sync keeps this project fresh.
 	s.watcher.Watch(projectName, absPath)
 
+	// Refresh ARCHITECTURE_REPORT.md at the repo root so the PreToolUse hook
+	// (installed via `codebase-memory-mcp install`) has fresh content to
+	// surface next time Glob/Grep fires. Report generation failure must NOT
+	// fail the overall index — a stale or missing report is less bad than a
+	// failed index, and the user can regenerate manually via generate_report.
+	if reportResult, reportErr := s.generateOrientationReport(projectName); reportErr != nil {
+		slog.Warn("index.report.err", "project", projectName, "err", reportErr)
+	} else {
+		slog.Info("index.report.ok",
+			"project", projectName,
+			"path", reportResult.Path,
+			"bytes", reportResult.Bytes)
+	}
+
 	// Update session state if this is the session project
 	if projectName == s.sessionProject {
 		s.indexStatus.Store("ready")

@@ -79,6 +79,12 @@ func runInstall(args []string) int {
 	// Zed (uses "context_servers" key with "source" field)
 	installZedMCP(binaryPath, zedConfigPath(), cfg)
 
+	fmt.Println()
+
+	// PreToolUse orientation hook — nudges Claude Code to read
+	// ARCHITECTURE_REPORT.md before Glob/Grep on indexed repos.
+	installOrientationHook(cfg)
+
 	fmt.Println("\nDone. Restart your editor/CLI to activate.")
 	return 0
 }
@@ -123,6 +129,11 @@ func runUninstall(args []string) int {
 
 	// Zed
 	removeZedMCP(zedConfigPath(), cfg)
+
+	fmt.Println()
+
+	// PreToolUse orientation hook
+	uninstallOrientationHook(cfg)
 
 	fmt.Println("\nDone. Binary and databases were NOT removed.")
 	return 0

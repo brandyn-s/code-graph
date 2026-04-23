@@ -10,6 +10,7 @@
       "oracle": "pycg",
       "oracle_count": 371,
       "measured_count": 400,
+      "oracle_caller_count": 184,
       "exact": {
         "tp": 58,
         "fp": 342,
@@ -25,6 +26,14 @@
         "precision": 0.1473,
         "recall": 0.1579,
         "f1": 0.1524
+      },
+      "scope_aligned": {
+        "tp": 58,
+        "fp": 4,
+        "fn": 313,
+        "precision": 0.9355,
+        "recall": 0.1563,
+        "f1": 0.2679
       },
       "sample_fp_exact": [
         [
@@ -129,12 +138,87 @@
           "airlock.airlock_mcp_server._j",
           "CALLS"
         ]
+      ],
+      "sample_fp_scoped": [
+        [
+          "claude-proxy.claude_proxy._load_rules_from_s3",
+          "confluence.confluence_fedramp_mcp.client",
+          "CALLS"
+        ],
+        [
+          "claude-proxy.claude_proxy._poll_s3_guardrails",
+          "confluence.confluence_fedramp_mcp.client",
+          "CALLS"
+        ],
+        [
+          "claude-proxy.claude_proxy.load_guardrail_config",
+          "claude-proxy.claude_proxy.GuardrailRule",
+          "CALLS"
+        ],
+        [
+          "claude-proxy.claude_proxy.redact_request_body",
+          ".gitleaks.extend",
+          "CALLS"
+        ]
+      ],
+      "sample_fn_scoped": [
+        [
+          "airlock.airlock_mcp_server",
+          "shared.mcp_http.configure_http_transport",
+          "CALLS"
+        ],
+        [
+          "airlock.airlock_mcp_server._post",
+          "shared.errors.api_error",
+          "CALLS"
+        ],
+        [
+          "airlock.airlock_mcp_server._post_raw",
+          "shared.errors.api_error",
+          "CALLS"
+        ],
+        [
+          "airlock.airlock_mcp_server.airlock_add_allowlist_metarule_criteria",
+          "airlock.airlock_mcp_server._j",
+          "CALLS"
+        ],
+        [
+          "airlock.airlock_mcp_server.airlock_add_allowlist_metarule_criteria",
+          "airlock.airlock_mcp_server._post",
+          "CALLS"
+        ],
+        [
+          "airlock.airlock_mcp_server.airlock_add_blocklist_metarule_criteria",
+          "airlock.airlock_mcp_server._j",
+          "CALLS"
+        ],
+        [
+          "airlock.airlock_mcp_server.airlock_add_blocklist_metarule_criteria",
+          "airlock.airlock_mcp_server._post",
+          "CALLS"
+        ],
+        [
+          "airlock.airlock_mcp_server.airlock_add_hash",
+          "airlock.airlock_mcp_server._j",
+          "CALLS"
+        ],
+        [
+          "airlock.airlock_mcp_server.airlock_add_hash",
+          "airlock.airlock_mcp_server._post",
+          "CALLS"
+        ],
+        [
+          "airlock.airlock_mcp_server.airlock_add_hash_to_baseline",
+          "airlock.airlock_mcp_server._j",
+          "CALLS"
+        ]
       ]
     },
     "IMPORTS": {
       "oracle": "ast",
       "oracle_count": 42,
       "measured_count": 11,
+      "oracle_caller_count": 31,
       "exact": {
         "tp": 10,
         "fp": 1,
@@ -150,6 +234,14 @@
         "precision": 0.0,
         "recall": 0.0,
         "f1": 0.0
+      },
+      "scope_aligned": {
+        "tp": 10,
+        "fp": 0,
+        "fn": 32,
+        "precision": 1.0,
+        "recall": 0.2381,
+        "f1": 0.3846
       },
       "sample_fp_exact": [
         [
@@ -209,12 +301,66 @@
           "shared.mcp_http",
           "IMPORTS"
         ]
+      ],
+      "sample_fp_scoped": [],
+      "sample_fn_scoped": [
+        [
+          "airlock.airlock_mcp_server",
+          "shared.errors",
+          "IMPORTS"
+        ],
+        [
+          "airlock.airlock_mcp_server",
+          "shared.mcp_http",
+          "IMPORTS"
+        ],
+        [
+          "claude_compliance.claude_compliance_mcp",
+          "shared.errors",
+          "IMPORTS"
+        ],
+        [
+          "claude_compliance.claude_compliance_mcp",
+          "shared.mcp_http",
+          "IMPORTS"
+        ],
+        [
+          "claude_platform.claude_platform_mcp",
+          "shared.errors",
+          "IMPORTS"
+        ],
+        [
+          "claude_platform.claude_platform_mcp",
+          "shared.mcp_http",
+          "IMPORTS"
+        ],
+        [
+          "confluence.confluence_fedramp_mcp",
+          "shared.mcp_http",
+          "IMPORTS"
+        ],
+        [
+          "crowdstrike.proxy",
+          "shared.mcp_http",
+          "IMPORTS"
+        ],
+        [
+          "crowdstrike.proxy",
+          "shared.opa_middleware",
+          "IMPORTS"
+        ],
+        [
+          "github.github_mcp",
+          "shared.mcp_http",
+          "IMPORTS"
+        ]
       ]
     },
     "HTTP_CALLS": {
       "oracle": "opus+sonnet",
       "oracle_count": 411,
       "measured_count": 0,
+      "oracle_caller_count": 372,
       "exact": {
         "tp": 0,
         "fp": 0,
@@ -231,8 +377,69 @@
         "recall": 0.0,
         "f1": 0.0
       },
+      "scope_aligned": {
+        "tp": 0,
+        "fp": 0,
+        "fn": 411,
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0
+      },
       "sample_fp_exact": [],
       "sample_fn_exact": [
+        [
+          "airlock.airlock_mcp_server._post",
+          "POST {path}",
+          "HTTP_CALLS"
+        ],
+        [
+          "airlock.airlock_mcp_server._post_raw",
+          "POST {path}",
+          "HTTP_CALLS"
+        ],
+        [
+          "claude-compliance.claude_compliance_mcp.delete_chat",
+          "DELETE /v1/compliance/apps/chats/{claude_chat_id}",
+          "HTTP_CALLS"
+        ],
+        [
+          "claude-compliance.claude_compliance_mcp.delete_file",
+          "DELETE /v1/compliance/apps/chats/files/{claude_file_id}",
+          "HTTP_CALLS"
+        ],
+        [
+          "claude-compliance.claude_compliance_mcp.delete_project",
+          "DELETE /v1/compliance/apps/projects/{claude_proj_id}",
+          "HTTP_CALLS"
+        ],
+        [
+          "claude-compliance.claude_compliance_mcp.delete_project_document",
+          "DELETE /v1/compliance/apps/projects/documents/{claude_proj_doc_id}",
+          "HTTP_CALLS"
+        ],
+        [
+          "claude-compliance.claude_compliance_mcp.download_file_content",
+          "GET /v1/compliance/apps/chats/files/{claude_file_id}/content",
+          "HTTP_CALLS"
+        ],
+        [
+          "claude-compliance.claude_compliance_mcp.get_chat_messages",
+          "GET /v1/compliance/apps/chats/{claude_chat_id}/messages",
+          "HTTP_CALLS"
+        ],
+        [
+          "claude-compliance.claude_compliance_mcp.get_project",
+          "GET /v1/compliance/apps/projects/{claude_proj_id}",
+          "HTTP_CALLS"
+        ],
+        [
+          "claude-compliance.claude_compliance_mcp.get_project_document",
+          "GET /v1/compliance/apps/projects/documents/{claude_proj_doc_id}",
+          "HTTP_CALLS"
+        ]
+      ],
+      "sample_fp_scoped": [],
+      "sample_fn_scoped": [
         [
           "airlock.airlock_mcp_server._post",
           "POST {path}",

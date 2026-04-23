@@ -38,6 +38,7 @@ from common import (  # noqa: E402
     verify_fixture_sha,
     write_edges,
 )
+from _env import ensure_bench_venv  # noqa: E402
 
 # Services in mcp-servers that have clear Python entry points.
 # Format: (service_dir, entry_point_relative_to_service)
@@ -67,17 +68,11 @@ def run_pycg_for_service(
     # Use the service directory as --package so qualified names are
     # relative to the service, which matches code-graph's per-service
     # namespacing.
-    # PyCG requires Python 3.11 via the bench venv (locally patched for
-    # modern-Python reentrant-import compatibility; see
-    # ~/.cache/code-graph-bench-py311/Lib/site-packages/pycg/machinery/imports.py).
-    # sys.executable here would be 3.13 and hit the ImportManagerError.
-    pycg_py = str(
-        Path.home()
-        / ".cache"
-        / "code-graph-bench-py311"
-        / "Scripts"
-        / "python.exe"
-    )
+    # PyCG requires Python 3.11 + three local patches (see bench/accuracy/_env.py).
+    # ensure_bench_venv() provisions / repairs / returns the cached interpreter,
+    # idempotent across runs. The bench venv is uv-managed at
+    # ~/.cache/code-graph-bench/py311.
+    pycg_py = str(ensure_bench_venv())
     argv = [
         pycg_py,
         "-m",

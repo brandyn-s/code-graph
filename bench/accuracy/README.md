@@ -44,19 +44,36 @@ bench/accuracy/
 ## Reproduction
 
 ```bash
-# One-time:
-pip install pycg==0.0.7 anthropic
+# One-time: ensure `uv` is installed (https://github.com/astral-sh/uv).
+# PyCG needs Python 3.11 + 3 local patches; `_env.py` provisions that venv
+# idempotently on first run. No manual setup required.
+
+pip install anthropic   # only LLM-ensemble oracle needs this on the system python
 
 # Verify binary is current:
 CGO_ENABLED=1 go build -o bin/codebase-memory-mcp.exe ./cmd/codebase-memory-mcp/
 
-# Run baseline against a fixture:
-python bench/accuracy/run_baseline.py --fixture mcp-servers
+# Run each oracle + compare:
+python bench/accuracy/oracle_pycg.py mcp-servers       # CALLS  (auto-bootstraps bench venv + patches)
+python bench/accuracy/oracle_ast_imports.py mcp-servers # IMPORTS (stdlib only)
+python bench/accuracy/oracle_llm_ensemble.py mcp-servers # HTTP_CALLS (needs ANTHROPIC_API_KEY)
+python bench/accuracy/compare.py mcp-servers
 
 # Output:
 #   bench/accuracy/baselines/YYYY-MM-DD-mcp-servers-report.md   (human)
 #   bench/accuracy/baselines/YYYY-MM-DD-mcp-servers-report.json (machine)
 ```
+
+### Pre-provisioning the bench venv (CI, first-timers)
+
+```bash
+python bench/accuracy/_env.py
+```
+
+Creates `~/.cache/code-graph-bench/py311/` (uv-managed), installs
+`setuptools<81` + `pycg==0.0.7`, and applies three patches to
+`pycg/machinery/imports.py` that make PyCG work on Python 3.11+.
+Idempotent — subsequent calls return the cached interpreter path.
 
 ## Environment
 
@@ -72,6 +89,23 @@ python bench/accuracy/run_baseline.py --fixture mcp-servers
 2. Make an improvement (edit Go, rebuild binary).
 3. Re-run baseline. The compare tool reports `was X, now Y, delta Z` against the most recent baseline JSON.
 4. If numbers improved: commit the new baseline as the new reference. If they regressed: revert or fix.
+
+## Metrics reported
+
+Per edge type, three metrics:
+
+- **Exact**: strict `(from_qn, to_qn, type)` equality. Baseline number — may be depressed by scope mismatches.
+- **Suffix-3**: permissive match on the last 3 QN segments. Useful for
+  spotting QN-drift artifacts between oracle and code-graph.
+- **Scope-aligned**: restricted to edges whose caller is in the oracle's
+  analyzed-caller set. This is the apples-to-apples accuracy reading —
+  it excludes code-graph edges from callers the oracle never reached
+  (e.g., test files PyCG's entry-point analysis doesn't touch).
+
+The gap between "Exact" and "Scope-aligned" is the *scope-mismatch
+artifact* — not an accuracy bug. For mcp-servers CALLS, raw exact
+precision is 14.5% but scope-aligned is 93.5% because code-graph indexes
+the full repo while PyCG only walks 5 service entry points.
 
 ## Known limitations
 

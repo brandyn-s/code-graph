@@ -136,6 +136,20 @@ def compute_metrics(
     fp_exact = measured_exact - oracle_exact
     fn_exact = oracle_exact - measured_exact
 
+    # Scope-aligned metric: restrict both sides to edges whose caller is in
+    # the oracle's analyzed-caller set. The raw metric above includes
+    # code-graph edges from callers PyCG never reached (e.g., test files
+    # outside the service entry-point scope) as FPs, which isn't a fair
+    # accuracy signal — it's a scope mismatch artifact. The scope-aligned
+    # metric is apples-to-apples: on files PyCG actually analyzed, how
+    # accurately does code-graph represent the edges?
+    oracle_callers = {e.from_qn for e in oracle}
+    oracle_scoped = {k for k in oracle_exact if k[0] in oracle_callers}
+    measured_scoped = {k for k in measured_exact if k[0] in oracle_callers}
+    tp_scoped = oracle_scoped & measured_scoped
+    fp_scoped = measured_scoped - oracle_scoped
+    fn_scoped = oracle_scoped - measured_scoped
+
     # Suffix match: (from_suffix, to_suffix, type)
     def suffix_key(k: tuple[str, str, str]) -> tuple[str, str, str] | None:
         fs = suffix_match_key(k[0])
@@ -166,10 +180,14 @@ def compute_metrics(
     return {
         "oracle_count": len(oracle),
         "measured_count": len(measured),
+        "oracle_caller_count": len(oracle_callers),
         "exact": pr(len(tp_exact), len(fp_exact), len(fn_exact)),
         "suffix_3seg": pr(len(tp_suffix), len(fp_suffix), len(fn_suffix)),
+        "scope_aligned": pr(len(tp_scoped), len(fp_scoped), len(fn_scoped)),
         "sample_fp_exact": sorted(fp_exact)[:10],
         "sample_fn_exact": sorted(fn_exact)[:10],
+        "sample_fp_scoped": sorted(fp_scoped)[:10],
+        "sample_fn_scoped": sorted(fn_scoped)[:10],
     }
 
 
@@ -246,22 +264,29 @@ def compare_fixture(fixture_id: str) -> tuple[dict, Path, Path]:
         "",
         "## Summary",
         "",
-        "| Edge type | Oracle | Oracle count | Measured count | Exact P | Exact R | Exact F1 | Suffix-3 P | Suffix-3 R | Suffix-3 F1 |",
-        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "Three metrics per edge type:",
+        "- **Exact**: strict (from_qn, to_qn, type) equality between oracle and code-graph.",
+        "- **Suffix-3**: permissive match on the last 3 QN segments — identifies QN-drift artifacts.",
+        "- **Scope-aligned**: restricted to edges whose caller is in the oracle's analyzed-caller set. Filters out scope-mismatch artifacts (e.g., code-graph edges from test files PyCG never reached) to give an apples-to-apples accuracy reading.",
+        "",
+        "| Edge type | Oracle | Oracle / Measured | Exact P/R/F1 | Suffix-3 P/R/F1 | Scope-aligned P/R/F1 |",
+        "|---|---|---|---|---|---|",
     ]
     for edge_type, res in results.items():
         if res.get("status") == "pending":
             lines.append(
-                f"| {edge_type} | {res['oracle']} | — | — | — | — | — | — | — | — |"
+                f"| {edge_type} | {res['oracle']} | — | — | — | — |"
             )
             continue
         e = res["exact"]
         s = res["suffix_3seg"]
+        a = res["scope_aligned"]
         lines.append(
-            f"| {edge_type} | {res['oracle']} | {res['oracle_count']} | "
-            f"{res['measured_count']} | {e['precision']:.3f} | {e['recall']:.3f} | "
-            f"{e['f1']:.3f} | {s['precision']:.3f} | {s['recall']:.3f} | "
-            f"{s['f1']:.3f} |"
+            f"| {edge_type} | {res['oracle']} | "
+            f"{res['oracle_count']} / {res['measured_count']} | "
+            f"{e['precision']:.3f} / {e['recall']:.3f} / {e['f1']:.3f} | "
+            f"{s['precision']:.3f} / {s['recall']:.3f} / {s['f1']:.3f} | "
+            f"{a['precision']:.3f} / {a['recall']:.3f} / {a['f1']:.3f} |"
         )
     lines.append("")
     lines.append("## Samples (first 10 per edge type)")
@@ -272,12 +297,24 @@ def compare_fixture(fixture_id: str) -> tuple[dict, Path, Path]:
             "",
             f"### {edge_type}",
             "",
-            "**False positives** (code-graph found, oracle did NOT):",
+            f"Oracle analyzed callers: {res.get('oracle_caller_count', 0)}",
+            "",
+            "**Scope-aligned false positives** (code-graph edge from a PyCG-analyzed caller to a callee PyCG did not record):",
+            "```",
+            *[f"  {f} --> {t}" for f, t, _ in res.get("sample_fp_scoped", [])],
+            "```",
+            "",
+            "**Scope-aligned false negatives** (oracle recorded, code-graph did NOT):",
+            "```",
+            *[f"  {f} --> {t}" for f, t, _ in res.get("sample_fn_scoped", [])],
+            "```",
+            "",
+            "**Raw-exact false positives (may include out-of-scope callers)**:",
             "```",
             *[f"  {f} --> {t}" for f, t, _ in res["sample_fp_exact"]],
             "```",
             "",
-            "**False negatives** (oracle found, code-graph did NOT):",
+            "**Raw-exact false negatives**:",
             "```",
             *[f"  {f} --> {t}" for f, t, _ in res["sample_fn_exact"]],
             "```",

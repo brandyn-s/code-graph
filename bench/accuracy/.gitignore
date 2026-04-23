@@ -1,2 +1,6 @@
 # Per-machine cache — rebuilt from sources, not committed.
 cache/
+
+# Python bytecode
+__pycache__/
+*.pyc

@@ -13,8 +13,8 @@ Three metrics per edge type:
 
 | Edge type | Oracle | Oracle / Measured | Exact P/R/F1 | Suffix-3 P/R/F1 | Scope-aligned P/R/F1 |
 |---|---|---|---|---|---|
-| CALLS | pycg | 371 / 400 | 0.145 / 0.156 / 0.150 | 0.147 / 0.158 / 0.152 | 0.935 / 0.156 / 0.268 |
-| IMPORTS | ast | 42 / 11 | 0.909 / 0.238 / 0.377 | 0.000 / 0.000 / 0.000 | 1.000 / 0.238 / 0.385 |
+| CALLS | pycg | 371 / 549 | 0.665 / 0.984 / 0.793 | 0.675 / 0.997 / 0.805 | 0.979 / 0.984 / 0.981 |
+| IMPORTS | ast | 42 / 10 | 1.000 / 0.238 / 0.385 | 0.000 / 0.000 / 0.000 | 1.000 / 0.238 / 0.385 |
 | HTTP_CALLS | opus+sonnet | 411 / 0 | 0.000 / 0.000 / 0.000 | 0.000 / 0.000 / 0.000 | 0.000 / 0.000 / 0.000 |
 
 ## Samples (first 10 per edge type)
@@ -29,48 +29,44 @@ Oracle analyzed callers: 184
   claude-proxy.claude_proxy._poll_s3_guardrails --> confluence.confluence_fedramp_mcp.client
   claude-proxy.claude_proxy.load_guardrail_config --> claude-proxy.claude_proxy.GuardrailRule
   claude-proxy.claude_proxy.redact_request_body --> .gitleaks.extend
+  security-remix.backend_pool.BackendPool.call_tool --> security-remix.backend_pool.BackendPool.call_tool
+  security-remix.security_remix_server --> security-remix.backend_pool.BackendPool
+  security-remix.security_remix_server --> security-remix.tool_index.ToolIndex
+  security-remix.tool_index.ToolIndex.refresh --> security-remix.tool_index.ToolEntry
 ```
 
 **Scope-aligned false negatives** (oracle recorded, code-graph did NOT):
 ```
-  airlock.airlock_mcp_server --> shared.mcp_http.configure_http_transport
-  airlock.airlock_mcp_server._post --> shared.errors.api_error
-  airlock.airlock_mcp_server._post_raw --> shared.errors.api_error
-  airlock.airlock_mcp_server.airlock_add_allowlist_metarule_criteria --> airlock.airlock_mcp_server._j
-  airlock.airlock_mcp_server.airlock_add_allowlist_metarule_criteria --> airlock.airlock_mcp_server._post
-  airlock.airlock_mcp_server.airlock_add_blocklist_metarule_criteria --> airlock.airlock_mcp_server._j
-  airlock.airlock_mcp_server.airlock_add_blocklist_metarule_criteria --> airlock.airlock_mcp_server._post
-  airlock.airlock_mcp_server.airlock_add_hash --> airlock.airlock_mcp_server._j
-  airlock.airlock_mcp_server.airlock_add_hash --> airlock.airlock_mcp_server._post
-  airlock.airlock_mcp_server.airlock_add_hash_to_baseline --> airlock.airlock_mcp_server._j
+  claude-proxy.claude_proxy.extract_scannable_text --> claude-proxy.claude_proxy.extract_scannable_text.content.get
+  crowdstrike.proxy --> shared.mcp_http._build_oauth._get_resource_url
+  crowdstrike.proxy --> shared.mcp_http._build_oauth.get_middleware
+  crowdstrike.proxy --> shared.mcp_http._build_oauth.get_routes
+  security-remix.security_remix_server --> security-remix.backend_pool.BackendPool.__init__
+  security-remix.security_remix_server --> security-remix.tool_index.ToolIndex.__init__
 ```
 
 **Raw-exact false positives (may include out-of-scope callers)**:
 ```
-  claude-compliance.test_claude_compliance --> claude-compliance.test_claude_compliance.test_read_tools_have_readonly_hint
-  claude-compliance.test_claude_compliance --> claude-compliance.test_claude_compliance.test_tools_load
-  claude-compliance.test_claude_compliance --> claude-compliance.test_claude_compliance.test_write_tools_have_destructive_hint
-  claude-compliance.test_claude_compliance.test_read_tools_have_readonly_hint --> security-remix.tool_index.ToolIndex.get_tool
-  claude-compliance.test_claude_compliance.test_write_tools_have_destructive_hint --> security-remix.tool_index.ToolIndex.get_tool
+  airlock.airlock_mcp_server._lifespan --> security-remix.backend_pool.BackendPool.close
   claude-proxy.claude_proxy._get_circuit --> claude-proxy.claude_proxy.CircuitState
   claude-proxy.claude_proxy._get_s3_client --> confluence.confluence_fedramp_mcp.client
   claude-proxy.claude_proxy._load_key_pool --> claude-proxy.claude_proxy.PoolKey
   claude-proxy.claude_proxy._load_rules_from_s3 --> confluence.confluence_fedramp_mcp.client
   claude-proxy.claude_proxy._parse_rules_json --> claude-proxy.claude_proxy.GuardrailRule
+  claude-proxy.claude_proxy._poll_s3_guardrails --> confluence.confluence_fedramp_mcp.client
+  claude-proxy.claude_proxy.check_guardrails --> confluence.confluence_fedramp_mcp.ConfluenceClient.search
+  claude-proxy.claude_proxy.load_guardrail_config --> claude-proxy.claude_proxy.GuardrailRule
+  claude-proxy.claude_proxy.redact_request_body --> .gitleaks.extend
 ```
 
 **Raw-exact false negatives**:
 ```
-  airlock.airlock_mcp_server --> shared.mcp_http.configure_http_transport
-  airlock.airlock_mcp_server._post --> shared.errors.api_error
-  airlock.airlock_mcp_server._post_raw --> shared.errors.api_error
-  airlock.airlock_mcp_server.airlock_add_allowlist_metarule_criteria --> airlock.airlock_mcp_server._j
-  airlock.airlock_mcp_server.airlock_add_allowlist_metarule_criteria --> airlock.airlock_mcp_server._post
-  airlock.airlock_mcp_server.airlock_add_blocklist_metarule_criteria --> airlock.airlock_mcp_server._j
-  airlock.airlock_mcp_server.airlock_add_blocklist_metarule_criteria --> airlock.airlock_mcp_server._post
-  airlock.airlock_mcp_server.airlock_add_hash --> airlock.airlock_mcp_server._j
-  airlock.airlock_mcp_server.airlock_add_hash --> airlock.airlock_mcp_server._post
-  airlock.airlock_mcp_server.airlock_add_hash_to_baseline --> airlock.airlock_mcp_server._j
+  claude-proxy.claude_proxy.extract_scannable_text --> claude-proxy.claude_proxy.extract_scannable_text.content.get
+  crowdstrike.proxy --> shared.mcp_http._build_oauth._get_resource_url
+  crowdstrike.proxy --> shared.mcp_http._build_oauth.get_middleware
+  crowdstrike.proxy --> shared.mcp_http._build_oauth.get_routes
+  security-remix.security_remix_server --> security-remix.backend_pool.BackendPool.__init__
+  security-remix.security_remix_server --> security-remix.tool_index.ToolIndex.__init__
 ```
 
 ### IMPORTS
@@ -97,7 +93,6 @@ Oracle analyzed callers: 31
 
 **Raw-exact false positives (may include out-of-scope callers)**:
 ```
-  colin.entrypoint --> colin
 ```
 
 **Raw-exact false negatives**:

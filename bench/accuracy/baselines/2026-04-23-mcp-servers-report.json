@@ -9,56 +9,36 @@
     "CALLS": {
       "oracle": "pycg",
       "oracle_count": 371,
-      "measured_count": 400,
+      "measured_count": 549,
       "oracle_caller_count": 184,
       "exact": {
-        "tp": 58,
-        "fp": 342,
-        "fn": 313,
-        "precision": 0.145,
-        "recall": 0.1563,
-        "f1": 0.1505
+        "tp": 365,
+        "fp": 184,
+        "fn": 6,
+        "precision": 0.6648,
+        "recall": 0.9838,
+        "f1": 0.7935
       },
       "suffix_3seg": {
-        "tp": 57,
-        "fp": 330,
-        "fn": 304,
-        "precision": 0.1473,
-        "recall": 0.1579,
-        "f1": 0.1524
+        "tp": 360,
+        "fp": 173,
+        "fn": 1,
+        "precision": 0.6754,
+        "recall": 0.9972,
+        "f1": 0.8054
       },
       "scope_aligned": {
-        "tp": 58,
-        "fp": 4,
-        "fn": 313,
-        "precision": 0.9355,
-        "recall": 0.1563,
-        "f1": 0.2679
+        "tp": 365,
+        "fp": 8,
+        "fn": 6,
+        "precision": 0.9786,
+        "recall": 0.9838,
+        "f1": 0.9812
       },
       "sample_fp_exact": [
         [
-          "claude-compliance.test_claude_compliance",
-          "claude-compliance.test_claude_compliance.test_read_tools_have_readonly_hint",
-          "CALLS"
-        ],
-        [
-          "claude-compliance.test_claude_compliance",
-          "claude-compliance.test_claude_compliance.test_tools_load",
-          "CALLS"
-        ],
-        [
-          "claude-compliance.test_claude_compliance",
-          "claude-compliance.test_claude_compliance.test_write_tools_have_destructive_hint",
-          "CALLS"
-        ],
-        [
-          "claude-compliance.test_claude_compliance.test_read_tools_have_readonly_hint",
-          "security-remix.tool_index.ToolIndex.get_tool",
-          "CALLS"
-        ],
-        [
-          "claude-compliance.test_claude_compliance.test_write_tools_have_destructive_hint",
-          "security-remix.tool_index.ToolIndex.get_tool",
+          "airlock.airlock_mcp_server._lifespan",
+          "security-remix.backend_pool.BackendPool.close",
           "CALLS"
         ],
         [
@@ -85,57 +65,57 @@
           "claude-proxy.claude_proxy._parse_rules_json",
           "claude-proxy.claude_proxy.GuardrailRule",
           "CALLS"
+        ],
+        [
+          "claude-proxy.claude_proxy._poll_s3_guardrails",
+          "confluence.confluence_fedramp_mcp.client",
+          "CALLS"
+        ],
+        [
+          "claude-proxy.claude_proxy.check_guardrails",
+          "confluence.confluence_fedramp_mcp.ConfluenceClient.search",
+          "CALLS"
+        ],
+        [
+          "claude-proxy.claude_proxy.load_guardrail_config",
+          "claude-proxy.claude_proxy.GuardrailRule",
+          "CALLS"
+        ],
+        [
+          "claude-proxy.claude_proxy.redact_request_body",
+          ".gitleaks.extend",
+          "CALLS"
         ]
       ],
       "sample_fn_exact": [
         [
-          "airlock.airlock_mcp_server",
-          "shared.mcp_http.configure_http_transport",
+          "claude-proxy.claude_proxy.extract_scannable_text",
+          "claude-proxy.claude_proxy.extract_scannable_text.content.get",
           "CALLS"
         ],
         [
-          "airlock.airlock_mcp_server._post",
-          "shared.errors.api_error",
+          "crowdstrike.proxy",
+          "shared.mcp_http._build_oauth._get_resource_url",
           "CALLS"
         ],
         [
-          "airlock.airlock_mcp_server._post_raw",
-          "shared.errors.api_error",
+          "crowdstrike.proxy",
+          "shared.mcp_http._build_oauth.get_middleware",
           "CALLS"
         ],
         [
-          "airlock.airlock_mcp_server.airlock_add_allowlist_metarule_criteria",
-          "airlock.airlock_mcp_server._j",
+          "crowdstrike.proxy",
+          "shared.mcp_http._build_oauth.get_routes",
           "CALLS"
         ],
         [
-          "airlock.airlock_mcp_server.airlock_add_allowlist_metarule_criteria",
-          "airlock.airlock_mcp_server._post",
+          "security-remix.security_remix_server",
+          "security-remix.backend_pool.BackendPool.__init__",
           "CALLS"
         ],
         [
-          "airlock.airlock_mcp_server.airlock_add_blocklist_metarule_criteria",
-          "airlock.airlock_mcp_server._j",
-          "CALLS"
-        ],
-        [
-          "airlock.airlock_mcp_server.airlock_add_blocklist_metarule_criteria",
-          "airlock.airlock_mcp_server._post",
-          "CALLS"
-        ],
-        [
-          "airlock.airlock_mcp_server.airlock_add_hash",
-          "airlock.airlock_mcp_server._j",
-          "CALLS"
-        ],
-        [
-          "airlock.airlock_mcp_server.airlock_add_hash",
-          "airlock.airlock_mcp_server._post",
-          "CALLS"
-        ],
-        [
-          "airlock.airlock_mcp_server.airlock_add_hash_to_baseline",
-          "airlock.airlock_mcp_server._j",
+          "security-remix.security_remix_server",
+          "security-remix.tool_index.ToolIndex.__init__",
           "CALLS"
         ]
       ],
@@ -159,57 +139,57 @@
           "claude-proxy.claude_proxy.redact_request_body",
           ".gitleaks.extend",
           "CALLS"
+        ],
+        [
+          "security-remix.backend_pool.BackendPool.call_tool",
+          "security-remix.backend_pool.BackendPool.call_tool",
+          "CALLS"
+        ],
+        [
+          "security-remix.security_remix_server",
+          "security-remix.backend_pool.BackendPool",
+          "CALLS"
+        ],
+        [
+          "security-remix.security_remix_server",
+          "security-remix.tool_index.ToolIndex",
+          "CALLS"
+        ],
+        [
+          "security-remix.tool_index.ToolIndex.refresh",
+          "security-remix.tool_index.ToolEntry",
+          "CALLS"
         ]
       ],
       "sample_fn_scoped": [
         [
-          "airlock.airlock_mcp_server",
-          "shared.mcp_http.configure_http_transport",
+          "claude-proxy.claude_proxy.extract_scannable_text",
+          "claude-proxy.claude_proxy.extract_scannable_text.content.get",
           "CALLS"
         ],
         [
-          "airlock.airlock_mcp_server._post",
-          "shared.errors.api_error",
+          "crowdstrike.proxy",
+          "shared.mcp_http._build_oauth._get_resource_url",
           "CALLS"
         ],
         [
-          "airlock.airlock_mcp_server._post_raw",
-          "shared.errors.api_error",
+          "crowdstrike.proxy",
+          "shared.mcp_http._build_oauth.get_middleware",
           "CALLS"
         ],
         [
-          "airlock.airlock_mcp_server.airlock_add_allowlist_metarule_criteria",
-          "airlock.airlock_mcp_server._j",
+          "crowdstrike.proxy",
+          "shared.mcp_http._build_oauth.get_routes",
           "CALLS"
         ],
         [
-          "airlock.airlock_mcp_server.airlock_add_allowlist_metarule_criteria",
-          "airlock.airlock_mcp_server._post",
+          "security-remix.security_remix_server",
+          "security-remix.backend_pool.BackendPool.__init__",
           "CALLS"
         ],
         [
-          "airlock.airlock_mcp_server.airlock_add_blocklist_metarule_criteria",
-          "airlock.airlock_mcp_server._j",
-          "CALLS"
-        ],
-        [
-          "airlock.airlock_mcp_server.airlock_add_blocklist_metarule_criteria",
-          "airlock.airlock_mcp_server._post",
-          "CALLS"
-        ],
-        [
-          "airlock.airlock_mcp_server.airlock_add_hash",
-          "airlock.airlock_mcp_server._j",
-          "CALLS"
-        ],
-        [
-          "airlock.airlock_mcp_server.airlock_add_hash",
-          "airlock.airlock_mcp_server._post",
-          "CALLS"
-        ],
-        [
-          "airlock.airlock_mcp_server.airlock_add_hash_to_baseline",
-          "airlock.airlock_mcp_server._j",
+          "security-remix.security_remix_server",
+          "security-remix.tool_index.ToolIndex.__init__",
           "CALLS"
         ]
       ]
@@ -217,15 +197,15 @@
     "IMPORTS": {
       "oracle": "ast",
       "oracle_count": 42,
-      "measured_count": 11,
+      "measured_count": 10,
       "oracle_caller_count": 31,
       "exact": {
         "tp": 10,
-        "fp": 1,
+        "fp": 0,
         "fn": 32,
-        "precision": 0.9091,
+        "precision": 1.0,
         "recall": 0.2381,
-        "f1": 0.3774
+        "f1": 0.3846
       },
       "suffix_3seg": {
         "tp": 0,
@@ -243,13 +223,7 @@
         "recall": 0.2381,
         "f1": 0.3846
       },
-      "sample_fp_exact": [
-        [
-          "colin.entrypoint",
-          "colin",
-          "IMPORTS"
-        ]
-      ],
+      "sample_fp_exact": [],
       "sample_fn_exact": [
         [
           "airlock.airlock_mcp_server",

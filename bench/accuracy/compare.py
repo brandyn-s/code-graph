@@ -66,13 +66,8 @@ def strip_project_prefix(qn: str, project: str) -> str:
     return qn
 
 
-def query_code_graph_edges(project: str, edge_type: str) -> list[Edge]:
-    """Pull edges of `edge_type` from code-graph via CLI query_graph."""
-    cypher = (
-        f"MATCH (a)-[r:{edge_type}]->(b) "
-        f"RETURN a.qualified_name AS f, b.qualified_name AS t, "
-        f"a.file_path AS file, a.start_line AS line LIMIT 100000"
-    )
+def _run_cypher(project: str, cypher: str) -> list[dict]:
+    """Execute one Cypher query against code-graph and return the row list."""
     args_json = json.dumps({"project": project, "query": cypher})
     proc = subprocess.run(
         [str(CODE_GRAPH_BINARY), "cli", "--raw", "query_graph", args_json],
@@ -88,19 +83,50 @@ def query_code_graph_edges(project: str, edge_type: str) -> list[Edge]:
         payload = json.loads(proc.stdout.decode("utf-8", errors="replace"))
     except json.JSONDecodeError as e:
         raise SystemExit(f"code-graph returned non-JSON: {e}")
-
-    rows = payload.get("rows") or payload.get("data") or payload
+    rows = payload.get("rows") or payload.get("data") or []
     if not isinstance(rows, list):
-        # Some responses wrap in {"rows": [...]}; try another unwrap.
         rows = payload.get("result", [])
+    return rows if isinstance(rows, list) else []
 
+
+def query_code_graph_edges(project: str, edge_type: str, caller_shards: list[str]) -> list[Edge]:
+    """Pull edges of `edge_type` from code-graph, sharded by caller prefix.
+
+    code-graph's `query_graph` caps unfiltered responses at ~200 rows
+    (documented in codebase-memory-reference). WHERE clauses push down to
+    SQL and bypass the cap. We shard by `a.qualified_name CONTAINS '<shard>'`
+    so each per-shard query returns its full SQL result set, then union.
+
+    `caller_shards` is typically the distinct top-level service directories
+    in the fixture (airlock, claude-proxy, shared, ...). The oracle derives
+    these from its analyzed-caller set.
+    """
     edges: list[Edge] = []
-    for r in rows:
-        if not isinstance(r, dict):
-            continue
-        f = r.get("f") or r.get("a.qualified_name") or ""
-        t = r.get("t") or r.get("b.qualified_name") or ""
-        if f and t:
+    seen_keys: set[tuple[str, str]] = set()
+
+    for shard in caller_shards:
+        # Use CONTAINS with the shard segment wrapped in dots so "airlock"
+        # matches "<project>.airlock.*" but not "airlock-foo" elsewhere.
+        # Every real QN has the form `<project>.<shard>.<rest>`, so matching
+        # `.<shard>.` is sufficient and specific.
+        cypher = (
+            f"MATCH (a)-[r:{edge_type}]->(b) "
+            f'WHERE a.qualified_name CONTAINS ".{shard}." '
+            f"RETURN a.qualified_name AS f, b.qualified_name AS t, "
+            f"a.file_path AS file, a.start_line AS line LIMIT 100000"
+        )
+        rows = _run_cypher(project, cypher)
+        for r in rows:
+            if not isinstance(r, dict):
+                continue
+            f = r.get("f") or ""
+            t = r.get("t") or ""
+            if not (f and t):
+                continue
+            key = (f, t)
+            if key in seen_keys:
+                continue
+            seen_keys.add(key)
             edges.append(
                 Edge(
                     from_qn=strip_project_prefix(f, project),
@@ -112,6 +138,20 @@ def query_code_graph_edges(project: str, edge_type: str) -> list[Edge]:
                 )
             )
     return edges
+
+
+def _derive_caller_shards(oracle_edges: list[Edge]) -> list[str]:
+    """Pull the set of top-level-dir prefixes from the oracle's callers.
+
+    Every oracle caller QN is project-relative, starting with `<service>.`,
+    so the first segment IS the shard key.
+    """
+    shards: set[str] = set()
+    for e in oracle_edges:
+        first = e.from_qn.split(".", 1)[0]
+        if first:
+            shards.add(first)
+    return sorted(shards)
 
 
 def suffix_match_key(qn: str, min_segments: int = 3) -> str | None:
@@ -207,7 +247,8 @@ def compare_fixture(fixture_id: str) -> tuple[dict, Path, Path]:
     pycg_cache = CACHE_DIR / f"pycg-{fixture_id}-{fixture['short_sha']}.json"
     if pycg_cache.exists():
         oracle_calls = read_edges(pycg_cache)
-        measured_calls = query_code_graph_edges(project, "CALLS")
+        shards = _derive_caller_shards(oracle_calls)
+        measured_calls = query_code_graph_edges(project, "CALLS", shards)
         results["CALLS"] = {
             "oracle": "pycg",
             **compute_metrics(oracle_calls, measured_calls),
@@ -219,7 +260,8 @@ def compare_fixture(fixture_id: str) -> tuple[dict, Path, Path]:
     ast_cache = CACHE_DIR / f"ast-imports-{fixture_id}-{fixture['short_sha']}.json"
     if ast_cache.exists():
         oracle_imports = read_edges(ast_cache)
-        measured_imports = query_code_graph_edges(project, "IMPORTS")
+        shards = _derive_caller_shards(oracle_imports)
+        measured_imports = query_code_graph_edges(project, "IMPORTS", shards)
         results["IMPORTS"] = {
             "oracle": "ast",
             **compute_metrics(oracle_imports, measured_imports),
@@ -231,7 +273,8 @@ def compare_fixture(fixture_id: str) -> tuple[dict, Path, Path]:
     ensemble_cache = CACHE_DIR / f"ensemble-http-{fixture_id}-{fixture['short_sha']}.json"
     if ensemble_cache.exists():
         oracle_http = read_edges(ensemble_cache)
-        measured_http = query_code_graph_edges(project, "HTTP_CALLS")
+        shards = _derive_caller_shards(oracle_http)
+        measured_http = query_code_graph_edges(project, "HTTP_CALLS", shards)
         results["HTTP_CALLS"] = {
             "oracle": "opus+sonnet",
             **compute_metrics(oracle_http, measured_http),

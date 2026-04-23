@@ -974,28 +974,82 @@ func TestApplyLimitRespectsExplicit(t *testing.T) {
 		rows[i] = map[string]any{"i": i}
 	}
 
-	// No explicit limit — should use maxRows default (200)
-	got := applyLimit(rows, 0, 200)
+	// No explicit limit — should use maxRows default (200), and truncated=true
+	got, truncated := applyLimit(rows, 0, 200)
 	if len(got) != 200 {
 		t.Errorf("no limit: expected 200 rows, got %d", len(got))
 	}
+	if !truncated {
+		t.Error("no limit with 300 rows > 200 cap: expected truncated=true")
+	}
 
-	// Explicit limit below maxRows
-	got = applyLimit(rows, 50, 200)
+	// Explicit limit below maxRows — truncated=true
+	got, truncated = applyLimit(rows, 50, 200)
 	if len(got) != 50 {
 		t.Errorf("limit=50: expected 50 rows, got %d", len(got))
 	}
+	if !truncated {
+		t.Error("limit=50 with 300 rows: expected truncated=true")
+	}
 
 	// Explicit limit above maxRows — must be respected (not silently capped)
-	got = applyLimit(rows, 250, 200)
+	got, truncated = applyLimit(rows, 250, 200)
 	if len(got) != 250 {
 		t.Errorf("limit=250: expected 250 rows, got %d", len(got))
 	}
+	if !truncated {
+		t.Error("limit=250 with 300 rows: expected truncated=true")
+	}
 
-	// Explicit limit above total rows — returns all
-	got = applyLimit(rows, 500, 200)
+	// Explicit limit above total rows — returns all, truncated=false
+	got, truncated = applyLimit(rows, 500, 200)
 	if len(got) != 300 {
 		t.Errorf("limit=500: expected 300 rows (all), got %d", len(got))
+	}
+	if truncated {
+		t.Error("limit=500 with 300 rows: expected truncated=false")
+	}
+}
+
+// TestExecuteSignalsTruncation drives a real Executor against a multi-row
+// fixture and confirms Result.Truncated + Result.EffectiveCap are populated
+// when the default 200-row cap clips results. Prevents regression of the
+// silent-cap bug that sent bench/accuracy's PR #62 baseline 80pp off.
+func TestExecuteSignalsTruncation(t *testing.T) {
+	s := setupTestStoreMultiEdge(t)
+	defer s.Close()
+
+	// Run a trivial query that can't hit the 200-row cap — Truncated must be false.
+	exec := &Executor{Store: s}
+	result, err := exec.Execute("MATCH (a)-[r]->(b) RETURN a.name, b.name LIMIT 100")
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Truncated {
+		t.Errorf("small result: expected Truncated=false, got true")
+	}
+	if result.EffectiveCap != 200 {
+		t.Errorf("default cap: expected EffectiveCap=200, got %d", result.EffectiveCap)
+	}
+
+	// When MaxRows is explicitly set higher, EffectiveCap reflects it.
+	exec2 := &Executor{Store: s, MaxRows: 5000}
+	result2, err := exec2.Execute("MATCH (a) RETURN a.name LIMIT 10")
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result2.EffectiveCap != 5000 {
+		t.Errorf("max_rows=5000: expected EffectiveCap=5000, got %d", result2.EffectiveCap)
+	}
+
+	// MaxRows above absoluteMaxRows gets clamped.
+	exec3 := &Executor{Store: s, MaxRows: 99999}
+	result3, err := exec3.Execute("MATCH (a) RETURN a.name LIMIT 10")
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result3.EffectiveCap != 10000 {
+		t.Errorf("max_rows=99999: expected EffectiveCap=10000 (absolute max), got %d", result3.EffectiveCap)
 	}
 }
 

@@ -22,6 +22,15 @@ type Executor struct {
 	regexCache  map[string]*regexp.Regexp
 	ctx         context.Context // set by Execute, used for DB queries
 	expandLimit int             // binding cap for current query (set per-execution)
+	truncated   bool            // set to true when ANY clipping step drops results; propagated to Result
+}
+
+// markTruncated records that an intermediate or final cap trimmed results.
+// Called from every clipping site so the Result carries an accurate
+// "some rows were dropped" signal — critical for clients like benchmark
+// harnesses that would otherwise silently sample.
+func (e *Executor) markTruncated() {
+	e.truncated = true
 }
 
 func (e *Executor) maxRows() int {
@@ -52,6 +61,19 @@ func (e *Executor) bindingCap(ret *ReturnClause) int {
 type Result struct {
 	Columns []string         `json:"columns"`
 	Rows    []map[string]any `json:"rows"`
+
+	// Truncated is true if any clipping step (final LIMIT/max_rows cap or an
+	// intermediate binding-set cap during path expansion) dropped rows. When
+	// true, the returned Rows is a sample — not the full matching set. Clients
+	// should either raise max_rows, narrow the query with WHERE filters, or
+	// shard the query to retrieve the complete result.
+	Truncated bool `json:"truncated,omitempty"`
+
+	// EffectiveCap is the row cap that was active for this query. Reflects the
+	// lower of (user-supplied max_rows, absoluteMaxRows), defaulting to
+	// defaultMaxRows when max_rows is not set. Always populated so clients
+	// can report "capped at N" even when Truncated is false.
+	EffectiveCap int `json:"effective_cap"`
 }
 
 // binding maps variable names to matched nodes and edges.
@@ -80,7 +102,20 @@ func (e *Executor) Execute(query string) (*Result, error) {
 	if err != nil {
 		return nil, fmt.Errorf("plan: %w", err)
 	}
-	return e.executePlan(plan)
+	result, err := e.executePlan(plan)
+	if err != nil {
+		return nil, err
+	}
+	// Always populate EffectiveCap so clients can report the limit that was
+	// active even when no truncation occurred. Truncated is already set by the
+	// intermediate markTruncated() calls.
+	if result != nil {
+		result.EffectiveCap = e.maxRows()
+		if e.truncated {
+			result.Truncated = true
+		}
+	}
+	return result, nil
 }
 
 func (e *Executor) executePlan(plan *Plan) (*Result, error) {
@@ -105,6 +140,7 @@ func (e *Executor) executePlan(plan *Plan) (*Result, error) {
 		allBindings = append(allBindings, bindings...)
 		if len(allBindings) > bindingCap {
 			allBindings = allBindings[:bindingCap]
+			e.markTruncated()
 			break
 		}
 	}
@@ -157,7 +193,11 @@ func (e *Executor) tryAggregateSQL(plan *Plan) (*Result, bool) {
 	}
 
 	// LIMIT
-	allRows = applyLimit(allRows, plan.ReturnSpec.Limit, e.maxRows())
+	var trimmed bool
+	allRows, trimmed = applyLimit(allRows, plan.ReturnSpec.Limit, e.maxRows())
+	if trimmed {
+		e.markTruncated()
+	}
 
 	return &Result{Columns: cols, Rows: allRows}, true
 }
@@ -456,6 +496,7 @@ func (e *Executor) executeStepsForProject(project string, steps []PlanStep) ([]b
 			}
 			if len(bindings) > stepCap {
 				bindings = bindings[:stepCap]
+				e.markTruncated()
 			}
 		}
 	}
@@ -540,7 +581,9 @@ func (e *Executor) execJoinScanExpand(project string, scan *ScanNodes, expand *E
 	if sqlLimit <= 0 {
 		sqlLimit = e.maxRows() * 2
 	}
-	args = append(args, sqlLimit)
+	// Fetch sqlLimit+1 so the cap can detect whether more rows would have
+	// matched. Keep only sqlLimit of them; mark truncated if the +1 came back.
+	args = append(args, sqlLimit+1)
 
 	rows, err := e.Store.DB().QueryContext(e.ctx, query, args...)
 	if err != nil {
@@ -585,6 +628,13 @@ func (e *Executor) execJoinScanExpand(project string, scan *ScanNodes, expand *E
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
+	}
+
+	// Fetched sqlLimit+1; if the extra row came back, cap at sqlLimit and signal
+	// that SQL-level truncation happened (underlying set had more matching rows).
+	if len(bindings) > sqlLimit {
+		bindings = bindings[:sqlLimit]
+		e.markTruncated()
 	}
 
 	return bindings, nil
@@ -713,6 +763,7 @@ func (e *Executor) execExpand(s *ExpandRelationship, bindings []binding) ([]bind
 			result = append(result, expanded...)
 			if len(result) > e.maxRows()*2 {
 				result = result[:e.maxRows()*2]
+				e.markTruncated()
 				break
 			}
 		}
@@ -750,7 +801,11 @@ func (e *Executor) expandFixedLengthBatch(s *ExpandRelationship, bindings []bind
 	if expandCap <= 0 {
 		expandCap = e.maxRows() * 2
 	}
-	return buildExpandedBindings(bindings, s, edgesByNode, nodeMap, direction, expandCap), nil
+	expanded, truncated := buildExpandedBindings(bindings, s, edgesByNode, nodeMap, direction, expandCap)
+	if truncated {
+		e.markTruncated()
+	}
+	return expanded, nil
 }
 
 // collectSourceIDs extracts unique node IDs from bindings for the given variable.
@@ -814,8 +869,10 @@ func collectTargetIDs(edgesByNode map[int64][]*store.Edge, direction string) []i
 }
 
 // buildExpandedBindings creates result bindings by matching edges to target nodes.
-func buildExpandedBindings(bindings []binding, s *ExpandRelationship, edgesByNode map[int64][]*store.Edge, nodeMap map[int64]*store.Node, direction string, maxRows int) []binding {
+// Returns (bindings, truncated) — truncated is true iff the maxRows*2 clip fired.
+func buildExpandedBindings(bindings []binding, s *ExpandRelationship, edgesByNode map[int64][]*store.Edge, nodeMap map[int64]*store.Node, direction string, maxRows int) ([]binding, bool) {
 	result := make([]binding, 0, len(bindings))
+	truncated := false
 	for _, b := range bindings {
 		fromNode, ok := b.nodes[s.FromVar]
 		if !ok {
@@ -850,10 +907,11 @@ func buildExpandedBindings(bindings []binding, s *ExpandRelationship, edgesByNod
 
 		if len(result) > maxRows*2 {
 			result = result[:maxRows*2]
+			truncated = true
 			break
 		}
 	}
-	return result
+	return result, truncated
 }
 
 func (e *Executor) expandVariableLength(b binding, fromNode *store.Node, s *ExpandRelationship) ([]binding, error) {
@@ -1196,7 +1254,11 @@ func (e *Executor) simpleProjection(bindings []binding, ret *ReturnClause) (*Res
 	}
 
 	// LIMIT
-	rows = applyLimit(rows, ret.Limit, e.maxRows())
+	var trimmed bool
+	rows, trimmed = applyLimit(rows, ret.Limit, e.maxRows())
+	if trimmed {
+		e.markTruncated()
+	}
 
 	return &Result{Columns: cols, Rows: rows}, nil
 }
@@ -1296,14 +1358,17 @@ func resolveOrderColumn(orderBy string, items []ReturnItem, cols []string) strin
 
 // applyLimit caps result rows. Explicit LIMIT values from the Cypher query are
 // respected; when no LIMIT is specified (limit <= 0), maxRows is used as default.
-func applyLimit(rows []map[string]any, limit, maxRows int) []map[string]any {
+// applyLimit trims rows to the effective cap (min of user LIMIT and maxRows).
+// Returns (trimmed, truncated) — truncated is true iff rows were dropped, so
+// the caller can surface that via Result.Truncated.
+func applyLimit(rows []map[string]any, limit, maxRows int) ([]map[string]any, bool) {
 	if limit <= 0 {
 		limit = maxRows
 	}
 	if len(rows) > limit {
-		return rows[:limit]
+		return rows[:limit], true
 	}
-	return rows
+	return rows, false
 }
 
 func (e *Executor) aggregateResults(bindings []binding, ret *ReturnClause) (*Result, error) {
@@ -1334,7 +1399,11 @@ func (e *Executor) aggregateResults(bindings []binding, ret *ReturnClause) (*Res
 	}
 
 	// LIMIT
-	rows = applyLimit(rows, ret.Limit, e.maxRows())
+	var trimmed bool
+	rows, trimmed = applyLimit(rows, ret.Limit, e.maxRows())
+	if trimmed {
+		e.markTruncated()
+	}
 
 	return &Result{Columns: cols, Rows: rows}, nil
 }

@@ -971,7 +971,7 @@ func (s *Server) registerQueryTool() {
 			DestructiveHint: boolPtr(false),
 		},
 
-		Description: "Execute a Cypher-like graph query (read-only). String matching is case-sensitive; use =~ '(?i)pattern' for case-insensitive regex. Supports MATCH, WHERE, RETURN, ORDER BY, LIMIT, COUNT, DISTINCT, variable-length paths (*1..3). Default row cap 200 (max_rows up to 10000). Best for relationship patterns, filtered joins, path queries, and edge property filtering. Filterable edge properties: r.confidence, r.url_path, r.method, r.confidence_band, r.validated_by_trace, r.coupling_score. Edge types: CALLS, HTTP_CALLS, ASYNC_CALLS, IMPORTS, DEFINES, IMPLEMENTS, OVERRIDE, USAGE, FILE_CHANGES_WITH. Always use LIMIT.",
+		Description: "Execute a Cypher-like graph query (read-only). String matching is case-sensitive; use =~ '(?i)pattern' for case-insensitive regex. Supports MATCH, WHERE, RETURN, ORDER BY, LIMIT, COUNT, DISTINCT, variable-length paths (*1..3). DEFAULT ROW CAP IS 200 — pass max_rows (up to 10000) to raise it. Response includes 'effective_cap' always and 'capped: true' when results were truncated (check this before trusting totals on large result sets). Best for relationship patterns, filtered joins, path queries, and edge property filtering. Filterable edge properties: r.confidence, r.url_path, r.method, r.confidence_band, r.validated_by_trace, r.coupling_score. Edge types: CALLS, HTTP_CALLS, ASYNC_CALLS, IMPORTS, DEFINES, IMPLEMENTS, OVERRIDE, USAGE, FILE_CHANGES_WITH. Always use LIMIT.",
 		InputSchema: json.RawMessage(`{
 			"type": "object",
 			"properties": {

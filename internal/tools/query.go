@@ -40,9 +40,23 @@ func (s *Server) handleQueryGraph(_ context.Context, req *mcp.CallToolRequest) (
 	}
 
 	responseData := map[string]any{
-		"columns": result.Columns,
-		"rows":    result.Rows,
-		"total":   len(result.Rows),
+		"columns":       result.Columns,
+		"rows":          result.Rows,
+		"total":         len(result.Rows),
+		"effective_cap": result.EffectiveCap,
+	}
+	// Surface truncation explicitly so clients can detect when the returned rows
+	// are a sample rather than the full matching set. The bench-accuracy harness
+	// incident (2026-04-23) showed that silent capping at 200 rows produced a
+	// 14.5% "precision" reading that was actually 97.9% once the cap was
+	// bypassed via WHERE-shard queries. Explicit signaling prevents re-runs of
+	// that failure mode.
+	if result.Truncated {
+		responseData["capped"] = true
+		responseData["capped_hint"] = fmt.Sprintf(
+			"Results truncated at %d rows. Raise max_rows (up to 10000), narrow with WHERE, or shard by caller prefix.",
+			result.EffectiveCap,
+		)
 	}
 	s.addIndexStatus(responseData)
 

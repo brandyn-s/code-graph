@@ -85,6 +85,22 @@ go test ./internal/pipeline/ -run TestPipeline -v
 - Security tagging pass (labels nodes as auth/crypto/input/hardware_io)
 - LRU query cache for `search_graph` and `query_graph`
 
+## Test Conventions
+
+### Zero-value filter activation
+
+When adding a filter field to `SearchParams` (or any struct where callers use `{}` literal construction), the filter MUST activate only on explicitly-set values, not the zero value. Use `> 0` / `!= ""` / `len(x) > 0` as the gate — never `>= 0` on an int field whose zero means "off".
+
+Every new filter field needs a test with `SearchParams{}` default-constructed that asserts the filter is inactive. One line, catches the class of bug that PR #61 hit (MinComplexity=0 from zero-value activated the filter and broke snippet tests).
+
+```go
+func TestSearchParamsZeroValue_<field>_Inactive(t *testing.T) {
+    // With SearchParams{}, <field> is zero; filter must be OFF.
+    results, err := store.Search(ctx, SearchParams{Query: "x"})
+    // ... assert results match baseline (filter not applied)
+}
+```
+
 ## Protected Repo
 
 PR required to merge to main. Use `--repo redacted-org/code-graph` with `gh` CLI.

@@ -29,6 +29,8 @@ func (s *Server) handleSearchGraph(_ context.Context, req *mcp.CallToolRequest) 
 		Direction:          getStringArg(args, "direction"),
 		MinDegree:          getIntArg(args, "min_degree", -1),
 		MaxDegree:          getIntArg(args, "max_degree", -1),
+		MinComplexity:      getIntArg(args, "min_complexity", -1),
+		MaxComplexity:      getIntArg(args, "max_complexity", -1),
 		Limit:              getIntArg(args, "limit", 10),
 		Offset:             getIntArg(args, "offset", 0),
 		ExcludeEntryPoints: getBoolArg(args, "exclude_entry_points"),
@@ -53,10 +55,12 @@ func (s *Server) handleSearchGraph(_ context.Context, req *mcp.CallToolRequest) 
 	includeSource := getBoolArg(args, "include_source")
 
 	// Build cache key from all filter params that affect results
-	cacheKey := fmt.Sprintf("search:%s:%s:%s:%s:%s:%s:%s:%d:%d:%d:%d:%t:%t:%s:%s:%t:%t",
+	cacheKey := fmt.Sprintf("search:%s:%s:%s:%s:%s:%s:%s:%d:%d:%d:%d:%d:%d:%t:%t:%s:%s:%t:%t",
 		getStringArg(args, "project"), params.Label, params.NamePattern, params.QNPattern,
 		params.FilePattern, params.Relationship, params.Direction,
-		params.MinDegree, params.MaxDegree, params.Limit, params.Offset,
+		params.MinDegree, params.MaxDegree,
+		params.MinComplexity, params.MaxComplexity,
+		params.Limit, params.Offset,
 		params.ExcludeEntryPoints, params.IncludeConnected,
 		strings.Join(params.ExcludeLabels, ","), params.SortBy,
 		params.CaseSensitive, includeSource)

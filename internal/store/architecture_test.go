@@ -372,6 +372,108 @@ func TestArchBoundaries(t *testing.T) {
 
 // --- Case-insensitive search tests ---
 
+// TestSearchComplexityFilter covers min/max_complexity filtering.
+//
+// Nodes carry a "complexity" property (cyclomatic complexity from the
+// CBM tree-sitter pass). The filter reads this off Node.Properties and
+// excludes nodes that fall outside the requested range or lack the
+// property when a filter is set.
+func TestSearchComplexityFilter(t *testing.T) {
+	s, err := OpenMemory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+
+	if err := s.UpsertProject("test", "/tmp/test"); err != nil {
+		t.Fatal(err)
+	}
+
+	_, _ = s.UpsertNode(&Node{
+		Project: "test", Label: "Function", Name: "trivial",
+		QualifiedName: "test.trivial",
+		Properties:    map[string]any{"complexity": 1},
+	})
+	_, _ = s.UpsertNode(&Node{
+		Project: "test", Label: "Function", Name: "medium",
+		QualifiedName: "test.medium",
+		Properties:    map[string]any{"complexity": 5},
+	})
+	_, _ = s.UpsertNode(&Node{
+		Project: "test", Label: "Function", Name: "gnarly",
+		QualifiedName: "test.gnarly",
+		Properties:    map[string]any{"complexity": 20},
+	})
+	// Node without a complexity property — should be excluded when any
+	// complexity filter is set, kept otherwise.
+	_, _ = s.UpsertNode(&Node{
+		Project: "test", Label: "Function", Name: "unmeasured",
+		QualifiedName: "test.unmeasured",
+	})
+
+	noFilter, err := s.Search(&SearchParams{
+		Project: "test", Label: "Function",
+		MinDegree: -1, MaxDegree: -1, MinComplexity: -1, MaxComplexity: -1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(noFilter.Results) != 4 {
+		t.Errorf("no filter: expected 4 matches, got %d", len(noFilter.Results))
+	}
+
+	minOnly, err := s.Search(&SearchParams{
+		Project: "test", Label: "Function",
+		MinDegree: -1, MaxDegree: -1, MinComplexity: 5, MaxComplexity: -1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// medium (5) + gnarly (20); trivial (1) below, unmeasured has no complexity.
+	if len(minOnly.Results) != 2 {
+		t.Errorf("min_complexity=5: expected 2 matches, got %d", len(minOnly.Results))
+	}
+
+	maxOnly, err := s.Search(&SearchParams{
+		Project: "test", Label: "Function",
+		MinDegree: -1, MaxDegree: -1, MinComplexity: -1, MaxComplexity: 5,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// trivial (1) + medium (5); gnarly (20) above, unmeasured has no complexity.
+	if len(maxOnly.Results) != 2 {
+		t.Errorf("max_complexity=5: expected 2 matches, got %d", len(maxOnly.Results))
+	}
+
+	both, err := s.Search(&SearchParams{
+		Project: "test", Label: "Function",
+		MinDegree: -1, MaxDegree: -1, MinComplexity: 2, MaxComplexity: 10,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Only medium (5) falls in [2, 10].
+	if len(both.Results) != 1 {
+		t.Errorf("min=2 max=10: expected 1 match, got %d", len(both.Results))
+	}
+	if len(both.Results) == 1 && both.Results[0].Node.Name != "medium" {
+		t.Errorf("min=2 max=10: expected 'medium', got %q", both.Results[0].Node.Name)
+	}
+
+	// Unmeasured node: with min=-1 AND max=-1 it's included; with any bound
+	// set it must be dropped (already asserted above via counts).
+	foundUnmeasuredInNoFilter := false
+	for _, r := range noFilter.Results {
+		if r.Node.Name == "unmeasured" {
+			foundUnmeasuredInNoFilter = true
+		}
+	}
+	if !foundUnmeasuredInNoFilter {
+		t.Error("no filter: expected 'unmeasured' to be included")
+	}
+}
+
 func TestSearchCaseInsensitiveDefault(t *testing.T) {
 	s, err := OpenMemory()
 	if err != nil {

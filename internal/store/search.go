@@ -18,6 +18,8 @@ type SearchParams struct {
 	Direction          string // "inbound", "outbound", "any"
 	MinDegree          int
 	MaxDegree          int
+	MinComplexity      int // -1 = no filter; else require node's `complexity` property >= this
+	MaxComplexity      int // -1 = no filter; else require node's `complexity` property <= this
 	Limit              int
 	Offset             int
 	ExcludeEntryPoints bool     // when true, exclude nodes with is_entry_point=true
@@ -409,6 +411,23 @@ func (s *Store) buildFilteredResults(nodes []*Node, params *SearchParams) ([]*Se
 			continue
 		}
 
+		// Complexity filter activates on > 0 so that zero-value SearchParams{}
+		// (from callers that didn't set these fields) behaves as no-op.
+		// MinComplexity=0 / MaxComplexity=0 as an intended filter is degenerate
+		// (every function has complexity >= 0 trivially), so no user signal lost.
+		if params.MinComplexity > 0 || params.MaxComplexity > 0 {
+			complexity, hasComplexity := nodeComplexity(n)
+			if !hasComplexity {
+				continue
+			}
+			if params.MinComplexity > 0 && complexity < params.MinComplexity {
+				continue
+			}
+			if params.MaxComplexity > 0 && complexity > params.MaxComplexity {
+				continue
+			}
+		}
+
 		if params.ExcludeEntryPoints && isEntryPoint(n) {
 			continue
 		}
@@ -419,6 +438,30 @@ func (s *Store) buildFilteredResults(nodes []*Node, params *SearchParams) ([]*Se
 		results = append(results, sr)
 	}
 	return results, nil
+}
+
+// nodeComplexity reads the cyclomatic-complexity metric off a Node's
+// properties. Complexity is attached during the pipeline's CBM pass (see
+// pipeline/pipeline_cbm.go) as an int property named "complexity". Returns
+// (value, true) if present, (0, false) otherwise — callers use the bool to
+// distinguish "complexity=0" (trivial function) from "no metric available."
+func nodeComplexity(n *Node) (int, bool) {
+	if n == nil || n.Properties == nil {
+		return 0, false
+	}
+	raw, ok := n.Properties["complexity"]
+	if !ok || raw == nil {
+		return 0, false
+	}
+	switch v := raw.(type) {
+	case int:
+		return v, true
+	case int64:
+		return int(v), true
+	case float64:
+		return int(v), true
+	}
+	return 0, false
 }
 
 // extractLikeHints extracts literal substrings from a regex pattern for SQL LIKE pre-filtering.

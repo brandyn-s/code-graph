@@ -868,6 +868,14 @@ func (s *Server) registerSearchTools() {
 					"type": "integer",
 					"description": "Maximum edge count (e.g. 0 for dead code detection)"
 				},
+				"min_complexity": {
+					"type": "integer",
+					"description": "Minimum cyclomatic complexity (e.g. 10 to surface gnarly functions for documentation/refactor focus). Nodes without a complexity property are excluded when this filter is set."
+				},
+				"max_complexity": {
+					"type": "integer",
+					"description": "Maximum cyclomatic complexity (e.g. 5 to surface simple candidates for early documentation). Nodes without a complexity property are excluded when this filter is set."
+				},
 				"exclude_entry_points": {
 					"type": "boolean",
 					"description": "Exclude entry points (route handlers, main(), framework-registered functions) from results. Use with max_degree=0 for accurate dead code detection."

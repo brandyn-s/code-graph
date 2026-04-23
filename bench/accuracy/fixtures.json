@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "description": "SHA-pinned fixtures for code-graph edge-level accuracy measurement. Every fixture must be at the pinned SHA before measurement; the harness exits 2 on drift.",
+  "fixtures": [
+    {
+      "id": "mcp-servers",
+      "path": "C:/Users/user/Documents/GitHub/mcp-servers",
+      "sha": "81fa7d5abe36cac7709c225ce35ad908a9017a0d",
+      "short_sha": "81fa7d5",
+      "languages": ["python"],
+      "entry_points": ["claude-proxy/claude_proxy.py", "crowdstrike/proxy.py", "slack-connect/slack_connect_app.py"],
+      "notes": "Used in exp-008 ground-truth experiment. Python-first fixture; subsequent fixtures will add Go (code-graph itself) and Rust (rmf-corsair).",
+      "edge_types_in_scope": ["CALLS", "IMPORTS", "HTTP_CALLS"]
+    }
+  ]
+}

@@ -100,100 +100,131 @@ static void parse_go_imports(CBMExtractCtx* ctx) {
 // --- Python imports ---
 // import_statement: import X, import X as Y
 // import_from_statement: from X import Y, from X import Y as Z
+//
+// Python imports can appear at ANY depth: module-level, inside functions
+// (lazy imports), inside classes, inside conditionals. The earlier version
+// only scanned direct children of the AST root and missed ~75% of cross-
+// service imports in service code that uses lazy-loading patterns (e.g.,
+// `        from shared.errors import api_error` inside a function body).
+// The current implementation walks the full AST and dispatches each
+// `import_statement` / `import_from_statement` to its handler regardless
+// of depth. Measured gap before the fix (mcp-servers fixture): 10 edges
+// captured vs 42 the AST oracle finds. Expected after fix: match the
+// AST oracle's full set.
 
-static void parse_python_imports(CBMExtractCtx* ctx) {
+static void handle_python_import_statement(CBMExtractCtx* ctx, TSNode node) {
     CBMArena* a = ctx->arena;
-
-    uint32_t count = ts_node_child_count(ctx->root);
-    for (uint32_t i = 0; i < count; i++) {
-        TSNode node = ts_node_child(ctx->root, i);
-        const char* kind = ts_node_type(node);
-
-        if (strcmp(kind, "import_statement") == 0) {
-            // import X [as Y]
-            TSNode name_node = ts_node_child_by_field_name(node, "name", 4);
-            if (ts_node_is_null(name_node)) {
-                // Try children: dotted_name nodes
-                uint32_t nc = ts_node_child_count(node);
-                for (uint32_t j = 0; j < nc; j++) {
-                    TSNode child = ts_node_child(node, j);
-                    const char* ck = ts_node_type(child);
-                    if (strcmp(ck, "dotted_name") == 0 || strcmp(ck, "identifier") == 0) {
-                        char* mod = cbm_node_text(a, child, ctx->source);
-                        if (mod && mod[0]) {
-                            const char* local = path_last(a, mod);
-                            CBMImport imp = {.local_name = local, .module_path = mod};
-                            cbm_imports_push(&ctx->result->imports, a, imp);
-                        }
-                    } else if (strcmp(ck, "aliased_import") == 0) {
-                        TSNode mod_node = ts_node_child_by_field_name(child, "name", 4);
-                        TSNode alias_node = ts_node_child_by_field_name(child, "alias", 5);
-                        if (!ts_node_is_null(mod_node)) {
-                            char* mod = cbm_node_text(a, mod_node, ctx->source);
-                            const char* local = !ts_node_is_null(alias_node) ?
-                                cbm_node_text(a, alias_node, ctx->source) : path_last(a, mod);
-                            CBMImport imp = {.local_name = local, .module_path = mod};
-                            cbm_imports_push(&ctx->result->imports, a, imp);
-                        }
-                    }
-                }
-            } else {
-                char* mod = cbm_node_text(a, name_node, ctx->source);
+    // import X [as Y]
+    TSNode name_node = ts_node_child_by_field_name(node, "name", 4);
+    if (ts_node_is_null(name_node)) {
+        // Try children: dotted_name or aliased_import
+        uint32_t nc = ts_node_child_count(node);
+        for (uint32_t j = 0; j < nc; j++) {
+            TSNode child = ts_node_child(node, j);
+            const char* ck = ts_node_type(child);
+            if (strcmp(ck, "dotted_name") == 0 || strcmp(ck, "identifier") == 0) {
+                char* mod = cbm_node_text(a, child, ctx->source);
                 if (mod && mod[0]) {
-                    CBMImport imp = {.local_name = path_last(a, mod), .module_path = mod};
+                    const char* local = path_last(a, mod);
+                    CBMImport imp = {.local_name = local, .module_path = mod};
+                    cbm_imports_push(&ctx->result->imports, a, imp);
+                }
+            } else if (strcmp(ck, "aliased_import") == 0) {
+                TSNode mod_node = ts_node_child_by_field_name(child, "name", 4);
+                TSNode alias_node = ts_node_child_by_field_name(child, "alias", 5);
+                if (!ts_node_is_null(mod_node)) {
+                    char* mod = cbm_node_text(a, mod_node, ctx->source);
+                    const char* local = !ts_node_is_null(alias_node) ?
+                        cbm_node_text(a, alias_node, ctx->source) : path_last(a, mod);
+                    CBMImport imp = {.local_name = local, .module_path = mod};
                     cbm_imports_push(&ctx->result->imports, a, imp);
                 }
             }
-        } else if (strcmp(kind, "import_from_statement") == 0) {
-            // from X import Y [as Z]
-            TSNode module_node = ts_node_child_by_field_name(node, "module_name", 11);
-            if (ts_node_is_null(module_node)) {
-                // Try alternative field names
-                uint32_t nc = ts_node_child_count(node);
-                for (uint32_t j = 0; j < nc; j++) {
-                    TSNode c = ts_node_child(node, j);
-                    if (strcmp(ts_node_type(c), "dotted_name") == 0 ||
-                        strcmp(ts_node_type(c), "relative_import") == 0) {
-                        module_node = c;
-                        break;
-                    }
-                }
-            }
-            char* mod_path = ts_node_is_null(module_node) ? NULL :
-                cbm_node_text(a, module_node, ctx->source);
+        }
+    } else {
+        char* mod = cbm_node_text(a, name_node, ctx->source);
+        if (mod && mod[0]) {
+            CBMImport imp = {.local_name = path_last(a, mod), .module_path = mod};
+            cbm_imports_push(&ctx->result->imports, a, imp);
+        }
+    }
+}
 
-            // Find imported names
-            uint32_t nc = ts_node_child_count(node);
-            for (uint32_t j = 0; j < nc; j++) {
-                TSNode child = ts_node_child(node, j);
-                const char* ck = ts_node_type(child);
-                if (strcmp(ck, "identifier") == 0 || strcmp(ck, "dotted_name") == 0) {
-                    // Skip the module name node
-                    if (!ts_node_is_null(module_node) &&
-                        ts_node_start_byte(child) == ts_node_start_byte(module_node)) continue;
-                    char* name = cbm_node_text(a, child, ctx->source);
-                    if (name && name[0]) {
-                        const char* full = mod_path ?
-                            cbm_arena_sprintf(a, "%s.%s", mod_path, name) : name;
-                        CBMImport imp = {.local_name = name, .module_path = full};
-                        cbm_imports_push(&ctx->result->imports, a, imp);
-                    }
-                } else if (strcmp(ck, "aliased_import") == 0) {
-                    TSNode name_n = ts_node_child_by_field_name(child, "name", 4);
-                    TSNode alias_n = ts_node_child_by_field_name(child, "alias", 5);
-                    if (!ts_node_is_null(name_n)) {
-                        char* name = cbm_node_text(a, name_n, ctx->source);
-                        const char* local = !ts_node_is_null(alias_n) ?
-                            cbm_node_text(a, alias_n, ctx->source) : name;
-                        const char* full = mod_path ?
-                            cbm_arena_sprintf(a, "%s.%s", mod_path, name) : name;
-                        CBMImport imp = {.local_name = local, .module_path = full};
-                        cbm_imports_push(&ctx->result->imports, a, imp);
-                    }
-                }
+static void handle_python_import_from_statement(CBMExtractCtx* ctx, TSNode node) {
+    CBMArena* a = ctx->arena;
+    // from X import Y [as Z]
+    TSNode module_node = ts_node_child_by_field_name(node, "module_name", 11);
+    if (ts_node_is_null(module_node)) {
+        // Try alternative field names
+        uint32_t nc = ts_node_child_count(node);
+        for (uint32_t j = 0; j < nc; j++) {
+            TSNode c = ts_node_child(node, j);
+            if (strcmp(ts_node_type(c), "dotted_name") == 0 ||
+                strcmp(ts_node_type(c), "relative_import") == 0) {
+                module_node = c;
+                break;
             }
         }
     }
+    char* mod_path = ts_node_is_null(module_node) ? NULL :
+        cbm_node_text(a, module_node, ctx->source);
+
+    // Find imported names
+    uint32_t nc = ts_node_child_count(node);
+    for (uint32_t j = 0; j < nc; j++) {
+        TSNode child = ts_node_child(node, j);
+        const char* ck = ts_node_type(child);
+        if (strcmp(ck, "identifier") == 0 || strcmp(ck, "dotted_name") == 0) {
+            // Skip the module name node
+            if (!ts_node_is_null(module_node) &&
+                ts_node_start_byte(child) == ts_node_start_byte(module_node)) continue;
+            char* name = cbm_node_text(a, child, ctx->source);
+            if (name && name[0]) {
+                const char* full = mod_path ?
+                    cbm_arena_sprintf(a, "%s.%s", mod_path, name) : name;
+                CBMImport imp = {.local_name = name, .module_path = full};
+                cbm_imports_push(&ctx->result->imports, a, imp);
+            }
+        } else if (strcmp(ck, "aliased_import") == 0) {
+            TSNode name_n = ts_node_child_by_field_name(child, "name", 4);
+            TSNode alias_n = ts_node_child_by_field_name(child, "alias", 5);
+            if (!ts_node_is_null(name_n)) {
+                char* name = cbm_node_text(a, name_n, ctx->source);
+                const char* local = !ts_node_is_null(alias_n) ?
+                    cbm_node_text(a, alias_n, ctx->source) : name;
+                const char* full = mod_path ?
+                    cbm_arena_sprintf(a, "%s.%s", mod_path, name) : name;
+                CBMImport imp = {.local_name = local, .module_path = full};
+                cbm_imports_push(&ctx->result->imports, a, imp);
+            }
+        }
+    }
+}
+
+// Recursive walker: visit `node` and every descendant; dispatch each
+// import statement to its handler. This catches deferred/lazy imports
+// nested inside functions, conditionals, try/except blocks, etc. — the
+// pattern used heavily in mcp-servers/airlock for cross-service
+// `from shared.* import *` calls.
+static void walk_python_imports(CBMExtractCtx* ctx, TSNode node) {
+    const char* kind = ts_node_type(node);
+    if (strcmp(kind, "import_statement") == 0) {
+        handle_python_import_statement(ctx, node);
+        // Import statements are leaves for our purposes; don't recurse.
+        return;
+    }
+    if (strcmp(kind, "import_from_statement") == 0) {
+        handle_python_import_from_statement(ctx, node);
+        return;
+    }
+    uint32_t count = ts_node_child_count(node);
+    for (uint32_t i = 0; i < count; i++) {
+        walk_python_imports(ctx, ts_node_child(node, i));
+    }
+}
+
+static void parse_python_imports(CBMExtractCtx* ctx) {
+    walk_python_imports(ctx, ctx->root);
 }
 
 // --- ES module imports (JS/TS/TSX) ---

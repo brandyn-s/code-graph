@@ -14,7 +14,7 @@ Three metrics per edge type:
 | Edge type | Oracle | Oracle / Measured | Exact P/R/F1 | Suffix-3 P/R/F1 | Scope-aligned P/R/F1 |
 |---|---|---|---|---|---|
 | CALLS | pycg | 371 / 549 | 0.665 / 0.984 / 0.793 | 0.675 / 0.997 / 0.805 | 0.979 / 0.984 / 0.981 |
-| IMPORTS | ast | 42 / 10 | 1.000 / 0.238 / 0.385 | 0.000 / 0.000 / 0.000 | 1.000 / 0.238 / 0.385 |
+| IMPORTS | ast | 42 / 42 | 1.000 / 1.000 / 1.000 | 0.000 / 0.000 / 0.000 | 1.000 / 1.000 / 1.000 |
 | HTTP_CALLS | opus+sonnet | 411 / 0 | 0.000 / 0.000 / 0.000 | 0.000 / 0.000 / 0.000 | 0.000 / 0.000 / 0.000 |
 
 ## Samples (first 10 per edge type)
@@ -79,16 +79,6 @@ Oracle analyzed callers: 31
 
 **Scope-aligned false negatives** (oracle recorded, code-graph did NOT):
 ```
-  airlock.airlock_mcp_server --> shared.errors
-  airlock.airlock_mcp_server --> shared.mcp_http
-  claude_compliance.claude_compliance_mcp --> shared.errors
-  claude_compliance.claude_compliance_mcp --> shared.mcp_http
-  claude_platform.claude_platform_mcp --> shared.errors
-  claude_platform.claude_platform_mcp --> shared.mcp_http
-  confluence.confluence_fedramp_mcp --> shared.mcp_http
-  crowdstrike.proxy --> shared.mcp_http
-  crowdstrike.proxy --> shared.opa_middleware
-  github.github_mcp --> shared.mcp_http
 ```
 
 **Raw-exact false positives (may include out-of-scope callers)**:
@@ -97,16 +87,6 @@ Oracle analyzed callers: 31
 
 **Raw-exact false negatives**:
 ```
-  airlock.airlock_mcp_server --> shared.errors
-  airlock.airlock_mcp_server --> shared.mcp_http
-  claude_compliance.claude_compliance_mcp --> shared.errors
-  claude_compliance.claude_compliance_mcp --> shared.mcp_http
-  claude_platform.claude_platform_mcp --> shared.errors
-  claude_platform.claude_platform_mcp --> shared.mcp_http
-  confluence.confluence_fedramp_mcp --> shared.mcp_http
-  crowdstrike.proxy --> shared.mcp_http
-  crowdstrike.proxy --> shared.opa_middleware
-  github.github_mcp --> shared.mcp_http
 ```
 
 ### HTTP_CALLS

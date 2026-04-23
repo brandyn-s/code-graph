@@ -57,13 +57,17 @@ def module_qn_for_file(service_prefix: str, service_root: Path, file_path: Path)
     service_root/foo/bar.py       → <prefix>.foo.bar
     service_root/foo/__init__.py  → <prefix>.foo
     service_root/main.py          → <prefix>.main
+
+    Preserves hyphens in service names (e.g., `claude-compliance`) because
+    code-graph's QN format keeps the directory name verbatim. Earlier versions
+    replaced `-` with `_` for Python-import-path compatibility, but that
+    created a normalization mismatch with code-graph producing FP/FN noise.
     """
     rel = file_path.relative_to(service_root)
     parts = list(rel.with_suffix("").parts)
     if parts and parts[-1] == "__init__":
         parts = parts[:-1]
-    prefix = service_prefix.replace("-", "_")
-    return ".".join([prefix] + parts) if parts else prefix
+    return ".".join([service_prefix] + parts) if parts else service_prefix
 
 
 def resolve_relative(base_qn: str, level: int, module: str | None) -> str:

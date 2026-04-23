@@ -197,15 +197,15 @@
     "IMPORTS": {
       "oracle": "ast",
       "oracle_count": 42,
-      "measured_count": 10,
+      "measured_count": 42,
       "oracle_caller_count": 31,
       "exact": {
-        "tp": 10,
+        "tp": 42,
         "fp": 0,
-        "fn": 32,
+        "fn": 0,
         "precision": 1.0,
-        "recall": 0.2381,
-        "f1": 0.3846
+        "recall": 1.0,
+        "f1": 1.0
       },
       "suffix_3seg": {
         "tp": 0,
@@ -216,119 +216,17 @@
         "f1": 0.0
       },
       "scope_aligned": {
-        "tp": 10,
+        "tp": 42,
         "fp": 0,
-        "fn": 32,
+        "fn": 0,
         "precision": 1.0,
-        "recall": 0.2381,
-        "f1": 0.3846
+        "recall": 1.0,
+        "f1": 1.0
       },
       "sample_fp_exact": [],
-      "sample_fn_exact": [
-        [
-          "airlock.airlock_mcp_server",
-          "shared.errors",
-          "IMPORTS"
-        ],
-        [
-          "airlock.airlock_mcp_server",
-          "shared.mcp_http",
-          "IMPORTS"
-        ],
-        [
-          "claude_compliance.claude_compliance_mcp",
-          "shared.errors",
-          "IMPORTS"
-        ],
-        [
-          "claude_compliance.claude_compliance_mcp",
-          "shared.mcp_http",
-          "IMPORTS"
-        ],
-        [
-          "claude_platform.claude_platform_mcp",
-          "shared.errors",
-          "IMPORTS"
-        ],
-        [
-          "claude_platform.claude_platform_mcp",
-          "shared.mcp_http",
-          "IMPORTS"
-        ],
-        [
-          "confluence.confluence_fedramp_mcp",
-          "shared.mcp_http",
-          "IMPORTS"
-        ],
-        [
-          "crowdstrike.proxy",
-          "shared.mcp_http",
-          "IMPORTS"
-        ],
-        [
-          "crowdstrike.proxy",
-          "shared.opa_middleware",
-          "IMPORTS"
-        ],
-        [
-          "github.github_mcp",
-          "shared.mcp_http",
-          "IMPORTS"
-        ]
-      ],
+      "sample_fn_exact": [],
       "sample_fp_scoped": [],
-      "sample_fn_scoped": [
-        [
-          "airlock.airlock_mcp_server",
-          "shared.errors",
-          "IMPORTS"
-        ],
-        [
-          "airlock.airlock_mcp_server",
-          "shared.mcp_http",
-          "IMPORTS"
-        ],
-        [
-          "claude_compliance.claude_compliance_mcp",
-          "shared.errors",
-          "IMPORTS"
-        ],
-        [
-          "claude_compliance.claude_compliance_mcp",
-          "shared.mcp_http",
-          "IMPORTS"
-        ],
-        [
-          "claude_platform.claude_platform_mcp",
-          "shared.errors",
-          "IMPORTS"
-        ],
-        [
-          "claude_platform.claude_platform_mcp",
-          "shared.mcp_http",
-          "IMPORTS"
-        ],
-        [
-          "confluence.confluence_fedramp_mcp",
-          "shared.mcp_http",
-          "IMPORTS"
-        ],
-        [
-          "crowdstrike.proxy",
-          "shared.mcp_http",
-          "IMPORTS"
-        ],
-        [
-          "crowdstrike.proxy",
-          "shared.opa_middleware",
-          "IMPORTS"
-        ],
-        [
-          "github.github_mcp",
-          "shared.mcp_http",
-          "IMPORTS"
-        ]
-      ]
+      "sample_fn_scoped": []
     },
     "HTTP_CALLS": {
       "oracle": "opus+sonnet",

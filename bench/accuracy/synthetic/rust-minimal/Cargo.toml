@@ -1,0 +1,13 @@
+[package]
+name = "rust-minimal"
+version = "0.0.1"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "rust-minimal"
+path = "src/main.rs"
+
+[lib]
+name = "rust_minimal"
+path = "src/lib.rs"

@@ -1,0 +1,19 @@
+[package]
+name = "oracle-rust-syn"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# Standalone helper binary used by bench/accuracy/oracle_rust_syn.py as the
+# Rust CALLS+IMPORTS ground-truth oracle. Kept OUT of the main code-graph
+# Cargo workspace so it doesn't pull syn into the production build.
+
+[[bin]]
+name = "oracle-rust-syn"
+path = "src/main.rs"
+
+[dependencies]
+syn = { version = "2.0", features = ["full", "visit"] }
+walkdir = "2.5"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"

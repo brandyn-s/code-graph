@@ -1,0 +1,16 @@
+{
+  "description": "Hand-authored ground truth for rust-minimal synthetic fixture. Every edge is observable in source. Used by the prove-the-instrument gate before running real baselines.",
+  "expected_internal_calls": [
+    {"from_qn": "rust-minimal.src.main.entry",            "to_qn": "square"},
+    {"from_qn": "rust-minimal.src.main.entry",            "to_qn": "greet"},
+    {"from_qn": "rust-minimal.src.main.entry",            "to_qn": "leaf"},
+    {"from_qn": "rust-minimal.src.main.leaf",             "to_qn": "helper"},
+    {"from_qn": "rust-minimal.src.main.main",             "to_qn": "entry"},
+    {"from_qn": "rust_minimal.src.lib.helpers.greet",     "to_qn": "inner_greet"}
+  ],
+  "expected_internal_imports": [
+    {"from_qn": "rust-minimal.src.main", "to_qn": "rust_minimal.helpers.greet"},
+    {"from_qn": "rust-minimal.src.main", "to_qn": "rust_minimal.math.square"}
+  ],
+  "notes": "6 internal CALLS, 2 internal IMPORTS. The workspace has 2 crates ('rust-minimal' and 'rust_minimal'): the bin and lib share the same Cargo.toml but the oracle sees them as 2 crate-like units because they're 2 Cargo [[bin]]/[lib] targets. Free-function callee names (square, greet, leaf, helper, entry, inner_greet) are bare syntactic paths — the internal-fn-defs set catches them. 'greet' is imported from rust_minimal::helpers::greet and called as `greet(\"world\")` — oracle will emit bare `greet`, the fn-defs set contains 'greet', keeps it."
+}

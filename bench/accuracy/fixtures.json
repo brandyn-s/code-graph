@@ -9,8 +9,28 @@
       "short_sha": "81fa7d5",
       "languages": ["python"],
       "entry_points": ["claude-proxy/claude_proxy.py", "crowdstrike/proxy.py", "slack-connect/slack_connect_app.py"],
-      "notes": "Used in exp-008 ground-truth experiment. Python-first fixture; subsequent fixtures will add Go (code-graph itself) and Rust (rmf-corsair).",
+      "notes": "Python-first fixture. Baseline: CALLS F1=0.981, IMPORTS F1=1.000 (scope-aligned).",
       "edge_types_in_scope": ["CALLS", "IMPORTS", "HTTP_CALLS"]
+    },
+    {
+      "id": "psm-rust",
+      "path": "C:/Users/user/Documents/GitHub/psm",
+      "sha": "aa4584e2af8e5451ce1d8f81db2323d0493a07eb",
+      "short_sha": "aa4584e",
+      "languages": ["rust"],
+      "subset": ["canstatd", "calibration/calibd", "adsbd", "apid", "assetman"],
+      "notes": "Rust fixture on real redacted monorepo. Subset picked for structural variance: tiny pure-logic (canstatd 88 LOC) -> small async (calibd 184 LOC) -> monolithic (adsbd 631 LOC) -> large async-heavy (apid 6649 LOC, 52 files) -> macro/trait-heavy largest (assetman 20022 LOC, 118 files). Read-only per feedback memory.",
+      "edge_types_in_scope": ["CALLS", "IMPORTS"]
+    },
+    {
+      "id": "code-graph-go",
+      "path": "C:/Users/user/Documents/GitHub/code-graph",
+      "sha": "09ad069b0c173e82db3a972d6a78f84fb44140e4",
+      "short_sha": "09ad069",
+      "languages": ["go"],
+      "subset": ["internal/store", "internal/cypher", "internal/pipeline", "internal/tools", "internal/cbm"],
+      "notes": "Self-hosting Go fixture on code-graph itself. Originally planned psm/auth-gateway but that module has sqlc-generated types that aren't checked in, so Go RTA fails type-checking. code-graph is a ~90% Go codebase that type-checks cleanly. Subset picked for variance: store (SQLite CRUD), cypher (parser+executor), pipeline (multi-pass orchestrator), tools (MCP handlers), cbm (CGO bridge).",
+      "edge_types_in_scope": ["CALLS", "IMPORTS"]
     }
   ]
 }

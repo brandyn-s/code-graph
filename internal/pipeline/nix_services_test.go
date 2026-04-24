@@ -207,6 +207,52 @@ func TestExtractSubmsgTopics(t *testing.T) {
 	}
 }
 
+// TestParseNixServiceFile_ConditionalSubTopics covers the apid.nix pattern
+// of `default = [ ... ] ++ (if X then [...] else [...]) ++ lib.optionals Y [...]`.
+func TestParseNixServiceFile_ConditionalSubTopics(t *testing.T) {
+	t.Parallel()
+
+	src := `{ config, lib, pkgs, ... }:
+{
+  options.redacted.services.apid = {
+    baf.sub_topics = mkOption {
+      type = types.listOf types.str;
+      default = [
+        "always_a"
+        "always_b"
+      ]
+      ++ (if cfg.use_fuser then [ "fuserd" ] else [ "trackerd" ])
+      ++ (if cfg.lift_enabled then [ "lift" "lift-aux" ] else [ ])
+      ++ lib.optionals cfg.extras [ "extra_x" ];
+    };
+  };
+}`
+
+	info := parseNixServiceFile(src)
+
+	wantBase := []string{"always_a", "always_b"}
+	if !reflect.DeepEqual(info.subTopics, wantBase) {
+		t.Errorf("subTopics (base): want %v got %v", wantBase, info.subTopics)
+	}
+
+	wantCond := map[string]bool{
+		"fuserd":   true,
+		"trackerd": true,
+		"lift":     true,
+		"lift-aux": true,
+		"extra_x":  true,
+	}
+	if len(info.conditionalSubTopics) != len(wantCond) {
+		t.Errorf("conditional count: want %d got %d (%v)",
+			len(wantCond), len(info.conditionalSubTopics), info.conditionalSubTopics)
+	}
+	for _, t2 := range info.conditionalSubTopics {
+		if !wantCond[t2] {
+			t.Errorf("unexpected conditional topic: %q", t2)
+		}
+	}
+}
+
 // TestUniqueStrings sanity check.
 func TestUniqueStrings(t *testing.T) {
 	t.Parallel()

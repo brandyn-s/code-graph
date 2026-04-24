@@ -64,9 +64,23 @@ var (
 	)
 
 	// baf.sub_topics = mkOption { ... default = [ "a" "b" "c" ]; ... }
-	// Captures the list contents between [ and ].
+	// Captures the FIRST `[ ... ]` — used as the base literal list, which
+	// downstream code marks as EXTRACTED (confident) confidence tier.
 	reNixBafSubTopicsList = regexp.MustCompile(
 		`(?s)baf\.sub_topics\s*=\s*mkOption\s*\{[^}]*?default\s*=\s*\[([^\]]*)\]`,
+	)
+
+	// baf.sub_topics whole default expression, including conditional appends
+	// and lib.optional(s) patterns:
+	//   default = [ "a" "b" ]
+	//     ++ (if c then [ "d" ] else [ "e" ])
+	//     ++ lib.optionals foo [ "f" "g" ];
+	// Captures from `default = ` up to the terminating `;` — Nix doesn't
+	// use `;` inside string literals at this level, so `[^;]+` is safe.
+	// Used to surface conditional topics (AMBIGUOUS tier, since only ONE
+	// branch of if/else is taken at runtime).
+	reNixBafSubTopicsFullExpr = regexp.MustCompile(
+		`(?s)baf\.sub_topics\s*=\s*mkOption\s*\{[^}]*?default\s*=\s*([^;]+);`,
 	)
 
 	// redacted.services.<NAME>.additional_sub_topics = [ "X" "Y" ];
@@ -107,7 +121,12 @@ var (
 type nixServiceInfo struct {
 	serviceName string   // from options.redacted.services.<name>
 	pubTopic    string   // "" if not declared
-	subTopics   []string // base list, excluding conditional appends
+	subTopics   []string // base literal list only (unconditional)
+	// conditionalSubTopics: additional topics from `++ (if ...)` or
+	// `++ lib.optional(s)` tails. Only ONE branch of each if/else is
+	// taken at runtime, but all branches are captured as a union since
+	// the graph can't know which. Marked AMBIGUOUS downstream.
+	conditionalSubTopics []string
 	// Imperative references from systemd scripts
 	impPubTopics []string
 	impSubTopics []string
@@ -197,7 +216,14 @@ func (p *Pipeline) passNixServices() {
 					edgeCount++
 				}
 			}
-			for _, topic := range uniqueStrings(append(append([]string{}, info.subTopics...), info.impSubTopics...)) {
+			// Unconditional subs: base literal list + imperative script refs.
+			// EXTRACTED confidence since always subscribed.
+			baseSubs := uniqueStrings(append(append([]string{}, info.subTopics...), info.impSubTopics...))
+			baseSubSet := make(map[string]struct{}, len(baseSubs))
+			for _, t := range baseSubs {
+				baseSubSet[t] = struct{}{}
+			}
+			for _, topic := range baseSubs {
 				if topic == "" {
 					continue
 				}
@@ -214,6 +240,25 @@ func (p *Pipeline) passNixServices() {
 					}
 				}
 				if p.insertNixEdge(serviceID, topicID, "SUBSCRIBES_TO", declarative, relPath) {
+					edgeCount++
+				}
+			}
+			// Conditional subs from `++ (if ...)` tails. Only one branch is
+			// taken at runtime — emit as AMBIGUOUS tier, skip topics already
+			// covered by the unconditional set.
+			for _, topic := range uniqueStrings(info.conditionalSubTopics) {
+				if topic == "" {
+					continue
+				}
+				if _, seen := baseSubSet[topic]; seen {
+					continue
+				}
+				topicID, ok := p.upsertNixTopic(topic, relPath)
+				if !ok {
+					continue
+				}
+				topicCount++
+				if p.insertNixConditionalEdge(serviceID, topicID, "SUBSCRIBES_TO", relPath) {
 					edgeCount++
 				}
 			}
@@ -265,9 +310,30 @@ func parseNixServiceFile(source string) nixServiceInfo {
 		info.pubTopic = m[1]
 	}
 
-	// Declarative sub topics
+	// Declarative sub topics — base literal list (always subscribed).
 	if m := reNixBafSubTopicsList.FindStringSubmatch(source); len(m) == 2 {
 		info.subTopics = extractNixStringList(m[1])
+	}
+
+	// Conditional sub topics — topics from `++ (if ...)` or `++ lib.optional(s)`
+	// tails. Computed as the full-expression topic set MINUS the base list.
+	if m := reNixBafSubTopicsFullExpr.FindStringSubmatch(source); len(m) == 2 {
+		allTopics := extractNixStringList(m[1])
+		baseSet := make(map[string]struct{}, len(info.subTopics))
+		for _, t := range info.subTopics {
+			baseSet[t] = struct{}{}
+		}
+		seen := make(map[string]struct{})
+		for _, t := range allTopics {
+			if _, inBase := baseSet[t]; inBase {
+				continue
+			}
+			if _, dup := seen[t]; dup {
+				continue
+			}
+			seen[t] = struct{}{}
+			info.conditionalSubTopics = append(info.conditionalSubTopics, t)
+		}
 	}
 
 	// additional_sub_topics (often on OTHER services in common config files)
@@ -465,6 +531,29 @@ func (p *Pipeline) insertNixEdge(srcID, tgtID int64, edgeType string, declarativ
 			"source":           "nix",
 			"declarative":      declarative,
 			"confidence_tier":  tier,
+			"declared_in_file": declaredIn,
+		},
+	}
+	_, err := p.Store.InsertEdge(edge)
+	return err == nil
+}
+
+// insertNixConditionalEdge emits a topic edge for a conditional append
+// (`++ (if ...)` / `++ lib.optional(s)`). Marked AMBIGUOUS because only
+// one branch executes at runtime; the graph captures all branches as a
+// union. Callers (e.g., documentation pipelines) should filter on
+// `r.conditional = false` when they need "always active" relationships.
+func (p *Pipeline) insertNixConditionalEdge(srcID, tgtID int64, edgeType, declaredIn string) bool {
+	edge := &store.Edge{
+		Project:  p.ProjectName,
+		SourceID: srcID,
+		TargetID: tgtID,
+		Type:     edgeType,
+		Properties: map[string]any{
+			"source":           "nix",
+			"declarative":      true,
+			"conditional":      true,
+			"confidence_tier":  store.ConfidenceAmbiguous,
 			"declared_in_file": declaredIn,
 		},
 	}

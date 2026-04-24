@@ -198,6 +198,83 @@ func TestZenohSiteProperties(t *testing.T) {
 	}
 }
 
+// TestFindZenohSites_BuilderPattern covers .with_rel_topic() / .with_abs_topic()
+// builder invocations. Emits as Publisher role with AMBIGUOUS tier.
+func TestFindZenohSites_BuilderPattern(t *testing.T) {
+	t.Parallel()
+
+	src := `
+async fn main() -> Result<()> {
+    let p = AsyncPublisher::builder(&session)
+        .with_rel_topic("nav/heading")
+        .with_encoding(Encoding::APPLICATION_CBOR)
+        .build()
+        .await?;
+
+    let q = AsyncPublisher::builder(&session)
+        .with_abs_topic("asset/sg1/raw")
+        .build()
+        .await?;
+}
+`
+	sites := findZenohSites(src)
+	if len(sites) != 2 {
+		t.Fatalf("want 2 builder sites, got %d: %v", len(sites), sites)
+	}
+	for _, s := range sites {
+		if s.role != "Publisher" {
+			t.Errorf("role: want Publisher got %q", s.role)
+		}
+		if !s.ambiguous {
+			t.Errorf("ambiguous: want true got false for site %+v", s)
+		}
+	}
+	topics := map[string]bool{sites[0].topic: true, sites[1].topic: true}
+	if !topics["nav/heading"] || !topics["asset/sg1/raw"] {
+		t.Errorf("topics: want both, got %v", topics)
+	}
+}
+
+// TestFindZenohSites_ConstResolution covers non-literal topic args being
+// resolved against file-local const/static declarations.
+func TestFindZenohSites_ConstResolution(t *testing.T) {
+	t.Parallel()
+
+	src := `
+pub const CAN_STATUS: &str = "can_status";
+static NAV_TOPIC: &'static str = "nav/gps";
+const UNREFERENCED: &str = "unused";
+
+async fn main() -> Result<()> {
+    let p1 = AsyncPublisher::new(&s, CAN_STATUS).await?;
+    let p2 = SyncPublisher::new_external(&s, NAV_TOPIC, "sg1")?;
+    // Unreferenced identifier — not in const table.
+    let p3 = AsyncPublisher::new(&s, UNKNOWN_VAR).await?;
+}
+`
+	sites := findZenohSites(src)
+	topicsByRole := make(map[string][]string)
+	for _, s := range sites {
+		if s.ambiguous {
+			topicsByRole[s.role] = append(topicsByRole[s.role], s.topic)
+		}
+	}
+
+	// Expect 2 resolved Publisher sites (CAN_STATUS, NAV_TOPIC). Third
+	// (UNKNOWN_VAR) is not in const table and should be skipped.
+	if len(topicsByRole["Publisher"]) != 2 {
+		t.Errorf("resolved Publisher count: want 2 got %d: %v",
+			len(topicsByRole["Publisher"]), topicsByRole["Publisher"])
+	}
+	resolved := make(map[string]bool)
+	for _, t2 := range topicsByRole["Publisher"] {
+		resolved[t2] = true
+	}
+	if !resolved["can_status"] || !resolved["nav/gps"] {
+		t.Errorf("want resolved can_status + nav/gps, got %v", resolved)
+	}
+}
+
 // TestZenohEdgeType ensures role → edge type mapping is exhaustive.
 func TestZenohEdgeType(t *testing.T) {
 	t.Parallel()

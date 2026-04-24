@@ -1,0 +1,51 @@
+{
+  "_comment": "Hand-verified ground truth for a subset of psm Nix modules. Each entry was manually read from the source file and transcribed. This provides an INDEPENDENT check against the regex-based oracle_nix_pubsub.py, which shares patterns with the Go extractor and therefore produces inflated (~1.0) F1 against the same extractor.",
+  "_caveat": "Small (~5 services) — adequate to catch systemic extraction bugs, not a statistical recall baseline. Expanding the set is a reasonable follow-up.",
+  "_generated_for_repo": "psm @ 2026-04-24",
+
+  "services": [
+    {
+      "service": "canstatd",
+      "source_file": "nix/modules/canstatd.nix",
+      "pub_topics": ["canstatd"],
+      "sub_topics": [],
+      "pub_source": "imperative (hardcoded `pubmsg canstatd` in script; no baf.pub_topic mkOption)"
+    },
+    {
+      "service": "appliedd",
+      "source_file": "nix/modules/appliedd.nix",
+      "pub_topics": ["sbfd"],
+      "sub_topics": ["baf-test", "controlsd"],
+      "pub_source": "declarative (baf.pub_topic default = \"sbfd\" — legacy name override)",
+      "sub_source": "declarative (baf.sub_topics default = [ \"baf-test\" \"controlsd\" ])"
+    },
+    {
+      "service": "berriesd",
+      "source_file": "nix/modules/berriesd.nix",
+      "pub_topics": ["berriesd"],
+      "sub_topics": ["apid", "torchyd2", "garminaisd", "nmeaconvd", "tocarod", "sbfd", "swarmd"],
+      "pub_source": "declarative baf.pub_topic",
+      "sub_source": "declarative baf.sub_topics default list"
+    },
+    {
+      "service": "apid",
+      "source_file": "nix/modules/apid.nix",
+      "pub_topics": ["apid"],
+      "sub_topics": [
+        "appliedd", "baf-test", "battmond", "compassd", "controlsd",
+        "ebraked", "emcond", "gypsyd", "missiond", "netmand",
+        "pentad", "saftd", "sbfd", "seastated", "stated",
+        "takd", "tocarod", "torchyd2", "trajd", "vmond",
+        "vmond_perception"
+      ],
+      "sub_source": "declarative baf.sub_topics base list only (21 entries). Excludes conditional ++ appends for fuserd/trackerd, lift/lift-aux-fuel, haild, payload."
+    },
+    {
+      "service": "trackerd",
+      "source_file": "nix/modules/trackerd.nix + nix/hardware/common/nazgul-radar-services.nix",
+      "pub_topics": ["trackerd"],
+      "sub_topics_partial_note": "The trackerd module has its own sub_topics list; additional topic \"simd\" is added cross-file via nix/hardware/common/nazgul-radar-services.nix  `redacted.services.trackerd.additional_sub_topics = [ \"simd\" ]`. Verify both files are captured.",
+      "must_include_in_sub_topics": ["simd"]
+    }
+  ]
+}

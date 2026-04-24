@@ -76,6 +76,33 @@ var (
 	reQueryableNew = regexp.MustCompile(
 		`(?m)(Async|Sync)Queryable(Fifo|Ring)?::(new|new_external|new_unrestricted)\s*\(\s*[^,]+,\s*"([^"]+)"`,
 	)
+
+	// Publisher builder pattern: `.with_rel_topic("X")` or `.with_abs_topic("X")`.
+	// Only Publisher variants have builder() in libio (Subscriber/Querier/
+	// Queryable use direct new/new_*). Emitted as Publisher role — if a
+	// non-Publisher type adopts this method name downstream, the AMBIGUOUS
+	// confidence tier flags it for re-verification.
+	reBuilderWithTopic = regexp.MustCompile(
+		`(?m)\.with_(rel|abs)_topic\s*\(\s*"([^"]+)"`,
+	)
+
+	// Rust const/static string declarations — used to resolve non-literal
+	// topic arguments. Matches patterns like:
+	//   const CAN_STATUS: &str = "can_status";
+	//   static CAN_STATUS: &'static str = "can_status";
+	//   pub const CAN_STATUS: &str = "can_status";
+	// The `(?m)^` anchor + optional `pub(?:\(crate\))?` prefix covers the
+	// common declaration forms while requiring line-start to avoid false
+	// matches inside function bodies.
+	reRustStrConst = regexp.MustCompile(
+		`(?m)^\s*(?:pub(?:\([^)]*\))?\s+)?(?:const|static)\s+([A-Z][A-Z0-9_]*)\s*:\s*&(?:'static\s+)?str\s*=\s*"([^"]+)"`,
+	)
+
+	// Publisher/Subscriber/Querier/Queryable new* with a bare IDENT topic
+	// (instead of a quoted literal). Used to feed variable resolution.
+	reZenohNewWithIdent = regexp.MustCompile(
+		`(?m)(Async|Sync)(Publisher|Subscriber|Querier|Queryable)(?:Throttled|Fifo|Ring)?::(new|new_external|new_unrestricted)\s*\(\s*[^,]+,\s*([A-Z][A-Z0-9_]*)\b`,
+	)
 )
 
 // zenohSite is one detected pub/sub/query declaration.
@@ -87,6 +114,10 @@ type zenohSite struct {
 	scope      string // "local" | "external" | "absolute"
 	throttled  bool
 	bufferType string // "fifo" | "ring" | ""
+	// ambiguous flags a site whose role/topic could not be fully verified
+	// (e.g., builder-pattern matches without a typed context). Downstream
+	// insertNixEdge-equivalent tags the edge with AMBIGUOUS confidence.
+	ambiguous bool
 }
 
 // passZenoh scans .rs files under RepoPath for libio::zenoh creation sites.
@@ -179,11 +210,18 @@ func (p *Pipeline) passZenoh() {
 			if edgeType == "" {
 				continue
 			}
+			tier := store.ConfidenceExtracted
+			if site.ambiguous {
+				tier = store.ConfidenceAmbiguous
+			}
 			props := map[string]any{
 				"method":          site.method,
 				"scope":           site.scope,
 				"line":            site.line,
-				"confidence_tier": store.ConfidenceExtracted,
+				"confidence_tier": tier,
+			}
+			if site.ambiguous {
+				props["ambiguous"] = true
 			}
 			if site.throttled {
 				props["throttled"] = true
@@ -218,6 +256,14 @@ func (p *Pipeline) passZenoh() {
 // source fixtures.
 func findZenohSites(source string) []zenohSite {
 	var sites []zenohSite
+
+	// Build file-local const/static → string table for variable resolution.
+	// Scoped to same file only; cross-file resolution requires IMPORTS
+	// graph traversal which is a later enhancement.
+	constTopics := make(map[string]string)
+	for _, m := range reRustStrConst.FindAllStringSubmatch(source, -1) {
+		constTopics[m[1]] = m[2]
+	}
 
 	for _, m := range rePublisherNew.FindAllStringSubmatchIndex(source, -1) {
 		throttled := captureAt(source, m, 2) == "Throttled"
@@ -283,6 +329,49 @@ func findZenohSites(source string) []zenohSite {
 			method:     method,
 			scope:      zenohScope(method, topic),
 			bufferType: strings.ToLower(bufTypeStr),
+		})
+	}
+
+	// IDENT-form new* calls — `Publisher::new(s, CAN_STATUS)`. Resolve
+	// the identifier against the file-local const table. Skip unresolved
+	// idents since we can't infer the topic; later cross-file resolution
+	// could catch these.
+	for _, m := range reZenohNewWithIdent.FindAllStringSubmatchIndex(source, -1) {
+		kind := source[m[4]:m[5]] // Publisher | Subscriber | Querier | Queryable
+		method := source[m[6]:m[7]]
+		ident := source[m[8]:m[9]]
+		topic, ok := constTopics[ident]
+		if !ok {
+			continue
+		}
+		sites = append(sites, zenohSite{
+			role:      kind,
+			topic:     topic,
+			line:      lineOf(source, m[0]),
+			method:    method,
+			scope:     zenohScope(method, topic),
+			ambiguous: true,
+		})
+	}
+
+	// Builder pattern — `.with_rel_topic("X")` / `.with_abs_topic("X")`.
+	// Only libio's Publisher has builder(), so we default to Publisher role.
+	// Ambiguous because without AST we can't verify the receiver is a
+	// PublisherBuilder (versus a custom builder with the same method name).
+	for _, m := range reBuilderWithTopic.FindAllStringSubmatchIndex(source, -1) {
+		kind := captureAt(source, m, 1) // "rel" | "abs"
+		topic := source[m[4]:m[5]]
+		scope := "local"
+		if kind == "abs" {
+			scope = "absolute"
+		}
+		sites = append(sites, zenohSite{
+			role:      "Publisher",
+			topic:     topic,
+			line:      lineOf(source, m[0]),
+			method:    "with_" + kind + "_topic",
+			scope:     scope,
+			ambiguous: true,
 		})
 	}
 

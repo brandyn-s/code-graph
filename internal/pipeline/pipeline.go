@@ -454,6 +454,11 @@ func (p *Pipeline) runPostFlushPasses(files []discover.FileInfo) error {
 	p.passZenoh()
 	slog.Info("pass.timing", "pass", "zenoh", "elapsed", time.Since(t))
 
+	p.reportProgress("nix_services", 95, "extracting Nix service topic bindings")
+	t = time.Now()
+	p.passNixServices()
+	slog.Info("pass.timing", "pass", "nix_services", "elapsed", time.Since(t))
+
 	p.reportProgress("lockfile_deps", 96, "parsing lockfile deps")
 	t = time.Now()
 	p.passLockfileDeps()
@@ -673,6 +678,7 @@ func (p *Pipeline) runIncrementalPasses(
 	p.passGitHistory()
 	p.passOPALinker()
 	p.passZenoh()
+	p.passNixServices()
 
 	p.updateFileHashes(allFiles)
 

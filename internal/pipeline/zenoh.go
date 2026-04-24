@@ -155,10 +155,17 @@ func (p *Pipeline) passZenoh() {
 
 		for _, site := range sites {
 			topicNode := p.zenohTopicNode(site.topic, site.scope, relPath)
-			topicID, err := p.Store.UpsertNode(topicNode)
-			if err != nil || topicID == 0 {
+			// UpsertNode's LastInsertId is unreliable on ON CONFLICT DO UPDATE
+			// (store.UpsertNode doc). Re-resolve by QN so downstream edge
+			// inserts don't fail FK-constraint with a stale topic ID.
+			if _, err := p.Store.UpsertNode(topicNode); err != nil {
 				continue
 			}
+			resolved, err := p.Store.FindNodeByQN(p.ProjectName, topicNode.QualifiedName)
+			if err != nil || resolved == nil {
+				continue
+			}
+			topicID := resolved.ID
 			topicCount++
 
 			fn := findEnclosingFunction(funcs, site.line)

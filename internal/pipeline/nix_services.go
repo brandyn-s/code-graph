@@ -78,19 +78,23 @@ var (
 	// A string literal inside a Nix list — used to split `[ "a" "b" "c" ]`.
 	reNixStringLiteral = regexp.MustCompile(`"([^"]+)"`)
 
-	// pubmsg <topic> — imperative publish in a systemd script.
-	// Topic is a non-interpolation literal (skip ${...} templated cases
-	// since those are captured by the declarative pass).
+	// /bin/pubmsg <topic> — imperative publish in a systemd script.
+	// Requires `/bin/` prefix to anchor command-invocation context. Without
+	// this, comments ("# start pubmsg for ..."), Nix package lists
+	// ([ submsg pubmsg cfg ]), and multi-line declarations produce large
+	// numbers of false positives (measured on PSM: ~20 spurious edges).
+	// Topic is a non-interpolation literal; skip ${...} templated cases
+	// (captured by the declarative pass).
 	reNixPubmsgLiteral = regexp.MustCompile(
-		`\bpubmsg\s+([a-zA-Z0-9_][a-zA-Z0-9_-]*)\b`,
+		`/bin/pubmsg[ \t]+([a-zA-Z0-9_][a-zA-Z0-9_-]*)\b`,
 	)
 
-	// submsg <topic1> <topic2> ... | — imperative subscribe in a script.
-	// Captures the whole argument chunk up to the first `|` pipe or `\\`
-	// line-continuation. Topics then extracted via reNixStringLiteral +
-	// bare-identifier fallback.
+	// /bin/submsg <topic1> <topic2> ... | — imperative subscribe in a script.
+	// Same `/bin/` prefix requirement as pubmsg. Captures everything from
+	// submsg to first pipe/newline/line-continuation, then extractSubmsgTopics
+	// parses topics out of that chunk.
 	reNixSubmsgLine = regexp.MustCompile(
-		`\bsubmsg\s+([^\n|\\]+)`,
+		`/bin/submsg[ \t]+([^\n|\\]+)`,
 	)
 
 	// Bare identifier — used to split submsg argument chunks into topics.
@@ -165,13 +169,16 @@ func (p *Pipeline) passNixServices() {
 		info.declaredIn = relPath
 
 		// Emit Service node (if this file declares one).
+		// Re-resolve ID via FindNodeByQN — UpsertNode's LastInsertId is
+		// unreliable on ON CONFLICT DO UPDATE paths (store.UpsertNode doc).
 		var serviceID int64
 		if info.serviceName != "" {
 			svcNode := p.nixServiceNode(info.serviceName, relPath)
-			id, err := p.Store.UpsertNode(svcNode)
-			if err == nil && id > 0 {
-				serviceID = id
-				serviceCount++
+			if _, err := p.Store.UpsertNode(svcNode); err == nil {
+				if resolved, err2 := p.Store.FindNodeByQN(p.ProjectName, svcNode.QualifiedName); err2 == nil && resolved != nil {
+					serviceID = resolved.ID
+					serviceCount++
+				}
 			}
 		}
 
@@ -390,20 +397,31 @@ func (p *Pipeline) nixServiceNode(name, declaredIn string) *store.Node {
 // findOrCreateServiceID returns a Service node id, creating a stub if the
 // service isn't already in the graph. Used by additional_sub_topics which
 // references services defined in separate files.
+//
+// Always re-resolves via FindNodeByQN after UpsertNode to avoid stale
+// LastInsertId from ON CONFLICT DO UPDATE paths.
 func (p *Pipeline) findOrCreateServiceID(name, declaredIn string) int64 {
 	qn := p.ProjectName + ".__service__." + name
 	if node, err := p.Store.FindNodeByQN(p.ProjectName, qn); err == nil && node != nil {
 		return node.ID
 	}
-	id, err := p.Store.UpsertNode(p.nixServiceNode(name, declaredIn))
-	if err != nil {
+	if _, err := p.Store.UpsertNode(p.nixServiceNode(name, declaredIn)); err != nil {
 		return 0
 	}
-	return id
+	resolved, err := p.Store.FindNodeByQN(p.ProjectName, qn)
+	if err != nil || resolved == nil {
+		return 0
+	}
+	return resolved.ID
 }
 
 // upsertNixTopic emits a Topic node for the given topic string. Unified
 // label/QN scheme with zenoh.go's zenohTopicNode.
+//
+// WHY the FindNodeByQN re-read: store.UpsertNode's LastInsertId can return
+// a stale ID on ON CONFLICT DO UPDATE paths (documented in store.UpsertNode
+// doc comment). Trusting it silently breaks downstream edge inserts with
+// FK-constraint failures. Always resolve by QN to get the canonical ID.
 func (p *Pipeline) upsertNixTopic(topic, declaredIn string) (int64, bool) {
 	sanitized := sanitizeTopicForQN(topic)
 	qn := p.ProjectName + ".__topic__." + sanitized
@@ -420,11 +438,14 @@ func (p *Pipeline) upsertNixTopic(topic, declaredIn string) (int64, bool) {
 			"source":           "nix",
 		},
 	}
-	id, err := p.Store.UpsertNode(node)
-	if err != nil || id == 0 {
+	if _, err := p.Store.UpsertNode(node); err != nil {
 		return 0, false
 	}
-	return id, true
+	resolved, err := p.Store.FindNodeByQN(p.ProjectName, qn)
+	if err != nil || resolved == nil {
+		return 0, false
+	}
+	return resolved.ID, true
 }
 
 // insertNixEdge creates one edge. `declarative=true` means the topic came

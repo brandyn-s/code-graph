@@ -47,6 +47,14 @@ const (
 // downstream BFS expansion.
 const embeddingSeedTopK = 10
 
+// embeddingSeedMinCosine is the minimum cosine similarity required for
+// a node to qualify as an embedding seed. Calibrated from the 2026-04-25
+// Loc-Bench instance pypa__pip-13085: at top-10, scores 0.50-0.65 were
+// dominated by structural noise (Project, __init__.py, Optional). At
+// >=0.65 the matches were semantically related to the issue text. Tune
+// downward only with evidence — false-positive seeds amplify through BFS.
+const embeddingSeedMinCosine = 0.65
+
 // MatchSeedNodesByEmbedding returns the top-K nodes whose embeddings are
 // most cosine-similar to the embedded query. Returns an error wrapping
 // ErrEmbeddingsUnavailable if VOYAGE_API_KEY is not set or the project
@@ -93,10 +101,20 @@ func MatchSeedNodesByEmbedding(ctx context.Context, st *store.Store, project, qu
 		return nil, nil
 	}
 
+	// Filter by minimum cosine threshold. Below ~0.65 the hits tend to be
+	// structural noise (containers, generic helpers) rather than
+	// semantically-related code; including them as seeds amplifies through
+	// BFS into long lists of unrelated nodes.
 	out := make([]*store.Node, 0, len(hits))
 	ids := make([]int64, 0, len(hits))
 	for _, h := range hits {
+		if h.Score < embeddingSeedMinCosine {
+			continue
+		}
 		ids = append(ids, h.NodeID)
+	}
+	if len(ids) == 0 {
+		return nil, nil
 	}
 	nodeMap, err := st.FindNodesByIDs(ids)
 	if err != nil {

@@ -556,7 +556,7 @@ func (s *Server) registerRankByQueryTool() {
 			OpenWorldHint:   boolPtr(false),
 			DestructiveHint: boolPtr(false),
 		},
-		Description: "Rank graph nodes by relevance to a query using bidirectional weighted PageRank. Tokenizes the query, seeds personalization on nodes whose Name (exact, case-insensitive) or QualifiedName (substring, case-insensitive) matches any token, then runs forward+reverse PageRank and returns top-K by combined score. Bidirectional avoids the pure-source collapse where nodes that only propagate rank outward go to zero. Best use: agent context selection — 'give me the top-20 most relevant entities for this issue or question' — typically 3-5x token reduction vs dumping the full graph.",
+		Description: "Rank graph nodes by relevance to a query using bidirectional weighted PageRank. Best with specific symbol queries (function/class names): substring seeds match exactly, embedding seeds catch semantic neighbors. WORKS POORLY on long natural-language descriptions where surviving tokens are noise words (e.g., 'the install command runs lazily' tokenizes to 'install/command/runs/lazily', each matching dozens of unrelated symbols). For verbose issue descriptions, use code_localize_agent instead — the LLM-driven variant reasons about call paths rather than substring-matching. Algorithm: tokenize, seed via seed_strategy, run forward+reverse PageRank, return top-K by combined score. Bidirectional avoids pure-source collapse. Typical 3-5x token reduction vs dumping the full graph for context selection.",
 		InputSchema: json.RawMessage(`{
 			"type": "object",
 			"properties": {
@@ -601,7 +601,7 @@ func (s *Server) registerCodeLocalizeTool() {
 			OpenWorldHint:   boolPtr(false),
 			DestructiveHint: boolPtr(false),
 		},
-		Description: "Graph-guided code localization. Given a natural-language issue or question, returns the top-K code entities most relevant to investigate. Internally: matches seeds by name/qualified-name tokens, BFS-expands up to `depth` hops over structural edges (CALLS, DEFINES, IMPORTS, CONTAINS, MEMBER_OF, IMPLEMENTS, OVERRIDE, USES_TYPE) in both directions, scores each visited node by seed-score discounted by hop distance, and returns top-K with file:line for each. Use when an agent needs the relevant subset of a large codebase for a specific issue without dumping the full graph. Reference: LocAgent (ACL 2025).",
+		Description: "Graph-guided code localization (primitives-only LocAgent variant). Best with focused queries that name specific symbols or short error messages. WORKS POORLY on verbose multi-paragraph issue descriptions — tokens after stopword filter become noise words that substring-match thousands of unrelated symbols, and BFS amplifies the noise. For verbose Loc-Bench-style issues, use code_localize_agent — the LLM-driven variant bridges the 'issue talks about A, fix happens in B' gap that pure retrieval misses. Algorithm: match seeds via seed_strategy, BFS-expand up to `depth` hops over CALLS/DEFINES/IMPORTS/CONTAINS/MEMBER_OF/IMPLEMENTS/OVERRIDE/USES_TYPE bidirectionally, score each visited node by seed-score / 2^distance, return top-K with file:line. Reference: LocAgent (ACL 2025, arXiv 2503.09089) — published 92.7% file-level accuracy uses the LLM-in-the-loop variant; this primitives-only path trades accuracy for determinism and zero LLM cost.",
 		InputSchema: json.RawMessage(`{
 			"type": "object",
 			"properties": {
@@ -649,7 +649,7 @@ func (s *Server) registerCodeLocalizeAgentTool() {
 			OpenWorldHint:   boolPtr(true),
 			DestructiveHint: boolPtr(false),
 		},
-		Description: "LLM-driven code localization. Wraps rank_by_query and code_localize in a multi-turn agent loop (LocAgent ACL 2025 architecture). The LLM iteratively calls graph tools, narrows to relevant entities, and returns a finalized ranked list. Slower than code_localize (~5-15 turns @ ~1s each) but designed to match LocAgent's published 92.7% file-level Loc-Bench accuracy. Requires ANTHROPIC_API_KEY.",
+		Description: "LLM-driven code localization (LocAgent ACL 2025 architecture). Use this for VERBOSE natural-language issue descriptions — Loc-Bench security writeups, multi-paragraph bug reports, anything where the issue text talks about A but the fix is in B. The LLM iteratively calls rank_by_query / code_localize / finalize, reasons about call paths and entry points, and returns a ranked list of entities to investigate. Demonstrably bridges the gap that primitives miss (n=1: pip Loc-Bench instance pypa__pip-13085 — primitives missed top-20, agent landed ground truth at #3). Cost: ~30-60s wall, ~$0.04-0.05 per query at Haiku 4.5 (~50K input tokens, 6 turns typical). Requires ANTHROPIC_API_KEY. For specific symbol queries (function names, exact identifiers), use code_localize instead — primitives are ~1000x faster with zero LLM cost.",
 		InputSchema: json.RawMessage(`{
 			"type": "object",
 			"properties": {

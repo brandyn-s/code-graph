@@ -38,6 +38,7 @@ Not run by CI. This is an offline benchmark — invoke manually:
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import random
 import shutil
@@ -168,16 +169,19 @@ def clone_repo(repo: str, base_commit: str, dest: Path) -> bool:
 
 
 def index_repo(path: Path) -> bool:
-    """Run codebase-memory-mcp index_repository on {path}. Returns True on success."""
+    """Invoke codebase-memory-mcp index_repository against {path}.
+
+    Form: codebase-memory-mcp cli index_repository '{"path":"<abs path>"}'
+
+    Project name is derived from the path. Embedding seeds require
+    VOYAGE_API_KEY at index time."""
     if not INDEX_BIN.exists():
         print(f"  binary missing: {INDEX_BIN}")
         return False
-    # Equivalent to: codebase-memory-mcp index <path>
-    # Note: project name is derived from the path; embedding seeds require
-    # VOYAGE_API_KEY to be set in env at index time.
+    args_json = json.dumps({"path": to_windows_path(path)})
     try:
         result = subprocess.run(
-            [str(INDEX_BIN), "index", str(path)],
+            [str(INDEX_BIN), "cli", "index_repository", args_json],
             capture_output=True,
             text=True,
             timeout=1800,  # 30 min cap per index
@@ -191,15 +195,54 @@ def index_repo(path: Path) -> bool:
         return False
 
 
+def to_windows_path(p: Path | str) -> str:
+    """Convert a path to Windows-style absolute form (`C:/foo/bar`).
+
+    Handles three input shapes:
+      - Already Windows-style (`C:/foo` or `C:\\foo`): just normalize slashes.
+      - MSYS / Git Bash form (`/c/foo`): rewrite to `C:/foo`.
+      - Relative or other: resolve under CWD.
+
+    Why care: Python's Path.resolve() on Windows treats `/c/foo` as drive-
+    root-relative giving `C:\\c\\foo` (wrong — adds an extra `c`). Detect
+    the MSYS form before resolve()."""
+    s = str(p).replace("\\", "/")
+    # MSYS / Git Bash form: /c/path → C:/path (BEFORE resolve)
+    if len(s) >= 3 and s[0] == "/" and s[2] == "/" and s[1].isalpha():
+        s = s[1].upper() + ":" + s[2:]
+        return s
+    # Already Windows-style (drive letter at [1]): leave as-is
+    if len(s) >= 2 and s[1] == ":":
+        return s
+    # Relative — resolve under CWD
+    return str(Path(s).resolve()).replace("\\", "/")
+
+
 def db_path_for(repo_path: Path) -> Path:
-    """Mimic ProjectNameFromPath sanitization: lowercase drive letter, replace
-    `:`/`\\`/`/` with `-`, append `.db`. Matches the on-disk filename."""
-    raw = str(repo_path).replace("\\", "/")
-    # Lowercase drive letter (Windows)
-    if len(raw) >= 2 and raw[1] == ":":
-        raw = raw[0].lower() + raw[1:]
-    sanitized = raw.replace(":", "-").replace("/", "-")
-    return CACHE_DIR / f"{sanitized}.db"
+    """Mirror internal/pipeline/pipeline.go ProjectNameFromPath:
+
+      1. filepath.Clean (collapse `..`, `.`, double slashes)
+      2. Backslash → slash
+      3. Lowercase Windows drive letter
+      4. `/` → `-`, `:` → `-`
+      5. Collapse `--` to `-`
+      6. Strip leading `-`
+
+    Returns the absolute path of the on-disk SQLite file."""
+    win = to_windows_path(repo_path)
+    # Step 3: lowercase Windows drive letter (matches ProjectNameFromPath)
+    if len(win) >= 2 and win[1] == ":":
+        win = win[0].lower() + win[1:]
+    # Step 4: replace separators
+    name = win.replace("/", "-").replace(":", "-")
+    # Step 5: collapse consecutive dashes
+    while "--" in name:
+        name = name.replace("--", "-")
+    # Step 6: strip leading dash
+    name = name.lstrip("-")
+    if not name:
+        name = "root"
+    return CACHE_DIR / f"{name}.db"
 
 
 def run_agent(db: Path, query: str, top_k: int = 10) -> dict[str, Any]:
@@ -209,7 +252,7 @@ def run_agent(db: Path, query: str, top_k: int = 10) -> dict[str, Any]:
         "-top-k", str(top_k),
         "-agent",
         "-seed-strategy", "hybrid",
-        str(db),
+        to_windows_path(db),
         query,
     ]
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)

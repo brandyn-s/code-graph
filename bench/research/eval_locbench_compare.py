@@ -213,6 +213,51 @@ def index_repo(path: Path, index_bin: Path) -> bool:
         return False
 
 
+def pick_query_from_issue(problem_statement: str) -> str:
+    """Pick a query string from a Loc-Bench problem_statement.
+
+    Prior version used `split('\\n\\n')[0]` which on issues with markdown
+    headers (e.g. pandas-dev's "ENH: increase verbosity\\n### Feature
+    Type") gave only the title + first heading line. Useless as a seed
+    query.
+
+    New strategy:
+      1. Skip empty lines and lines that are only markdown headers (#),
+         checkbox markers ([X], [ ]), or section dividers.
+      2. Take the first ~1500 chars of the remaining content. Caps the
+         token budget while giving the agent enough context to extract
+         symbols, error messages, and identifiers itself.
+
+    Note: this could grow into a real preprocessor (skip code fences,
+    drop URLs, etc). Current implementation is the minimum that makes
+    issues like pandas-dev__pandas-59900 viable."""
+    lines = problem_statement.split("\n")
+    keep: list[str] = []
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            continue
+        # Skip pure markdown headers (any number of # at start)
+        if stripped.startswith("#") and not any(c.isalpha() for c in stripped.replace("#", " ").replace(" ", "")):
+            continue
+        # Skip checkbox markers as a sole content
+        if stripped in {"- [ ]", "- [X]", "- [x]", "_No response_"}:
+            continue
+        if stripped.startswith("- [ ]") or stripped.startswith("- [X]") or stripped.startswith("- [x]"):
+            # Strip the checkbox prefix; the description after may be useful
+            stripped = stripped[5:].strip()
+            if not stripped:
+                continue
+        keep.append(stripped)
+    text = "\n".join(keep)
+    if len(text) > 1500:
+        text = text[:1500]
+    if not text:
+        # Fallback: original first paragraph
+        text = problem_statement.split("\n\n")[0].strip()
+    return text
+
+
 def normalize_path(p: str) -> str:
     """Normalize a file path for comparison: forward slashes, no trailing
     slash. Loc-Bench ground truth uses forward slashes always."""
@@ -437,7 +482,7 @@ def evaluate_instance(
         return res
 
     # Step 4: run each mode
-    short_query = row["problem_statement"].split("\n\n")[0].strip()
+    short_query = pick_query_from_issue(row["problem_statement"])
     for mode in modes:
         print(f"  mode {mode}: ", end="", flush=True)
         m = run_mode(eval_bin, db, short_query, mode, res.ground_truth)

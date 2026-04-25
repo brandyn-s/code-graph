@@ -1253,6 +1253,29 @@ static void extract_class_methods(CBMExtractCtx* ctx, TSNode class_node,
             continue;
         }
 
+        // Python: decorated methods are wrapped in decorated_definition.
+        // The class body contains `decorated_definition` whose
+        // `function_definition` child is the actual method. Without this
+        // unwrap, every @staticmethod / @classmethod / @property /
+        // @custom_decorator method on the class is silently skipped.
+        // Bug observed on pandas StringMethods._validate (PR #94).
+        if (ctx->language == CBM_LANG_PYTHON &&
+            strcmp(ts_node_type(child), "decorated_definition") == 0) {
+            uint32_t nc = ts_node_child_count(child);
+            for (uint32_t j = 0; j < nc; j++) {
+                TSNode inner = ts_node_child(child, j);
+                if (ts_node_is_null(inner)) continue;
+                if (cbm_kind_in_set(inner, spec->function_node_types)) {
+                    TSNode nm = resolve_method_name(inner, ctx->language);
+                    if (!ts_node_is_null(nm)) {
+                        push_method_def(ctx, inner, class_qn, spec, nm);
+                    }
+                    break; // one function_definition per decorated_definition
+                }
+            }
+            continue;
+        }
+
         if (!cbm_kind_in_set(child, spec->function_node_types)) continue;
 
         TSNode name_node = resolve_method_name(child, ctx->language);

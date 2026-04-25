@@ -78,6 +78,15 @@ go test ./internal/pipeline/ -run TestPipeline -v
 | `get_relevant_context` | `internal/tools/relevant_context.go` | Graph-based file context selection for LLM agents (callers, callees, tests, coupled files) |
 | `visualize` | `internal/tools/visualize.go` | HTML graph visualization of node neighborhoods |
 
+### Code Localization & Ranking Tools
+| Tool | Source File | Purpose |
+|------|-----------|---------|
+| `rank_by_query` | `internal/tools/rank.go` | Bidirectional weighted PageRank seeded on query-matched nodes; returns top-K most relevant entities. Best for SPECIFIC SYMBOL queries. (Aider repo-map pattern) |
+| `code_localize` | `internal/tools/localize.go` | LocAgent BFS-style graph-guided localization: seed-match + bidirectional BFS over CALLS/DEFINES/IMPORTS/CONTAINS edges. Best for SPECIFIC SYMBOL queries. Primitives-only, deterministic, ~50ms. (LocAgent ACL 2025) |
+| `code_localize_agent` | `internal/tools/localize_agent.go` | LLM-driven LocAgent variant: wraps the primitives in a multi-turn agent loop. Best for VERBOSE natural-language issues where the issue talks about A but the fix is in B. ~30-60s wall, ~$0.04-0.05/query at Haiku 4.5. Requires `ANTHROPIC_API_KEY`. |
+
+> **Pick by query shape**: short symbol names → `rank_by_query` / `code_localize`. Multi-paragraph natural-language issue → `code_localize_agent`. Both primitive tools accept `seed_strategy`: `substring` (legacy), `embedding` (Voyage cosine), or `hybrid` (default; substring + embedding deduped, falls back to substring if no `VOYAGE_API_KEY`).
+
 ### Pipeline Additions
 - OPA policy linker (`POLICY_GATES` edges connecting policy to enforced code)
 - Terraform env var cross-referencing (`EnvVar` graph nodes)

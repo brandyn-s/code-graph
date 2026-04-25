@@ -25,6 +25,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"strconv"
 	"strings"
 
 	"github.com/DeusData/codebase-memory-mcp/internal/anthropic"
@@ -34,9 +36,11 @@ import (
 )
 
 const (
-	// maxTurns caps the agent loop. 10 matches the LocAgent paper's
-	// reported typical depth (most issues converge in 3-7 turns).
-	maxTurns = 10
+	// maxTurnsDefault caps the agent loop. The LocAgent paper reports
+	// typical convergence in 3-7 turns; the cap allows extended
+	// exploration on hard cases. Override per-run via the LOCAGENT_MAX_TURNS
+	// env var.
+	maxTurnsDefault = 20
 
 	// systemPrompt frames the agent's task and constrains the output.
 	systemPrompt = `You are a code-localization agent. Your task: given an issue description,
@@ -166,6 +170,12 @@ func Run(ctx context.Context, st *store.Store, project, issue string, topK int) 
 		},
 	}
 
+	maxTurns := maxTurnsDefault
+	if env := os.Getenv("LOCAGENT_MAX_TURNS"); env != "" {
+		if n, err := strconv.Atoi(env); err == nil && n > 0 && n <= 100 {
+			maxTurns = n
+		}
+	}
 	result := &Result{Transcript: make([]TranscriptEntry, 0, maxTurns*2)}
 
 	for turn := 1; turn <= maxTurns; turn++ {

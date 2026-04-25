@@ -42,14 +42,21 @@ const (
 	// env var.
 	maxTurnsDefault = 20
 
-	// systemPrompt frames the agent's task and constrains the output.
-	systemPrompt = `You are a code-localization agent. Your task: given an issue description,
+	// systemPromptAggressive is the original prompt: telegraphs a tight
+	// 5-turn budget and pushes the agent to finalize quickly. Good when
+	// the seed-matching is already on target; bad when the issue text
+	// doesn't surface specific symbols and exploration is needed.
+	systemPromptAggressive = `You are a code-localization agent. Your task: given an issue description,
 identify the top code entities (functions, methods, classes) most relevant
 to investigate or modify to address the issue.
 
 You have these tools:
 - rank_by_query(query, top_k): bidirectional PageRank, hybrid seed strategy.
 - code_localize(issue, depth, top_k): BFS expansion from query-matched seeds.
+- read_file(path, start_line, end_line): read a slice of a source file under
+  the indexed project root. Use to verify a candidate when graph metadata
+  alone is ambiguous (e.g. confirm a class actually has the method named
+  in the issue).
 - finalize(entities): YOU MUST call this when done. Pass {qualified_name, file_path, reason}.
 
 CRITICAL: BUDGET — you have at most 5 useful turns. Finalize AGGRESSIVELY.
@@ -67,6 +74,50 @@ Strategy:
 
 If you've found a class or module that is a plausible site for the fix,
 FINALIZE NOW. Over-exploration yields worse results than partial answers.`
+
+	// systemPromptOpen encourages using read_file to verify candidates
+	// while keeping a soft turn budget. Designed for the LocAgent-style
+	// pattern where the agent needs to inspect source to disambiguate
+	// sibling methods or recover entities the extractor missed.
+	//
+	// Tuning history: an earlier draft told the agent to "finalize when
+	// confident, not on a turn budget" — under that prompt the agent
+	// explored exhaustively (20 turns) and ran out of budget without
+	// finalizing. Soft budget restored.
+	systemPromptOpen = `You are a code-localization agent. Given an issue, identify the top code
+entities (functions, methods, classes) most relevant to investigate or
+modify to address it.
+
+Tools:
+- rank_by_query(query, top_k): graph PageRank seeded on query tokens + embeddings.
+- code_localize(issue, depth, top_k): BFS expansion over CALLS / DEFINES /
+  IMPORTS / MEMBER_OF edges from query-matched seeds.
+- read_file(path, start_line, end_line): read a slice of a source file
+  (paths relative to project root, line range capped at 200). Use this
+  SPARINGLY to CONFIRM a top candidate when the graph alone can't tell
+  sibling methods apart, or when you suspect the right entity exists in
+  source but isn't in the graph.
+- finalize(entities): MUST be called when done. {qualified_name, file_path, reason}.
+
+BUDGET: aim to finalize within 8 turns. read_file calls count against this.
+At most 2-3 read_file calls per run.
+
+Strategy:
+1. Turn 1-2: call rank_by_query and code_localize with the most specific
+   identifiers from the issue. Pull out function names, class names, or
+   error messages from prose issues.
+2. Turn 3-5 (only if needed): call read_file on the top 1-2 candidate
+   files to verify that the target method or class actually exists where
+   you think it does. Skip this if the graph already gave you a clear
+   single best candidate.
+3. Turn 6-8: finalize. If you found the right file and class but the
+   specific method is unclear, include the class itself plus the file
+   path — partial answers beat over-exploration.
+
+DO NOT: read more than 3 files, hunt for documentation pages, or keep
+calling rank_by_query with paraphrased queries hoping for better hits.
+If two ranking calls agree on the file, that's your answer — confirm and
+finalize.`
 )
 
 // LocalizedEntity is the agent's final output entry. Format mirrors
@@ -111,6 +162,15 @@ func Run(ctx context.Context, st *store.Store, project, issue string, topK int) 
 		return nil, fmt.Errorf("ANTHROPIC_API_KEY not set; code_localize_agent requires an Anthropic credential")
 	}
 
+	// Resolve project root for read_file safety check. If the project
+	// row doesn't have a root_path (legacy index), read_file is disabled
+	// — the agent still works without it, just at LocAgent-paper feature
+	// parity minus read.
+	var projectRoot string
+	if proj, err := st.GetProject(project); err == nil && proj != nil {
+		projectRoot = proj.RootPath
+	}
+
 	tools := []anthropic.Tool{
 		{
 			Name:        "rank_by_query",
@@ -138,6 +198,19 @@ func Run(ctx context.Context, st *store.Store, project, issue string, topK int) 
 			}`),
 		},
 		{
+			Name:        "read_file",
+			Description: "Read a slice of a source file under the indexed project root. Use to confirm a candidate (e.g. verify a class actually has the method named in the issue) or to recover entities the extractor missed. Path is relative to project root. Line range capped at 200 lines.",
+			InputSchema: json.RawMessage(`{
+				"type": "object",
+				"properties": {
+					"path": {"type": "string", "description": "Source file path relative to project root (forward slashes)."},
+					"start_line": {"type": "integer", "description": "1-indexed start line. Defaults to 1."},
+					"end_line": {"type": "integer", "description": "1-indexed end line (inclusive). Defaults to start_line + 199."}
+				},
+				"required": ["path"]
+			}`),
+		},
+		{
 			Name:        "finalize",
 			Description: "Submit the final ranked list. MUST be called before agent terminates.",
 			InputSchema: json.RawMessage(`{
@@ -159,6 +232,15 @@ func Run(ctx context.Context, st *store.Store, project, issue string, topK int) 
 				"required": ["entities"]
 			}`),
 		},
+	}
+
+	// Pick the system prompt variant. Default is "aggressive" (matches
+	// pre-#92 behavior). Set LOCAGENT_PROMPT_VARIANT=open to enable the
+	// LocAgent-style read-file-encouraged variant. Unknown values fall
+	// back to aggressive.
+	systemPrompt := systemPromptAggressive
+	if os.Getenv("LOCAGENT_PROMPT_VARIANT") == "open" {
+		systemPrompt = systemPromptOpen
 	}
 
 	// Initial user message: the issue + topK budget.
@@ -238,7 +320,7 @@ func Run(ctx context.Context, st *store.Store, project, issue string, topK int) 
 					})
 					break
 				}
-				toolOut, err := dispatchTool(ctx, st, project, block.Name, block.Input)
+				toolOut, err := dispatchTool(ctx, st, project, projectRoot, block.Name, block.Input)
 				if err != nil {
 					toolResults = append(toolResults, anthropic.ContentBlock{
 						Type:              "tool_result",
@@ -315,7 +397,7 @@ func handleFinalize(input json.RawMessage, topK int, result *Result) error {
 
 // dispatchTool runs the named tool against the store. Returns a JSON-
 // serializable value the LLM will see as the tool result.
-func dispatchTool(ctx context.Context, st *store.Store, project, name string, input json.RawMessage) (any, error) {
+func dispatchTool(ctx context.Context, st *store.Store, project, projectRoot, name string, input json.RawMessage) (any, error) {
 	switch name {
 	case "rank_by_query":
 		var args struct {
@@ -344,7 +426,14 @@ func dispatchTool(ctx context.Context, st *store.Store, project, name string, in
 			return nil, fmt.Errorf("parse code_localize args: %w", err)
 		}
 		if args.Depth == 0 {
+			// LOCAGENT_BFS_DEPTH overrides the default depth. Lets us
+			// A/B depth=3 vs depth=4 without code changes.
 			args.Depth = 3
+			if env := os.Getenv("LOCAGENT_BFS_DEPTH"); env != "" {
+				if d, perr := strconv.Atoi(env); perr == nil && d >= 1 && d <= 6 {
+					args.Depth = d
+				}
+			}
 		}
 		if args.TopK == 0 {
 			args.TopK = 10
@@ -354,6 +443,18 @@ func dispatchTool(ctx context.Context, st *store.Store, project, name string, in
 			return nil, err
 		}
 		return hits, nil
+
+	case "read_file":
+		var args readFileArgs
+		if err := json.Unmarshal(input, &args); err != nil {
+			return nil, fmt.Errorf("parse read_file args: %w", err)
+		}
+		if projectRoot == "" {
+			return map[string]string{
+				"error": "project root not available; agent cannot read files (legacy index without root_path)",
+			}, nil
+		}
+		return readFile(projectRoot, args)
 
 	default:
 		return nil, fmt.Errorf("unknown tool %q", name)

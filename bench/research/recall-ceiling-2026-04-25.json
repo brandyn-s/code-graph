@@ -1,0 +1,226 @@
+[
+  {
+    "instance": "internetarchive__openlibrary-3196",
+    "verdict": "AGENT_BOTTLENECK",
+    "results": [
+      {
+        "gt": "openlibrary/plugins/upstream/utils.py:setup",
+        "file_part": "openlibrary/plugins/upstream/utils.py",
+        "func_part": "setup",
+        "class": null,
+        "fn": "setup",
+        "file_nodes_count": 50,
+        "file_nodes_sample": [
+          {
+            "label": "Function",
+            "name": "get_changes_v1",
+            "qualified_name": "c-tmp-locbench-batch-internetarchive__openlibrary-3196.openlibrary.plugins.upstream.utils.get_changes_v1"
+          },
+          {
+            "label": "Parameter",
+            "name": "revision",
+            "qualified_name": "c-tmp-locbench-batch-internetarchive__openlibrary-3196.openlibrary.plugins.upstream.utils.get_version.revision"
+          },
+          {
+            "label": "Method",
+            "name": "__init__",
+            "qualified_name": "c-tmp-locbench-batch-internetarchive__openlibrary-3196.openlibrary.plugins.upstream.utils.UpstreamMemcacheClient.__init__"
+          },
+          {
+            "label": "Function",
+            "name": "fuzzy_find",
+            "qualified_name": "c-tmp-locbench-batch-internetarchive__openlibrary-3196.openlibrary.plugins.upstream.utils.fuzzy_find"
+          },
+          {
+            "label": "Method",
+            "name": "get_multi",
+            "qualified_name": "c-tmp-locbench-batch-internetarchive__openlibrary-3196.openlibrary.plugins.upstream.utils.UpstreamMemcacheClient.get_multi"
+          }
+        ],
+        "name_match_count": 31,
+        "name_match_sample": [
+          {
+            "label": "Function",
+            "name": "setup",
+            "qualified_name": "c-tmp-locbench-batch-internetarchive__openlibrary-3196.openlibrary.plugins.upstream.covers.setup",
+            "file_path": "openlibrary/plugins/upstream/covers.py"
+          },
+          {
+            "label": "Function",
+            "name": "setup",
+            "qualified_name": "c-tmp-locbench-batch-internetarchive__openlibrary-3196.openlibrary.core.lending.setup",
+            "file_path": "openlibrary/core/lending.py"
+          },
+          {
+            "label": "Function",
+            "name": "setup",
+            "qualified_name": "c-tmp-locbench-batch-internetarchive__openlibrary-3196.openlibrary.plugins.worksearch.searchapi.setup",
+            "file_path": "openlibrary/plugins/worksearch/searchapi.py"
+          },
+          {
+            "label": "Function",
+            "name": "setup",
+            "qualified_name": "c-tmp-locbench-batch-internetarchive__openlibrary-3196.openlibrary.plugins.openlibrary.lists.setup",
+            "file_path": "openlibrary/plugins/openlibrary/lists.py"
+          },
+          {
+            "label": "Function",
+            "name": "setup",
+            "qualified_name": "c-tmp-locbench-batch-internetarchive__openlibrary-3196.openlibrary.plugins.openlibrary.home.setup",
+            "file_path": "openlibrary/plugins/openlibrary/home.py"
+          }
+        ],
+        "qn_pattern": "%.setup",
+        "qn_match_count": 32,
+        "qn_match_sample": [
+          {
+            "label": "Function",
+            "name": "setup",
+            "qualified_name": "c-tmp-locbench-batch-internetarchive__openlibrary-3196.openlibrary.plugins.upstream.covers.setup",
+            "file_path": "openlibrary/plugins/upstream/covers.py"
+          },
+          {
+            "label": "Function",
+            "name": "setup",
+            "qualified_name": "c-tmp-locbench-batch-internetarchive__openlibrary-3196.openlibrary.core.lending.setup",
+            "file_path": "openlibrary/core/lending.py"
+          },
+          {
+            "label": "Function",
+            "name": "setup",
+            "qualified_name": "c-tmp-locbench-batch-internetarchive__openlibrary-3196.openlibrary.plugins.worksearch.searchapi.setup",
+            "file_path": "openlibrary/plugins/worksearch/searchapi.py"
+          },
+          {
+            "label": "Function",
+            "name": "setup",
+            "qualified_name": "c-tmp-locbench-batch-internetarchive__openlibrary-3196.openlibrary.plugins.openlibrary.lists.setup",
+            "file_path": "openlibrary/plugins/openlibrary/lists.py"
+          },
+          {
+            "label": "Function",
+            "name": "setup",
+            "qualified_name": "c-tmp-locbench-batch-internetarchive__openlibrary-3196.openlibrary.plugins.openlibrary.home.setup",
+            "file_path": "openlibrary/plugins/openlibrary/home.py"
+          }
+        ],
+        "strict_match_count": 1,
+        "strict_match_sample": [
+          {
+            "label": "Function",
+            "name": "setup",
+            "qualified_name": "c-tmp-locbench-batch-internetarchive__openlibrary-3196.openlibrary.plugins.upstream.utils.setup",
+            "file_path": "openlibrary/plugins/upstream/utils.py"
+          }
+        ],
+        "status": "PRESENT",
+        "graph_size": 11077
+      }
+    ]
+  },
+  {
+    "instance": "pandas-dev__pandas-59900",
+    "verdict": "PARTIAL_EXTRACTION",
+    "results": [
+      {
+        "gt": "pandas/core/strings/accessor.py:StringMethods._validate",
+        "file_part": "pandas/core/strings/accessor.py",
+        "func_part": "StringMethods._validate",
+        "class": "StringMethods",
+        "fn": "_validate",
+        "file_nodes_count": 41,
+        "file_nodes_sample": [
+          {
+            "label": "Parameter",
+            "name": "regex",
+            "qualified_name": "c-tmp-locbench-batch-pandas-dev__pandas-59900.pandas.core.strings.accessor._get_group_names.regex"
+          },
+          {
+            "label": "Function",
+            "name": "_get_group_names",
+            "qualified_name": "c-tmp-locbench-batch-pandas-dev__pandas-59900.pandas.core.strings.accessor._get_group_names"
+          },
+          {
+            "label": "Parameter",
+            "name": "sep",
+            "qualified_name": "c-tmp-locbench-batch-pandas-dev__pandas-59900.pandas.core.strings.accessor.cat_core.sep"
+          },
+          {
+            "label": "Function",
+            "name": "cat_core",
+            "qualified_name": "c-tmp-locbench-batch-pandas-dev__pandas-59900.pandas.core.strings.accessor.cat_core"
+          },
+          {
+            "label": "Variable",
+            "name": "_shared_docs",
+            "qualified_name": "c-tmp-locbench-batch-pandas-dev__pandas-59900.pandas.core.strings.accessor._shared_docs"
+          }
+        ],
+        "name_match_count": 9,
+        "name_match_sample": [
+          {
+            "label": "Method",
+            "name": "_validate",
+            "qualified_name": "c-tmp-locbench-batch-pandas-dev__pandas-59900.pandas.core.window.rolling.BaseWindow._validate",
+            "file_path": "pandas/core/window/rolling.py"
+          },
+          {
+            "label": "Method",
+            "name": "_validate",
+            "qualified_name": "c-tmp-locbench-batch-pandas-dev__pandas-59900.pandas.core.arrays.string_.StringArrayNumpySemantics._validate",
+            "file_path": "pandas/core/arrays/string_.py"
+          },
+          {
+            "label": "Method",
+            "name": "_validate",
+            "qualified_name": "c-tmp-locbench-batch-pandas-dev__pandas-59900.pandas.core.window.rolling.Window._validate",
+            "file_path": "pandas/core/window/rolling.py"
+          },
+          {
+            "label": "Method",
+            "name": "_validate",
+            "qualified_name": "c-tmp-locbench-batch-pandas-dev__pandas-59900.pandas.core.arrays.sparse.accessor.SparseAccessor._validate",
+            "file_path": "pandas/core/arrays/sparse/accessor.py"
+          },
+          {
+            "label": "Method",
+            "name": "_validate",
+            "qualified_name": "c-tmp-locbench-batch-pandas-dev__pandas-59900.pandas.core.arrays.arrow.accessors.ArrowAccessor._validate",
+            "file_path": "pandas/core/arrays/arrow/accessors.py"
+          }
+        ],
+        "qn_pattern": "%.stringmethods._validate",
+        "qn_match_count": 0,
+        "qn_match_sample": [],
+        "strict_match_count": 0,
+        "strict_match_sample": [],
+        "status": "FILE_PRESENT_BUT_NO_FN",
+        "graph_size": 45974
+      }
+    ]
+  },
+  {
+    "instance": "vllm-project__vllm-11138",
+    "verdict": "EXTRACTOR_BOTTLENECK",
+    "results": [
+      {
+        "gt": "vllm/executor/ray_utils.py:initialize_ray_cluster",
+        "file_part": "vllm/executor/ray_utils.py",
+        "func_part": "initialize_ray_cluster",
+        "class": null,
+        "fn": "initialize_ray_cluster",
+        "file_nodes_count": 0,
+        "file_nodes_sample": [],
+        "name_match_count": 0,
+        "name_match_sample": [],
+        "qn_pattern": "%.initialize_ray_cluster",
+        "qn_match_count": 0,
+        "qn_match_sample": [],
+        "strict_match_count": 0,
+        "strict_match_sample": [],
+        "status": "FILE_ABSENT",
+        "graph_size": 24
+      }
+    ]
+  }
+]

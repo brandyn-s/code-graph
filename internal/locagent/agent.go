@@ -234,13 +234,15 @@ func Run(ctx context.Context, st *store.Store, project, issue string, topK int) 
 		},
 	}
 
-	// Pick the system prompt variant. Default is "aggressive" (matches
-	// pre-#92 behavior). Set LOCAGENT_PROMPT_VARIANT=open to enable the
-	// LocAgent-style read-file-encouraged variant. Unknown values fall
-	// back to aggressive.
-	systemPrompt := systemPromptAggressive
-	if os.Getenv("LOCAGENT_PROMPT_VARIANT") == "open" {
-		systemPrompt = systemPromptOpen
+	// Pick the system prompt variant. Default is "open" (the LocAgent-
+	// style read-file-encouraged variant) — measured to lift n=16
+	// hybrid-agent from 81%/31%/44% to 88%/44%/81% (PR #92), and combined
+	// with the extractor fix (PR #94) to 94%/50%/88%. Set
+	// LOCAGENT_PROMPT_VARIANT=aggressive to revert to the tighter
+	// 5-turn-budget prompt. Unknown values fall back to open.
+	systemPrompt := systemPromptOpen
+	if os.Getenv("LOCAGENT_PROMPT_VARIANT") == "aggressive" {
+		systemPrompt = systemPromptAggressive
 	}
 
 	maxTurns := maxTurnsDefault
@@ -467,9 +469,11 @@ func dispatchTool(ctx context.Context, st *store.Store, project, projectRoot, na
 			return nil, fmt.Errorf("parse code_localize args: %w", err)
 		}
 		if args.Depth == 0 {
-			// LOCAGENT_BFS_DEPTH overrides the default depth. Lets us
-			// A/B depth=3 vs depth=4 without code changes.
-			args.Depth = 3
+			// Default depth=4 matches LocAgent's depth-4 BFS reach and
+			// was measured (PR #92) to lift class+func hits over depth=3
+			// without meaningfully increasing latency. LOCAGENT_BFS_DEPTH
+			// overrides for ablations.
+			args.Depth = 4
 			if env := os.Getenv("LOCAGENT_BFS_DEPTH"); env != "" {
 				if d, perr := strconv.Atoi(env); perr == nil && d >= 1 && d <= 6 {
 					args.Depth = d

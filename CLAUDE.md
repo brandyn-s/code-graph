@@ -87,6 +87,27 @@ go test ./internal/pipeline/ -run TestPipeline -v
 
 > **Pick by query shape**: short symbol names → `rank_by_query` / `code_localize`. Multi-paragraph natural-language issue → `code_localize_agent`. Both primitive tools accept `seed_strategy`: `substring` (legacy), `embedding` (Voyage cosine), or `hybrid` (default; substring + embedding deduped, falls back to substring if no `VOYAGE_API_KEY`).
 
+#### Measured Loc-Bench accuracy (n=16, structured scorer, 2026-04-25)
+
+| Mode | File | Class | Func |
+|------|------|-------|------|
+| substring-primitives | 38% | 6% | 12% |
+| hybrid-primitives | 44% | 6% | 19% |
+| `code_localize_agent` (default config) | **94%** | **50%** | **88%** |
+
+For comparison: LocAgent (ACL 2025, arXiv 2503.09089) reports 92.7% file-level on the full 560-instance Loc-Bench V1. We exceed that on this subset; full-benchmark validation is separate work.
+
+#### Agent loop env vars (all opt-out — defaults are the measured-best config)
+
+| Env var | Default | Purpose |
+|---------|---------|---------|
+| `LOCAGENT_PROMPT_VARIANT` | `open` | `open` encourages `read_file` for verification; `aggressive` reverts to a tighter 5-turn budget |
+| `LOCAGENT_BFS_DEPTH` | `4` | BFS depth for `code_localize` inside the agent loop |
+| `LOCAGENT_MAX_TURNS` | `20` | Hard cap; `open` prompt soft-targets 8 turns |
+| `LOCAGENT_REWRITE` | unset | Set to `1` to enable a Haiku pre-step that extracts focused search terms. Measured to **regress** results on n=16; available for further experimentation |
+| `EMBEDDING_SEED_MIN_COSINE` | `0.0` | Minimum cosine similarity for embedding seeds. PR #84 set this to 0.65 based on n=1; PR #91 reverted after n=16 showed the threshold filtered useful seeds |
+| `ANTHROPIC_MODEL` | `claude-haiku-4-5-20251001` | Override to opt into Opus 4.7. Head-to-head (PR #90) showed Opus matches Haiku at ~8x cost — opt-in only |
+
 ### Pipeline Additions
 - OPA policy linker (`POLICY_GATES` edges connecting policy to enforced code)
 - Terraform env var cross-referencing (`EnvVar` graph nodes)

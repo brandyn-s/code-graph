@@ -56,11 +56,21 @@ var (
 		`(?m)^\s*options\.redacted\.services\.([a-zA-Z_][a-zA-Z0-9_-]*)\s*=`,
 	)
 
-	// baf.pub_topic = mkOption { ... default = "<topic>"; ... }
-	// `[^}]*` means we can't match nested braces; fine for these modules
-	// (mkOption blocks don't nest braces in PSM's style).
+	// baf.pub_topic[_<suffix>] = mkOption { ... default = "<topic>"; ... }
+	// Matches the canonical baf.pub_topic AND named variants like
+	// baf.pub_topic_fast (anavd has both — separate topics for different
+	// rate classes). `[^}]*` means we can't match nested braces; fine for
+	// these modules (mkOption blocks don't nest braces in PSM's style).
 	reNixBafPubTopic = regexp.MustCompile(
-		`(?s)baf\.pub_topic\s*=\s*mkOption\s*\{[^}]*?default\s*=\s*"([^"]+)"`,
+		`(?s)baf\.pub_topic(?:_[a-zA-Z_][a-zA-Z0-9_]*)?\s*=\s*mkOption\s*\{[^}]*?default\s*=\s*"([^"]+)"`,
+	)
+
+	// baf.<name>_sub_topic = mkOption { default = "<topic>"; }
+	// SINGULAR scalar variant — used by adsbd (baf.ahrs_sub_topic = "sbfd").
+	// Distinct from baf.sub_topics (plural list). Currently only one PSM
+	// service uses this pattern, but it's a legitimate option type.
+	reNixBafSubTopicSingular = regexp.MustCompile(
+		`(?s)baf\.([a-zA-Z_][a-zA-Z0-9_]*)_sub_topic\s*=\s*mkOption\s*\{[^}]*?default\s*=\s*"([^"]+)"`,
 	)
 
 	// baf.sub_topics = mkOption { ... default = [ "a" "b" "c" ]; ... }
@@ -115,13 +125,41 @@ var (
 	reNixBareIdent = regexp.MustCompile(
 		`\b([a-zA-Z_][a-zA-Z0-9_-]*)\b`,
 	)
+
+	// `${pkgs.redacted.<package>}/bin/<binary>` — the redacted-Nix idiom for
+	// invoking a Rust binary from a systemd script. Captures (package, binary).
+	// Used to emit `Service ── RUNS_BINARY ──> Module` edges, which close
+	// the service-to-implementation loop ("show me the code for canstatd").
+	//
+	// Filters out pubmsg/submsg here — those are framework helpers, not the
+	// service implementation itself.
+	reNixredactedBinary = regexp.MustCompile(
+		`\$\{pkgs\.redacted\.([a-zA-Z0-9_-]+)\}/bin/([a-zA-Z_][a-zA-Z0-9_-]*)\b`,
+	)
+
+	// Cargo.toml [package] name = "X". Standalone package manifests only
+	// (workspace-only Cargo.toml has no [package] section, returns no match).
+	reCargoPackageName = regexp.MustCompile(
+		`(?m)^\s*name\s*=\s*"([^"]+)"`,
+	)
+
+	// Cargo.toml [[bin]] name = "X". Multiple [[bin]] sections per crate
+	// possible; captures all explicit binary declarations. If no [[bin]],
+	// the binary defaults to the [package].name.
+	reCargoBinName = regexp.MustCompile(
+		`(?ms)^\s*\[\[bin\]\][^\[]*?^\s*name\s*=\s*"([^"]+)"`,
+	)
 )
 
 // nixServiceInfo is one parsed Nix service module.
 type nixServiceInfo struct {
-	serviceName string   // from options.redacted.services.<name>
-	pubTopic    string   // "" if not declared
-	subTopics   []string // base literal list only (unconditional)
+	serviceName string // from options.redacted.services.<name>
+	pubTopic    string // primary baf.pub_topic default; "" if not declared
+	// pubTopicVariants captures additional `baf.pub_topic_<suffix>` defaults
+	// (e.g., anavd's `baf.pub_topic_fast = "anavd-fast"`). Each variant is
+	// emitted as a separate Service → Topic edge.
+	pubTopicVariants []string
+	subTopics        []string // base literal list only (unconditional)
 	// conditionalSubTopics: additional topics from `++ (if ...)` or
 	// `++ lib.optional(s)` tails. Only ONE branch of each if/else is
 	// taken at runtime, but all branches are captured as a union since
@@ -133,7 +171,11 @@ type nixServiceInfo struct {
 	// additional_sub_topics keyed by target service name (often references a
 	// different service, e.g., nazgul-radar-services.nix adds "simd" to trackerd).
 	additionalSubsByService map[string][]string
-	declaredIn              string
+	// runsBinaries: package names referenced via `${pkgs.redacted.<pkg>}/bin/<binary>`.
+	// Filtered to exclude pubmsg/submsg (framework helpers, not service code).
+	// Used to emit Service ── RUNS_BINARY ──> Module edges.
+	runsBinaries []string
+	declaredIn   string
 }
 
 // passNixServices walks .nix files under RepoPath, parses redacted service
@@ -167,6 +209,11 @@ func (p *Pipeline) passNixServices() {
 	serviceCount := 0
 	topicCount := 0
 	edgeCount := 0
+	runsBinaryCount := 0
+
+	// Build Rust binary index once for the repo. Empty if no Cargo.toml
+	// files found (non-Rust repo); RUNS_BINARY emission no-ops cleanly.
+	rustBinaryMap := p.buildRustBinaryMap()
 
 	for _, absPath := range nixFiles {
 		data, err := os.ReadFile(absPath)
@@ -201,9 +248,20 @@ func (p *Pipeline) passNixServices() {
 			}
 		}
 
-		// Emit PUBLISHES_TO edges
+		// Emit PUBLISHES_TO edges. Combines: primary baf.pub_topic + named
+		// pub_topic_<suffix> variants + imperative pubmsg literals.
 		if serviceID > 0 {
-			for _, topic := range uniqueStrings(append([]string{info.pubTopic}, info.impPubTopics...)) {
+			declarativePubs := make(map[string]struct{})
+			if info.pubTopic != "" {
+				declarativePubs[info.pubTopic] = struct{}{}
+			}
+			for _, t := range info.pubTopicVariants {
+				declarativePubs[t] = struct{}{}
+			}
+			allPubs := []string{info.pubTopic}
+			allPubs = append(allPubs, info.pubTopicVariants...)
+			allPubs = append(allPubs, info.impPubTopics...)
+			for _, topic := range uniqueStrings(allPubs) {
 				if topic == "" {
 					continue
 				}
@@ -212,7 +270,8 @@ func (p *Pipeline) passNixServices() {
 					continue
 				}
 				topicCount++
-				if p.insertNixEdge(serviceID, topicID, "PUBLISHES_TO", topic == info.pubTopic, relPath) {
+				_, isDeclarative := declarativePubs[topic]
+				if p.insertNixEdge(serviceID, topicID, "PUBLISHES_TO", isDeclarative, relPath) {
 					edgeCount++
 				}
 			}
@@ -281,6 +340,36 @@ func (p *Pipeline) passNixServices() {
 				}
 			}
 		}
+
+		// RUNS_BINARY edges: Service → Module (the Rust crate's main entry).
+		// Only emit when the Service node was successfully created AND the
+		// referenced binary maps to a known crate AND that crate's Module
+		// node exists in the graph.
+		if serviceID > 0 {
+			for _, bin := range info.runsBinaries {
+				entry, ok := rustBinaryMap[bin]
+				if !ok {
+					continue
+				}
+				moduleQN := p.ProjectName
+				if entry.cratePath != "" {
+					moduleQN += "." + entry.cratePath
+				}
+				moduleQN += ".src.main"
+				moduleNode, err := p.Store.FindNodeByQN(p.ProjectName, moduleQN)
+				if err != nil || moduleNode == nil {
+					// Try lib.rs fallback for crates without a main.rs binary.
+					libQN := strings.TrimSuffix(moduleQN, ".main") + ".lib"
+					moduleNode, err = p.Store.FindNodeByQN(p.ProjectName, libQN)
+					if err != nil || moduleNode == nil {
+						continue
+					}
+				}
+				if p.insertNixRunsBinaryEdge(serviceID, moduleNode.ID, bin, entry, relPath) {
+					runsBinaryCount++
+				}
+			}
+		}
 	}
 
 	if serviceCount > 0 || edgeCount > 0 {
@@ -289,8 +378,30 @@ func (p *Pipeline) passNixServices() {
 			"services", serviceCount,
 			"topics", topicCount,
 			"edges", edgeCount,
+			"runs_binary_edges", runsBinaryCount,
 		)
 	}
+}
+
+// insertNixRunsBinaryEdge creates a Service ── RUNS_BINARY ──> Module edge
+// linking a systemd service to the Rust crate's source module.
+func (p *Pipeline) insertNixRunsBinaryEdge(srcID, tgtID int64, binaryName string, entry rustBinaryEntry, declaredIn string) bool {
+	edge := &store.Edge{
+		Project:  p.ProjectName,
+		SourceID: srcID,
+		TargetID: tgtID,
+		Type:     "RUNS_BINARY",
+		Properties: map[string]any{
+			"source":           "nix",
+			"binary_name":      binaryName,
+			"crate_name":       entry.crateName,
+			"crate_path":       entry.cratePath,
+			"confidence_tier":  store.ConfidenceExtracted,
+			"declared_in_file": declaredIn,
+		},
+	}
+	_, err := p.Store.InsertEdge(edge)
+	return err == nil
 }
 
 // parseNixServiceFile extracts service + topic bindings from one Nix file.
@@ -305,9 +416,21 @@ func parseNixServiceFile(source string) nixServiceInfo {
 		info.serviceName = m[1]
 	}
 
-	// Declarative pub topic
-	if m := reNixBafPubTopic.FindStringSubmatch(source); len(m) == 2 {
-		info.pubTopic = m[1]
+	// Declarative pub topic(s) — supports `baf.pub_topic` plus named
+	// variants like `baf.pub_topic_fast`. First match becomes the primary
+	// pub; additional matches are stored as variants.
+	for i, m := range reNixBafPubTopic.FindAllStringSubmatch(source, -1) {
+		if i == 0 {
+			info.pubTopic = m[1]
+		} else {
+			info.pubTopicVariants = append(info.pubTopicVariants, m[1])
+		}
+	}
+
+	// Declarative singular sub topic — `baf.<name>_sub_topic = mkOption { default = "X" }`.
+	// adsbd uses `baf.ahrs_sub_topic = "sbfd"` (only PSM example).
+	for _, m := range reNixBafSubTopicSingular.FindAllStringSubmatch(source, -1) {
+		info.subTopics = append(info.subTopics, m[2])
 	}
 
 	// Declarative sub topics — base literal list (always subscribed).
@@ -353,7 +476,94 @@ func parseNixServiceFile(source string) nixServiceInfo {
 		info.impSubTopics = append(info.impSubTopics, extractSubmsgTopics(m[1])...)
 	}
 
+	// `${pkgs.redacted.X}/bin/Y` references — Y is the binary the service runs.
+	// Filter out pubmsg/submsg (framework helpers, not the service code itself).
+	seen := make(map[string]struct{})
+	for _, m := range reNixredactedBinary.FindAllStringSubmatch(source, -1) {
+		bin := m[2]
+		if bin == "pubmsg" || bin == "submsg" {
+			continue
+		}
+		if _, dup := seen[bin]; dup {
+			continue
+		}
+		seen[bin] = struct{}{}
+		info.runsBinaries = append(info.runsBinaries, bin)
+	}
+
 	return info
+}
+
+// rustBinaryEntry maps a Rust binary name to its source crate.
+type rustBinaryEntry struct {
+	cratePath string // dotted relative path, e.g., "canstatd" or "calibration.calibd"
+	crateName string // [package] name field
+}
+
+// buildRustBinaryMap scans Cargo.toml files under RepoPath and produces
+// a map from binary name to crate. Binary name defaults to the package
+// name; if `[[bin]] name = "X"` is present, X is used.
+//
+// Used by RUNS_BINARY edge emission to resolve `${pkgs.redacted.X}/bin/Y`
+// references in Nix scripts back to the Rust crate's Module node.
+func (p *Pipeline) buildRustBinaryMap() map[string]rustBinaryEntry {
+	out := make(map[string]rustBinaryEntry)
+	_ = filepath.WalkDir(p.RepoPath, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil //nolint:nilerr
+		}
+		if d.IsDir() {
+			if d.Name() == "target" || d.Name() == "node_modules" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if d.Name() != "Cargo.toml" {
+			return nil
+		}
+		data, rerr := os.ReadFile(path)
+		if rerr != nil {
+			return nil
+		}
+		source := string(data)
+
+		// [package] name — first match wins. Workspace-only manifests have
+		// no [package] section, return early.
+		pkgName := ""
+		if m := reCargoPackageName.FindStringSubmatch(source); len(m) == 2 {
+			pkgName = m[1]
+		}
+		if pkgName == "" {
+			return nil
+		}
+
+		crateDir := filepath.Dir(path)
+		relCrate, err := filepath.Rel(p.RepoPath, crateDir)
+		if err != nil {
+			return nil
+		}
+		dotted := strings.ReplaceAll(filepath.ToSlash(relCrate), "/", ".")
+		// Repo root crate has empty rel path; treat as "" so QN is just package.
+		if dotted == "." {
+			dotted = ""
+		}
+		entry := rustBinaryEntry{cratePath: dotted, crateName: pkgName}
+
+		// Default binary = package name.
+		out[pkgName] = entry
+		// Replace `-` with `_` (Cargo's default binary lookup convention)
+		// AND keep the original; Nix references can use either form.
+		if strings.Contains(pkgName, "-") {
+			out[strings.ReplaceAll(pkgName, "-", "_")] = entry
+		}
+
+		// Explicit [[bin]] name fields override / supplement.
+		for _, m := range reCargoBinName.FindAllStringSubmatch(source, -1) {
+			out[m[1]] = entry
+		}
+		return nil
+	})
+	return out
 }
 
 // extractNixStringList pulls all "quoted" items from a Nix list body.

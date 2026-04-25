@@ -1,7 +1,12 @@
 {
-  "_comment": "Hand-verified ground truth for a subset of psm Nix modules. Each entry was manually read from the source file and transcribed. This provides an INDEPENDENT check against the regex-based oracle_nix_pubsub.py, which shares patterns with the Go extractor and therefore produces inflated (~1.0) F1 against the same extractor.",
-  "_caveat": "Small (~5 services) — adequate to catch systemic extraction bugs, not a statistical recall baseline. Expanding the set is a reasonable follow-up.",
+  "_comment": "Hand-verified ground truth for psm Nix modules. Each entry was manually read from the source file and transcribed. INDEPENDENT check against the regex-based oracle_nix_pubsub.py — that oracle shares patterns with the Go extractor and produces inflated F1 against the same extractor.",
+  "_caveat": "Sample = 20 services covering pattern variety: declarative-only, imperative-only, conditional-heavy, cross-file, multi-pub, non-standard sub patterns. Sample is small for statistical recall; large enough to catch systemic bugs.",
   "_generated_for_repo": "psm @ 2026-04-24",
+  "_pattern_categories": {
+    "declarative_only": ["appliedd", "berriesd", "battmond", "controlsd", "ebraked", "emcond", "fuserd", "hobbled", "missiond", "pentad", "saftd"],
+    "imperative_only": ["canstatd", "compassd", "anellod", "nmeaconvd"],
+    "mixed_or_special": ["procrustesd", "anavd", "adsbd", "apid", "trackerd"]
+  },
 
   "services": [
     {
@@ -17,7 +22,7 @@
       "pub_topics": ["sbfd"],
       "sub_topics": ["baf-test", "controlsd"],
       "pub_source": "declarative (baf.pub_topic default = \"sbfd\" — legacy name override)",
-      "sub_source": "declarative (baf.sub_topics default = [ \"baf-test\" \"controlsd\" ])"
+      "sub_source": "declarative baf.sub_topics default list"
     },
     {
       "service": "berriesd",
@@ -38,14 +43,111 @@
         "takd", "tocarod", "torchyd2", "trajd", "vmond",
         "vmond_perception"
       ],
-      "sub_source": "declarative baf.sub_topics base list only (21 entries). Excludes conditional ++ appends for fuserd/trackerd, lift/lift-aux-fuel, haild, payload."
+      "sub_source": "declarative baf.sub_topics base list (21 entries). Excludes conditional ++ appends for fuserd/trackerd, lift/lift-aux-fuel, haild, payload."
     },
     {
       "service": "trackerd",
       "source_file": "nix/modules/trackerd.nix + nix/hardware/common/nazgul-radar-services.nix",
       "pub_topics": ["trackerd"],
-      "sub_topics_partial_note": "The trackerd module has its own sub_topics list; additional topic \"simd\" is added cross-file via nix/hardware/common/nazgul-radar-services.nix  `redacted.services.trackerd.additional_sub_topics = [ \"simd\" ]`. Verify both files are captured.",
+      "sub_topics_partial_note": "trackerd has its own sub_topics list; additional topic \"simd\" added cross-file via nix/hardware/common/nazgul-radar-services.nix. Verify both files captured.",
       "must_include_in_sub_topics": ["simd"]
+    },
+
+    {
+      "service": "adsbd",
+      "source_file": "nix/modules/adsbd.nix",
+      "pub_topics": ["adsbd"],
+      "sub_topics": ["sbfd"],
+      "pub_source": "declarative baf.pub_topic",
+      "sub_source": "NON-STANDARD: baf.ahrs_sub_topic (singular scalar, not baf.sub_topics list). Only service in PSM using this pattern. Likely missed by current regex extractor."
+    },
+    {
+      "service": "anavd",
+      "source_file": "nix/modules/anavd.nix",
+      "pub_topics": ["anavd", "anavd-fast"],
+      "sub_topics": [],
+      "pub_source": "TWO declarative pub topics: baf.pub_topic = \"anavd\" + baf.pub_topic_fast = \"anavd-fast\". Tests multi-pub coverage."
+    },
+    {
+      "service": "anellod",
+      "source_file": "nix/modules/anellod.nix",
+      "pub_topics": ["anellod"],
+      "sub_topics": []
+    },
+    {
+      "service": "battmond",
+      "source_file": "nix/modules/battmond.nix",
+      "pub_topics": ["battmond"],
+      "sub_topics": ["pentad", "saftd"]
+    },
+    {
+      "service": "compassd",
+      "source_file": "nix/modules/compassd.nix",
+      "pub_topics": ["compassd"],
+      "sub_topics": []
+    },
+    {
+      "service": "controlsd",
+      "source_file": "nix/modules/controlsd.nix",
+      "pub_topics": ["controlsd"],
+      "sub_topics": ["apid", "baf-test", "sbfd", "stated", "trajd", "uxvd", "appliedd", "pentad", "ebraked"]
+    },
+    {
+      "service": "ebraked",
+      "source_file": "nix/modules/ebraked.nix",
+      "pub_topics": ["ebraked"],
+      "sub_topics": ["baf-test", "nmeaconvd", "garminaisd", "missiond", "stated", "sbfd", "swarmd", "controlsd"]
+    },
+    {
+      "service": "emcond",
+      "source_file": "nix/modules/emcond.nix",
+      "pub_topics": ["emcond"],
+      "sub_topics": ["baf-test", "emconctl", "apid"]
+    },
+    {
+      "service": "fuserd",
+      "source_file": "nix/modules/fuserd.nix",
+      "pub_topics": ["fuserd"],
+      "sub_topics": ["baf-test", "swarmd", "trackerd", "apid"]
+    },
+    {
+      "service": "hobbled",
+      "source_file": "nix/modules/hobbled.nix",
+      "pub_topics": ["hobbled"],
+      "sub_topics": ["sbfd", "stated", "pentad", "controlsd"]
+    },
+    {
+      "service": "missiond",
+      "source_file": "nix/modules/missiond.nix",
+      "pub_topics": ["missiond"],
+      "sub_topics": ["apid", "baf-test", "sbfd", "stated", "swarmd", "trajd", "trackerd"],
+      "_note": "Has conditional ++ append for use_fuser ? [ \"fuserd\" ] : [ ]; not in unconditional sub_topics."
+    },
+    {
+      "service": "nmeaconvd",
+      "source_file": "nix/modules/nmeaconvd.nix",
+      "pub_topics": ["nmeaconvd"],
+      "sub_topics": [],
+      "pub_source": "declarative baf.pub_topic; script uses `pubmsg ${cfg.baf.pub_topic}` (templated)"
+    },
+    {
+      "service": "pentad",
+      "source_file": "nix/modules/pentad.nix",
+      "pub_topics": ["pentad"],
+      "sub_topics": ["apid", "baf-test", "controlsd", "trajd"]
+    },
+    {
+      "service": "procrustesd",
+      "source_file": "nix/modules/procrustesd.nix",
+      "pub_topics": ["procrustesd"],
+      "sub_topics": ["apid", "torchyd2", "swarmd", "sbfd"],
+      "pub_source": "imperative (hardcoded `pubmsg procrustesd`; no baf.pub_topic mkOption)"
+    },
+    {
+      "service": "saftd",
+      "source_file": "nix/modules/saftd.nix",
+      "pub_topics": ["saftd"],
+      "sub_topics": ["saft-registry"]
     }
   ]
 }

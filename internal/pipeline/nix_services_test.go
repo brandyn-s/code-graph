@@ -253,6 +253,104 @@ func TestParseNixServiceFile_ConditionalSubTopics(t *testing.T) {
 	}
 }
 
+// TestParseNixServiceFile_RunsBinary covers extraction of `${pkgs.redacted.X}/bin/Y`
+// references with the pubmsg/submsg helpers filtered out.
+func TestParseNixServiceFile_RunsBinary(t *testing.T) {
+	t.Parallel()
+
+	src := `{ config, lib, pkgs, ... }:
+{
+  options.redacted.services.demo = {
+    enable = mkEnableOption "demo";
+  };
+
+  config = mkIf cfg.enable {
+    systemd.services.demo = {
+      script = ''
+        ${pkgs.redacted.demo}/bin/demo \
+          | ${pkgs.redacted.helper-tool}/bin/helper-tool \
+          | ${pkgs.redacted.pubmsg}/bin/pubmsg demo
+      '';
+    };
+  };
+}`
+
+	info := parseNixServiceFile(src)
+
+	wantBins := map[string]bool{"demo": true, "helper-tool": true}
+	if len(info.runsBinaries) != len(wantBins) {
+		t.Errorf("runsBinaries count: want %d got %d (%v)",
+			len(wantBins), len(info.runsBinaries), info.runsBinaries)
+	}
+	for _, b := range info.runsBinaries {
+		if !wantBins[b] {
+			t.Errorf("unexpected runs_binary: %q", b)
+		}
+	}
+	// Confirm pubmsg was filtered out (it's a framework helper, not the implementation).
+	for _, b := range info.runsBinaries {
+		if b == "pubmsg" || b == "submsg" {
+			t.Errorf("framework helper not filtered: %q", b)
+		}
+	}
+}
+
+// TestParseNixServiceFile_PubTopicVariants covers `baf.pub_topic_<suffix>` named
+// variants — anavd has both `baf.pub_topic` and `baf.pub_topic_fast`.
+func TestParseNixServiceFile_PubTopicVariants(t *testing.T) {
+	t.Parallel()
+
+	src := `{
+  options.redacted.services.anavd = {
+    baf.pub_topic = mkOption {
+      type = types.str;
+      default = "anavd";
+    };
+    baf.pub_topic_fast = mkOption {
+      type = types.str;
+      default = "anavd-fast";
+    };
+  };
+}`
+
+	info := parseNixServiceFile(src)
+
+	if info.pubTopic != "anavd" {
+		t.Errorf("primary pubTopic: want anavd got %q", info.pubTopic)
+	}
+	if len(info.pubTopicVariants) != 1 || info.pubTopicVariants[0] != "anavd-fast" {
+		t.Errorf("pubTopicVariants: want [anavd-fast] got %v", info.pubTopicVariants)
+	}
+}
+
+// TestParseNixServiceFile_SingularSubTopic covers adsbd's
+// `baf.ahrs_sub_topic = "sbfd"` (singular scalar) pattern.
+func TestParseNixServiceFile_SingularSubTopic(t *testing.T) {
+	t.Parallel()
+
+	src := `{
+  options.redacted.services.adsbd = {
+    baf.pub_topic = mkOption {
+      type = types.str;
+      default = "adsbd";
+    };
+    baf.ahrs_sub_topic = mkOption {
+      type = types.str;
+      default = "sbfd";
+    };
+  };
+}`
+
+	info := parseNixServiceFile(src)
+
+	if info.pubTopic != "adsbd" {
+		t.Errorf("pubTopic: want adsbd got %q", info.pubTopic)
+	}
+	if len(info.subTopics) != 1 || info.subTopics[0] != "sbfd" {
+		t.Errorf("subTopics: want [sbfd] got %v", info.subTopics)
+	}
+}
+
 // TestUniqueStrings sanity check.
 func TestUniqueStrings(t *testing.T) {
 	t.Parallel()

@@ -1,0 +1,15 @@
+{
+  "description": "Hand-authored ground truth for nix-pubsub-minimal. Two services covering the canonical patterns: declarative mkOption (alphad) and imperative-only (betad). Plus cross-file additional_sub_topics. Used by the regression CI gate to detect extraction breakage.",
+  "expected_services": ["alphad", "betad"],
+  "expected_publishes_to": [
+    {"service": "alphad", "topic": "alphad"},
+    {"service": "betad",  "topic": "betad"}
+  ],
+  "expected_subscribes_to": [
+    {"service": "alphad", "topic": "broker-a"},
+    {"service": "alphad", "topic": "broker-b"},
+    {"service": "alphad", "topic": "telemetry"},
+    {"service": "alphad", "topic": "extra-cross-file"}
+  ],
+  "notes": "alphad has 1 declarative pub + 3 declarative subs + 1 cross-file sub via betad's additional_sub_topics assignment. betad has 1 imperative pub. Total: 2 PUBLISHES_TO, 4 SUBSCRIBES_TO, 6 expected edges across 2 services + 4 topic nodes (alphad, betad, broker-a, broker-b, telemetry, extra-cross-file = 6 topic nodes since topic names match their producers in some cases)."
+}

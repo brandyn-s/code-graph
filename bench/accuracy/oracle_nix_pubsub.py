@@ -35,7 +35,12 @@ _RE_SERVICE_DECL = re.compile(
 )
 
 _RE_PUB_TOPIC = re.compile(
-    r"baf\.pub_topic\s*=\s*mkOption\s*\{[^}]*?default\s*=\s*\"([^\"]+)\"",
+    r"baf\.pub_topic(?:_[a-zA-Z_][a-zA-Z0-9_]*)?\s*=\s*mkOption\s*\{[^}]*?default\s*=\s*\"([^\"]+)\"",
+    re.DOTALL,
+)
+
+_RE_SUB_TOPIC_SINGULAR = re.compile(
+    r"baf\.([a-zA-Z_][a-zA-Z0-9_]*)_sub_topic\s*=\s*mkOption\s*\{[^}]*?default\s*=\s*\"([^\"]+)\"",
     re.DOTALL,
 )
 
@@ -69,6 +74,7 @@ class NixServiceOracle:
 
     service_name: str = ""
     pub_topic: str = ""
+    pub_topic_variants: set[str] = field(default_factory=set)
     sub_topics: set[str] = field(default_factory=set)
     conditional_subs: set[str] = field(default_factory=set)
     imp_pub_topics: set[str] = field(default_factory=set)
@@ -102,13 +108,19 @@ def parse_nix_file(source: str) -> NixServiceOracle:
     if m:
         info.service_name = m.group(1)
 
-    m = _RE_PUB_TOPIC.search(source)
-    if m:
-        info.pub_topic = m.group(1)
+    pub_matches = list(_RE_PUB_TOPIC.finditer(source))
+    if pub_matches:
+        info.pub_topic = pub_matches[0].group(1)
+        for m in pub_matches[1:]:
+            info.pub_topic_variants.add(m.group(1))
 
     m = _RE_SUB_TOPICS_BASE.search(source)
     if m:
         info.sub_topics = set(_RE_STR_LIT.findall(m.group(1)))
+
+    # Singular `baf.<name>_sub_topic = "X"` — adsbd's pattern.
+    for m in _RE_SUB_TOPIC_SINGULAR.finditer(source):
+        info.sub_topics.add(m.group(2))
 
     m = _RE_SUB_TOPICS_FULL.search(source)
     if m:

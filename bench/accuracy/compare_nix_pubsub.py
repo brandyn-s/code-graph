@@ -92,6 +92,7 @@ def compare(repo_root: Path, db_path: Path, project: str, include_ambiguous: boo
             svc_pub = set()
             if o.pub_topic:
                 svc_pub.add(o.pub_topic)
+            svc_pub |= o.pub_topic_variants  # named variants like anavd-fast
             svc_pub |= o.imp_pub_topics  # imperative pubs count
             svc_sub = set(o.sub_topics) | set(o.imp_sub_topics)
             oracle_map.setdefault(o.service_name, {"pub": set(), "sub": set()})

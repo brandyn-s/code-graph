@@ -1,28 +1,17 @@
-// eval_rank_localize is a one-shot evaluation harness for the rank_by_query
-// (PageRank) and code_localize (LocAgent-style BFS) MCP tools.
-//
-// Purpose: Gate β validation. Unit tests prove the algorithms work on
-// synthetic graphs. This program runs them against real indexed projects
-// to verify behavior on production-scale data.
-//
-// Usage:
-//
-//	go run ./bench/research/eval_rank_localize <db-path> <"query">
-//
-// Example:
-//
-//	go run ./bench/research/eval_rank_localize \
-//	  ~/.cache/codebase-memory-mcp/c-Users-user-Documents-GitHub-mcp-servers.db \
-//	  "how does authentication work"
+// eval_rank_localize is a one-shot evaluation harness for rank_by_query
+// (PageRank), code_localize (LocAgent BFS), and code_localize_agent
+// (LLM-driven LocAgent loop).
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/DeusData/codebase-memory-mcp/internal/locagent"
 	"github.com/DeusData/codebase-memory-mcp/internal/localize"
 	"github.com/DeusData/codebase-memory-mcp/internal/ranking"
 	"github.com/DeusData/codebase-memory-mcp/internal/store"
@@ -31,11 +20,14 @@ import (
 func main() {
 	topK := flag.Int("top-k", 10, "max results")
 	depth := flag.Int("depth", 3, "BFS depth for code_localize")
+	seedStrategy := flag.String("seed-strategy", string(ranking.SeedStrategyHybrid), "substring | embedding | hybrid")
+	runAgent := flag.Bool("agent", false, "also run code_localize_agent (requires ANTHROPIC_API_KEY)")
 	flag.Parse()
 
 	args := flag.Args()
 	if len(args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: eval_rank_localize <db-path> <query>")
+		fmt.Fprintln(os.Stderr, "usage: eval_rank_localize [flags] <db-path> <query>")
+		flag.PrintDefaults()
 		os.Exit(2)
 	}
 	dbPath := args[0]
@@ -53,16 +45,9 @@ func main() {
 	}
 	defer st.Close()
 
-	// Project name = filename without extension. The store doesn't enforce
-	// that the path-derived name matches what's stored in the projects
-	// table — pull the actual project from the DB.
 	projects, err := st.ListProjects()
-	if err != nil {
+	if err != nil || len(projects) == 0 {
 		fmt.Fprintf(os.Stderr, "list projects: %v\n", err)
-		os.Exit(1)
-	}
-	if len(projects) == 0 {
-		fmt.Fprintf(os.Stderr, "no projects in %s\n", dbPath)
 		os.Exit(1)
 	}
 	project := projects[0].Name
@@ -70,15 +55,18 @@ func main() {
 	fmt.Printf("db: %s\n", filepath.Base(dbPath))
 	fmt.Printf("project: %s\n", project)
 	fmt.Printf("query: %q\n", query)
-	fmt.Printf("top_k: %d, depth: %d\n", *topK, *depth)
+	fmt.Printf("seed_strategy: %s, top_k: %d, depth: %d, agent: %v\n", *seedStrategy, *topK, *depth, *runAgent)
 
 	nodeCount, _ := st.CountNodes(project)
 	edgeCount, _ := st.CountEdges(project)
-	fmt.Printf("graph: %d nodes, %d edges\n\n", nodeCount, edgeCount)
+	embedCount, _ := st.EmbeddingCount(project)
+	fmt.Printf("graph: %d nodes, %d edges, %d embeddings\n\n", nodeCount, edgeCount, embedCount)
 
-	// === A-2: rank_by_query ===
-	fmt.Println("=== rank_by_query (PageRank) ===")
-	ranked, err := ranking.RankByQuery(st, project, query, *topK)
+	ctx := context.Background()
+	strategy := ranking.SeedStrategy(*seedStrategy)
+
+	fmt.Println("=== rank_by_query ===")
+	ranked, err := ranking.RankByQueryWithStrategy(ctx, st, project, query, *topK, strategy)
 	if err != nil {
 		fmt.Printf("ERROR: %v\n\n", err)
 	} else {
@@ -89,9 +77,8 @@ func main() {
 		fmt.Println()
 	}
 
-	// === A-1: code_localize ===
-	fmt.Println("=== code_localize (LocAgent BFS) ===")
-	localized, err := localize.CodeLocalize(st, project, query, *depth, *topK)
+	fmt.Println("=== code_localize (primitives) ===")
+	localized, err := localize.CodeLocalizeWithStrategy(ctx, st, project, query, *depth, *topK, strategy)
 	if err != nil {
 		fmt.Printf("ERROR: %v\n\n", err)
 	} else {
@@ -103,20 +90,25 @@ func main() {
 		fmt.Println()
 	}
 
-	// === Token cost estimate ===
-	fmt.Println("=== token cost estimate ===")
-	// Rough heuristic: each result is ~30 tokens (name + qn + label + score).
-	rankTokens := len(ranked) * 30
-	locTokens := len(localized) * 50 // larger because includes file:line range
-	fullDumpTokens := nodeCount * 30 // worst-case naive: dump every node
-	fmt.Printf("  rank_by_query top_k=%d: ~%d tokens\n", *topK, rankTokens)
-	fmt.Printf("  code_localize top_k=%d: ~%d tokens\n", *topK, locTokens)
-	fmt.Printf("  naive full-graph dump: ~%d tokens\n", fullDumpTokens)
-	if rankTokens > 0 {
-		fmt.Printf("  rank_by_query reduction: %.1fx vs full dump\n", float64(fullDumpTokens)/float64(rankTokens))
-	}
-	if locTokens > 0 {
-		fmt.Printf("  code_localize reduction: %.1fx vs full dump\n", float64(fullDumpTokens)/float64(locTokens))
+	if *runAgent {
+		fmt.Println("=== code_localize_agent (LLM loop) ===")
+		res, err := locagent.Run(ctx, st, project, query, *topK)
+		if err != nil {
+			fmt.Printf("ERROR: %v\n\n", err)
+		} else {
+			fmt.Printf("turns=%d, stop_reason=%s, input_tokens=%d, output_tokens=%d\n",
+				res.Turns, res.StopReason, res.InputTokens, res.OutputTokens)
+			for i, e := range res.Entities {
+				fmt.Printf("  %2d. %s\n", i+1, e.QualifiedName)
+				fmt.Printf("      %s — %s\n", e.FilePath, truncate(e.Reason, 100))
+			}
+			fmt.Println()
+			fmt.Println("Transcript:")
+			for _, t := range res.Transcript {
+				fmt.Printf("  T%d %s %s: %s\n", t.Turn, t.Kind, t.ToolName, truncate(t.Summary, 150))
+			}
+			fmt.Println()
+		}
 	}
 }
 

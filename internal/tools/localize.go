@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/DeusData/codebase-memory-mcp/internal/localize"
+	"github.com/DeusData/codebase-memory-mcp/internal/ranking"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -14,6 +15,7 @@ type codeLocalizeResult struct {
 	Project          string                       `json:"project"`
 	Depth            int                          `json:"depth"`
 	TopK             int                          `json:"top_k"`
+	SeedStrategy     string                       `json:"seed_strategy"`
 	Matches          []localize.LocalizedEntity   `json:"matches"`
 	Total            int                          `json:"total_returned"`
 	Note             string                       `json:"note,omitempty"`
@@ -21,7 +23,7 @@ type codeLocalizeResult struct {
 
 // handleCodeLocalize is the code_localize MCP tool handler. Wraps
 // localize.CodeLocalize with project resolution and result formatting.
-func (s *Server) handleCodeLocalize(_ context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+func (s *Server) handleCodeLocalize(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	args, err := parseArgs(req)
 	if err != nil {
 		return errResult(err.Error()), nil
@@ -40,13 +42,18 @@ func (s *Server) handleCodeLocalize(_ context.Context, req *mcp.CallToolRequest)
 
 	depth := getIntArg(args, "depth", 3)
 	topK := getIntArg(args, "top_k", 10)
+	strategyArg := getStringArg(args, "seed_strategy")
+	if strategyArg == "" {
+		strategyArg = string(ranking.SeedStrategyHybrid)
+	}
+	strategy := ranking.SeedStrategy(strategyArg)
 
 	st, err := s.router.ForProject(project)
 	if err != nil {
 		return errResult(fmt.Sprintf("resolve store: %v", err)), nil
 	}
 
-	matches, err := localize.CodeLocalize(st, project, issue, depth, topK)
+	matches, err := localize.CodeLocalizeWithStrategy(ctx, st, project, issue, depth, topK, strategy)
 	if err != nil {
 		return errResult(fmt.Sprintf("code_localize: %v", err)), nil
 	}
@@ -56,6 +63,7 @@ func (s *Server) handleCodeLocalize(_ context.Context, req *mcp.CallToolRequest)
 		Project:          project,
 		Depth:            depth,
 		TopK:             topK,
+		SeedStrategy:     string(strategy),
 		Matches:          matches,
 		Total:            len(matches),
 	}

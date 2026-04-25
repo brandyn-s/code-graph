@@ -467,6 +467,7 @@ func (s *Server) registerTools() {
 	s.registerFindRationaleTool()
 	s.registerRankByQueryTool()
 	s.registerCodeLocalizeTool()
+	s.registerCodeLocalizeAgentTool()
 }
 
 // registerFindRationaleTool surfaces the Rationale nodes produced by
@@ -570,6 +571,11 @@ func (s *Server) registerRankByQueryTool() {
 				"top_k": {
 					"type": "integer",
 					"description": "Maximum number of ranked nodes to return (1-200, default 20). Higher values give wider context at cost of more tokens."
+				},
+				"seed_strategy": {
+					"type": "string",
+					"enum": ["substring", "embedding", "hybrid"],
+					"description": "How to match query → seed nodes. 'substring' (legacy): tokens substring-match Name/QualifiedName. 'embedding': Voyage-embed the query, cosine-search node embeddings (requires VOYAGE_API_KEY + index with embeddings populated). 'hybrid' (default): both, deduplicated; falls back to substring if embeddings unavailable."
 				}
 			},
 			"required": ["query"]
@@ -614,11 +620,59 @@ func (s *Server) registerCodeLocalizeTool() {
 				"top_k": {
 					"type": "integer",
 					"description": "Maximum number of localized entities to return (1-50, default 10)."
+				},
+				"seed_strategy": {
+					"type": "string",
+					"enum": ["substring", "embedding", "hybrid"],
+					"description": "How to match issue → seed nodes. 'substring' (legacy): tokens substring-match Name/QualifiedName. 'embedding': Voyage-embed the issue, cosine-search node embeddings (requires VOYAGE_API_KEY + index with embeddings populated). 'hybrid' (default): both, deduplicated; falls back to substring if embeddings unavailable."
 				}
 			},
 			"required": ["issue_description"]
 		}`),
 	}, s.handleCodeLocalize)
+}
+
+// registerCodeLocalizeAgentTool adds code_localize_agent — the LLM-driven
+// LocAgent variant. Wraps our graph primitives in an iterative agent loop
+// (rank_by_query → code_localize → narrow → finalize). Slower and more
+// expensive per query than code_localize, but designed to match
+// LocAgent's published 92.7% file-level localization on Loc-Bench by
+// adding the intelligent narrowing layer that primitives-only cannot do.
+//
+// Requires ANTHROPIC_API_KEY. Falls back to errResult if missing.
+func (s *Server) registerCodeLocalizeAgentTool() {
+	s.addTool(&mcp.Tool{
+		Name: "code_localize_agent",
+		Annotations: &mcp.ToolAnnotations{
+			ReadOnlyHint:    true,
+			IdempotentHint:  false, // LLM is non-deterministic
+			OpenWorldHint:   boolPtr(true),
+			DestructiveHint: boolPtr(false),
+		},
+		Description: "LLM-driven code localization. Wraps rank_by_query and code_localize in a multi-turn agent loop (LocAgent ACL 2025 architecture). The LLM iteratively calls graph tools, narrows to relevant entities, and returns a finalized ranked list. Slower than code_localize (~5-15 turns @ ~1s each) but designed to match LocAgent's published 92.7% file-level Loc-Bench accuracy. Requires ANTHROPIC_API_KEY.",
+		InputSchema: json.RawMessage(`{
+			"type": "object",
+			"properties": {
+				"issue_description": {
+					"type": "string",
+					"description": "Natural-language issue/question to localize."
+				},
+				"project": {
+					"type": "string",
+					"description": "Project name (optional — uses session project if omitted)"
+				},
+				"top_k": {
+					"type": "integer",
+					"description": "Maximum number of entities to return (1-50, default 10)."
+				},
+				"include_transcript": {
+					"type": "boolean",
+					"description": "If true, include the agent's per-turn transcript (tool calls + summaries) for debugging. Default false."
+				}
+			},
+			"required": ["issue_description"]
+		}`),
+	}, s.handleCodeLocalizeAgent)
 }
 
 // registerGenerateReportTool adds the generate_report MCP tool — writes

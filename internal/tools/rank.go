@@ -10,17 +10,18 @@ import (
 )
 
 type rankByQueryResult struct {
-	Query    string                `json:"query"`
-	Project  string                `json:"project"`
-	TopK     int                   `json:"top_k"`
-	Matches  []ranking.RankedNode  `json:"matches"`
-	Total    int                   `json:"total_returned"`
-	Note     string                `json:"note,omitempty"`
+	Query        string                `json:"query"`
+	Project      string                `json:"project"`
+	TopK         int                   `json:"top_k"`
+	SeedStrategy string                `json:"seed_strategy"`
+	Matches      []ranking.RankedNode  `json:"matches"`
+	Total        int                   `json:"total_returned"`
+	Note         string                `json:"note,omitempty"`
 }
 
 // handleRankByQuery is the rank_by_query MCP tool. Wraps
 // ranking.RankByQuery with project resolution and result formatting.
-func (s *Server) handleRankByQuery(_ context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+func (s *Server) handleRankByQuery(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	args, err := parseArgs(req)
 	if err != nil {
 		return errResult(err.Error()), nil
@@ -38,23 +39,29 @@ func (s *Server) handleRankByQuery(_ context.Context, req *mcp.CallToolRequest) 
 	}
 
 	topK := getIntArg(args, "top_k", 20)
+	strategyArg := getStringArg(args, "seed_strategy")
+	if strategyArg == "" {
+		strategyArg = string(ranking.SeedStrategyHybrid)
+	}
+	strategy := ranking.SeedStrategy(strategyArg)
 
 	st, err := s.router.ForProject(project)
 	if err != nil {
 		return errResult(fmt.Sprintf("resolve store: %v", err)), nil
 	}
 
-	matches, err := ranking.RankByQuery(st, project, query, topK)
+	matches, err := ranking.RankByQueryWithStrategy(ctx, st, project, query, topK, strategy)
 	if err != nil {
 		return errResult(fmt.Sprintf("rank_by_query: %v", err)), nil
 	}
 
 	out := rankByQueryResult{
-		Query:   query,
-		Project: project,
-		TopK:    topK,
-		Matches: matches,
-		Total:   len(matches),
+		Query:        query,
+		Project:      project,
+		TopK:         topK,
+		SeedStrategy: string(strategy),
+		Matches:      matches,
+		Total:        len(matches),
 	}
 	if len(matches) == 0 {
 		out.Note = "No nodes matched the query. Try more specific tokens (function/class names) or expand `top_k`."

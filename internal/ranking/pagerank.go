@@ -27,6 +27,7 @@
 package ranking
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strings"
@@ -53,17 +54,23 @@ type RankedNode struct {
 }
 
 // RankByQuery computes query-weighted bidirectional PageRank over the
-// project graph and returns the top-K nodes by relevance.
+// project graph and returns the top-K nodes by relevance, using the
+// substring seed strategy (legacy default — kept for backward compat).
 //
-// The query is tokenized on whitespace; tokens match node Name (case-
-// insensitive equality) and QualifiedName (case-insensitive substring).
-// Matched nodes become personalization seeds. If no seeds match, the
-// function returns an empty slice with a descriptive error wrapping a
-// distinct ErrNoSeeds sentinel so callers can render a helpful message.
+// New callers should prefer RankByQueryWithStrategy for the choice of
+// substring / embedding / hybrid seed matching.
 //
 // The topK parameter is clamped to [1, 200]. The returned slice is
 // sorted by descending score.
 func RankByQuery(st *store.Store, project, query string, topK int) ([]RankedNode, error) {
+	return RankByQueryWithStrategy(context.Background(), st, project, query, topK, SeedStrategySubstring)
+}
+
+// RankByQueryWithStrategy is RankByQuery with explicit seed-strategy
+// selection (substring, embedding, or hybrid). Hybrid is the recommended
+// default — it merges substring + embedding seeds, falling back to
+// substring-only if embeddings are unavailable.
+func RankByQueryWithStrategy(ctx context.Context, st *store.Store, project, query string, topK int, strategy SeedStrategy) ([]RankedNode, error) {
 	if st == nil {
 		return nil, fmt.Errorf("nil store")
 	}
@@ -93,18 +100,36 @@ func RankByQuery(st *store.Store, project, query string, topK int) ([]RankedNode
 		return nil, fmt.Errorf("load edges: %w", err)
 	}
 
-	seedIdx := matchSeeds(nodes, query)
-	if len(seedIdx) == 0 {
-		return nil, fmt.Errorf("no nodes matched query tokens %q — try specific names or qualified names", query)
+	// Resolve seed nodes via the requested strategy. The seed-node IDs are
+	// then translated to the compact graph indices used by the PageRank
+	// kernel (matchSeeds returns indices, but for embedding/hybrid we get
+	// nodes back and need to convert).
+	seedNodes, err := MatchSeedNodesByStrategy(ctx, st, project, query, strategy)
+	if err != nil {
+		return nil, fmt.Errorf("seed match: %w", err)
+	}
+	if len(seedNodes) == 0 {
+		return nil, fmt.Errorf("no nodes matched query %q with strategy=%s — try a different query or seed_strategy", query, strategy)
 	}
 
-	// Build dense index: nodeID -> compact index [0, n).
-	n := len(nodes)
-	idxOf := make(map[int64]int, n)
+	// Build nodeID -> compact index map upfront for both seed translation
+	// and the PageRank kernel.
+	idxOf := make(map[int64]int, len(nodes))
 	for i, node := range nodes {
 		idxOf[node.ID] = i
 	}
 
+	seedIdx := make([]int, 0, len(seedNodes))
+	for _, sn := range seedNodes {
+		if i, ok := idxOf[sn.ID]; ok {
+			seedIdx = append(seedIdx, i)
+		}
+	}
+	if len(seedIdx) == 0 {
+		return nil, fmt.Errorf("seed nodes from strategy=%s did not map to project graph (stale store?)", strategy)
+	}
+
+	n := len(nodes)
 	// Forward ranks (outbound edges as-is).
 	forward := runPageRank(n, edges, idxOf, seedIdx, false)
 	// Reverse ranks (edges flipped). Addresses pure-source-collapse:

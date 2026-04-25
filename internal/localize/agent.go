@@ -25,6 +25,7 @@
 package localize
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/DeusData/codebase-memory-mcp/internal/ranking"
@@ -73,7 +74,18 @@ const (
 // CodeLocalize takes a natural-language issue/question and returns the
 // top-K graph entities most relevant to investigate. depth controls the
 // BFS expansion radius from seed nodes; topK is clamped to [1, 50].
+//
+// Uses substring seed matching for backward compatibility. Use
+// CodeLocalizeWithStrategy to choose substring / embedding / hybrid.
 func CodeLocalize(st *store.Store, project, issue string, depth, topK int) ([]LocalizedEntity, error) {
+	return CodeLocalizeWithStrategy(context.Background(), st, project, issue, depth, topK, ranking.SeedStrategySubstring)
+}
+
+// CodeLocalizeWithStrategy is CodeLocalize with explicit seed-strategy
+// selection. Hybrid is recommended for natural-language issues — it
+// merges substring (catches identifier-exact queries) with embedding
+// (catches intent-style queries that don't share substrings with names).
+func CodeLocalizeWithStrategy(ctx context.Context, st *store.Store, project, issue string, depth, topK int, strategy ranking.SeedStrategy) ([]LocalizedEntity, error) {
 	if st == nil {
 		return nil, fmt.Errorf("nil store")
 	}
@@ -96,17 +108,16 @@ func CodeLocalize(st *store.Store, project, issue string, depth, topK int) ([]Lo
 		topK = maxTopK
 	}
 
-	// Step 1: get the actual seed nodes — those whose name/QN match any
-	// query token. We do NOT use ranking.RankByQuery here because that
-	// returns the FULL PageRank-ranked node list (every node in the
-	// project, sorted), not just the matched seeds. For BFS expansion
-	// we need to start from query-matched nodes only.
-	seedNodes, err := ranking.MatchSeedNodes(st, project, issue)
+	// Step 1: resolve seed nodes via the requested strategy. For natural-
+	// language issues, hybrid combines substring matches (identifier-exact)
+	// with embedding matches (intent-similar) — the empirical Loc-Bench
+	// gap on substring-only motivated this option.
+	seedNodes, err := ranking.MatchSeedNodesByStrategy(ctx, st, project, issue, strategy)
 	if err != nil {
-		return nil, fmt.Errorf("seed match: %w", err)
+		return nil, fmt.Errorf("seed match (strategy=%s): %w", strategy, err)
 	}
 	if len(seedNodes) == 0 {
-		return nil, fmt.Errorf("no nodes matched issue tokens — try specific symbol names or file references")
+		return nil, fmt.Errorf("no nodes matched issue with strategy=%s — try a different query or seed_strategy", strategy)
 	}
 	// Cap the number of seeds we expand from to avoid combinatorial blowup
 	// on highly-ambiguous queries.

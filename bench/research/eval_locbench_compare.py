@@ -213,46 +213,73 @@ def index_repo(path: Path, index_bin: Path) -> bool:
         return False
 
 
-def split_eval_output_sections(output: str) -> dict[str, str]:
-    """Slice the eval binary's stdout into per-tool sections.
-
-    The binary prints headers `=== rank_by_query ===`, `=== code_localize
-    (primitives) ===`, `=== code_localize_agent (LLM loop) ===`. Returns
-    a dict keyed on the section name with the body for each."""
-    sections: dict[str, str] = {}
-    current = "preamble"
-    buf: list[str] = []
-    for line in output.splitlines():
-        if line.startswith("=== "):
-            sections[current] = "\n".join(buf)
-            current = line.strip(" =")
-            buf = []
-        else:
-            buf.append(line)
-    sections[current] = "\n".join(buf)
-    return sections
+def normalize_path(p: str) -> str:
+    """Normalize a file path for comparison: forward slashes, no trailing
+    slash. Loc-Bench ground truth uses forward slashes always."""
+    return p.replace("\\", "/").strip("/")
 
 
-def score_section(section_text: str, ground_truth: list[str]) -> tuple[bool, bool, bool]:
-    """Score one tool's output section against ground truth."""
+def score_entities(
+    entities: list[dict[str, Any]],
+    ground_truth: list[str],
+) -> tuple[bool, bool, bool]:
+    """Structured scorer.
+
+    Each entity must have at least `qualified_name` (str) and `file_path`
+    (str). Ground truth items are `path/to/file.py:Class.method` or
+    `path/to/file.py:func`.
+
+    Hit definitions:
+      - file_hit: any entity's file_path equals any ground-truth file_part
+      - class_hit (when ground truth has Class.method): any entity's
+        file_path matches AND its qualified_name contains '.Class' as a
+        suffix-component (or is itself the class)
+      - func_hit: any entity's file_path matches AND its qualified_name
+        ends with '.func' (or '.Class.func' when ground truth has class)
+
+    All comparisons use forward-slash paths and exact equality on the
+    file_path; qualified_name uses dotted-component containment so the
+    project-prefix in code-graph QNs (e.g.
+    'c-tmp-locbench-batch-X.backend.foo.Bar.baz') matches against the
+    ground-truth tail ('foo.Bar.baz')."""
     file_hit = class_hit = func_hit = False
+    norm_entities: list[tuple[str, str]] = []
+    for ent in entities:
+        qn = (ent.get("qualified_name") or "").strip()
+        fp = normalize_path(ent.get("file_path") or "")
+        if qn or fp:
+            norm_entities.append((qn, fp))
+
     for gt in ground_truth:
         if ":" not in gt:
             continue
-        file_part, func_part = gt.split(":", 1)
-        if file_part in section_text:
-            file_hit = True
-        comps = func_part.split(".")
+        gt_file_raw, gt_func = gt.split(":", 1)
+        gt_file = normalize_path(gt_file_raw)
+        comps = gt_func.split(".")
+        cls: str | None = None
+        fn: str
         if len(comps) >= 2:
             cls = comps[0]
-            fn = comps[-1]
-            if cls in section_text:
-                class_hit = True
-            if fn in section_text:
-                func_hit = True
+            fn = ".".join(comps[1:])  # supports nested classes / dotted func
         else:
-            if func_part in section_text:
-                func_hit = True
+            fn = gt_func
+
+        for qn, fp in norm_entities:
+            if fp != gt_file:
+                continue
+            file_hit = True
+            qn_lower = qn.lower()
+            if cls is not None:
+                # Class hit: qn ends with '.Class' or contains '.Class.'
+                if qn_lower.endswith(f".{cls.lower()}") or f".{cls.lower()}." in qn_lower:
+                    class_hit = True
+                # Func hit: qn ends with '.Class.fn'
+                if qn_lower.endswith(f".{cls.lower()}.{fn.lower()}"):
+                    func_hit = True
+            else:
+                # Func hit: qn ends with '.fn'
+                if qn_lower.endswith(f".{fn.lower()}"):
+                    func_hit = True
     return file_hit, class_hit, func_hit
 
 
@@ -264,11 +291,15 @@ def run_mode(
     ground_truth: list[str],
     top_k: int = 10,
 ) -> ModeResult:
-    """Run one mode against an existing DB and score it."""
+    """Run one mode against an existing DB and score it.
+
+    Uses the eval binary's `-json` mode and structured scoring (matches
+    against entity qualified_name + file_path), not stdout substrings."""
     res = ModeResult(mode=mode)
     flags = MODE_FLAGS[mode]
     cmd = [
         str(eval_bin),
+        "-json",
         "-top-k", str(top_k),
         "-depth", "3",
         *flags,
@@ -287,33 +318,35 @@ def run_mode(
         res.note = f"exit {result.returncode}: {result.stderr[:200]}"
         return res
 
-    sections = split_eval_output_sections(result.stdout)
+    try:
+        data = json.loads(result.stdout)
+    except json.JSONDecodeError as e:
+        res.note = f"json parse: {e}"
+        return res
 
-    # Pick the section relevant to this mode. For primitives modes, score
-    # the union of rank_by_query + code_localize (both are tools the user
-    # could call). For agent mode, score the agent's section only.
+    # Build the entity list for this mode.
     if mode == "hybrid-agent":
-        section = sections.get("code_localize_agent (LLM loop)", "")
-        # Parse agent token usage line
-        for line in section.splitlines():
-            if "input_tokens=" in line and "output_tokens=" in line:
-                for part in line.split(","):
-                    k, _, v = part.strip().partition("=")
-                    if k in {"turns", "input_tokens", "output_tokens"}:
-                        try:
-                            setattr(res, k, int(v))
-                        except (ValueError, AttributeError):
-                            pass
-        res.cost_usd = COST_PER_AGENT_QUERY_USD if section else 0.0
+        agent = data.get("code_localize_agent") or {}
+        if data.get("code_localize_agent_error"):
+            res.note = data["code_localize_agent_error"][:200]
+            return res
+        # Agent's entities have qualified_name and file_path.
+        entities = list(agent.get("entities") or [])
+        res.turns = int(agent.get("turns") or 0)
+        res.input_tokens = int(agent.get("input_tokens") or 0)
+        res.output_tokens = int(agent.get("output_tokens") or 0)
+        res.cost_usd = COST_PER_AGENT_QUERY_USD if entities else 0.0
     else:
-        # Primitives modes: combine rank_by_query + code_localize sections
-        section = (
-            sections.get("rank_by_query", "")
-            + "\n"
-            + sections.get("code_localize (primitives)", "")
-        )
-    res.rank_section = section
-    res.file_hit, res.class_hit, res.func_hit = score_section(section, ground_truth)
+        # Primitives modes: union of rank_by_query + code_localize
+        entities = list(data.get("rank_by_query") or []) + list(data.get("code_localize") or [])
+    # Compact summary of what was scored, for the per-instance report.
+    res.rank_section = json.dumps(
+        [
+            {"q": e.get("qualified_name", "")[-80:], "f": e.get("file_path", "")}
+            for e in entities[:5]
+        ]
+    )
+    res.file_hit, res.class_hit, res.func_hit = score_entities(entities, ground_truth)
     return res
 
 

@@ -17,6 +17,8 @@ package ranking
 import (
 	"context"
 	"fmt"
+	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -47,13 +49,20 @@ const (
 // downstream BFS expansion.
 const embeddingSeedTopK = 10
 
-// embeddingSeedMinCosine is the minimum cosine similarity required for
-// a node to qualify as an embedding seed. Calibrated from the 2026-04-25
-// Loc-Bench instance pypa__pip-13085: at top-10, scores 0.50-0.65 were
-// dominated by structural noise (Project, __init__.py, Optional). At
-// >=0.65 the matches were semantically related to the issue text. Tune
-// downward only with evidence — false-positive seeds amplify through BFS.
-const embeddingSeedMinCosine = 0.65
+// embeddingSeedMinCosineDefault is the default minimum cosine similarity
+// required for a node to qualify as an embedding seed.
+//
+// History:
+//   - PR #84 set this to 0.65 based on a single Loc-Bench observation
+//     (pypa__pip-13085) where 0.50-0.65 hits were structural noise.
+//   - The 2026-04-25 ablation (cosine=0.65 vs 0.0 on n=16) showed the
+//     threshold filters out at least one legitimate seed that would
+//     have lifted hybrid-primitives by 6pp file / 7pp func. Agent mode
+//     was a wash. The original n=1 calibration did not generalize.
+//   - Default lowered to 0.0 (effectively no threshold). The
+//     EMBEDDING_SEED_MIN_COSINE env var keeps the knob for users who
+//     observe noise on their workload.
+const embeddingSeedMinCosineDefault = 0.0
 
 // MatchSeedNodesByEmbedding returns the top-K nodes whose embeddings are
 // most cosine-similar to the embedded query. Returns an error wrapping
@@ -105,10 +114,16 @@ func MatchSeedNodesByEmbedding(ctx context.Context, st *store.Store, project, qu
 	// structural noise (containers, generic helpers) rather than
 	// semantically-related code; including them as seeds amplifies through
 	// BFS into long lists of unrelated nodes.
+	threshold := embeddingSeedMinCosineDefault
+	if env := os.Getenv("EMBEDDING_SEED_MIN_COSINE"); env != "" {
+		if v, perr := strconv.ParseFloat(env, 64); perr == nil && v >= 0 && v <= 1 {
+			threshold = v
+		}
+	}
 	out := make([]*store.Node, 0, len(hits))
 	ids := make([]int64, 0, len(hits))
 	for _, h := range hits {
-		if h.Score < embeddingSeedMinCosine {
+		if h.Score < threshold {
 			continue
 		}
 		ids = append(ids, h.NodeID)

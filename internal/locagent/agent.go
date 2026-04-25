@@ -243,15 +243,6 @@ func Run(ctx context.Context, st *store.Store, project, issue string, topK int) 
 		systemPrompt = systemPromptOpen
 	}
 
-	// Initial user message: the issue + topK budget.
-	userInitial := fmt.Sprintf("Issue:\n%s\n\nReturn at most %d entities ranked best-first.", issue, topK)
-	messages := []anthropic.Message{
-		{
-			Role:    "user",
-			Content: []anthropic.ContentBlock{{Type: "text", Text: userInitial}},
-		},
-	}
-
 	maxTurns := maxTurnsDefault
 	if env := os.Getenv("LOCAGENT_MAX_TURNS"); env != "" {
 		if n, err := strconv.Atoi(env); err == nil && n > 0 && n <= 100 {
@@ -259,6 +250,56 @@ func Run(ctx context.Context, st *store.Store, project, issue string, topK int) 
 		}
 	}
 	result := &Result{Transcript: make([]TranscriptEntry, 0, maxTurns*2)}
+
+	// Optional question-rewriting pre-step (LOCAGENT_REWRITE=1). One
+	// extra Haiku turn extracts focused search terms from prose-heavy
+	// issues. Falls back to the original on any error. Cost is logged
+	// against the run.
+	rewrittenQuery := ""
+	if os.Getenv("LOCAGENT_REWRITE") == "1" {
+		rw, inTok, outTok, rerr := RewriteIssue(ctx, client, issue)
+		result.InputTokens += inTok
+		result.OutputTokens += outTok
+		summary := rewriteResult{
+			OriginalLen:  len(issue),
+			Rewritten:    rw,
+			InputTokens:  inTok,
+			OutputTokens: outTok,
+		}
+		if rerr == nil && rw != issue && rw != "" {
+			rewrittenQuery = rw
+			result.Transcript = append(result.Transcript, TranscriptEntry{
+				Turn:    0,
+				Kind:    "rewrite",
+				Summary: truncate(summary.jsonForTranscript(), 250),
+			})
+		} else {
+			result.Transcript = append(result.Transcript, TranscriptEntry{
+				Turn:    0,
+				Kind:    "rewrite_fallback",
+				Summary: truncate(summary.jsonForTranscript(), 250),
+			})
+		}
+	}
+
+	// Initial user message: the issue + topK budget. If rewritten, append
+	// the focused terms so the agent uses them in early rank_by_query
+	// calls but still has the original prose for context.
+	var userInitial string
+	if rewrittenQuery != "" {
+		userInitial = fmt.Sprintf(
+			"Issue:\n%s\n\nFocused search terms (extracted from the issue):\n%s\n\nReturn at most %d entities ranked best-first.",
+			issue, rewrittenQuery, topK,
+		)
+	} else {
+		userInitial = fmt.Sprintf("Issue:\n%s\n\nReturn at most %d entities ranked best-first.", issue, topK)
+	}
+	messages := []anthropic.Message{
+		{
+			Role:    "user",
+			Content: []anthropic.ContentBlock{{Type: "text", Text: userInitial}},
+		},
+	}
 
 	for turn := 1; turn <= maxTurns; turn++ {
 		resp, err := client.CreateMessage(ctx, anthropic.MessagesRequest{

@@ -133,6 +133,19 @@ func (s *Store) CountEdges(project string) (int, error) {
 	return count, err
 }
 
+// AllEdges returns every edge in a project. Used by whole-graph algorithms
+// (PageRank, centrality) that need to load the full edge set into memory.
+// For large projects consumers should prefer streaming or type-scoped reads.
+func (s *Store) AllEdges(project string) ([]*Edge, error) {
+	rows, err := s.q.Query(`SELECT id, project, source_id, target_id, type, properties
+		FROM edges WHERE project=?`, project)
+	if err != nil {
+		return nil, fmt.Errorf("all edges: %w", err)
+	}
+	defer rows.Close()
+	return scanEdges(rows)
+}
+
 // DeleteEdgesByProject deletes all edges for a project.
 func (s *Store) DeleteEdgesByProject(project string) error {
 	_, err := s.q.Exec("DELETE FROM edges WHERE project=?", project)

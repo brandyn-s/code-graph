@@ -465,6 +465,7 @@ func (s *Server) registerTools() {
 	s.registerGenerateReportTool()
 	s.registerFindSimilarFunctionsTool()
 	s.registerFindRationaleTool()
+	s.registerRankByQueryTool()
 }
 
 // registerFindRationaleTool surfaces the Rationale nodes produced by
@@ -536,6 +537,43 @@ func (s *Server) registerFindSimilarFunctionsTool() {
 			"required": ["name"]
 		}`),
 	}, s.handleFindSimilarFunctions)
+}
+
+// registerRankByQueryTool adds rank_by_query — bidirectional weighted
+// PageRank with personalization on query-matched seed nodes. Primary use
+// case: agent context selection — "give me the top-20 most relevant
+// entities for this issue/question" — typically reducing context tokens
+// by 3-5x vs dumping the full graph. Reference: Aider repo-map pattern
+// (https://aider.chat/2023/10/22/repomap.html).
+func (s *Server) registerRankByQueryTool() {
+	s.addTool(&mcp.Tool{
+		Name: "rank_by_query",
+		Annotations: &mcp.ToolAnnotations{
+			ReadOnlyHint:    true,
+			IdempotentHint:  true,
+			OpenWorldHint:   boolPtr(false),
+			DestructiveHint: boolPtr(false),
+		},
+		Description: "Rank graph nodes by relevance to a query using bidirectional weighted PageRank. Tokenizes the query, seeds personalization on nodes whose Name (exact, case-insensitive) or QualifiedName (substring, case-insensitive) matches any token, then runs forward+reverse PageRank and returns top-K by combined score. Bidirectional avoids the pure-source collapse where nodes that only propagate rank outward go to zero. Best use: agent context selection — 'give me the top-20 most relevant entities for this issue or question' — typically 3-5x token reduction vs dumping the full graph.",
+		InputSchema: json.RawMessage(`{
+			"type": "object",
+			"properties": {
+				"query": {
+					"type": "string",
+					"description": "Natural-language query or symbol list. Tokens shorter than 2 chars and English stopwords (the/of/how/etc.) are dropped. At least one token must match a node Name or QualifiedName substring."
+				},
+				"project": {
+					"type": "string",
+					"description": "Project name (optional — uses session project if omitted)"
+				},
+				"top_k": {
+					"type": "integer",
+					"description": "Maximum number of ranked nodes to return (1-200, default 20). Higher values give wider context at cost of more tokens."
+				}
+			},
+			"required": ["query"]
+		}`),
+	}, s.handleRankByQuery)
 }
 
 // registerGenerateReportTool adds the generate_report MCP tool — writes

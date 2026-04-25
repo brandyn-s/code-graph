@@ -14,6 +14,9 @@ on:
     paths:
       - "internal/pipeline/nix_services.go"
       - "internal/pipeline/zenoh.go"
+      - "internal/ranking/**"
+      - "internal/localize/**"
+      - "internal/locagent/**"
       - "bench/accuracy/check_nix_synthetic.py"
       - "bench/accuracy/synthetic/nix-pubsub-minimal/**"
       - ".github/workflows/accuracy-regression.yml"
@@ -54,3 +57,16 @@ jobs:
           python bench/accuracy/check_nix_synthetic.py \
             --binary "$PWD/bin/codebase-memory-mcp" \
             --fixture "$PWD/bench/accuracy/synthetic/nix-pubsub-minimal"
+
+      - name: Ranking + localization unit tests
+        # The ranking, localize, and locagent packages have integration-style
+        # tests that exercise PageRank, BFS expansion, and the LLM-driven
+        # agent loop against in-memory SQLite graphs. These run in the main
+        # CI via `go test ./...`, but we re-run them here so a path-filter
+        # match on internal/ranking/** or internal/localize/** triggers
+        # behavioral validation explicitly. (LocAgent unit tests excluded:
+        # the agent loop requires ANTHROPIC_API_KEY which CI doesn't have.
+        # Real Loc-Bench validation happens in the offline N=20 batch
+        # runner — see bench/research/eval_locbench_batch.py.)
+        run: |
+          CGO_ENABLED=1 go test ./internal/ranking/ ./internal/localize/ -count=1 -v

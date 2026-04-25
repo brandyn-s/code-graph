@@ -529,6 +529,23 @@ Key test suites:
 
 The language benchmark (`BENCHMARK.md`) tests 12 standardized questions across 35 languages on real open-source repos — not synthetic test data.
 
+## Related Work
+
+This project sits in the tree-sitter-based code-graph + LLM retrieval space. Relevant academic and production work:
+
+- **Codebase-Memory**: [Tree-Sitter-Based Knowledge Graphs for LLM Code Exploration](https://arxiv.org/abs/2603.27277) — the upstream paper documenting the architecture this fork extends. Authoritative literature anchor for the approach (tree-sitter + SQLite WAL + Cypher subset + MCP).
+- **LocAgent** (ACL 2025): [Graph-Guided LLM Agents for Code Localization](https://arxiv.org/abs/2503.09089) — heterogeneous graph + multi-hop reasoning achieves 92.7% file-level localization accuracy; Loc-Bench is a public benchmark for this class of tools.
+- **Prometheus** (ICLR 2026 submission): [Unified Knowledge Graphs for Issue Resolution in Multilingual Codebases](https://openreview.net/forum?id=bPGZi7X5vH) — closest academic match for the multilingual-KG-feeding-docs-pipeline use case.
+- **Code Graph Model / CGM** (NeurIPS 2025): [A Graph-Integrated Large Language Model for Repository-Level Software Engineering Tasks](https://arxiv.org/abs/2505.16901) — integrates graph structure directly into LLM attention (44% on SWE-Bench-Lite with open-weight Qwen2.5-72B). Relevant for downstream docs-pipeline consumers of graph output.
+- **LogicLoc**: [Neurosymbolic Repo-level Code Localization](https://arxiv.org/abs/2604.16021) — Datalog + LLM hybrid with soundness guarantees; validates the direction of richer structured-query support in our Cypher engine (e.g., `OPTIONAL MATCH`).
+- **GraphCodeAgent**: [Dual Graph-Guided LLM Agent for Retrieval-Augmented Repo-Level Code Generation](https://arxiv.org/abs/2504.10046) — adds semantic-similarity edges as first-class graph structure alongside call/import/inheritance edges.
+- **Aider** repo-map: [Building a better repository map with tree sitter](https://aider.chat/2023/10/22/repomap.html) — tree-sitter tags + PageRank ranking over code graph as agent-context primitive.
+
+For ground-truth methodology (multi-annotator hand-oracles with Cohen's Kappa):
+
+- **CLEVER** (NeurIPS 2025): [A Curated Benchmark for Formally Verified Code Generation](https://arxiv.org/abs/2505.13938) — published cost data for hand-curation (~25 min/problem spec + 15 min review).
+- **Code Debloating ground-truth**: [Revisiting Code Debloating with Ground Truth-based Evaluation](https://arxiv.org/abs/2604.17717) — two-annotator methodology with Cohen's Kappa >0.81 as the agreement standard.
+
 ## License
 
 MIT (inherited from upstream)

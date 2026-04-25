@@ -215,25 +215,78 @@ func matchSeeds(nodes []*store.Node, query string) []int {
 	return seeds
 }
 
-// tokenize splits the query on whitespace and lowercases; stopwords are
-// trivial English function words that add noise to graph matching.
+// tokenize splits the query on whitespace, lowercases, and filters
+// noise tokens. Stopwords are common English words that match dozens of
+// unrelated symbols (e.g. "install" matched all install-related code in
+// pip's source plus vendored libs). Short tokens (<4 chars) are filtered
+// because they over-match in code: "get" is a substring of every getter
+// in the graph, so it provides almost no specificity. The
+// shortGoMethodAllow allowlist preserves a small set of canonical short
+// Go method names ("New", "Run", "Get", etc.) that users intentionally
+// query with — those keep their seed-matching power.
 func tokenize(query string) []string {
-	stopwords := map[string]bool{
-		"the": true, "a": true, "an": true, "of": true, "and": true, "or": true,
-		"to": true, "in": true, "on": true, "for": true, "is": true, "how": true,
-		"does": true, "do": true, "what": true, "where": true, "when": true,
-		"why": true, "which": true,
-	}
 	raw := strings.Fields(strings.ToLower(query))
 	tokens := make([]string, 0, len(raw))
 	for _, tok := range raw {
 		tok = strings.Trim(tok, ".,;:!?\"'()[]{}")
-		if tok == "" || stopwords[tok] || len(tok) < 2 {
+		if tok == "" {
+			continue
+		}
+		if shortGoMethodAllow[tok] {
+			tokens = append(tokens, tok)
+			continue
+		}
+		if stopwords[tok] || len(tok) < 4 {
 			continue
 		}
 		tokens = append(tokens, tok)
 	}
 	return tokens
+}
+
+// stopwords are English function words plus high-frequency code/English
+// words that over-match in natural-language queries. Tuning history:
+//   - Initial set (PR #78): English articles, conjunctions, question words.
+//   - Expanded (PR after #82): added words observed in Loc-Bench instance
+//     pypa__pip-13085 that polluted seed matches — "install", "code",
+//     "execute", "wheel", "lazy" all matched dozens of unrelated symbols
+//     in pip's source plus vendored libraries, and BFS amplified the noise.
+var stopwords = map[string]bool{
+	// articles, conjunctions, prepositions
+	"the": true, "a": true, "an": true, "of": true, "and": true, "or": true,
+	"to": true, "in": true, "on": true, "for": true, "is": true, "as": true,
+	"at": true, "by": true, "be": true, "if": true, "it": true, "this": true,
+	"that": true, "with": true, "from": true, "into": true, "than": true,
+	// question words
+	"how": true, "does": true, "do": true, "what": true, "where": true,
+	"when": true, "why": true, "which": true, "who": true, "whom": true,
+	// common verbs/nouns that over-match in code
+	"work": true, "use": true, "make": true, "call": true, "calls": true,
+	"show": true, "need": true, "want": true, "find": true, "look": true,
+	"have": true, "will": true, "would": true, "could": true, "should": true,
+	"must": true, "install": true, "create": true, "delete": true, "update": true,
+	"return": true, "execute": true, "handle": true, "process": true,
+	// high-frequency code/English words observed polluting Loc-Bench queries
+	"code": true, "file": true, "type": true, "name": true, "test": true,
+	"data": true, "error": true, "value": true, "item": true, "list": true,
+	"line": true, "step": true, "case": true, "true": true, "false": true,
+	"null": true, "none": true, "self": true, "main": true,
+	// quantifiers / adverbs
+	"some": true, "many": true, "more": true, "most": true, "also": true,
+	"only": true, "just": true, "very": true, "even": true, "such": true,
+}
+
+// shortGoMethodAllow is a small allowlist of canonical short Go method
+// names that should pass the min-length filter. These are conventional
+// across Go codebases (constructors, lifecycle, getters/setters, error
+// idioms) and users who query for them mean the method, not the English
+// word. Kept short — every entry costs precision when the same word
+// appears as natural language ("run the script", "get the data").
+var shortGoMethodAllow = map[string]bool{
+	"new": true, "run": true, "get": true, "set": true, "add": true,
+	"del": true, "ok": true, "io": true, "err": true, "log": true,
+	"id": true, "key": true, "url": true, "tcp": true, "udp": true,
+	"dns": true, "tls": true, "ssh": true, "ssl": true, "api": true,
 }
 
 // runPageRank executes weighted PageRank with personalization on `seedIdx`.

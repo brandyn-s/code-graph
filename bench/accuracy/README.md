@@ -112,3 +112,60 @@ the full repo while PyCG only walks 5 service entry points.
 - **PyCG is flow-insensitive**; it will have its own false negatives on dynamic dispatch. We measure comparative drift, not absolute truth.
 - **LLM ensemble non-determinism**: runs are cached per `(file_sha, model)` so results are reproducible across re-runs, but cache invalidation on file change means the first run of a new fixture SHA is stochastic.
 - **Python-only first fixture**: Go and Rust fixtures will be added once the Python pipeline is validated.
+
+## Hand-oracle methodology: multi-annotator + Cohen's Kappa
+
+Single-annotator hand-oracles (like `nix_pubsub_hand_oracle.json` as first
+shipped) carry self-bias risk — the annotator's mental model of the pattern
+may be the same as the extractor's, so systemic bugs go undetected. When
+expanding hand-oracle coverage to a new language (Rust CALLS, Python CALLS,
+Go stdlib edges, etc.), require **≥2 independent annotators** per fixture
+and compute **Cohen's Kappa** via `check_hand_oracle_kappa.py`.
+
+**Standard**: κ ≥ 0.81 = "almost perfect agreement" (threshold from
+[Code Debloating ground-truth, arXiv 2604.17717](https://arxiv.org/abs/2604.17717)
+and [CLEVER, NeurIPS 2025](https://arxiv.org/abs/2505.13938)). Below 0.81
+means either the fixture is ambiguous (split on a case neither annotator
+was prepared for) or the annotator protocol needs refinement.
+
+### Multi-annotator schema
+
+```json
+{
+  "_annotators": ["brandyn-2026-04-24", "reviewer-tbd"],
+  "services": [
+    {
+      "service": "canstatd",
+      "source_file": "nix/modules/canstatd.nix",
+      "annotations": {
+        "brandyn-2026-04-24": {
+          "pub_topics": ["canstatd"],
+          "sub_topics": []
+        },
+        "reviewer-tbd": {
+          "pub_topics": ["canstatd"],
+          "sub_topics": []
+        }
+      }
+    }
+  ]
+}
+```
+
+The legacy single-annotator path (top-level `pub_topics`/`sub_topics`)
+remains supported — `check_hand_oracle_kappa.py` reports "single-annotator,
+kappa not applicable" and exits 0, preserving existing CI behavior.
+
+### Usage
+
+```bash
+python bench/accuracy/check_hand_oracle_kappa.py \
+  bench/accuracy/nix_pubsub_hand_oracle.json
+
+# Override default threshold (0.81) if needed:
+python bench/accuracy/check_hand_oracle_kappa.py \
+  bench/accuracy/rust_calls_hand_oracle.json --threshold 0.75
+```
+
+Exit codes: `0` = pass or single-annotator, `1` = multi-annotator below
+threshold, `2` = schema/file error.

@@ -133,6 +133,37 @@ func RankByQuery(st *store.Store, project, query string, topK int) ([]RankedNode
 	return combined[:topK], nil
 }
 
+// MatchSeedNodes returns the seed nodes for a query — the subset of
+// project nodes whose Name exactly matches any query token (case-
+// insensitive) or whose QualifiedName contains any token (case-
+// insensitive substring). Used by callers that need just the seeds
+// without running the full PageRank propagation (e.g., the localize
+// package's BFS-from-seeds pattern).
+//
+// Returns the seed nodes themselves, not their indices. Empty slice if
+// no node matched any token.
+func MatchSeedNodes(st *store.Store, project, query string) ([]*store.Node, error) {
+	if st == nil {
+		return nil, fmt.Errorf("nil store")
+	}
+	if project == "" {
+		return nil, fmt.Errorf("project is required")
+	}
+	if strings.TrimSpace(query) == "" {
+		return nil, fmt.Errorf("query is required")
+	}
+	nodes, err := st.AllNodes(project)
+	if err != nil {
+		return nil, fmt.Errorf("load nodes: %w", err)
+	}
+	seedIdx := matchSeeds(nodes, query)
+	out := make([]*store.Node, 0, len(seedIdx))
+	for _, i := range seedIdx {
+		out = append(out, nodes[i])
+	}
+	return out, nil
+}
+
 // matchSeeds returns the compact indices of nodes whose Name exactly
 // matches any query token (case-insensitive) or whose QualifiedName
 // contains any token (case-insensitive substring).

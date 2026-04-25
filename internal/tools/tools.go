@@ -466,6 +466,7 @@ func (s *Server) registerTools() {
 	s.registerFindSimilarFunctionsTool()
 	s.registerFindRationaleTool()
 	s.registerRankByQueryTool()
+	s.registerCodeLocalizeTool()
 }
 
 // registerFindRationaleTool surfaces the Rationale nodes produced by
@@ -574,6 +575,50 @@ func (s *Server) registerRankByQueryTool() {
 			"required": ["query"]
 		}`),
 	}, s.handleRankByQuery)
+}
+
+// registerCodeLocalizeTool adds code_localize — the LocAgent-style
+// graph-guided code localization primitive. Given a natural-language
+// issue or question, returns the top-K code entities (Functions,
+// Methods, Classes) most relevant to investigate, computed via
+// bidirectional BFS from query-matched seeds over CALLS / DEFINES /
+// IMPORTS / CONTAINS / MEMBER_OF / IMPLEMENTS edges. Reference:
+// LocAgent, ACL 2025, arXiv 2503.09089 — published 92.7% file-level
+// localization accuracy on Loc-Bench with the LLM-in-the-loop variant;
+// our primitives-only variant trades some accuracy for determinism.
+func (s *Server) registerCodeLocalizeTool() {
+	s.addTool(&mcp.Tool{
+		Name: "code_localize",
+		Annotations: &mcp.ToolAnnotations{
+			ReadOnlyHint:    true,
+			IdempotentHint:  true,
+			OpenWorldHint:   boolPtr(false),
+			DestructiveHint: boolPtr(false),
+		},
+		Description: "Graph-guided code localization. Given a natural-language issue or question, returns the top-K code entities most relevant to investigate. Internally: matches seeds by name/qualified-name tokens, BFS-expands up to `depth` hops over structural edges (CALLS, DEFINES, IMPORTS, CONTAINS, MEMBER_OF, IMPLEMENTS, OVERRIDE, USES_TYPE) in both directions, scores each visited node by seed-score discounted by hop distance, and returns top-K with file:line for each. Use when an agent needs the relevant subset of a large codebase for a specific issue without dumping the full graph. Reference: LocAgent (ACL 2025).",
+		InputSchema: json.RawMessage(`{
+			"type": "object",
+			"properties": {
+				"issue_description": {
+					"type": "string",
+					"description": "The issue/question/symbol-list to localize. Tokenized (drops 1-char tokens + English stopwords); at least one token must match a node Name or QualifiedName substring."
+				},
+				"project": {
+					"type": "string",
+					"description": "Project name (optional — uses session project if omitted)"
+				},
+				"depth": {
+					"type": "integer",
+					"description": "BFS expansion radius from each seed (0-5, default 3). Higher reaches more code but adds noise."
+				},
+				"top_k": {
+					"type": "integer",
+					"description": "Maximum number of localized entities to return (1-50, default 10)."
+				}
+			},
+			"required": ["issue_description"]
+		}`),
+	}, s.handleCodeLocalize)
 }
 
 // registerGenerateReportTool adds the generate_report MCP tool — writes

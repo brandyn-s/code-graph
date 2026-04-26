@@ -3,8 +3,20 @@
 BINARY=codebase-memory-mcp
 MODULE=github.com/DeusData/codebase-memory-mcp
 
+# Windows: statically link the MinGW pthread runtime so the resulting .exe
+# does not depend on libwinpthread-1.dll being on the caller's PATH. Matches
+# the release.yml build-windows job. Caller's parent (e.g. Claude Code MCP
+# spawn) often has a stripped PATH; missing DLL → STATUS_ENTRYPOINT_NOT_FOUND.
+ifeq ($(OS),Windows_NT)
+    BUILD_LDFLAGS = -ldflags "-extldflags '-static'"
+    BINARY_EXT = .exe
+else
+    BUILD_LDFLAGS =
+    BINARY_EXT =
+endif
+
 build:
-	go build -o bin/$(BINARY) ./cmd/codebase-memory-mcp/
+	CGO_ENABLED=1 go build $(BUILD_LDFLAGS) -o bin/$(BINARY)$(BINARY_EXT) ./cmd/codebase-memory-mcp/
 
 test:
 	go test ./... -v

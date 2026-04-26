@@ -50,6 +50,30 @@ func ParseGitDiffFiles(repoPath string, scope DiffScope, baseBranch string) ([]C
 	return parseDiffNameStatus(repoPath, args)
 }
 
+// validRevName matches safe git rev specifiers: commit SHAs (short or full),
+// branch names, HEAD / HEAD~N references. Deliberately rejects anything
+// that could be parsed as a git flag (leading dash) or contain shell
+// metacharacters, so we can pass the value through to `git diff` without
+// escaping concerns.
+var validRevName = regexp.MustCompile(`^(HEAD(~[0-9]+)?|[a-fA-F0-9]{4,40}|[a-zA-Z0-9][a-zA-Z0-9/_.\-]*)$`)
+
+// ParseGitDiffFilesBetween runs `git diff --name-status from..to` and
+// returns the list of changed files. Used by diff_graph to compute the
+// symbol-level delta between two arbitrary git revisions.
+//
+// Both from and to are validated against validRevName to block argument
+// injection via a crafted SHA/branch string.
+func ParseGitDiffFilesBetween(repoPath, from, to string) ([]ChangedFile, error) {
+	if !validRevName.MatchString(from) {
+		return nil, fmt.Errorf("invalid from %q: must match [a-zA-Z0-9/_.-]", from)
+	}
+	if !validRevName.MatchString(to) {
+		return nil, fmt.Errorf("invalid to %q: must match [a-zA-Z0-9/_.-]", to)
+	}
+	args := []string{"diff", "--name-status", from + ".." + to}
+	return parseDiffNameStatus(repoPath, args)
+}
+
 // ParseGitDiffHunks runs git diff --unified=0 and extracts changed line ranges.
 func ParseGitDiffHunks(repoPath string, scope DiffScope, baseBranch string) ([]ChangedHunk, error) {
 	if err := validateBranchName(scope, baseBranch); err != nil {

@@ -468,6 +468,7 @@ func (s *Server) registerTools() {
 	s.registerRankByQueryTool()
 	s.registerCodeLocalizeTool()
 	s.registerCodeLocalizeAgentTool()
+	s.registerDiffGraphTool()
 }
 
 // registerFindRationaleTool surfaces the Rationale nodes produced by
@@ -501,6 +502,40 @@ func (s *Server) registerFindRationaleTool() {
 			}
 		}`),
 	}, s.handleFindRationale)
+}
+
+// registerDiffGraphTool surfaces diff_graph — symbol-level delta
+// between two arbitrary git revisions, complementing detect_changes
+// (which is scoped to uncommitted / staged / branch-vs-branch flows).
+func (s *Server) registerDiffGraphTool() {
+	s.addTool(&mcp.Tool{
+		Name: "diff_graph",
+		Annotations: &mcp.ToolAnnotations{
+			ReadOnlyHint:    true,
+			IdempotentHint:  true,
+			OpenWorldHint:   boolPtr(false),
+			DestructiveHint: boolPtr(false),
+		},
+		Description: "Given two git revisions, list which indexed symbols (Function/Method/Class/Struct/Interface/Trait/Enum) live in the files touched between them. Complements detect_changes (uncommitted / staged / branch) by accepting arbitrary SHAs — useful for 'what did we ship between v1.2.0 and v1.3.0?' review. Current index only: symbols deleted after to_sha cannot be surfaced.",
+		InputSchema: json.RawMessage(`{
+			"type": "object",
+			"properties": {
+				"project": {
+					"type": "string",
+					"description": "Project name (optional — uses session project if omitted)"
+				},
+				"from_sha": {
+					"type": "string",
+					"description": "Starting revision: commit SHA (short or full), branch name, or HEAD~N"
+				},
+				"to_sha": {
+					"type": "string",
+					"description": "Ending revision: commit SHA (short or full), branch name, or HEAD"
+				}
+			},
+			"required": ["from_sha", "to_sha"]
+		}`),
+	}, s.handleDiffGraph)
 }
 
 // registerFindSimilarFunctionsTool adds find_similar_functions — cosine

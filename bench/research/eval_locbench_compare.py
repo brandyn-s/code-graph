@@ -200,12 +200,21 @@ def index_repo(path: Path, index_bin: Path) -> bool:
         return False
     args_json = json.dumps({"path": to_windows_path(path)})
     try:
+        # NOTE: capture as bytes (no text=True) and decode UTF-8 with
+        # errors='replace'. Python's subprocess text=True uses cp1252
+        # on Windows by default; indexer stdout often contains source
+        # code excerpts with non-cp1252 bytes (e.g. 0x90 DCS or other
+        # C1 control chars) which crashes the parent's reader thread
+        # mid-run. Took out a worker on the 560 batch with
+        # UnicodeDecodeError. Same fix pattern as platform-constraints.md
+        # `subprocess_bytes_then_decode_utf8` invariant.
         result = subprocess.run(
             [str(index_bin), "cli", "index_repository", args_json],
-            capture_output=True, text=True, timeout=3600,
+            capture_output=True, timeout=3600,
         )
         if result.returncode != 0:
-            print(f"  index failed (exit {result.returncode}): {result.stderr[:200]}")
+            err = result.stderr.decode("utf-8", errors="replace")
+            print(f"  index failed (exit {result.returncode}): {err[:200]}")
             return False
         return True
     except subprocess.TimeoutExpired:
@@ -353,18 +362,21 @@ def run_mode(
     ]
     t0 = time.time()
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        # bytes + UTF-8 decode (see index_repo for context)
+        result = subprocess.run(cmd, capture_output=True, timeout=300)
     except subprocess.TimeoutExpired:
         res.note = "eval timed out"
         res.duration_s = time.time() - t0
         return res
     res.duration_s = time.time() - t0
+    stdout_text = result.stdout.decode("utf-8", errors="replace")
+    stderr_text = result.stderr.decode("utf-8", errors="replace")
     if result.returncode != 0:
-        res.note = f"exit {result.returncode}: {result.stderr[:200]}"
+        res.note = f"exit {result.returncode}: {stderr_text[:200]}"
         return res
 
     try:
-        data = json.loads(result.stdout)
+        data = json.loads(stdout_text)
     except json.JSONDecodeError as e:
         res.note = f"json parse: {e}"
         return res
@@ -407,14 +419,38 @@ def select_instances(
     if categories:
         sub = df[df["category"].isin(categories)]
         return sub.sample(n=min(n, len(sub)), random_state=seed).copy()
-    # Default: balanced across all 4 categories
+    # If user requested >= total, just return everything (avoids the
+    # balanced-sampler under-fill problem when smaller categories cap
+    # the per-cat target — e.g. n=560 on Loc-Bench V1 was returning 448
+    # because Performance and Security categories are smaller than n/4).
+    if n >= len(df):
+        return df.copy()
+    # Default: balanced across all 4 categories, with top-up when smaller
+    # categories underfill their quota.
     target = n // 4
     rows: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
     for cat in ["Bug Report", "Feature Request", "Performance Issue", "Security Vulnerability"]:
         sub = df[df["category"] == cat]
         if len(sub) == 0:
             continue
-        rows.extend(sub.sample(n=min(target, len(sub)), random_state=seed).to_dict("records"))
+        picked = sub.sample(n=min(target, len(sub)), random_state=seed).to_dict("records")
+        for p in picked:
+            if p["instance_id"] not in seen_ids:
+                rows.append(p)
+                seen_ids.add(p["instance_id"])
+    # Top up: fill remaining slots from any category that still has
+    # un-picked rows. Use a deterministic shuffle.
+    if len(rows) < n:
+        remaining = df[~df["instance_id"].isin(seen_ids)]
+        if len(remaining) > 0:
+            extra = remaining.sample(
+                n=min(n - len(rows), len(remaining)),
+                random_state=seed + 1,
+            ).to_dict("records")
+            for p in extra:
+                rows.append(p)
+                seen_ids.add(p["instance_id"])
     return pd.DataFrame(rows[:n])
 
 
@@ -637,6 +673,17 @@ def main() -> int:
 
     rows = [row.to_dict() for _, row in selected.iterrows()]
 
+    # Checkpointing: write the report after every instance completes,
+    # not just at end-of-run. Long benchmarks (n=560 took >2 hours
+    # before being killed) need progress preserved across kills. The
+    # final report is identical; checkpointing just rewrites it
+    # incrementally so a kill at instance K leaves K rows of data.
+    def _checkpoint() -> None:
+        ordered = sorted(results, key=lambda r: order.get(r.instance_id, 9999))
+        write_report(ordered, modes, args.output, args.binary_label, args.max_mb)
+
+    order = {row["instance_id"]: i for i, row in enumerate(rows)}
+
     if args.workers <= 1:
         # Sequential path
         for row in rows:
@@ -659,6 +706,7 @@ def main() -> int:
                     note=f"exception: {e!r}",
                 )
             results.append(res)
+            _checkpoint()
     else:
         # Parallel path. Each worker gets its own subdir under workdir to
         # avoid clone collisions on repos that happen to share names. The
@@ -693,10 +741,8 @@ def main() -> int:
                         note=f"worker exception: {e!r}",
                     )
                 results.append(res)
-                # Sort results by selection order at the end so report
-                # is stable.
-        # Restore original order
-        order = {row["instance_id"]: i for i, row in enumerate(rows)}
+                _checkpoint()
+        # Final sort (checkpoint already wrote sorted output)
         results.sort(key=lambda r: order.get(r.instance_id, 9999))
 
     write_report(results, modes, args.output, args.binary_label, args.max_mb)

@@ -45,11 +45,14 @@ def main() -> int:
     # Invoke our eval binary.
     cmd = [str(EVAL_BIN), "-top-k", "20", "-depth", "3", str(PIP_DB), short_query]
     print(f"Running: {' '.join(cmd)}\n")
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
-    output = result.stdout
+    # Capture as bytes + UTF-8 decode (text=True uses cp1252 on Windows
+    # and crashes on non-cp1252 bytes — PR #97 fix).
+    result = subprocess.run(cmd, capture_output=True, timeout=120)
+    output = result.stdout.decode("utf-8", errors="replace")
     print(output)
     if result.returncode != 0:
-        print("STDERR:", result.stderr, file=sys.stderr)
+        err = result.stderr.decode("utf-8", errors="replace")
+        print("STDERR:", err, file=sys.stderr)
         return 1
 
     # Score: did any ground-truth function appear in top-K?

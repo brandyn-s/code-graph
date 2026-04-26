@@ -180,14 +180,17 @@ def index_repo(path: Path) -> bool:
         return False
     args_json = json.dumps({"path": to_windows_path(path)})
     try:
+        # Capture as bytes (no text=True) and decode UTF-8 with replace.
+        # text=True uses cp1252 on Windows and crashes the parent reader
+        # thread when subprocess outputs non-cp1252 bytes (PR #97 fix).
         result = subprocess.run(
             [str(INDEX_BIN), "cli", "index_repository", args_json],
             capture_output=True,
-            text=True,
             timeout=1800,  # 30 min cap per index
         )
         if result.returncode != 0:
-            print(f"  index failed (exit {result.returncode}): {result.stderr[:200]}")
+            err = result.stderr.decode("utf-8", errors="replace")
+            print(f"  index failed (exit {result.returncode}): {err[:200]}")
             return False
         return True
     except subprocess.TimeoutExpired:
@@ -255,16 +258,19 @@ def run_agent(db: Path, query: str, top_k: int = 10) -> dict[str, Any]:
         to_windows_path(db),
         query,
     ]
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+    # Capture as bytes + UTF-8 decode (text=True uses cp1252 on Windows
+    # and crashes on non-cp1252 bytes — PR #97 fix).
+    result = subprocess.run(cmd, capture_output=True, timeout=300)
+    out = result.stdout.decode("utf-8", errors="replace")
+    err = result.stderr.decode("utf-8", errors="replace")
     if result.returncode != 0:
         return {
-            "error": result.stderr[:500],
-            "stdout": result.stdout,
+            "error": err[:500],
+            "stdout": out,
             "input_tokens": 0,
             "output_tokens": 0,
             "turns": 0,
         }
-    out = result.stdout
     # Parse the line: "turns=N, stop_reason=foo, input_tokens=X, output_tokens=Y"
     parsed = {"stdout": out, "input_tokens": 0, "output_tokens": 0, "turns": 0}
     for line in out.splitlines():

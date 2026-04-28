@@ -39,8 +39,12 @@ def index_fixture(binary: Path, fixture_root: Path) -> None:
 
 
 def project_for_path(p: Path) -> str:
-    """Mirror code-graph's project name sanitization. On Windows the path
-    starts `C:\\Users\\...`; code-graph maps that to `c-Users-...`."""
+    """Mirror Go binary's pipeline.ProjectNameFromPath exactly.
+
+    Windows: `C:\\Users\\...` → `c-Users-...`
+    Linux:   `/home/runner/...` → `home-runner-...` (leading dash from
+             leading / is trimmed; the harness used to keep it, which
+             made it open the wrong .db on CI runners)."""
     s = str(p)
     # Lowercase drive letter so `C:` → `c:` → `c-`.
     if len(s) >= 2 and s[1] == ":":
@@ -49,7 +53,9 @@ def project_for_path(p: Path) -> str:
     # Collapse any double dashes from the drive letter substitution.
     while "--" in s:
         s = s.replace("--", "-")
-    return s
+    # Trim leading dashes (from a leading / on POSIX paths).
+    s = s.lstrip("-")
+    return s or "root"
 
 
 def query_actual(db_path: Path, project: str) -> tuple[set[tuple[str, str, str]], set[str]]:

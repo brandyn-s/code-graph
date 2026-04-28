@@ -17,8 +17,10 @@ on:
         type: boolean
         default: false
 
+# Workflow-level default. Lint/build jobs are read-only; the release job
+# declares its own contents:write to publish the GitHub release.
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   lint:

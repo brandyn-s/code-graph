@@ -1,0 +1,506 @@
+{
+  "schema_version": 1,
+  "date": "2026-04-24",
+  "fixture": "requests-adversarial",
+  "sha": "f43f750ee10addbaa13901c1017631b4d70fd6e3",
+  "short_sha": "f43f750",
+  "project_name": "c-Users-user-Documents-bench-fixtures-requests",
+  "results": {
+    "CALLS": {
+      "oracle": "pycg",
+      "oracle_count": 194,
+      "measured_count": 238,
+      "oracle_caller_count": 58,
+      "exact": {
+        "tp": 86,
+        "fp": 152,
+        "fn": 108,
+        "precision": 0.3613,
+        "recall": 0.4433,
+        "f1": 0.3981
+      },
+      "suffix_3seg": {
+        "tp": 86,
+        "fp": 150,
+        "fn": 108,
+        "precision": 0.3644,
+        "recall": 0.4433,
+        "f1": 0.4
+      },
+      "scope_aligned": {
+        "tp": 86,
+        "fp": 21,
+        "fn": 108,
+        "precision": 0.8037,
+        "recall": 0.4433,
+        "f1": 0.5714
+      },
+      "scope_impl_normalized": {
+        "tp": 86,
+        "fp": 21,
+        "fn": 108,
+        "precision": 0.8037,
+        "recall": 0.4433,
+        "f1": 0.5714
+      },
+      "sample_fp_exact": [
+        [
+          "src.requests",
+          "src.requests._check_cryptography",
+          "CALLS"
+        ],
+        [
+          "src.requests",
+          "src.requests.check_compatibility",
+          "CALLS"
+        ],
+        [
+          "src.requests.adapters.HTTPAdapter.__init__",
+          "src.requests.adapters.HTTPAdapter.init_poolmanager",
+          "CALLS"
+        ],
+        [
+          "src.requests.adapters.HTTPAdapter.__setstate__",
+          "src.requests.adapters.HTTPAdapter.init_poolmanager",
+          "CALLS"
+        ],
+        [
+          "src.requests.adapters.HTTPAdapter.__setstate__",
+          "src.requests.cookies.RequestsCookieJar.items",
+          "CALLS"
+        ],
+        [
+          "src.requests.adapters.HTTPAdapter.build_connection_pool_key_attributes",
+          "src.requests.adapters._urllib3_request_context",
+          "CALLS"
+        ],
+        [
+          "src.requests.adapters.HTTPAdapter.build_response",
+          "src.requests.cookies.extract_cookies_to_jar",
+          "CALLS"
+        ],
+        [
+          "src.requests.adapters.HTTPAdapter.build_response",
+          "src.requests.utils.get_encoding_from_headers",
+          "CALLS"
+        ],
+        [
+          "src.requests.adapters.HTTPAdapter.close",
+          "src.requests.cookies.RequestsCookieJar.values",
+          "CALLS"
+        ],
+        [
+          "src.requests.adapters.HTTPAdapter.get_connection",
+          "src.requests.adapters.HTTPAdapter.proxy_manager_for",
+          "CALLS"
+        ]
+      ],
+      "sample_fn_exact": [
+        [
+          "src.requests.api.request",
+          "src.requests.sessions.Session",
+          "CALLS"
+        ],
+        [
+          "src.requests.models.PreparedRequest.copy",
+          "src.requests.models.PreparedRequest.__init__",
+          "CALLS"
+        ],
+        [
+          "src.requests.models.PreparedRequest.copy",
+          "src.requests.structures.CaseInsensitiveDict.copy",
+          "CALLS"
+        ],
+        [
+          "src.requests.models.PreparedRequest.prepare_auth",
+          "src.requests.auth.HTTPBasicAuth",
+          "CALLS"
+        ],
+        [
+          "src.requests.models.PreparedRequest.prepare_body",
+          "src.requests._internal_utils.to_native_string.encode",
+          "CALLS"
+        ],
+        [
+          "src.requests.models.PreparedRequest.prepare_body",
+          "src.requests._internal_utils.to_native_string.encode.tell",
+          "CALLS"
+        ],
+        [
+          "src.requests.models.PreparedRequest.prepare_body",
+          "src.requests._internal_utils.to_native_string.tell",
+          "CALLS"
+        ],
+        [
+          "src.requests.models.PreparedRequest.prepare_body",
+          "src.requests.compat.builtin_str",
+          "CALLS"
+        ],
+        [
+          "src.requests.models.PreparedRequest.prepare_body",
+          "src.requests.compat.json.dumps",
+          "CALLS"
+        ],
+        [
+          "src.requests.models.PreparedRequest.prepare_body",
+          "src.requests.compat.json.dumps.encode",
+          "CALLS"
+        ]
+      ],
+      "sample_fp_scoped": [
+        [
+          "src.requests.api.request",
+          "src.requests.api.request",
+          "CALLS"
+        ],
+        [
+          "src.requests.models.PreparedRequest.copy",
+          "src.requests.models.PreparedRequest.copy",
+          "CALLS"
+        ],
+        [
+          "src.requests.models.PreparedRequest.prepare_auth",
+          "src.requests.cookies.RequestsCookieJar.update",
+          "CALLS"
+        ],
+        [
+          "src.requests.models.PreparedRequest.prepare_body",
+          "tests.certs.expired.Makefile.all",
+          "CALLS"
+        ],
+        [
+          "src.requests.models.PreparedRequest.prepare_content_length",
+          "src.requests.api.get",
+          "CALLS"
+        ],
+        [
+          "src.requests.models.PreparedRequest.prepare_headers",
+          "src.requests.cookies.RequestsCookieJar.items",
+          "CALLS"
+        ],
+        [
+          "src.requests.models.Request.__init__",
+          "src.requests.cookies.RequestsCookieJar.items",
+          "CALLS"
+        ],
+        [
+          "src.requests.sessions.Session.get_adapter",
+          "src.requests.cookies.RequestsCookieJar.items",
+          "CALLS"
+        ],
+        [
+          "src.requests.sessions.Session.merge_environment_settings",
+          "src.requests.cookies.RequestsCookieJar.items",
+          "CALLS"
+        ],
+        [
+          "src.requests.sessions.Session.merge_environment_settings",
+          "src.requests.sessions.Session.get",
+          "CALLS"
+        ]
+      ],
+      "sample_fn_scoped": [
+        [
+          "src.requests.api.request",
+          "src.requests.sessions.Session",
+          "CALLS"
+        ],
+        [
+          "src.requests.models.PreparedRequest.copy",
+          "src.requests.models.PreparedRequest.__init__",
+          "CALLS"
+        ],
+        [
+          "src.requests.models.PreparedRequest.copy",
+          "src.requests.structures.CaseInsensitiveDict.copy",
+          "CALLS"
+        ],
+        [
+          "src.requests.models.PreparedRequest.prepare_auth",
+          "src.requests.auth.HTTPBasicAuth",
+          "CALLS"
+        ],
+        [
+          "src.requests.models.PreparedRequest.prepare_body",
+          "src.requests._internal_utils.to_native_string.encode",
+          "CALLS"
+        ],
+        [
+          "src.requests.models.PreparedRequest.prepare_body",
+          "src.requests._internal_utils.to_native_string.encode.tell",
+          "CALLS"
+        ],
+        [
+          "src.requests.models.PreparedRequest.prepare_body",
+          "src.requests._internal_utils.to_native_string.tell",
+          "CALLS"
+        ],
+        [
+          "src.requests.models.PreparedRequest.prepare_body",
+          "src.requests.compat.builtin_str",
+          "CALLS"
+        ],
+        [
+          "src.requests.models.PreparedRequest.prepare_body",
+          "src.requests.compat.json.dumps",
+          "CALLS"
+        ],
+        [
+          "src.requests.models.PreparedRequest.prepare_body",
+          "src.requests.compat.json.dumps.encode",
+          "CALLS"
+        ]
+      ]
+    },
+    "IMPORTS": {
+      "oracle": "ast",
+      "oracle_count": 55,
+      "measured_count": 26,
+      "oracle_caller_count": 17,
+      "exact": {
+        "tp": 2,
+        "fp": 24,
+        "fn": 53,
+        "precision": 0.0769,
+        "recall": 0.0364,
+        "f1": 0.0494
+      },
+      "suffix_3seg": {
+        "tp": 0,
+        "fp": 0,
+        "fn": 44,
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0
+      },
+      "scope_aligned": {
+        "tp": 2,
+        "fp": 18,
+        "fn": 53,
+        "precision": 0.1,
+        "recall": 0.0364,
+        "f1": 0.0533
+      },
+      "scope_impl_normalized": {
+        "tp": 2,
+        "fp": 18,
+        "fn": 53,
+        "precision": 0.1,
+        "recall": 0.0364,
+        "f1": 0.0533
+      },
+      "sample_fp_exact": [
+        [
+          "tests.conftest",
+          "src.requests.compat",
+          "IMPORTS"
+        ],
+        [
+          "tests.test_adapters",
+          "src.requests.adapters",
+          "IMPORTS"
+        ],
+        [
+          "tests.test_help",
+          "src.requests.help",
+          "IMPORTS"
+        ],
+        [
+          "tests.test_hooks",
+          "src.requests.hooks",
+          "IMPORTS"
+        ],
+        [
+          "tests.test_lowlevel",
+          "src.requests",
+          "IMPORTS"
+        ],
+        [
+          "tests.test_lowlevel",
+          "src.requests.compat",
+          "IMPORTS"
+        ],
+        [
+          "tests.test_packages",
+          "src.requests",
+          "IMPORTS"
+        ],
+        [
+          "tests.test_requests",
+          "src.requests",
+          "IMPORTS"
+        ],
+        [
+          "tests.test_requests",
+          "src.requests.adapters",
+          "IMPORTS"
+        ],
+        [
+          "tests.test_requests",
+          "src.requests.auth",
+          "IMPORTS"
+        ]
+      ],
+      "sample_fn_exact": [
+        [
+          "src.requests._internal_utils",
+          "src.requests.compat",
+          "IMPORTS"
+        ],
+        [
+          "src.requests.adapters",
+          "src.requests.auth",
+          "IMPORTS"
+        ],
+        [
+          "src.requests.adapters",
+          "src.requests.compat",
+          "IMPORTS"
+        ],
+        [
+          "src.requests.adapters",
+          "src.requests.cookies",
+          "IMPORTS"
+        ],
+        [
+          "src.requests.adapters",
+          "src.requests.exceptions",
+          "IMPORTS"
+        ],
+        [
+          "src.requests.adapters",
+          "src.requests.models",
+          "IMPORTS"
+        ],
+        [
+          "src.requests.adapters",
+          "src.requests.structures",
+          "IMPORTS"
+        ],
+        [
+          "src.requests.adapters",
+          "src.requests.utils",
+          "IMPORTS"
+        ],
+        [
+          "src.requests.api",
+          "src.requests",
+          "IMPORTS"
+        ],
+        [
+          "src.requests.auth",
+          "src.requests._internal_utils",
+          "IMPORTS"
+        ]
+      ],
+      "sample_fp_scoped": [
+        [
+          "tests.test_lowlevel",
+          "src.requests",
+          "IMPORTS"
+        ],
+        [
+          "tests.test_lowlevel",
+          "src.requests.compat",
+          "IMPORTS"
+        ],
+        [
+          "tests.test_requests",
+          "src.requests",
+          "IMPORTS"
+        ],
+        [
+          "tests.test_requests",
+          "src.requests.adapters",
+          "IMPORTS"
+        ],
+        [
+          "tests.test_requests",
+          "src.requests.auth",
+          "IMPORTS"
+        ],
+        [
+          "tests.test_requests",
+          "src.requests.compat",
+          "IMPORTS"
+        ],
+        [
+          "tests.test_requests",
+          "src.requests.cookies",
+          "IMPORTS"
+        ],
+        [
+          "tests.test_requests",
+          "src.requests.exceptions",
+          "IMPORTS"
+        ],
+        [
+          "tests.test_requests",
+          "src.requests.hooks",
+          "IMPORTS"
+        ],
+        [
+          "tests.test_requests",
+          "src.requests.models",
+          "IMPORTS"
+        ]
+      ],
+      "sample_fn_scoped": [
+        [
+          "src.requests._internal_utils",
+          "src.requests.compat",
+          "IMPORTS"
+        ],
+        [
+          "src.requests.adapters",
+          "src.requests.auth",
+          "IMPORTS"
+        ],
+        [
+          "src.requests.adapters",
+          "src.requests.compat",
+          "IMPORTS"
+        ],
+        [
+          "src.requests.adapters",
+          "src.requests.cookies",
+          "IMPORTS"
+        ],
+        [
+          "src.requests.adapters",
+          "src.requests.exceptions",
+          "IMPORTS"
+        ],
+        [
+          "src.requests.adapters",
+          "src.requests.models",
+          "IMPORTS"
+        ],
+        [
+          "src.requests.adapters",
+          "src.requests.structures",
+          "IMPORTS"
+        ],
+        [
+          "src.requests.adapters",
+          "src.requests.utils",
+          "IMPORTS"
+        ],
+        [
+          "src.requests.api",
+          "src.requests",
+          "IMPORTS"
+        ],
+        [
+          "src.requests.auth",
+          "src.requests._internal_utils",
+          "IMPORTS"
+        ]
+      ]
+    },
+    "HTTP_CALLS": {
+      "oracle": "opus+sonnet (not yet run)",
+      "status": "pending"
+    }
+  }
+}

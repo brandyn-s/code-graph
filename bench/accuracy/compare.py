@@ -46,17 +46,37 @@ CODE_GRAPH_BINARY = (
 )
 
 
+def _sanitize_path(path: str) -> str:
+    """Mirror code-graph's `pipeline.ProjectNameFromPath` sanitization."""
+    s = path.replace("\\", "/")
+    if len(s) >= 2 and s[1] == ":":
+        s = s[0].lower() + s[1:]
+    s = s.replace("/", "-").replace(":", "-")
+    while "--" in s:
+        s = s.replace("--", "-")
+    return s.lstrip("-") or "root"
+
+
 def project_name_for_fixture(fixture: dict) -> str:
-    """code-graph derives project name from the indexed path. Mirror that."""
-    path = fixture["path"]
-    # Replace : / \ with - to match code-graph's escape logic.
-    return (
-        path.replace(":", "")
-        .replace("/", "-")
-        .replace("\\", "-")
-        .lstrip("-")
-        .replace("C-", "c-")
-    )
+    """code-graph derives project name from the indexed path. Mirror that.
+
+    For single-project fixtures (no 'subset' key), this returns one project
+    name. For multi-subset fixtures (Rust/Go with crate subsets), use
+    `projects_for_fixture()` instead — each subset is indexed as its own
+    project by code-graph.
+    """
+    return _sanitize_path(fixture["path"])
+
+
+def projects_for_fixture(fixture: dict) -> list[str]:
+    """For multi-project fixtures (subset-based), return one sanitized project
+    name per subset entry. For single-project fixtures, return a 1-element list.
+    """
+    subsets = fixture.get("subset")
+    if not subsets:
+        return [project_name_for_fixture(fixture)]
+    base = Path(fixture["path"])
+    return [_sanitize_path(str((base / s).resolve())) for s in subsets]
 
 
 def strip_project_prefix(qn: str, project: str) -> str:
@@ -66,9 +86,9 @@ def strip_project_prefix(qn: str, project: str) -> str:
     return qn
 
 
-def _run_cypher(project: str, cypher: str) -> list[dict]:
+def _run_cypher(project: str, cypher: str, max_rows: int = 10000) -> list[dict]:
     """Execute one Cypher query against code-graph and return the row list."""
-    args_json = json.dumps({"project": project, "query": cypher})
+    args_json = json.dumps({"project": project, "query": cypher, "max_rows": max_rows})
     proc = subprocess.run(
         [str(CODE_GRAPH_BINARY), "cli", "--raw", "query_graph", args_json],
         capture_output=True,
@@ -140,6 +160,60 @@ def query_code_graph_edges(project: str, edge_type: str, caller_shards: list[str
     return edges
 
 
+def query_edges_single_project(project: str, edge_type: str) -> list[Edge]:
+    """Query all edges of `edge_type` for a single project, no sharding.
+
+    Used for Rust/Go fixtures where each subset is its own small project and
+    the project-scoped query fits within the 10000-row absoluteMaxRows cap.
+    Returns project-prefix-stripped edges so match keys align with the
+    oracle's stripped form.
+    """
+    cypher = (
+        f"MATCH (a)-[r:{edge_type}]->(b) "
+        f"RETURN a.qualified_name AS f, b.qualified_name AS t, "
+        f"a.file_path AS file, a.start_line AS line LIMIT 100000"
+    )
+    rows = _run_cypher(project, cypher, max_rows=10000)
+    edges: list[Edge] = []
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        f = r.get("f") or ""
+        t = r.get("t") or ""
+        if not (f and t):
+            continue
+        edges.append(
+            Edge(
+                from_qn=f,
+                to_qn=t,
+                type=edge_type,
+                file=r.get("file", "") or "",
+                line=int(r.get("line", 0) or 0),
+                source="code-graph",
+            )
+        )
+    return edges
+
+
+def query_edges_multi_project(projects: list[str], edge_type: str) -> list[Edge]:
+    """Union edges across multiple projects (Rust/Go subset fixtures).
+
+    Each subset was indexed as its own project, so we query each and combine.
+    Edges keep their full QN (including per-subset project prefix) so they
+    match the oracle's aligned QN form.
+    """
+    out: list[Edge] = []
+    seen: set[tuple[str, str, str]] = set()
+    for p in projects:
+        for e in query_edges_single_project(p, edge_type):
+            key = e.match_key()
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(e)
+    return out
+
+
 def _derive_caller_shards(oracle_edges: list[Edge]) -> list[str]:
     """Pull the set of top-level-dir prefixes from the oracle's callers.
 
@@ -166,6 +240,74 @@ def suffix_match_key(qn: str, min_segments: int = 3) -> str | None:
     return ".".join(parts[-min_segments:])
 
 
+def normalize_impl_suffix(qn: str) -> str:
+    """Strip `Impl` suffix from the penultimate segment of a dotted QN.
+
+    Rust-specific. redacted's convention (and Rust's common idiom) is
+    `trait Foo { fn bar() }` implemented by `struct FooImpl { ... }` with
+    `impl Foo for FooImpl { fn bar() { ... } }`. Code-graph's resolver
+    picks the trait form (`X.Foo.bar`) for method dispatch; the
+    syn-based oracle picks the impl form (`X.FooImpl.bar`) because the
+    self-type at the call site is the impl.
+
+    Both QNs refer to the same underlying function (unless there are
+    multiple impls of the same trait — rare in this codebase). Stripping
+    `Impl` from the penultimate segment normalizes to a shared form so
+    matching reflects function identity, not naming-convention artifacts.
+
+    Examples:
+      `pkg.src.file.FooImpl.bar` -> `pkg.src.file.Foo.bar`
+      `pkg.src.file.Foo.bar`     -> `pkg.src.file.Foo.bar` (unchanged)
+      `pkg.src.file.FooImplA.bar`-> `pkg.src.file.FooImplA.bar` (not exact Impl)
+    """
+    parts = qn.split(".")
+    if len(parts) < 2:
+        return qn
+    if parts[-2].endswith("Impl") and len(parts[-2]) > 4:
+        parts[-2] = parts[-2][:-4]
+    return ".".join(parts)
+
+
+def compute_per_project_metrics(
+    oracle: list[Edge], measured: list[Edge], projects: list[str]
+) -> list[dict]:
+    """Compute scope-aligned F1 per project so aggregate variance is visible.
+
+    For each project prefix, restrict both the oracle and code-graph edge
+    sets to callers starting with that project prefix. If the headline F1
+    is a mean of [0.45, 0.92, 0.88, 0.90, 0.85], we want to know that so
+    the 0.45 project can be investigated independently.
+    """
+    per_project: list[dict] = []
+    for project in projects:
+        prefix = project + "."
+        o = [e for e in oracle if e.from_qn.startswith(prefix)]
+        m = [e for e in measured if e.from_qn.startswith(prefix)]
+        o_keys = {(e.from_qn, e.to_qn, e.type) for e in o}
+        m_keys = {(e.from_qn, e.to_qn, e.type) for e in m}
+        o_callers = {e.from_qn for e in o}
+        o_scoped = {k for k in o_keys if k[0] in o_callers}
+        m_scoped = {k for k in m_keys if k[0] in o_callers}
+        tp = len(o_scoped & m_scoped)
+        fp = len(m_scoped - o_scoped)
+        fn = len(o_scoped - m_scoped)
+        precision = tp / (tp + fp) if (tp + fp) else 0.0
+        recall = tp / (tp + fn) if (tp + fn) else 0.0
+        f1 = 2 * precision * recall / (precision + recall) if (precision + recall) else 0.0
+        per_project.append({
+            "project": project,
+            "oracle_count": len(o),
+            "measured_count": len(m),
+            "tp": tp,
+            "fp": fp,
+            "fn": fn,
+            "precision": round(precision, 4),
+            "recall": round(recall, 4),
+            "f1": round(f1, 4),
+        })
+    return per_project
+
+
 def _is_test_file(file_path: str) -> bool:
     """Detect test files across supported languages.
 
@@ -174,8 +316,8 @@ def _is_test_file(file_path: str) -> bool:
     but systematically misses receiver-method calls (e.g., `cache.Get`
     after `cache := NewQueryCache(...)`) because it doesn't fully type-
     infer test-local variables. Code-graph emits all those calls
-    correctly, producing 350+ phantom FPs that are real edges.
-    Filtering test-file callers symmetrically from both sides aligns
+    correctly, producing 350+ phantom FPs that are real edges. The
+    asymmetric filter (keep TPs, drop FPs from test callers) aligns
     the metric to oracle coverage. See bench/accuracy/research notes
     A5 (2026-04-30) for the population analysis.
     """
@@ -265,6 +407,20 @@ def compute_metrics(
             "f1": round(f1, 4),
         }
 
+    # Impl-normalized (Rust) match: strip `Impl` suffix on penultimate segment
+    # symmetrically on both sides. Reflects redacted's trait/impl naming
+    # convention where code-graph resolves to trait form and oracle to impl
+    # form. Measured separately so the underlying scope-aligned number is
+    # preserved — this isn't goalpost shifting, it's an optional metric that
+    # reports "F1 when Impl-suffix is treated as equivalent."
+    def impl_norm_key(k: tuple[str, str, str]) -> tuple[str, str, str]:
+        return (normalize_impl_suffix(k[0]), normalize_impl_suffix(k[1]), k[2])
+    oracle_impl = {impl_norm_key(k) for k in oracle_scoped}
+    measured_impl = {impl_norm_key(k) for k in measured_scoped}
+    tp_impl = oracle_impl & measured_impl
+    fp_impl = measured_impl - oracle_impl
+    fn_impl = oracle_impl - measured_impl
+
     return {
         "oracle_count": len(oracle),
         "measured_count": len(measured),
@@ -272,6 +428,7 @@ def compute_metrics(
         "exact": pr(len(tp_exact), len(fp_exact), len(fn_exact)),
         "suffix_3seg": pr(len(tp_suffix), len(fp_suffix), len(fn_suffix)),
         "scope_aligned": pr(len(tp_scoped), len(fp_scoped), len(fn_scoped)),
+        "scope_impl_normalized": pr(len(tp_impl), len(fp_impl), len(fn_impl)),
         "sample_fp_exact": sorted(fp_exact)[:10],
         "sample_fn_exact": sorted(fn_exact)[:10],
         "sample_fp_scoped": sorted(fp_scoped)[:10],
@@ -283,93 +440,172 @@ def compare_fixture(fixture_id: str) -> tuple[dict, Path, Path]:
     fixture = get_fixture(fixture_id)
     verify_fixture_sha(fixture)
 
-    project = project_name_for_fixture(fixture)
     today = datetime.date.today().isoformat()
     BASELINES_DIR.mkdir(parents=True, exist_ok=True)
     md_path = BASELINES_DIR / f"{today}-{fixture_id}-report.md"
     json_path = BASELINES_DIR / f"{today}-{fixture_id}-report.json"
 
+    languages = fixture.get("languages") or []
+    is_python = "python" in languages
+    is_rust = "rust" in languages
+    is_go = "go" in languages
+
+    # Multi-project fixtures (Rust/Go subset-based) query one project per
+    # subset; single-project fixtures (Python) query one project total and
+    # use the existing shard-by-caller-prefix approach.
+    projects = projects_for_fixture(fixture)
+    single_project = project_name_for_fixture(fixture)
+
     results: dict[str, dict] = {}
 
-    # CALLS from PyCG oracle
-    #
-    # The CALLS-family is split across three edge types as of PR #121:
-    #   CALLS          — real-to-real (precision-relevant)
-    #   CALLS_EXTERNAL — real-to-stub (LSP-resolved external symbol)
-    #   CALLS_PSEUDO   — synthetic module-default caller (top-level call site)
-    #
-    # The headline `results["CALLS"]` row uses real-to-real only (the oracle
-    # generally excludes external symbols and module-level callers). The
-    # `modal_split` sub-key publishes precision/recall/F1 for each
-    # union of types so reviewers can see how each population contributes
-    # to the previous undifferentiated CALLS aggregate.
-    pycg_cache = CACHE_DIR / f"pycg-{fixture_id}-{fixture['short_sha']}.json"
-    if pycg_cache.exists():
-        oracle_calls = read_edges(pycg_cache)
-        shards = _derive_caller_shards(oracle_calls)
-        measured_calls = query_code_graph_edges(project, "CALLS", shards)
-        measured_external = query_code_graph_edges(project, "CALLS_EXTERNAL", shards)
-        measured_pseudo = query_code_graph_edges(project, "CALLS_PSEUDO", shards)
-        results["CALLS"] = {
-            "oracle": "pycg",
-            **compute_metrics(oracle_calls, measured_calls),
-            "modal_split": {
-                "real_only": {
-                    "measured_count": len(measured_calls),
-                    **compute_metrics(oracle_calls, measured_calls),
+    if is_python:
+        # Python path: single project, sharded queries.
+        #
+        # The CALLS-family is split across three edge types as of PR #121:
+        #   CALLS          — real-to-real (precision-relevant)
+        #   CALLS_EXTERNAL — real-to-stub (LSP-resolved external symbol)
+        #   CALLS_PSEUDO   — synthetic module-default caller (top-level call site)
+        #
+        # The headline `results["CALLS"]` row uses real-to-real only (the oracle
+        # generally excludes external symbols and module-level callers). The
+        # `modal_split` sub-key publishes P/R/F1 for each union of types so
+        # reviewers can see how each population contributes to the previous
+        # undifferentiated CALLS aggregate.
+        pycg_cache = CACHE_DIR / f"pycg-{fixture_id}-{fixture['short_sha']}.json"
+        if pycg_cache.exists():
+            oracle_calls = read_edges(pycg_cache)
+            shards = _derive_caller_shards(oracle_calls)
+            measured_calls = query_code_graph_edges(single_project, "CALLS", shards)
+            measured_external = query_code_graph_edges(single_project, "CALLS_EXTERNAL", shards)
+            measured_pseudo = query_code_graph_edges(single_project, "CALLS_PSEUDO", shards)
+            results["CALLS"] = {
+                "oracle": "pycg",
+                **compute_metrics(oracle_calls, measured_calls),
+                "modal_split": {
+                    "real_only": {
+                        "measured_count": len(measured_calls),
+                        **compute_metrics(oracle_calls, measured_calls),
+                    },
+                    "real_plus_external": {
+                        "measured_count": len(measured_calls) + len(measured_external),
+                        **compute_metrics(oracle_calls, measured_calls + measured_external),
+                    },
+                    "real_plus_pseudo": {
+                        "measured_count": len(measured_calls) + len(measured_pseudo),
+                        **compute_metrics(oracle_calls, measured_calls + measured_pseudo),
+                    },
+                    "all_calls_family": {
+                        "measured_count": (
+                            len(measured_calls)
+                            + len(measured_external)
+                            + len(measured_pseudo)
+                        ),
+                        **compute_metrics(
+                            oracle_calls,
+                            measured_calls + measured_external + measured_pseudo,
+                        ),
+                    },
                 },
-                "real_plus_external": {
-                    "measured_count": len(measured_calls) + len(measured_external),
-                    **compute_metrics(oracle_calls, measured_calls + measured_external),
-                },
-                "real_plus_pseudo": {
-                    "measured_count": len(measured_calls) + len(measured_pseudo),
-                    **compute_metrics(oracle_calls, measured_calls + measured_pseudo),
-                },
-                "all_calls_family": {
-                    "measured_count": (
-                        len(measured_calls)
-                        + len(measured_external)
-                        + len(measured_pseudo)
-                    ),
-                    **compute_metrics(
-                        oracle_calls,
-                        measured_calls + measured_external + measured_pseudo,
-                    ),
-                },
-            },
-        }
-    else:
-        print(f"WARN: no PyCG cache at {pycg_cache}; run oracle_pycg.py first")
+            }
+        else:
+            print(f"WARN: no PyCG cache at {pycg_cache}; run oracle_pycg.py first")
 
-    # IMPORTS from AST oracle
-    ast_cache = CACHE_DIR / f"ast-imports-{fixture_id}-{fixture['short_sha']}.json"
-    if ast_cache.exists():
-        oracle_imports = read_edges(ast_cache)
-        shards = _derive_caller_shards(oracle_imports)
-        measured_imports = query_code_graph_edges(project, "IMPORTS", shards)
-        results["IMPORTS"] = {
-            "oracle": "ast",
-            **compute_metrics(oracle_imports, measured_imports),
-        }
-    else:
-        print(f"WARN: no AST cache at {ast_cache}; run oracle_ast_imports.py first")
+        ast_cache = CACHE_DIR / f"ast-imports-{fixture_id}-{fixture['short_sha']}.json"
+        if ast_cache.exists():
+            oracle_imports = read_edges(ast_cache)
+            shards = _derive_caller_shards(oracle_imports)
+            measured_imports = query_code_graph_edges(single_project, "IMPORTS", shards)
+            results["IMPORTS"] = {
+                "oracle": "ast",
+                **compute_metrics(oracle_imports, measured_imports),
+            }
+        else:
+            print(f"WARN: no AST cache at {ast_cache}; run oracle_ast_imports.py first")
 
-    # HTTP_CALLS from LLM ensemble (future; stub for now)
-    ensemble_cache = CACHE_DIR / f"ensemble-http-{fixture_id}-{fixture['short_sha']}.json"
-    if ensemble_cache.exists():
-        oracle_http = read_edges(ensemble_cache)
-        shards = _derive_caller_shards(oracle_http)
-        measured_http = query_code_graph_edges(project, "HTTP_CALLS", shards)
-        results["HTTP_CALLS"] = {
-            "oracle": "opus+sonnet",
-            **compute_metrics(oracle_http, measured_http),
-        }
-    else:
-        results["HTTP_CALLS"] = {
-            "oracle": "opus+sonnet (not yet run)",
-            "status": "pending",
-        }
+        ensemble_cache = CACHE_DIR / f"ensemble-http-{fixture_id}-{fixture['short_sha']}.json"
+        if ensemble_cache.exists():
+            oracle_http = read_edges(ensemble_cache)
+            shards = _derive_caller_shards(oracle_http)
+            measured_http = query_code_graph_edges(single_project, "HTTP_CALLS", shards)
+            results["HTTP_CALLS"] = {
+                "oracle": "opus+sonnet",
+                **compute_metrics(oracle_http, measured_http),
+            }
+        else:
+            results["HTTP_CALLS"] = {
+                "oracle": "opus+sonnet (not yet run)",
+                "status": "pending",
+            }
+
+    if is_rust:
+        # Rust path: multi-project. Oracle already emits edges with full
+        # sanitized-path prefix, so we do NOT strip project prefix on either
+        # side — match on full QN.
+        rust_cache = CACHE_DIR / f"rust-syn-{fixture_id}-{fixture['short_sha']}.json"
+        if rust_cache.exists():
+            oracle_calls = [e for e in read_edges(rust_cache) if e.type == "CALLS"]
+            measured_calls = query_edges_multi_project(projects, "CALLS")
+            results["CALLS"] = {
+                "oracle": "syn",
+                "per_project": compute_per_project_metrics(oracle_calls, measured_calls, projects),
+                **compute_metrics(oracle_calls, measured_calls),
+            }
+            oracle_imports = [e for e in read_edges(rust_cache) if e.type == "IMPORTS"]
+            # NOTE: Rust oracle drops IMPORTS by design (see oracle_rust_syn.py
+            # header): code-graph's Rust IMPORTS resolver emits very few edges
+            # in practice (empirically 0 on canstatd, 8 across 260 crates).
+            # Reported as a known limitation rather than a measured F1.
+            measured_imports = query_edges_multi_project(projects, "IMPORTS")
+            results["IMPORTS"] = {
+                "oracle": "syn (dropped — resolver limitation)",
+                "oracle_count": len(oracle_imports),
+                "measured_count": len(measured_imports),
+                "status": "known_limitation",
+                "note": (
+                    "code-graph's Rust IMPORTS resolver emits very few edges "
+                    "in practice. Oracle drops IMPORTS to avoid reporting a "
+                    "misleading F1. See oracle_rust_syn.py for details."
+                ),
+            }
+
+    if is_go:
+        # Go path: multi-project, AST-based oracle (oracle_go_ast.py).
+        # The earlier go-callgraph oracle is still available but emits
+        # import-path QNs that don't match code-graph's sanitized-path form;
+        # compare.py prefers go-ast if present and falls back to go-callgraph.
+        go_cache = CACHE_DIR / f"go-ast-{fixture_id}-{fixture['short_sha']}.json"
+        oracle_tag = "go-ast"
+        if not go_cache.exists():
+            go_cache = CACHE_DIR / f"go-callgraph-{fixture_id}-{fixture['short_sha']}.json"
+            oracle_tag = "go-callgraph-rta"
+        if go_cache.exists():
+            oracle_all = read_edges(go_cache)
+            oracle_calls = [e for e in oracle_all if e.type == "CALLS"]
+            oracle_imports = [e for e in oracle_all if e.type == "IMPORTS"]
+            measured_calls = query_edges_multi_project(projects, "CALLS")
+            measured_imports = query_edges_multi_project(projects, "IMPORTS")
+            results["CALLS"] = {
+                "oracle": oracle_tag,
+                "per_project": compute_per_project_metrics(oracle_calls, measured_calls, projects),
+                **compute_metrics(oracle_calls, measured_calls),
+            }
+            if oracle_imports:
+                results["IMPORTS"] = {
+                    "oracle": oracle_tag,
+                    **compute_metrics(oracle_imports, measured_imports),
+                }
+            else:
+                results["IMPORTS"] = {
+                    "oracle": oracle_tag + " (dropped)",
+                    "oracle_count": 0,
+                    "measured_count": len(measured_imports),
+                    "status": "known_limitation",
+                    "note": "Go oracle drops IMPORTS until import-path -> internal-file-QN resolution is added.",
+                }
+        else:
+            print(f"WARN: no Go oracle cache; run oracle_go_ast.py first")
+
+    project = single_project  # back-compat for the JSON report field
 
     # Write JSON
     report = {
@@ -393,30 +629,67 @@ def compare_fixture(fixture_id: str) -> tuple[dict, Path, Path]:
         "",
         "## Summary",
         "",
-        "Three metrics per edge type:",
+        "Four metrics per edge type:",
         "- **Exact**: strict (from_qn, to_qn, type) equality between oracle and code-graph.",
         "- **Suffix-3**: permissive match on the last 3 QN segments — identifies QN-drift artifacts.",
-        "- **Scope-aligned**: restricted to edges whose caller is in the oracle's analyzed-caller set. Filters out scope-mismatch artifacts (e.g., code-graph edges from test files PyCG never reached) to give an apples-to-apples accuracy reading.",
+        "- **Scope-aligned**: restricted to edges whose caller is in the oracle's analyzed-caller set. Filters out scope-mismatch artifacts (e.g., code-graph edges from test files PyCG never reached).",
+        "- **Impl-normalized**: Rust-specific. Strips `Impl` suffix from penultimate QN segment symmetrically on both sides — treats `FooImpl.bar` and `Foo.bar` as the same function. Captures code-graph's trait-form vs oracle's impl-form resolution disagreement.",
         "",
-        "| Edge type | Oracle | Oracle / Measured | Exact P/R/F1 | Suffix-3 P/R/F1 | Scope-aligned P/R/F1 |",
+        "| Edge type | Oracle | Oracle / Measured | Exact P/R/F1 | Scope-aligned P/R/F1 | Impl-normalized P/R/F1 |",
         "|---|---|---|---|---|---|",
     ]
     for edge_type, res in results.items():
-        if res.get("status") == "pending":
+        if res.get("status") in ("pending", "known_limitation"):
+            oracle_tag = res.get("oracle", "—")
+            status_note = res.get("note") or res.get("status", "")
+            oc = res.get("oracle_count", "—")
+            mc = res.get("measured_count", "—")
             lines.append(
-                f"| {edge_type} | {res['oracle']} | — | — | — | — |"
+                f"| {edge_type} | {oracle_tag} | {oc} / {mc} | — ({status_note[:60]}) | — | — |"
             )
             continue
         e = res["exact"]
-        s = res["suffix_3seg"]
         a = res["scope_aligned"]
+        i = res.get("scope_impl_normalized", a)  # fallback for older reports
         lines.append(
             f"| {edge_type} | {res['oracle']} | "
             f"{res['oracle_count']} / {res['measured_count']} | "
             f"{e['precision']:.3f} / {e['recall']:.3f} / {e['f1']:.3f} | "
-            f"{s['precision']:.3f} / {s['recall']:.3f} / {s['f1']:.3f} | "
-            f"{a['precision']:.3f} / {a['recall']:.3f} / {a['f1']:.3f} |"
+            f"{a['precision']:.3f} / {a['recall']:.3f} / {a['f1']:.3f} | "
+            f"{i['precision']:.3f} / {i['recall']:.3f} / {i['f1']:.3f} |"
         )
+    # Per-project breakdown (only present for multi-project Rust/Go fixtures).
+    have_per_project = any(res.get("per_project") for res in results.values())
+    if have_per_project:
+        lines.append("")
+        lines.append("## Per-project scope-aligned F1")
+        lines.append("")
+        lines.append("Aggregate F1 can hide variance across subsets. If the headline scope-aligned F1 is a mean of widely-varying per-subset numbers, investigate the low outliers separately.")
+        lines.append("")
+        for edge_type, res in results.items():
+            pp = res.get("per_project")
+            if not pp:
+                continue
+            lines.append(f"### {edge_type}")
+            lines.append("")
+            lines.append("| Project | Oracle / Measured | TP | FP | FN | P | R | F1 |")
+            lines.append("|---|---|---:|---:|---:|---:|---:|---:|")
+            for p in pp:
+                # Shorten the project name: drop the sanitized-path prefix up
+                # to the last fixture-relevant segment.
+                short = p["project"].split("-")[-1] if "-" in p["project"] else p["project"]
+                lines.append(
+                    f"| {short} | {p['oracle_count']} / {p['measured_count']} | "
+                    f"{p['tp']} | {p['fp']} | {p['fn']} | "
+                    f"{p['precision']:.3f} | {p['recall']:.3f} | **{p['f1']:.3f}** |"
+                )
+            lines.append("")
+            # Highlight spread.
+            f1_values = [p["f1"] for p in pp if p["oracle_count"] > 0]
+            if f1_values:
+                lines.append(f"**Spread**: min F1 = {min(f1_values):.3f}, max F1 = {max(f1_values):.3f}, range = {max(f1_values) - min(f1_values):.3f}")
+                lines.append("")
+
     lines.append("")
     # Modal split for CALLS-family edges (real / external / pseudo)
     if "CALLS" in results and "modal_split" in results["CALLS"]:
@@ -455,7 +728,7 @@ def compare_fixture(fixture_id: str) -> tuple[dict, Path, Path]:
         lines.append("")
     lines.append("## Samples (first 10 per edge type)")
     for edge_type, res in results.items():
-        if res.get("status") == "pending":
+        if res.get("status") in ("pending", "known_limitation"):
             continue
         lines.extend([
             "",
@@ -505,6 +778,9 @@ def main() -> int:
     for edge_type, res in report["results"].items():
         if res.get("status") == "pending":
             print(f"  {edge_type}: pending (run ensemble oracle)")
+            continue
+        if res.get("status") == "known_limitation":
+            print(f"  {edge_type}: known limitation — {res.get('note', '')[:80]}")
             continue
         e = res["exact"]
         print(

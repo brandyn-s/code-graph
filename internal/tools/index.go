@@ -101,7 +101,14 @@ func (s *Server) handleIndexRepository(ctx context.Context, req *mcp.CallToolReq
 	// surface next time Glob/Grep fires. Report generation failure must NOT
 	// fail the overall index — a stale or missing report is less bad than a
 	// failed index, and the user can regenerate manually via generate_report.
-	if reportResult, reportErr := s.generateOrientationReport(projectName); reportErr != nil {
+	//
+	// skip_report=true opts out of the write entirely. Required when indexing
+	// read-only repos (bench fixtures, vendored code, protected paths) where
+	// any write — even a generated doc — violates policy. Default is false so
+	// normal usage is unchanged.
+	if getBoolArg(args, "skip_report") {
+		slog.Info("index.report.skipped", "project", projectName, "reason", "skip_report=true")
+	} else if reportResult, reportErr := s.generateOrientationReport(projectName); reportErr != nil {
 		slog.Warn("index.report.err", "project", projectName, "err", reportErr)
 	} else {
 		slog.Info("index.report.ok",

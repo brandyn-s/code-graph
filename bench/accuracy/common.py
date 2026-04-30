@@ -55,7 +55,18 @@ def get_fixture(fixture_id: str) -> dict[str, Any]:
 
 
 def verify_fixture_sha(fixture: dict[str, Any]) -> None:
-    """Exit 2 on SHA drift. This prevents silently measuring against the wrong commit."""
+    """Exit 2 on SHA drift OR uncommitted changes inside subset paths.
+
+    The SHA check alone isn't enough: `git rev-parse HEAD` returns the same
+    commit even when the working tree has uncommitted .rs / .go / .py changes
+    that would alter measurement output. For fixtures with a `subset` key,
+    we also run `git status --porcelain` and fail if any listed subset has
+    modified or untracked files.
+
+    Uncommitted files OUTSIDE listed subsets produce a warning (common for
+    environments like psm where auth-gateway/go.mod is
+    routinely modified but we're measuring Rust crates).
+    """
     path = fixture["path"]
     expected = fixture["sha"]
     try:
@@ -73,6 +84,55 @@ def verify_fixture_sha(fixture: dict[str, Any]) -> None:
             f"  expected: {expected}\n"
             f"  actual:   {actual}\n"
             f"  Reset the fixture or update fixtures.json."
+        )
+
+    # Working-tree drift check. Only applies to fixtures with a subset list —
+    # for single-project fixtures like mcp-servers we could add it later but
+    # the blast radius of uncommitted changes there isn't obviously worse
+    # than SHA drift alone.
+    subsets = fixture.get("subset") or []
+    if not subsets:
+        return
+    try:
+        status = subprocess.run(
+            ["git", "-C", path, "status", "--porcelain"],
+            capture_output=True,
+            timeout=10,
+        )
+    except (subprocess.SubprocessError, FileNotFoundError) as e:
+        print(f"fixture {fixture['id']}: git status failed (non-fatal): {e}")
+        return
+    status_text = status.stdout.decode("utf-8", errors="replace")
+    if not status_text.strip():
+        return
+    subset_drift: list[str] = []
+    other_drift: list[str] = []
+    for line in status_text.splitlines():
+        # Porcelain format: `XY path` where X/Y are status codes (e.g. " M",
+        # "??"). path is from index 3 onward. Renames use "R  old -> new" —
+        # for simplicity we keep the whole post-code string.
+        if len(line) < 3:
+            continue
+        rel = line[3:].strip()
+        # Normalize: git always reports forward slashes.
+        rel_posix = rel.replace("\\", "/")
+        in_subset = any(rel_posix == s or rel_posix.startswith(s.rstrip("/") + "/") for s in subsets)
+        if in_subset:
+            subset_drift.append(line)
+        else:
+            other_drift.append(line)
+    if subset_drift:
+        detail = "\n  ".join(subset_drift[:10])
+        raise SystemExit(
+            f"fixture {fixture['id']}: uncommitted changes inside subset paths.\n"
+            f"  subsets: {subsets}\n"
+            f"  drift ({len(subset_drift)} paths; first 10 shown):\n  {detail}\n"
+            f"  Commit, stash, or revert before running the harness."
+        )
+    if other_drift:
+        print(
+            f"fixture {fixture['id']}: {len(other_drift)} uncommitted path(s) "
+            f"outside subsets (not blocking). Sample: {other_drift[0][:80]}"
         )
 
 

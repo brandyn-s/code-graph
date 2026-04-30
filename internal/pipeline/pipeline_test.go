@@ -893,7 +893,9 @@ func TestBuildEdgesFromResults_EdgeTypeSplit(t *testing.T) {
 			{CallerQN: "proj.main", TargetQN: "github.com/x/ext.SomeFunc", Type: "CALLS_PSEUDO"},
 		},
 	}
-	edges := buildEdgesFromResults(results, qnToID, "proj", 4, stubQNs)
+	// All targets are Function/Method-equivalent for this test (labels=nil
+	// disables the INDIRECT_CALLS retype).
+	edges := buildEdgesFromResults(results, qnToID, nil, "proj", 4, stubQNs)
 	if len(edges) != 4 {
 		t.Fatalf("want 4 edges, got %d", len(edges))
 	}

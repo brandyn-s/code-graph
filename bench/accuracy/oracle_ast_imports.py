@@ -107,7 +107,15 @@ def _is_internal_to_fixture(module_qn: str, fixture_path: Path) -> bool:
     return False
 
 
-def extract_imports_from_file(service_prefix: str, service_root: Path, file_path: Path) -> list[Edge]:
+def _submod_exists(root: Path, parts: list[str], name: str) -> bool:
+    """True if `root/<parts>/<name>.py` or `root/<parts>/<name>/__init__.py` exists."""
+    candidate = root
+    for seg in parts:
+        candidate = candidate / seg
+    return (candidate / f"{name}.py").exists() or (candidate / name / "__init__.py").exists()
+
+
+def extract_imports_from_file(service_prefix: str, service_root: Path, file_path: Path, fixture_path: Path) -> list[Edge]:
     """Parse one .py file and return its IMPORTS edges."""
     try:
         source = file_path.read_bytes().decode("utf-8", errors="replace")
@@ -148,6 +156,55 @@ def extract_imports_from_file(service_prefix: str, service_root: Path, file_path
                         source="ast",
                     )
                 )
+                # ALSO emit per-imported-name edges when that name resolves to
+                # a module (submodule import: `from pkg import submod`). Two
+                # forms emitted so either code-graph granularity matches:
+                #
+                #   - `<to_qn>.<name>`              — for cross-service imports
+                #                                     that match code-graph's
+                #                                     package-level form (when
+                #                                     <to_qn> is itself a
+                #                                     top-level pkg like `shared`)
+                #   - `<service>.<to_qn>.<name>`    — for intra-service imports
+                #                                     where code-graph's
+                #                                     sanitized-path QN includes
+                #                                     the service segment (e.g.,
+                #                                     `workspace-provisioner.clients.confluence`)
+                #
+                # Detected by checking WHICH root the submodule file lives
+                # under. If under a service subdir, prefix with that service.
+                for alias in node.names:
+                    if alias.name == "*":
+                        continue
+                    candidate_parts = to_qn.split(".")
+                    # Try fixture root first (cross-service imports like
+                    # `from shared import errors` where `shared` is a top-level
+                    # dir). Then each service root (intra-service imports).
+                    # Stop at first hit.
+                    fixture_root = fixture_path
+                    if _submod_exists(fixture_root, candidate_parts, alias.name):
+                        edges.append(Edge(
+                            from_qn=caller_qn,
+                            to_qn=f"{to_qn}.{alias.name}",
+                            type="IMPORTS",
+                            file=str(file_path.relative_to(service_root.parent)),
+                            line=node.lineno,
+                            source="ast",
+                        ))
+                        continue
+                    for svc_root in fixture_path.iterdir():
+                        if not svc_root.is_dir():
+                            continue
+                        if _submod_exists(svc_root, candidate_parts, alias.name):
+                            edges.append(Edge(
+                                from_qn=caller_qn,
+                                to_qn=f"{svc_root.name}.{to_qn}.{alias.name}",
+                                type="IMPORTS",
+                                file=str(file_path.relative_to(service_root.parent)),
+                                line=node.lineno,
+                                source="ast",
+                            ))
+                            break
 
     return edges
 
@@ -182,7 +239,7 @@ def build_ground_truth(fixture_id: str, force: bool = False) -> Path:
         svc_raw = 0
         svc_kept = 0
         for py in py_files:
-            for edge in extract_imports_from_file(service_dir, service_root, py):
+            for edge in extract_imports_from_file(service_dir, service_root, py, fixture_path):
                 svc_raw += 1
                 # Filter to internal imports only to match code-graph's scope.
                 if _is_internal_to_fixture(edge.to_qn, fixture_path):

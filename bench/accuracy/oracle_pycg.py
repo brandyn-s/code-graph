@@ -126,7 +126,11 @@ def normalize_to_edges(
          external (stdlib/pip) → filter out (outside code-graph's scope).
     """
     edges: list[Edge] = []
-    prefix = service_prefix
+    # Convert path-like service prefixes (e.g., "src/flask" or "src\flask") to
+    # dotted form so emitted QNs match code-graph's fqn.Compute output
+    # (which also dot-joins path segments). mcp-servers' single-segment
+    # service names pass through unchanged.
+    prefix = service_prefix.replace("\\", "/").replace("/", ".")
 
     service_modules = {f.stem for f in service_root.rglob("*.py")}
     # fixture_top_dirs: directories directly under the fixture root that contain
@@ -177,16 +181,29 @@ def build_ground_truth(fixture_id: str, force: bool = False) -> Path:
         return cache_path
 
     fixture_path = Path(fixture["path"])
-    if fixture_id != "mcp-servers":
-        raise SystemExit(
-            f"oracle_pycg.py: only mcp-servers is configured so far "
-            f"(got {fixture_id!r}); extend MCP_SERVERS_SERVICES."
-        )
+    # Derive per-service (service_dir, entry_point) tuples. mcp-servers has
+    # its hardcoded list of services; other fixtures use the `entry_points`
+    # field from fixtures.json (relative paths).
+    if fixture_id == "mcp-servers":
+        services = list(MCP_SERVERS_SERVICES)
+    else:
+        entry_points = fixture.get("entry_points") or []
+        if not entry_points:
+            raise SystemExit(
+                f"oracle_pycg.py: fixture {fixture_id} has no entry_points. "
+                f"Add entry_points: [\"path/to/main.py\", ...] to fixtures.json."
+            )
+        services = []
+        for ep in entry_points:
+            # ep is a path relative to fixture_path. Split into dir + basename.
+            # PyCG wants a directory as --package and a file as the entry point.
+            ep_path = Path(ep)
+            services.append((str(ep_path.parent), ep_path.name))
 
     all_edges: list[Edge] = []
     errors: list[str] = []
     t0 = time.time()
-    for service_dir, entry_point in MCP_SERVERS_SERVICES:
+    for service_dir, entry_point in services:
         print(f"[pycg] running on {service_dir}/{entry_point} ...")
         data, err = run_pycg_for_service(fixture_path, service_dir, entry_point)
         if err:

@@ -15,11 +15,15 @@ complexity than Java.
 code-graph already consumes LSP internally (`internal/cbm/cbm.go`), so LSP
 can't serve as an independent oracle. Instead:
 
-| Edge type | Oracle | Trust |
-|-----------|--------|-------|
-| CALLS     | PyCG (static analysis; peer-reviewed micro-benchmark) | High |
-| IMPORTS   | Python `ast` stdlib (deterministic) | High |
-| HTTP_CALLS | Opus + Sonnet ensemble with 2/3 majority tiebreaker | Medium |
+| Edge type | Language | Oracle | Trust |
+|-----------|----------|--------|-------|
+| CALLS     | Python   | PyCG (static analysis; peer-reviewed micro-benchmark) | High |
+| IMPORTS   | Python   | Python `ast` stdlib (deterministic) | High |
+| HTTP_CALLS | all     | Opus + Sonnet ensemble with 2/3 majority tiebreaker | Medium |
+| CALLS     | Rust     | `syn` 2.x visitor (AST-level, matches code-graph's tree-sitter granularity) | High |
+| IMPORTS   | Rust     | (not measured — code-graph's Rust IMPORTS resolver emits few edges in practice) | N/A |
+| CALLS     | Go       | `go callgraph -algo=rta` (RTA matches code-graph's gopls-informed extraction) | High — but see caveats |
+| IMPORTS   | Go       | `go list -json` (authoritative from the Go toolchain) | High |
 
 None require human verification. Ground truth is frozen to JSON and
 re-used for every future regression run.
@@ -32,13 +36,19 @@ bench/accuracy/
   README.md              this file
   fixtures.json          SHA-pinned fixtures (initial: mcp-servers @ 81fa7d5)
   common.py              Edge dataclass, SHA verification, subprocess wrapper
-  oracle_pycg.py         CALLS ground truth via PyCG
-  oracle_ast_imports.py  IMPORTS ground truth via Python ast
-  oracle_llm_ensemble.py HTTP_CALLS ground truth via Opus+Sonnet
-  compare.py             TP/FP/FN/P/R/F1 reporter
-  run_baseline.py        orchestrator: verifies SHA, runs all oracles, runs code-graph, produces report
-  cache/                 per-(fixture, sha, tool) oracle output cache
-  baselines/             frozen baseline reports — committed to git
+  oracle_pycg.py             CALLS ground truth via PyCG (Python)
+  oracle_ast_imports.py      IMPORTS ground truth via Python ast
+  oracle_llm_ensemble.py     HTTP_CALLS ground truth via Opus+Sonnet
+  oracle_rust_syn.py         CALLS ground truth via syn 2.x (Rust)
+  oracle_go_callgraph.py     CALLS + IMPORTS ground truth via go callgraph (Go)
+  compare.py                 TP/FP/FN/P/R/F1 reporter
+  run_baseline.py            orchestrator: verifies SHA, runs all oracles, runs code-graph, produces report
+  tools/oracle-rust-syn/     Cargo crate for the Rust syn-based oracle binary
+  synthetic/                 hand-authored fixtures with hand-enumerated ground truth
+    rust-minimal/            used by prove-the-instrument gate
+    go-minimal/
+  cache/                     per-(fixture, sha, tool) oracle output cache
+  baselines/                 frozen baseline reports — committed to git
 ```
 
 ## Reproduction
@@ -59,10 +69,36 @@ python bench/accuracy/oracle_ast_imports.py mcp-servers # IMPORTS (stdlib only)
 python bench/accuracy/oracle_llm_ensemble.py mcp-servers # HTTP_CALLS (needs ANTHROPIC_API_KEY)
 python bench/accuracy/compare.py mcp-servers
 
+# Rust: first ensure the syn oracle binary is built (auto-bootstraps on first call)
+python bench/accuracy/oracle_rust_syn.py psm-rust
+# Index each subset first (use skip_report=true to respect read-only fixtures)
+python bench/accuracy/compare.py psm-rust
+
+# Go: requires `go install golang.org/x/tools/cmd/callgraph@latest`
+python bench/accuracy/oracle_go_callgraph.py code-graph-go
 # Output:
 #   bench/accuracy/baselines/YYYY-MM-DD-mcp-servers-report.md   (human)
 #   bench/accuracy/baselines/YYYY-MM-DD-mcp-servers-report.json (machine)
 ```
+
+## Prove-the-instrument gate
+
+Before measuring code-graph on a real fixture, every oracle must first pass a
+synthetic-fixture gate: hand-authored source with hand-enumerable ground
+truth, verified FP=0 FN=0. This catches oracle bugs before they pollute a
+published baseline (see `rules/verify-effectiveness.md` for the full rule).
+
+```bash
+# Rust syn oracle: 8 expected edges (6 CALLS + 2 IMPORTS)
+./bench/accuracy/tools/oracle-rust-syn/target/release/oracle-rust-syn.exe \
+  bench/accuracy/synthetic/rust-minimal rust-minimal
+
+# Go callgraph oracle: 5 expected CALLS after init-chain filter
+cd bench/accuracy/synthetic/go-minimal && \
+  ~/go/bin/callgraph.exe -algo=rta -format=graphviz ./...
+```
+
+Ground truth lives in each synthetic fixture's `ground_truth.json`.
 
 ### Pre-provisioning the bench venv (CI, first-timers)
 
@@ -111,61 +147,7 @@ the full repo while PyCG only walks 5 service entry points.
 
 - **PyCG is flow-insensitive**; it will have its own false negatives on dynamic dispatch. We measure comparative drift, not absolute truth.
 - **LLM ensemble non-determinism**: runs are cached per `(file_sha, model)` so results are reproducible across re-runs, but cache invalidation on file change means the first run of a new fixture SHA is stochastic.
-- **Python-only first fixture**: Go and Rust fixtures will be added once the Python pipeline is validated.
-
-## Hand-oracle methodology: multi-annotator + Cohen's Kappa
-
-Single-annotator hand-oracles (like `nix_pubsub_hand_oracle.json` as first
-shipped) carry self-bias risk — the annotator's mental model of the pattern
-may be the same as the extractor's, so systemic bugs go undetected. When
-expanding hand-oracle coverage to a new language (Rust CALLS, Python CALLS,
-Go stdlib edges, etc.), require **≥2 independent annotators** per fixture
-and compute **Cohen's Kappa** via `check_hand_oracle_kappa.py`.
-
-**Standard**: κ ≥ 0.81 = "almost perfect agreement" (threshold from
-[Code Debloating ground-truth, arXiv 2604.17717](https://arxiv.org/abs/2604.17717)
-and [CLEVER, NeurIPS 2025](https://arxiv.org/abs/2505.13938)). Below 0.81
-means either the fixture is ambiguous (split on a case neither annotator
-was prepared for) or the annotator protocol needs refinement.
-
-### Multi-annotator schema
-
-```json
-{
-  "_annotators": ["brandyn-2026-04-24", "reviewer-tbd"],
-  "services": [
-    {
-      "service": "canstatd",
-      "source_file": "nix/modules/canstatd.nix",
-      "annotations": {
-        "brandyn-2026-04-24": {
-          "pub_topics": ["canstatd"],
-          "sub_topics": []
-        },
-        "reviewer-tbd": {
-          "pub_topics": ["canstatd"],
-          "sub_topics": []
-        }
-      }
-    }
-  ]
-}
-```
-
-The legacy single-annotator path (top-level `pub_topics`/`sub_topics`)
-remains supported — `check_hand_oracle_kappa.py` reports "single-annotator,
-kappa not applicable" and exits 0, preserving existing CI behavior.
-
-### Usage
-
-```bash
-python bench/accuracy/check_hand_oracle_kappa.py \
-  bench/accuracy/nix_pubsub_hand_oracle.json
-
-# Override default threshold (0.81) if needed:
-python bench/accuracy/check_hand_oracle_kappa.py \
-  bench/accuracy/rust_calls_hand_oracle.json --threshold 0.75
-```
-
-Exit codes: `0` = pass or single-annotator, `1` = multi-annotator below
-threshold, `2` = schema/file error.
+- **Rust oracle is syntactic**: `syn` parses unexpanded source (same as code-graph's tree-sitter). Method-call receiver types are unresolved on both sides, so bare-method-call edges drop from both. This is apples-to-apples.
+- **Rust IMPORTS dropped from measurement**: code-graph's `use crate_name::Type` resolver is incomplete (empirically 0 edges on a canstatd re-index, 8 across the full 260-crate psm). The oracle drops IMPORTS rather than report a misleading F1.
+- **Go QN alignment**: `go callgraph` emits Go-native symbols (`github.com/org/repo/pkg.Func`) while code-graph stores sanitized-path QNs (`c-Users-...pkg.file.Func`). Fully aligning these requires per-file `go/ast` walking to know which `.go` file each function lives in. The current oracle is plumbed end-to-end but the QN normalization for multi-file packages is deferred.
+- **Oracle scope ≠ code-graph scope**: oracles only walk source files with explicit `fn`/`def`; code-graph also indexes Cargo.toml (as config nodes), infrascan artifacts, and `diesel` query DSL macros. These show up as legitimate code-graph edges the oracle doesn't see. Scope-aligned metric filters this artifact.

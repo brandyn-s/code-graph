@@ -195,6 +195,21 @@ func (s *Server) handleIndexStatus(_ context.Context, req *mcp.CallToolRequest) 
 		result["enrichment_hint"] = "Enrichment passes updated. Re-index with force=true to apply."
 	}
 
+	// Accuracy band. Measured empirically via bench/accuracy/ on 2026-04-24
+	// across 5 fixtures and 2 independent oracles. Surfacing these on every
+	// index_status call means consumers of query_graph can adjust their
+	// confidence in the returned data without reading the README.
+	result["known_accuracy"] = map[string]any{
+		"measured_at": "2026-04-24",
+		"method":      "edge-level F1 vs PyCG/Jedi/syn/go-ast oracles, scope-aligned",
+		"python_calls_f1_range":  "0.54-0.99 (fixture-dependent; top-level packages score high, nested src/ layouts lower)",
+		"rust_calls_f1_range":    "0.82-0.91 across 3 fixtures (stable)",
+		"go_calls_f1_range":      "0.54-0.68 across 3 fixtures (self-host higher, non-self-hosted ~10pp lower)",
+		"imports_caveats":        "Python 0.94-0.96 after 2026-04-24 nested-resolver fix; Rust resolver sparse on use crate:: paths",
+		"oracle_class_uncertainty": "+/- 35% on Python (Jedi vs PyCG disagreement on mcp-servers)",
+		"known_gaps":             []string{"closures/fn-pointers/trait-objects produce 0 CALLS edges", "Rust IMPORTS resolver incomplete for cross-crate use paths", "macro-expanded code invisible on both oracle and extractor"},
+	}
+
 	// Live index progress from SQLite (set by pipeline progress callback)
 	phase, pct, detail, _ := st.GetIndexProgress(projectName)
 	if phase != "" && phase != "complete" {

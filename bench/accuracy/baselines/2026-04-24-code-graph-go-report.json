@@ -1,0 +1,320 @@
+{
+  "schema_version": 1,
+  "date": "2026-04-24",
+  "fixture": "code-graph-go",
+  "sha": "aca3ae14093166948403e76a831a94e41b9e9ee5",
+  "short_sha": "aca3ae1",
+  "project_name": "c-Users-user-Documents-GitHub-code-graph",
+  "results": {
+    "CALLS": {
+      "oracle": "go-ast",
+      "per_project": [
+        {
+          "project": "c-Users-user-Documents-GitHub-code-graph-internal-store",
+          "oracle_count": 196,
+          "measured_count": 503,
+          "tp": 130,
+          "fp": 299,
+          "fn": 66,
+          "precision": 0.303,
+          "recall": 0.6633,
+          "f1": 0.416
+        },
+        {
+          "project": "c-Users-user-Documents-GitHub-code-graph-internal-cypher",
+          "oracle_count": 113,
+          "measured_count": 121,
+          "tp": 73,
+          "fp": 41,
+          "fn": 40,
+          "precision": 0.6404,
+          "recall": 0.646,
+          "f1": 0.6432
+        },
+        {
+          "project": "c-Users-user-Documents-GitHub-code-graph-internal-pipeline",
+          "oracle_count": 575,
+          "measured_count": 1003,
+          "tp": 397,
+          "fp": 379,
+          "fn": 178,
+          "precision": 0.5116,
+          "recall": 0.6904,
+          "f1": 0.5877
+        },
+        {
+          "project": "c-Users-user-Documents-GitHub-code-graph-internal-tools",
+          "oracle_count": 365,
+          "measured_count": 300,
+          "tp": 111,
+          "fp": 74,
+          "fn": 254,
+          "precision": 0.6,
+          "recall": 0.3041,
+          "f1": 0.4036
+        },
+        {
+          "project": "c-Users-user-Documents-GitHub-code-graph-internal-cbm",
+          "oracle_count": 429,
+          "measured_count": 2138,
+          "tp": 429,
+          "fp": 12,
+          "fn": 0,
+          "precision": 0.9728,
+          "recall": 1.0,
+          "f1": 0.9862
+        }
+      ],
+      "oracle_count": 1678,
+      "measured_count": 4065,
+      "oracle_caller_count": 909,
+      "exact": {
+        "tp": 1140,
+        "fp": 2925,
+        "fn": 538,
+        "precision": 0.2804,
+        "recall": 0.6794,
+        "f1": 0.397
+      },
+      "suffix_3seg": {
+        "tp": 1140,
+        "fp": 1973,
+        "fn": 538,
+        "precision": 0.3662,
+        "recall": 0.6794,
+        "f1": 0.4759
+      },
+      "scope_aligned": {
+        "tp": 1140,
+        "fp": 805,
+        "fn": 538,
+        "precision": 0.5861,
+        "recall": 0.6794,
+        "f1": 0.6293
+      },
+      "scope_impl_normalized": {
+        "tp": 1140,
+        "fp": 805,
+        "fn": 538,
+        "precision": 0.5861,
+        "recall": 0.6794,
+        "f1": 0.6293
+      },
+      "sample_fp_exact": [
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.arena",
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.arena.arena_grow",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.arena",
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.arena.cbm_arena_alloc",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.cbm",
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.arena.cbm_arena_destroy",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.cbm",
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.arena.cbm_arena_init",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.cbm",
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.arena.cbm_arena_strdup",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.cbm",
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.cbm.get_thread_parser",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.cbm",
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.cbm.now_ns",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.cbm",
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.extract_defs.cbm_extract_definitions",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.cbm",
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.extract_imports.cbm_extract_imports",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.cbm",
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.extract_unified.cbm_extract_unified",
+          "CALLS"
+        ]
+      ],
+      "sample_fn_exact": [
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-cypher.executor.Executor.Execute",
+          "c-Users-user-Documents-GitHub-code-graph-internal-cypher.parser.Parse",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-cypher.executor.Executor.Execute",
+          "c-Users-user-Documents-GitHub-code-graph-internal-cypher.planner.BuildPlan",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-cypher.executor.Executor.aggregateResults",
+          "c-Users-user-Documents-GitHub-code-graph-internal-cypher.executor.applyLimit",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-cypher.executor.Executor.aggregateResults",
+          "c-Users-user-Documents-GitHub-code-graph-internal-cypher.executor.buildColumnNames",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-cypher.executor.Executor.aggregateResults",
+          "c-Users-user-Documents-GitHub-code-graph-internal-cypher.executor.buildGroups",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-cypher.executor.Executor.aggregateResults",
+          "c-Users-user-Documents-GitHub-code-graph-internal-cypher.executor.resolveOrderColumn",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-cypher.executor.Executor.aggregateResults",
+          "c-Users-user-Documents-GitHub-code-graph-internal-cypher.executor.sortRows",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-cypher.executor.Executor.aggregateResults",
+          "c-Users-user-Documents-GitHub-code-graph-internal-cypher.executor.splitAggregateItems",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-cypher.executor.Executor.evaluateCondition",
+          "c-Users-user-Documents-GitHub-code-graph-internal-cypher.executor.compareNumeric",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-cypher.executor.Executor.evaluateCondition",
+          "c-Users-user-Documents-GitHub-code-graph-internal-cypher.executor.getEdgeProperty",
+          "CALLS"
+        ]
+      ],
+      "sample_fp_scoped": [
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.cbm.ExtractFile",
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.cbm.cbm_extract_file",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.cbm.ExtractFile",
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.cbm.cbm_free_result",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.cbm.ExtractFile",
+          "fmt.Errorf",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.cbm_test.TestGoFunctionExtraction",
+          "fmt.Printf",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.cbm_test.TestJSArrowFunction",
+          "fmt.Printf",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.cbm_test.TestPythonDocstring",
+          "fmt.Printf",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.lsp_bridge.DefsToLSPDefs",
+          "strings.Join",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.lsp_bridge.DefsToLSPDefs",
+          "strings.TrimLeft",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.lsp_bridge.RunGoLSPCrossFile",
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.arena.cbm_arena_destroy",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.lsp_bridge.RunGoLSPCrossFile",
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.arena.cbm_arena_init",
+          "CALLS"
+        ]
+      ],
+      "sample_fn_scoped": [
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-cypher.executor.Executor.Execute",
+          "c-Users-user-Documents-GitHub-code-graph-internal-cypher.parser.Parse",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-cypher.executor.Executor.Execute",
+          "c-Users-user-Documents-GitHub-code-graph-internal-cypher.planner.BuildPlan",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-cypher.executor.Executor.aggregateResults",
+          "c-Users-user-Documents-GitHub-code-graph-internal-cypher.executor.applyLimit",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-cypher.executor.Executor.aggregateResults",
+          "c-Users-user-Documents-GitHub-code-graph-internal-cypher.executor.buildColumnNames",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-cypher.executor.Executor.aggregateResults",
+          "c-Users-user-Documents-GitHub-code-graph-internal-cypher.executor.buildGroups",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-cypher.executor.Executor.aggregateResults",
+          "c-Users-user-Documents-GitHub-code-graph-internal-cypher.executor.resolveOrderColumn",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-cypher.executor.Executor.aggregateResults",
+          "c-Users-user-Documents-GitHub-code-graph-internal-cypher.executor.sortRows",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-cypher.executor.Executor.aggregateResults",
+          "c-Users-user-Documents-GitHub-code-graph-internal-cypher.executor.splitAggregateItems",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-cypher.executor.Executor.evaluateCondition",
+          "c-Users-user-Documents-GitHub-code-graph-internal-cypher.executor.compareNumeric",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-cypher.executor.Executor.evaluateCondition",
+          "c-Users-user-Documents-GitHub-code-graph-internal-cypher.executor.getEdgeProperty",
+          "CALLS"
+        ]
+      ]
+    },
+    "IMPORTS": {
+      "oracle": "go-ast (dropped)",
+      "oracle_count": 0,
+      "measured_count": 102,
+      "status": "known_limitation",
+      "note": "Go oracle drops IMPORTS until import-path -> internal-file-QN resolution is added."
+    }
+  }
+}

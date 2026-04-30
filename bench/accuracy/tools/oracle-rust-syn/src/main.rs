@@ -54,6 +54,10 @@ struct Visitor {
     /// method names with the type.
     impl_stack: Vec<String>,
     edges: Vec<Edge>,
+    /// Full QNs for every fn definition we encounter. The Python wrapper
+    /// uses these to resolve bare-name calls to full QNs that match
+    /// code-graph's node QNs (including impl/mod scope).
+    defs: Vec<String>,
 }
 
 impl Visitor {
@@ -68,6 +72,9 @@ impl Visitor {
 impl<'ast> Visit<'ast> for Visitor {
     fn visit_item_fn(&mut self, i: &'ast ItemFn) {
         self.fn_stack.push(i.sig.ident.to_string());
+        // Record def QN with full impl/mod scope. The Python wrapper resolves
+        // bare-name calls against this set.
+        self.defs.push(self.current_caller());
         syn::visit::visit_item_fn(self, i);
         self.fn_stack.pop();
     }
@@ -78,6 +85,7 @@ impl<'ast> Visit<'ast> for Visitor {
         let name = i.sig.ident.to_string();
         let segment = if ty.is_empty() { name.clone() } else { format!("{}.{}", ty, name) };
         self.fn_stack.push(segment);
+        self.defs.push(self.current_caller());
         syn::visit::visit_impl_item_fn(self, i);
         self.fn_stack.pop();
     }
@@ -95,12 +103,19 @@ impl<'ast> Visit<'ast> for Visitor {
     }
 
     fn visit_item_mod(&mut self, i: &'ast ItemMod) {
-        // Only descend into `mod X { ... }` (inline). `mod X;` (file-level)
-        // is visited separately via the file walker.
+        // Descend into `mod X { ... }` (inline) WITHOUT pushing the mod name
+        // onto the caller-stack. Empirically (2026-04-24 verification),
+        // code-graph's `fqn.Compute` does not track nested-mod scope — a fn
+        // defined in `mod tests { fn foo() }` is stored as `<file>.foo`, not
+        // `<file>.tests.foo`. If we push mod names, the oracle's QNs diverge
+        // from code-graph's for inline-mod callers (was 88 FNs / 38.8% of
+        // total recall gap).
+        //
+        // Mod scope is still NEEDED for impl resolution: `mod x { impl T { fn
+        // foo() } }` — but since the impl's type name is already on impl_stack,
+        // we don't need the mod.
         if i.content.is_some() {
-            self.mod_stack.push(i.ident.to_string());
             syn::visit::visit_item_mod(self, i);
-            self.mod_stack.pop();
         }
     }
 
@@ -229,7 +244,13 @@ fn module_qn(project: &str, rel_path: &Path) -> String {
     all.join(".")
 }
 
-fn process_file(path: &Path, crate_root: &Path, project: &str, all_edges: &mut Vec<Edge>) -> Result<(), String> {
+fn process_file(
+    path: &Path,
+    crate_root: &Path,
+    project: &str,
+    all_edges: &mut Vec<Edge>,
+    all_defs: &mut Vec<String>,
+) -> Result<(), String> {
     let source = fs::read_to_string(path).map_err(|e| format!("read {}: {}", path.display(), e))?;
     let syntax = match syn::parse_file(&source) {
         Ok(f) => f,
@@ -245,9 +266,11 @@ fn process_file(path: &Path, crate_root: &Path, project: &str, all_edges: &mut V
         fn_stack: Vec::new(),
         impl_stack: Vec::new(),
         edges: Vec::new(),
+        defs: Vec::new(),
     };
     v.visit_file(&syntax);
     all_edges.extend(v.edges);
+    all_defs.extend(v.defs);
     Ok(())
 }
 
@@ -266,6 +289,7 @@ fn main() -> ExitCode {
     }
 
     let mut edges: Vec<Edge> = Vec::new();
+    let mut defs: Vec<String> = Vec::new();
     let mut errors: Vec<String> = Vec::new();
     let mut parsed = 0usize;
 
@@ -282,24 +306,33 @@ fn main() -> ExitCode {
         if s.contains("/target/") || s.ends_with("/build.rs") {
             continue;
         }
-        match process_file(p, &crate_root, project, &mut edges) {
+        match process_file(p, &crate_root, project, &mut edges, &mut defs) {
             Ok(()) => parsed += 1,
             Err(e) => errors.push(e),
         }
     }
 
     eprintln!(
-        "oracle-rust-syn: project={} files_parsed={} edges={} errors={}",
+        "oracle-rust-syn: project={} files_parsed={} edges={} defs={} errors={}",
         project,
         parsed,
         edges.len(),
+        defs.len(),
         errors.len()
     );
     for e in &errors {
         eprintln!("  error: {}", e);
     }
 
-    let json = serde_json::to_string(&edges).expect("serde_json");
+    // Emit both edges and def QNs. Python wrapper uses defs to resolve bare
+    // calls without re-parsing the crate.
+    #[derive(Serialize)]
+    struct Output<'a> {
+        edges: &'a [Edge],
+        defs: &'a [String],
+    }
+    let out = Output { edges: &edges, defs: &defs };
+    let json = serde_json::to_string(&out).expect("serde_json");
     println!("{}", json);
     ExitCode::SUCCESS
 }

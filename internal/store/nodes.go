@@ -367,3 +367,54 @@ func (s *Store) FindNodeIDsByQNs(project string, qns []string) (map[string]int64
 	}
 	return idMap, nil
 }
+
+// FindNodeLabelsByQNs returns a map of qualifiedName → label for the given QNs.
+// Used by the CALLS pass to filter out edges targeting Variable/Class/File nodes
+// (a CALLS edge should only target Function or Method). Before this existed,
+// 38% of CALLS edges on some Rust projects pointed at Variable nodes generated
+// from config files (diesel.toml entries, Cargo.toml), inflating false-positive
+// rate with zero semantic value (see 2026-04-24 accuracy harness incident).
+func (s *Store) FindNodeLabelsByQNs(project string, qns []string) (map[string]string, error) {
+	if len(qns) == 0 {
+		return map[string]string{}, nil
+	}
+	const maxQNsPerQuery = 998
+	labelMap := make(map[string]string, len(qns))
+	for i := 0; i < len(qns); i += maxQNsPerQuery {
+		end := i + maxQNsPerQuery
+		if end > len(qns) {
+			end = len(qns)
+		}
+		chunk := qns[i:end]
+		placeholders := make([]string, len(chunk))
+		args := make([]any, 0, len(chunk)+1)
+		args = append(args, project)
+		for j, qn := range chunk {
+			placeholders[j] = "?"
+			args = append(args, qn)
+		}
+		query := fmt.Sprintf(
+			"SELECT qualified_name, label FROM nodes WHERE project = ? AND qualified_name IN (%s)",
+			strings.Join(placeholders, ","),
+		)
+		rows, err := s.q.Query(query, args...)
+		if err != nil {
+			return nil, fmt.Errorf("resolve node labels: %w", err)
+		}
+		err = func() error {
+			defer rows.Close()
+			for rows.Next() {
+				var qn, label string
+				if err := rows.Scan(&qn, &label); err != nil {
+					return err
+				}
+				labelMap[qn] = label
+			}
+			return rows.Err()
+		}()
+		if err != nil {
+			return nil, err
+		}
+	}
+	return labelMap, nil
+}

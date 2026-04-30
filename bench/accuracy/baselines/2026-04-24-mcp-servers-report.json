@@ -1,0 +1,398 @@
+{
+  "schema_version": 1,
+  "date": "2026-04-24",
+  "fixture": "mcp-servers",
+  "sha": "81fa7d5abe36cac7709c225ce35ad908a9017a0d",
+  "short_sha": "81fa7d5",
+  "project_name": "c-Users-user-Documents-GitHub-mcp-servers",
+  "results": {
+    "CALLS": {
+      "oracle": "pycg",
+      "oracle_count": 371,
+      "measured_count": 506,
+      "oracle_caller_count": 184,
+      "exact": {
+        "tp": 364,
+        "fp": 142,
+        "fn": 7,
+        "precision": 0.7194,
+        "recall": 0.9811,
+        "f1": 0.8301
+      },
+      "suffix_3seg": {
+        "tp": 360,
+        "fp": 133,
+        "fn": 1,
+        "precision": 0.7302,
+        "recall": 0.9972,
+        "f1": 0.8431
+      },
+      "scope_aligned": {
+        "tp": 364,
+        "fp": 1,
+        "fn": 7,
+        "precision": 0.9973,
+        "recall": 0.9811,
+        "f1": 0.9891
+      },
+      "scope_impl_normalized": {
+        "tp": 364,
+        "fp": 1,
+        "fn": 7,
+        "precision": 0.9973,
+        "recall": 0.9811,
+        "f1": 0.9891
+      },
+      "sample_fp_exact": [
+        [
+          "airlock.airlock_mcp_server._lifespan",
+          "security-remix.backend_pool.BackendPool.close",
+          "CALLS"
+        ],
+        [
+          "claude-proxy.claude_proxy.check_guardrails",
+          "confluence.confluence_fedramp_mcp.ConfluenceClient.search",
+          "CALLS"
+        ],
+        [
+          "claude-proxy.manage_guardrails",
+          "claude-proxy.manage_guardrails.main",
+          "CALLS"
+        ],
+        [
+          "claude-proxy.manage_guardrails.cmd_add",
+          "claude-proxy.manage_guardrails.format_rule",
+          "CALLS"
+        ],
+        [
+          "claude-proxy.manage_guardrails.cmd_add",
+          "claude-proxy.manage_guardrails.load_rules",
+          "CALLS"
+        ],
+        [
+          "claude-proxy.manage_guardrails.cmd_add",
+          "claude-proxy.manage_guardrails.save_rules",
+          "CALLS"
+        ],
+        [
+          "claude-proxy.manage_guardrails.cmd_edit",
+          "claude-proxy.manage_guardrails.load_rules",
+          "CALLS"
+        ],
+        [
+          "claude-proxy.manage_guardrails.cmd_edit",
+          "claude-proxy.manage_guardrails.save_rules",
+          "CALLS"
+        ],
+        [
+          "claude-proxy.manage_guardrails.cmd_list",
+          "claude-proxy.manage_guardrails.format_rule",
+          "CALLS"
+        ],
+        [
+          "claude-proxy.manage_guardrails.cmd_list",
+          "claude-proxy.manage_guardrails.load_rules",
+          "CALLS"
+        ]
+      ],
+      "sample_fn_exact": [
+        [
+          "claude-proxy.claude_proxy.extract_scannable_text",
+          "claude-proxy.claude_proxy.extract_scannable_text.content.get",
+          "CALLS"
+        ],
+        [
+          "crowdstrike.proxy",
+          "shared.mcp_http._build_oauth._get_resource_url",
+          "CALLS"
+        ],
+        [
+          "crowdstrike.proxy",
+          "shared.mcp_http._build_oauth.get_middleware",
+          "CALLS"
+        ],
+        [
+          "crowdstrike.proxy",
+          "shared.mcp_http._build_oauth.get_routes",
+          "CALLS"
+        ],
+        [
+          "crowdstrike.proxy",
+          "shared.opa_middleware.OPAMiddleware",
+          "CALLS"
+        ],
+        [
+          "security-remix.security_remix_server",
+          "security-remix.backend_pool.BackendPool.__init__",
+          "CALLS"
+        ],
+        [
+          "security-remix.security_remix_server",
+          "security-remix.tool_index.ToolIndex.__init__",
+          "CALLS"
+        ]
+      ],
+      "sample_fp_scoped": [
+        [
+          "security-remix.backend_pool.BackendPool.call_tool",
+          "security-remix.backend_pool.BackendPool.call_tool",
+          "CALLS"
+        ]
+      ],
+      "sample_fn_scoped": [
+        [
+          "claude-proxy.claude_proxy.extract_scannable_text",
+          "claude-proxy.claude_proxy.extract_scannable_text.content.get",
+          "CALLS"
+        ],
+        [
+          "crowdstrike.proxy",
+          "shared.mcp_http._build_oauth._get_resource_url",
+          "CALLS"
+        ],
+        [
+          "crowdstrike.proxy",
+          "shared.mcp_http._build_oauth.get_middleware",
+          "CALLS"
+        ],
+        [
+          "crowdstrike.proxy",
+          "shared.mcp_http._build_oauth.get_routes",
+          "CALLS"
+        ],
+        [
+          "crowdstrike.proxy",
+          "shared.opa_middleware.OPAMiddleware",
+          "CALLS"
+        ],
+        [
+          "security-remix.security_remix_server",
+          "security-remix.backend_pool.BackendPool.__init__",
+          "CALLS"
+        ],
+        [
+          "security-remix.security_remix_server",
+          "security-remix.tool_index.ToolIndex.__init__",
+          "CALLS"
+        ]
+      ]
+    },
+    "IMPORTS": {
+      "oracle": "ast",
+      "oracle_count": 45,
+      "measured_count": 51,
+      "oracle_caller_count": 31,
+      "exact": {
+        "tp": 45,
+        "fp": 6,
+        "fn": 0,
+        "precision": 0.8824,
+        "recall": 1.0,
+        "f1": 0.9375
+      },
+      "suffix_3seg": {
+        "tp": 0,
+        "fp": 3,
+        "fn": 0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0
+      },
+      "scope_aligned": {
+        "tp": 45,
+        "fp": 0,
+        "fn": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "scope_impl_normalized": {
+        "tp": 45,
+        "fp": 0,
+        "fn": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "sample_fp_exact": [
+        [
+          "scripts.audit_msgraph_params",
+          "scripts.spec_utils",
+          "IMPORTS"
+        ],
+        [
+          "scripts.test_spec_utils",
+          "scripts.spec_utils",
+          "IMPORTS"
+        ],
+        [
+          "security-remix.evals.test_ab_discovery",
+          "security-remix.evals.ab_metrics",
+          "IMPORTS"
+        ],
+        [
+          "security-remix.evals.test_ab_discovery",
+          "security-remix.evals.augmented_backends",
+          "IMPORTS"
+        ],
+        [
+          "security-remix.evals.test_ab_discovery",
+          "security-remix.evals.test_scenarios",
+          "IMPORTS"
+        ],
+        [
+          "security-remix.tool_index",
+          "security-remix.classify",
+          "IMPORTS"
+        ]
+      ],
+      "sample_fn_exact": [],
+      "sample_fp_scoped": [],
+      "sample_fn_scoped": []
+    },
+    "HTTP_CALLS": {
+      "oracle": "opus+sonnet",
+      "oracle_count": 411,
+      "measured_count": 0,
+      "oracle_caller_count": 372,
+      "exact": {
+        "tp": 0,
+        "fp": 0,
+        "fn": 411,
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0
+      },
+      "suffix_3seg": {
+        "tp": 0,
+        "fp": 0,
+        "fn": 46,
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0
+      },
+      "scope_aligned": {
+        "tp": 0,
+        "fp": 0,
+        "fn": 411,
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0
+      },
+      "scope_impl_normalized": {
+        "tp": 0,
+        "fp": 0,
+        "fn": 411,
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0
+      },
+      "sample_fp_exact": [],
+      "sample_fn_exact": [
+        [
+          "airlock.airlock_mcp_server._post",
+          "POST {path}",
+          "HTTP_CALLS"
+        ],
+        [
+          "airlock.airlock_mcp_server._post_raw",
+          "POST {path}",
+          "HTTP_CALLS"
+        ],
+        [
+          "claude-compliance.claude_compliance_mcp.delete_chat",
+          "DELETE /v1/compliance/apps/chats/{claude_chat_id}",
+          "HTTP_CALLS"
+        ],
+        [
+          "claude-compliance.claude_compliance_mcp.delete_file",
+          "DELETE /v1/compliance/apps/chats/files/{claude_file_id}",
+          "HTTP_CALLS"
+        ],
+        [
+          "claude-compliance.claude_compliance_mcp.delete_project",
+          "DELETE /v1/compliance/apps/projects/{claude_proj_id}",
+          "HTTP_CALLS"
+        ],
+        [
+          "claude-compliance.claude_compliance_mcp.delete_project_document",
+          "DELETE /v1/compliance/apps/projects/documents/{claude_proj_doc_id}",
+          "HTTP_CALLS"
+        ],
+        [
+          "claude-compliance.claude_compliance_mcp.download_file_content",
+          "GET /v1/compliance/apps/chats/files/{claude_file_id}/content",
+          "HTTP_CALLS"
+        ],
+        [
+          "claude-compliance.claude_compliance_mcp.get_chat_messages",
+          "GET /v1/compliance/apps/chats/{claude_chat_id}/messages",
+          "HTTP_CALLS"
+        ],
+        [
+          "claude-compliance.claude_compliance_mcp.get_project",
+          "GET /v1/compliance/apps/projects/{claude_proj_id}",
+          "HTTP_CALLS"
+        ],
+        [
+          "claude-compliance.claude_compliance_mcp.get_project_document",
+          "GET /v1/compliance/apps/projects/documents/{claude_proj_doc_id}",
+          "HTTP_CALLS"
+        ]
+      ],
+      "sample_fp_scoped": [],
+      "sample_fn_scoped": [
+        [
+          "airlock.airlock_mcp_server._post",
+          "POST {path}",
+          "HTTP_CALLS"
+        ],
+        [
+          "airlock.airlock_mcp_server._post_raw",
+          "POST {path}",
+          "HTTP_CALLS"
+        ],
+        [
+          "claude-compliance.claude_compliance_mcp.delete_chat",
+          "DELETE /v1/compliance/apps/chats/{claude_chat_id}",
+          "HTTP_CALLS"
+        ],
+        [
+          "claude-compliance.claude_compliance_mcp.delete_file",
+          "DELETE /v1/compliance/apps/chats/files/{claude_file_id}",
+          "HTTP_CALLS"
+        ],
+        [
+          "claude-compliance.claude_compliance_mcp.delete_project",
+          "DELETE /v1/compliance/apps/projects/{claude_proj_id}",
+          "HTTP_CALLS"
+        ],
+        [
+          "claude-compliance.claude_compliance_mcp.delete_project_document",
+          "DELETE /v1/compliance/apps/projects/documents/{claude_proj_doc_id}",
+          "HTTP_CALLS"
+        ],
+        [
+          "claude-compliance.claude_compliance_mcp.download_file_content",
+          "GET /v1/compliance/apps/chats/files/{claude_file_id}/content",
+          "HTTP_CALLS"
+        ],
+        [
+          "claude-compliance.claude_compliance_mcp.get_chat_messages",
+          "GET /v1/compliance/apps/chats/{claude_chat_id}/messages",
+          "HTTP_CALLS"
+        ],
+        [
+          "claude-compliance.claude_compliance_mcp.get_project",
+          "GET /v1/compliance/apps/projects/{claude_proj_id}",
+          "HTTP_CALLS"
+        ],
+        [
+          "claude-compliance.claude_compliance_mcp.get_project_document",
+          "GET /v1/compliance/apps/projects/documents/{claude_proj_doc_id}",
+          "HTTP_CALLS"
+        ]
+      ]
+    }
+  }
+}

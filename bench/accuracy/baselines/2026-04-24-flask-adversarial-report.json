@@ -1,0 +1,476 @@
+{
+  "schema_version": 1,
+  "date": "2026-04-24",
+  "fixture": "flask-adversarial",
+  "sha": "2ac89889f4cc330eabd50f295dcef02828522c69",
+  "short_sha": "2ac8988",
+  "project_name": "c-Users-user-Documents-bench-fixtures-flask",
+  "results": {
+    "CALLS": {
+      "oracle": "pycg",
+      "oracle_count": 93,
+      "measured_count": 278,
+      "oracle_caller_count": 46,
+      "exact": {
+        "tp": 50,
+        "fp": 228,
+        "fn": 43,
+        "precision": 0.1799,
+        "recall": 0.5376,
+        "f1": 0.2695
+      },
+      "suffix_3seg": {
+        "tp": 50,
+        "fp": 228,
+        "fn": 43,
+        "precision": 0.1799,
+        "recall": 0.5376,
+        "f1": 0.2695
+      },
+      "scope_aligned": {
+        "tp": 50,
+        "fp": 42,
+        "fn": 43,
+        "precision": 0.5435,
+        "recall": 0.5376,
+        "f1": 0.5405
+      },
+      "scope_impl_normalized": {
+        "tp": 50,
+        "fp": 42,
+        "fn": 43,
+        "precision": 0.5435,
+        "recall": 0.5376,
+        "f1": 0.5405
+      },
+      "sample_fp_exact": [
+        [
+          "examples.celery.src.task_app.create_app",
+          "examples.celery.src.task_app.celery_init_app",
+          "CALLS"
+        ],
+        [
+          "examples.celery.src.task_app.create_app",
+          "src.flask.config.Config.from_mapping",
+          "CALLS"
+        ],
+        [
+          "examples.celery.src.task_app.create_app",
+          "src.flask.config.Config.from_prefixed_env",
+          "CALLS"
+        ],
+        [
+          "examples.celery.src.task_app.views",
+          "src.flask.ctx._AppCtxGlobals.get",
+          "CALLS"
+        ],
+        [
+          "examples.celery.src.task_app.views.add",
+          "src.flask.ctx._AppCtxGlobals.get",
+          "CALLS"
+        ],
+        [
+          "examples.celery.src.task_app.views.process",
+          "src.flask.ctx._AppCtxGlobals.get",
+          "CALLS"
+        ],
+        [
+          "examples.celery.src.task_app.views.result",
+          "src.flask.ctx._AppCtxGlobals.get",
+          "CALLS"
+        ],
+        [
+          "src.flask.__main__",
+          "src.flask.cli.main",
+          "CALLS"
+        ],
+        [
+          "src.flask.app.Flask.__init__",
+          "src.flask.app.Flask.send_static_file",
+          "CALLS"
+        ],
+        [
+          "src.flask.app.Flask.__init__",
+          "src.flask.sansio.blueprints.BlueprintSetupState.add_url_rule",
+          "CALLS"
+        ]
+      ],
+      "sample_fn_exact": [
+        [
+          "src.flask.app",
+          "src.flask.typing.TypeVar",
+          "CALLS"
+        ],
+        [
+          "src.flask.app.Flask",
+          "src.flask.sessions.SecureCookieSessionInterface",
+          "CALLS"
+        ],
+        [
+          "src.flask.app.Flask.__init__",
+          "src.flask.cli.AppGroup.AppGroup",
+          "CALLS"
+        ],
+        [
+          "src.flask.app.Flask.app_context",
+          "src.flask.ctx.AppContext",
+          "CALLS"
+        ],
+        [
+          "src.flask.app.Flask.do_teardown_appcontext",
+          "src.flask.helpers._CollectErrors",
+          "CALLS"
+        ],
+        [
+          "src.flask.app.Flask.do_teardown_appcontext",
+          "src.flask.signals.appcontext_tearing_down.send",
+          "CALLS"
+        ],
+        [
+          "src.flask.app.Flask.do_teardown_request",
+          "src.flask.helpers._CollectErrors",
+          "CALLS"
+        ],
+        [
+          "src.flask.app.Flask.do_teardown_request",
+          "src.flask.signals.request_tearing_down.send",
+          "CALLS"
+        ],
+        [
+          "src.flask.app.Flask.finalize_request",
+          "src.flask.signals.request_finished.send",
+          "CALLS"
+        ],
+        [
+          "src.flask.app.Flask.full_dispatch_request",
+          "src.flask.signals.request_started.send",
+          "CALLS"
+        ]
+      ],
+      "sample_fp_scoped": [
+        [
+          "src.flask.app.Flask.__init__",
+          "src.flask.app.Flask.send_static_file",
+          "CALLS"
+        ],
+        [
+          "src.flask.app.Flask.__init__",
+          "src.flask.sansio.blueprints.BlueprintSetupState.add_url_rule",
+          "CALLS"
+        ],
+        [
+          "src.flask.app.Flask.handle_exception",
+          "src.flask.sansio.app.App._find_error_handler",
+          "CALLS"
+        ],
+        [
+          "src.flask.app.Flask.handle_http_exception",
+          "src.flask.sansio.app.App._find_error_handler",
+          "CALLS"
+        ],
+        [
+          "src.flask.app.Flask.handle_user_exception",
+          "src.flask.sansio.app.App._find_error_handler",
+          "CALLS"
+        ],
+        [
+          "src.flask.app.Flask.handle_user_exception",
+          "src.flask.sansio.app.App.trap_http_exception",
+          "CALLS"
+        ],
+        [
+          "src.flask.app.Flask.make_default_options_response",
+          "examples.tutorial.flaskr.blog.update",
+          "CALLS"
+        ],
+        [
+          "src.flask.app.Flask.make_response",
+          "examples.tutorial.flaskr.blog.update",
+          "CALLS"
+        ],
+        [
+          "src.flask.app.Flask.make_response",
+          "src.flask.json.provider.JSONProvider.response",
+          "CALLS"
+        ],
+        [
+          "src.flask.app.Flask.process_response",
+          "src.flask.ctx.AppContext._get_session",
+          "CALLS"
+        ]
+      ],
+      "sample_fn_scoped": [
+        [
+          "src.flask.app",
+          "src.flask.typing.TypeVar",
+          "CALLS"
+        ],
+        [
+          "src.flask.app.Flask",
+          "src.flask.sessions.SecureCookieSessionInterface",
+          "CALLS"
+        ],
+        [
+          "src.flask.app.Flask.__init__",
+          "src.flask.cli.AppGroup.AppGroup",
+          "CALLS"
+        ],
+        [
+          "src.flask.app.Flask.app_context",
+          "src.flask.ctx.AppContext",
+          "CALLS"
+        ],
+        [
+          "src.flask.app.Flask.do_teardown_appcontext",
+          "src.flask.helpers._CollectErrors",
+          "CALLS"
+        ],
+        [
+          "src.flask.app.Flask.do_teardown_appcontext",
+          "src.flask.signals.appcontext_tearing_down.send",
+          "CALLS"
+        ],
+        [
+          "src.flask.app.Flask.do_teardown_request",
+          "src.flask.helpers._CollectErrors",
+          "CALLS"
+        ],
+        [
+          "src.flask.app.Flask.do_teardown_request",
+          "src.flask.signals.request_tearing_down.send",
+          "CALLS"
+        ],
+        [
+          "src.flask.app.Flask.finalize_request",
+          "src.flask.signals.request_finished.send",
+          "CALLS"
+        ],
+        [
+          "src.flask.app.Flask.full_dispatch_request",
+          "src.flask.signals.request_started.send",
+          "CALLS"
+        ]
+      ]
+    },
+    "IMPORTS": {
+      "oracle": "ast",
+      "oracle_count": 97,
+      "measured_count": 48,
+      "oracle_caller_count": 26,
+      "exact": {
+        "tp": 2,
+        "fp": 46,
+        "fn": 95,
+        "precision": 0.0417,
+        "recall": 0.0206,
+        "f1": 0.0276
+      },
+      "suffix_3seg": {
+        "tp": 1,
+        "fp": 17,
+        "fn": 87,
+        "precision": 0.0556,
+        "recall": 0.0114,
+        "f1": 0.0189
+      },
+      "scope_aligned": {
+        "tp": 2,
+        "fp": 4,
+        "fn": 95,
+        "precision": 0.3333,
+        "recall": 0.0206,
+        "f1": 0.0388
+      },
+      "scope_impl_normalized": {
+        "tp": 2,
+        "fp": 4,
+        "fn": 95,
+        "precision": 0.3333,
+        "recall": 0.0206,
+        "f1": 0.0388
+      },
+      "sample_fp_exact": [
+        [
+          "examples.celery.make_celery",
+          "examples.celery.src.task_app",
+          "IMPORTS"
+        ],
+        [
+          "examples.javascript.js_example",
+          "examples.javascript.js_example.views",
+          "IMPORTS"
+        ],
+        [
+          "examples.javascript.tests.conftest",
+          "examples.javascript.js_example",
+          "IMPORTS"
+        ],
+        [
+          "examples.tutorial.tests.conftest",
+          "examples.tutorial.flaskr",
+          "IMPORTS"
+        ],
+        [
+          "examples.tutorial.tests.conftest",
+          "examples.tutorial.flaskr.db",
+          "IMPORTS"
+        ],
+        [
+          "examples.tutorial.tests.test_auth",
+          "examples.tutorial.flaskr.db",
+          "IMPORTS"
+        ],
+        [
+          "examples.tutorial.tests.test_blog",
+          "examples.tutorial.flaskr.db",
+          "IMPORTS"
+        ],
+        [
+          "examples.tutorial.tests.test_db",
+          "examples.tutorial.flaskr.db",
+          "IMPORTS"
+        ],
+        [
+          "examples.tutorial.tests.test_factory",
+          "examples.tutorial.flaskr",
+          "IMPORTS"
+        ],
+        [
+          "src.flask.config",
+          "src.flask.json",
+          "IMPORTS"
+        ]
+      ],
+      "sample_fn_exact": [
+        [
+          "examples.celery.src.task_app.views",
+          "examples.celery.src.task_app",
+          "IMPORTS"
+        ],
+        [
+          "examples.celery.src.task_app.views",
+          "examples.celery.src.task_app.tasks",
+          "IMPORTS"
+        ],
+        [
+          "examples.javascript.js_example.views",
+          "examples.javascript.js_example",
+          "IMPORTS"
+        ],
+        [
+          "examples.tutorial.flaskr.auth",
+          "examples.tutorial.flaskr.db",
+          "IMPORTS"
+        ],
+        [
+          "examples.tutorial.flaskr.blog",
+          "examples.tutorial.flaskr.auth",
+          "IMPORTS"
+        ],
+        [
+          "examples.tutorial.flaskr.blog",
+          "examples.tutorial.flaskr.db",
+          "IMPORTS"
+        ],
+        [
+          "src.flask.__main__",
+          "src.flask.cli",
+          "IMPORTS"
+        ],
+        [
+          "src.flask.app",
+          "src.flask",
+          "IMPORTS"
+        ],
+        [
+          "src.flask.app",
+          "src.flask.cli",
+          "IMPORTS"
+        ],
+        [
+          "src.flask.app",
+          "src.flask.ctx",
+          "IMPORTS"
+        ]
+      ],
+      "sample_fp_scoped": [
+        [
+          "src.flask.config",
+          "src.flask.json",
+          "IMPORTS"
+        ],
+        [
+          "src.flask.json.provider",
+          "src.flask.json",
+          "IMPORTS"
+        ],
+        [
+          "src.flask.logging",
+          "src.flask.logging",
+          "IMPORTS"
+        ],
+        [
+          "tests.test_json",
+          "src.flask.json.provider",
+          "IMPORTS"
+        ]
+      ],
+      "sample_fn_scoped": [
+        [
+          "examples.celery.src.task_app.views",
+          "examples.celery.src.task_app",
+          "IMPORTS"
+        ],
+        [
+          "examples.celery.src.task_app.views",
+          "examples.celery.src.task_app.tasks",
+          "IMPORTS"
+        ],
+        [
+          "examples.javascript.js_example.views",
+          "examples.javascript.js_example",
+          "IMPORTS"
+        ],
+        [
+          "examples.tutorial.flaskr.auth",
+          "examples.tutorial.flaskr.db",
+          "IMPORTS"
+        ],
+        [
+          "examples.tutorial.flaskr.blog",
+          "examples.tutorial.flaskr.auth",
+          "IMPORTS"
+        ],
+        [
+          "examples.tutorial.flaskr.blog",
+          "examples.tutorial.flaskr.db",
+          "IMPORTS"
+        ],
+        [
+          "src.flask.__main__",
+          "src.flask.cli",
+          "IMPORTS"
+        ],
+        [
+          "src.flask.app",
+          "src.flask",
+          "IMPORTS"
+        ],
+        [
+          "src.flask.app",
+          "src.flask.cli",
+          "IMPORTS"
+        ],
+        [
+          "src.flask.app",
+          "src.flask.ctx",
+          "IMPORTS"
+        ]
+      ]
+    },
+    "HTTP_CALLS": {
+      "oracle": "opus+sonnet (not yet run)",
+      "status": "pending"
+    }
+  }
+}

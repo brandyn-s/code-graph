@@ -1,0 +1,276 @@
+{
+  "schema_version": 1,
+  "date": "2026-04-24",
+  "fixture": "gin-adversarial",
+  "sha": "d3ffc9985281dcf4d3bef604cce4e662b1a327a6",
+  "short_sha": "d3ffc99",
+  "project_name": "c-Users-user-Documents-bench-fixtures-gin",
+  "results": {
+    "CALLS": {
+      "oracle": "go-ast",
+      "per_project": [
+        {
+          "project": "c-Users-user-Documents-bench-fixtures-gin",
+          "oracle_count": 1591,
+          "measured_count": 3570,
+          "tp": 1290,
+          "fp": 1859,
+          "fn": 301,
+          "precision": 0.4097,
+          "recall": 0.8108,
+          "f1": 0.5443
+        }
+      ],
+      "oracle_count": 1591,
+      "measured_count": 3570,
+      "oracle_caller_count": 880,
+      "exact": {
+        "tp": 1290,
+        "fp": 2280,
+        "fn": 301,
+        "precision": 0.3613,
+        "recall": 0.8108,
+        "f1": 0.4999
+      },
+      "suffix_3seg": {
+        "tp": 1288,
+        "fp": 1776,
+        "fn": 299,
+        "precision": 0.4204,
+        "recall": 0.8116,
+        "f1": 0.5539
+      },
+      "scope_aligned": {
+        "tp": 1290,
+        "fp": 1859,
+        "fn": 301,
+        "precision": 0.4097,
+        "recall": 0.8108,
+        "f1": 0.5443
+      },
+      "scope_impl_normalized": {
+        "tp": 1290,
+        "fp": 1859,
+        "fn": 301,
+        "precision": 0.4097,
+        "recall": 0.8108,
+        "f1": 0.5443
+      },
+      "sample_fp_exact": [
+        [
+          "c-Users-user-Documents-bench-fixtures-gin.auth.BasicAuthForProxy",
+          "c-Users-user-Documents-bench-fixtures-gin.auth.searchCredential",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-gin.auth.BasicAuthForProxy",
+          "c-Users-user-Documents-bench-fixtures-gin.benchmarks_test.Header",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-gin.auth.BasicAuthForProxy",
+          "c-Users-user-Documents-bench-fixtures-gin.context.AbortWithStatus",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-gin.auth.BasicAuthForProxy",
+          "c-Users-user-Documents-bench-fixtures-gin.context.Set",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-gin.auth.BasicAuthForProxy",
+          "c-Users-user-Documents-bench-fixtures-gin.context.requestHeader",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-gin.auth.BasicAuthForProxy",
+          "strconv.Quote",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-gin.auth.BasicAuthForRealm",
+          "c-Users-user-Documents-bench-fixtures-gin.auth.searchCredential",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-gin.auth.BasicAuthForRealm",
+          "c-Users-user-Documents-bench-fixtures-gin.benchmarks_test.Header",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-gin.auth.BasicAuthForRealm",
+          "c-Users-user-Documents-bench-fixtures-gin.context.AbortWithStatus",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-gin.auth.BasicAuthForRealm",
+          "c-Users-user-Documents-bench-fixtures-gin.context.Set",
+          "CALLS"
+        ]
+      ],
+      "sample_fn_exact": [
+        [
+          "c-Users-user-Documents-bench-fixtures-gin.auth_test.TestBasicAuthForProxySucceed",
+          "c-Users-user-Documents-bench-fixtures-gin.context.String",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-gin.auth_test.TestBasicAuthSucceed",
+          "c-Users-user-Documents-bench-fixtures-gin.context.String",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-gin.binding.binding_test.Read",
+          "c-Users-user-Documents-bench-fixtures-gin.gin.New",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-gin.binding.binding_test.TestBindingFormFilesMultipart",
+          "c-Users-user-Documents-bench-fixtures-gin.fs.Open",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-gin.binding.binding_test.testFormBindingForTime",
+          "c-Users-user-Documents-bench-fixtures-gin.context.String",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-gin.binding.default_validator_benchmark_test.BenchmarkSliceValidationError",
+          "c-Users-user-Documents-bench-fixtures-gin.gin.New",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-gin.binding.default_validator_test.TestDefaultValidator",
+          "c-Users-user-Documents-bench-fixtures-gin.binding.default_validator.ValidateStruct",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-gin.binding.default_validator_test.TestSliceValidationError",
+          "c-Users-user-Documents-bench-fixtures-gin.gin.New",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-gin.binding.form_mapping.setByForm",
+          "c-Users-user-Documents-bench-fixtures-gin.context.String",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-gin.binding.form_mapping_test.TestMappingBaseTypes",
+          "c-Users-user-Documents-bench-fixtures-gin.context.String",
+          "CALLS"
+        ]
+      ],
+      "sample_fp_scoped": [
+        [
+          "c-Users-user-Documents-bench-fixtures-gin.auth.BasicAuthForProxy",
+          "c-Users-user-Documents-bench-fixtures-gin.auth.searchCredential",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-gin.auth.BasicAuthForProxy",
+          "c-Users-user-Documents-bench-fixtures-gin.benchmarks_test.Header",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-gin.auth.BasicAuthForProxy",
+          "c-Users-user-Documents-bench-fixtures-gin.context.AbortWithStatus",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-gin.auth.BasicAuthForProxy",
+          "c-Users-user-Documents-bench-fixtures-gin.context.Set",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-gin.auth.BasicAuthForProxy",
+          "c-Users-user-Documents-bench-fixtures-gin.context.requestHeader",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-gin.auth.BasicAuthForProxy",
+          "strconv.Quote",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-gin.auth.BasicAuthForRealm",
+          "c-Users-user-Documents-bench-fixtures-gin.auth.searchCredential",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-gin.auth.BasicAuthForRealm",
+          "c-Users-user-Documents-bench-fixtures-gin.benchmarks_test.Header",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-gin.auth.BasicAuthForRealm",
+          "c-Users-user-Documents-bench-fixtures-gin.context.AbortWithStatus",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-gin.auth.BasicAuthForRealm",
+          "c-Users-user-Documents-bench-fixtures-gin.context.Set",
+          "CALLS"
+        ]
+      ],
+      "sample_fn_scoped": [
+        [
+          "c-Users-user-Documents-bench-fixtures-gin.auth_test.TestBasicAuthForProxySucceed",
+          "c-Users-user-Documents-bench-fixtures-gin.context.String",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-gin.auth_test.TestBasicAuthSucceed",
+          "c-Users-user-Documents-bench-fixtures-gin.context.String",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-gin.binding.binding_test.Read",
+          "c-Users-user-Documents-bench-fixtures-gin.gin.New",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-gin.binding.binding_test.TestBindingFormFilesMultipart",
+          "c-Users-user-Documents-bench-fixtures-gin.fs.Open",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-gin.binding.binding_test.testFormBindingForTime",
+          "c-Users-user-Documents-bench-fixtures-gin.context.String",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-gin.binding.default_validator_benchmark_test.BenchmarkSliceValidationError",
+          "c-Users-user-Documents-bench-fixtures-gin.gin.New",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-gin.binding.default_validator_test.TestDefaultValidator",
+          "c-Users-user-Documents-bench-fixtures-gin.binding.default_validator.ValidateStruct",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-gin.binding.default_validator_test.TestSliceValidationError",
+          "c-Users-user-Documents-bench-fixtures-gin.gin.New",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-gin.binding.form_mapping.setByForm",
+          "c-Users-user-Documents-bench-fixtures-gin.context.String",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-gin.binding.form_mapping_test.TestMappingBaseTypes",
+          "c-Users-user-Documents-bench-fixtures-gin.context.String",
+          "CALLS"
+        ]
+      ]
+    },
+    "IMPORTS": {
+      "oracle": "go-ast (dropped)",
+      "oracle_count": 0,
+      "measured_count": 25,
+      "status": "known_limitation",
+      "note": "Go oracle drops IMPORTS until import-path -> internal-file-QN resolution is added."
+    }
+  }
+}

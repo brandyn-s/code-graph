@@ -838,6 +838,10 @@ func (s *Server) registerIndexAndTraceTool() {
 				"force": {
 					"type": "boolean",
 					"description": "Force full re-index, ignoring cached file hashes. Use after deploying new enrichment features to ensure all post-flush passes run. Default: false."
+				},
+				"skip_report": {
+					"type": "boolean",
+					"description": "Skip writing ARCHITECTURE_REPORT.md to the repo root after indexing. Required when indexing read-only repos (bench fixtures, vendored code, protected paths) where any write violates policy. Default: false (report is written)."
 				}
 			}
 		}`),
@@ -1143,7 +1147,7 @@ func (s *Server) registerQueryTool() {
 			DestructiveHint: boolPtr(false),
 		},
 
-		Description: "Execute a Cypher-like graph query (read-only). String matching is case-sensitive; use =~ '(?i)pattern' for case-insensitive regex. Supports MATCH, WHERE, RETURN, ORDER BY, LIMIT, COUNT, DISTINCT, variable-length paths (*1..3). DEFAULT ROW CAP IS 200 — pass max_rows (up to 10000) to raise it. Response includes 'effective_cap' always and 'capped: true' when results were truncated (check this before trusting totals on large result sets). Best for relationship patterns, filtered joins, path queries, and edge property filtering. Filterable edge properties: r.confidence, r.url_path, r.method, r.confidence_band, r.validated_by_trace, r.coupling_score. Edge types: CALLS, HTTP_CALLS, ASYNC_CALLS, IMPORTS, DEFINES, IMPLEMENTS, OVERRIDE, USAGE, FILE_CHANGES_WITH. Always use LIMIT.",
+		Description: "Execute a Cypher-like graph query (read-only). String matching is case-sensitive; use =~ '(?i)pattern' for case-insensitive regex. Supports MATCH, WHERE, RETURN, ORDER BY, LIMIT, COUNT, DISTINCT, variable-length paths (*1..3). DEFAULT ROW CAP IS 200 — pass max_rows (up to 10000) to raise it. Response includes 'effective_cap' always and 'capped: true' when results were truncated (check this before trusting totals on large result sets). Best for relationship patterns, filtered joins, path queries, and edge property filtering. Filterable edge properties: r.confidence, r.url_path, r.method, r.confidence_band, r.validated_by_trace, r.coupling_score. Edge types: CALLS, HTTP_CALLS, ASYNC_CALLS, IMPORTS, DEFINES, IMPLEMENTS, OVERRIDE, USAGE, FILE_CHANGES_WITH. Always use LIMIT. KNOWN ACCURACY BANDS (measured via bench/accuracy/, 2026-04-24, PyCG/Jedi/syn/go-ast oracles; ±35% oracle-class uncertainty per Jedi-vs-PyCG comparison): Python CALLS scope-aligned F1 ~0.54-0.99 (highly fixture-dependent — top-level packages score high, nested src/ layouts lower). Rust CALLS scope-aligned F1 ~0.82-0.91 across 3 fixtures (services, trait-heavy lib, utility lib). Go CALLS scope-aligned F1 ~0.54-0.68 across 3 fixtures (self-host, cobra, gin — non-self-hosted fixtures run ~10pp lower). IMPORTS: Python 0.94-0.96 after nested-package resolver fix; Rust sparse (resolver gap on `use crate::...` paths). Indirect calls (closures, fn pointers, trait objects) are NOT in the graph — code-graph's extractor doesn't emit CALLS edges for higher-order dispatch.",
 		InputSchema: json.RawMessage(`{
 			"type": "object",
 			"properties": {

@@ -14,27 +14,26 @@ Why syn instead of rust-analyzer or cargo-call-stack:
     have.
   - Deterministic and cacheable by fixture SHA.
 
-Multi-crate handling:
-  Each subset entry in fixtures.json (e.g., "canstatd") may contain multiple
-  Cargo.toml files (workspace crates). We find every Cargo.toml under each
-  subset path, read the package.name, and run the oracle once per crate with
-  project_name = the Cargo.toml's package.name.
+Project-name alignment (critical for compare.py):
+  code-graph derives the project name for an indexed path by sanitizing the
+  absolute path: `C:/Users/...canstatd` -> `c-Users-...canstatd`. Node QNs
+  are stored as `<project>.<rel_path>.<name>`.
 
-Internal vs external filtering:
-  Mirror oracle_pycg.py's approach. Collect all crate names seen across the
-  fixture. An IMPORTS edge is internal iff the first segment of to_qn matches
-  a crate name (with `-` -> `_` normalization since Rust `use` paths
-  substitute hyphens with underscores). A CALLS edge is internal iff the
-  first segment of to_qn matches a crate name OR the callee is a free-function
-  call whose name matches a function defined somewhere in the fixture.
-  Everything else (stdlib, pip-equivalent crates.io deps, unresolved methods)
-  is dropped, matching code-graph's scope.
+  To match, the oracle runs once per fixture SUBSET (not per Cargo.toml) and
+  passes the sanitized path as the project name to the Rust binary. Edges
+  emit with the same long project prefix, so compare.py's
+  `strip_project_prefix` works identically on both sides.
+
+Bare-call resolution:
+  syn can only report the syntactic callee: `foo()` -> to_qn="foo",
+  `Duration::from_secs(1)` -> to_qn="Duration.from_secs". Code-graph's
+  resolver does the same lookup we do here: match bare calls against
+  function definitions in indexed files, upgrade to full QN. We mirror it.
 """
 from __future__ import annotations
 
 import argparse
 import json
-import re
 import subprocess
 import sys
 import time
@@ -77,137 +76,125 @@ def ensure_oracle_built() -> Path:
     return ORACLE_BIN
 
 
-_PACKAGE_NAME_RE = re.compile(r'^\s*name\s*=\s*"([^"]+)"', re.MULTILINE)
+def project_name_from_path(abs_path: Path) -> str:
+    """Mirror code-graph's `pipeline.ProjectNameFromPath` sanitization.
 
-
-def read_crate_name(cargo_toml: Path) -> str | None:
-    """Parse `[package] name = "..."` from a Cargo.toml. Skip workspaces
-    without a [package] section."""
-    try:
-        txt = cargo_toml.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return None
-    # Only match names in [package] section; if the file is a workspace root,
-    # there's no [package] and first name= might be in [workspace.package].
-    # We use a simple heuristic: first [package] section block.
-    if "[package]" not in txt:
-        return None
-    pkg_idx = txt.index("[package]")
-    next_section = re.search(r"^\[", txt[pkg_idx + len("[package]"):], re.MULTILINE)
-    section_end = pkg_idx + len("[package]") + (next_section.start() if next_section else len(txt))
-    pkg_block = txt[pkg_idx:section_end]
-    m = _PACKAGE_NAME_RE.search(pkg_block)
-    return m.group(1) if m else None
-
-
-def find_crates(root: Path) -> list[tuple[str, Path]]:
-    """Return (crate_name, crate_dir) for every Cargo.toml under root.
-
-    crate_dir is the directory CONTAINING Cargo.toml. Skips target/ dirs.
+    Rules: ToSlash, lowercase the drive letter, replace `/` and `:` with `-`,
+    collapse consecutive dashes, trim leading dash.
     """
-    out: list[tuple[str, Path]] = []
-    for cargo in root.rglob("Cargo.toml"):
-        if "/target/" in cargo.as_posix() or "\\target\\" in str(cargo):
-            continue
-        name = read_crate_name(cargo)
-        if not name:
-            continue
-        out.append((name, cargo.parent))
-    return out
+    s = str(abs_path).replace("\\", "/")
+    # Lowercase drive letter: "C:/..." -> "c:/..."
+    if len(s) >= 2 and s[1] == ":":
+        s = s[0].lower() + s[1:]
+    s = s.replace("/", "-").replace(":", "-")
+    while "--" in s:
+        s = s.replace("--", "-")
+    return s.lstrip("-") or "root"
 
 
-def run_oracle_on_crate(crate_name: str, crate_dir: Path, timeout: int = 120) -> list[dict]:
-    """Shell out to oracle-rust-syn; return list of edge dicts (raw, unfiltered)."""
-    argv = [str(ORACLE_BIN), str(crate_dir), crate_name]
+def run_oracle_on_subset(project: str, subset_dir: Path, timeout: int = 300) -> tuple[list[dict], list[str]]:
+    """Shell out to oracle-rust-syn once per subset dir.
+
+    Returns (raw_edges, def_qns). The binary emits JSON
+    {"edges": [...], "defs": ["<project>.<path>.<fn>", ...]}. The def QNs
+    have full impl/mod scope because the Rust visitor tracks it — simpler
+    and more correct than a Python-side regex scan.
+    """
+    argv = [str(ORACLE_BIN), str(subset_dir), project]
     rc, stdout, stderr = run_captured(argv, timeout=timeout)
     if rc != 0:
         err = stderr.decode("utf-8", errors="replace")[:500]
-        print(f"  WARN: oracle-rust-syn rc={rc} on {crate_name}: {err}")
-        return []
-    # oracle writes progress to stderr (visible for debugging) and edges JSON
-    # to stdout. stderr is informational, don't error on it.
+        print(f"  WARN: oracle-rust-syn rc={rc} on {subset_dir}: {err}")
+        return [], []
     stderr_text = stderr.decode("utf-8", errors="replace")
-    if stderr_text.strip():
-        # Just print the summary line, not per-error noise here.
-        for line in stderr_text.splitlines():
-            if line.startswith("oracle-rust-syn:"):
-                print(f"  {line}")
+    for line in stderr_text.splitlines():
+        if line.startswith("oracle-rust-syn:"):
+            print(f"  {line}")
     try:
-        return json.loads(stdout.decode("utf-8", errors="replace"))
+        payload = json.loads(stdout.decode("utf-8", errors="replace"))
     except json.JSONDecodeError as e:
-        print(f"  WARN: oracle-rust-syn returned non-JSON on {crate_name}: {e}")
-        return []
+        print(f"  WARN: oracle-rust-syn returned non-JSON on {subset_dir}: {e}")
+        return [], []
+    if isinstance(payload, dict):
+        return payload.get("edges", []) or [], payload.get("defs", []) or []
+    # Backward compat: old binary returned just the edges array.
+    if isinstance(payload, list):
+        return payload, []
+    return [], []
 
 
-def normalize_crate_name(name: str) -> str:
-    """Rust `use` paths substitute `-` with `_`. Normalize so that crate
-    name `canstatd-types` matches `use canstatd_types::...` edges."""
-    return name.replace("-", "_")
+def build_fn_def_map_from_binary(defs: list[str]) -> dict[str, str]:
+    """Map bare-name -> full QN using def QNs from the Rust binary.
 
+    Def QNs look like:
+      "c-Users-...canstatd.src.main.main"                    (free fn)
+      "c-Users-...canstatd.src.main.AdsbDecoder.process_message"  (method)
+      "c-Users-...canstatd.src.main.tests.altitude_defaults_to_zero"  (mod tests)
 
-def filter_internal(
-    edges: list[dict],
-    internal_crate_names: set[str],
-    internal_fn_defs: set[str],
-) -> tuple[list[Edge], int, int]:
-    """Filter to internal-only edges.
-
-    Rules (mirroring oracle_pycg + oracle_ast_imports patterns):
-      - IMPORTS: keep iff to_qn's first segment ∈ internal_crate_names.
-      - CALLS: keep iff
-          (a) to_qn's first segment ∈ internal_crate_names (path-based call), OR
-          (b) to_qn has a single segment AND matches a known internal fn def
-              (bare local call resolved within the crate).
-        Bare method calls (single segment that's a method name, not a known
-        internal fn def) are dropped — same as code-graph drops them when it
-        can't resolve the receiver type.
+    For bare-call resolution we key by the LAST segment (the fn ident). Ambiguous
+    names where multiple defs share an ident: keep the first encountered (matches
+    code-graph's resolver which typically picks one).
     """
-    internal_norm = {normalize_crate_name(n) for n in internal_crate_names}
+    fn_to_qn: dict[str, str] = {}
+    for def_qn in defs:
+        last = def_qn.rsplit(".", 1)[-1]
+        if last and last not in fn_to_qn:
+            fn_to_qn[last] = def_qn
+    return fn_to_qn
+
+
+def resolve_and_filter(
+    raw_edges: list[dict],
+    fn_def_map: dict[str, str],
+) -> tuple[list[Edge], dict[str, int]]:
+    """Resolve bare calls, drop external/unresolvable edges, match code-graph.
+
+    Rules:
+      IMPORTS: drop — code-graph's Rust IMPORTS resolver only emits edges for
+        a narrow set of cases (confirmed empirically: 0 edges for a single
+        canstatd index, 8 total across the full 260-crate repo). To avoid
+        false-negative noise from extractor limitations, we drop IMPORTS from
+        the oracle output too. They can be re-enabled when code-graph's
+        Rust IMPORTS resolver is completed.
+      CALLS path-form (`a.b.c`): drop — these are external references
+        (`std.fs.read_to_string`, `Duration.from_secs`) that code-graph
+        can't resolve without type info. Symmetric drop.
+      CALLS bare (`foo`): if `foo` is defined in the subset, upgrade to
+        full QN `<project>.<def_file>.foo`. Otherwise drop (external or
+        method call).
+    """
+    stats = {
+        "imports_dropped_always": 0,
+        "calls_bare_resolved": 0,
+        "calls_bare_unresolved": 0,
+        "calls_path_dropped": 0,
+    }
     kept: list[Edge] = []
-    ext_imports = 0
-    ext_calls = 0
-    for e in edges:
-        first_seg = e["to_qn"].split(".", 1)[0]
-        segs_count = e["to_qn"].count(".") + 1
-        is_internal_prefix = normalize_crate_name(first_seg) in internal_norm
+    for e in raw_edges:
         if e["type"] == "IMPORTS":
-            if is_internal_prefix:
-                kept.append(Edge(**e))
-            else:
-                ext_imports += 1
-        elif e["type"] == "CALLS":
-            if is_internal_prefix:
-                kept.append(Edge(**e))
-            elif segs_count == 1 and e["to_qn"] in internal_fn_defs:
-                # Bare free-function call resolved by name.
-                kept.append(Edge(**e))
-            else:
-                ext_calls += 1
-    return kept, ext_imports, ext_calls
-
-
-def collect_internal_fn_defs(fixture_path: Path, subsets: list[str]) -> set[str]:
-    """Collect function names defined anywhere in the subset crates, so we can
-    recognize bare free-function calls as internal.
-
-    Very coarse: just grep for `fn <name>` and `pub fn <name>`. Shared
-    suffix with method names is unavoidable, but that's symmetric with
-    code-graph's resolver.
-    """
-    pattern = re.compile(r"\bfn\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*[<(]")
-    names: set[str] = set()
-    for sub in subsets:
-        sub_dir = fixture_path / sub
-        for rs in sub_dir.rglob("*.rs"):
-            if "/target/" in rs.as_posix():
-                continue
-            try:
-                txt = rs.read_text(encoding="utf-8", errors="replace")
-            except OSError:
-                continue
-            for m in pattern.finditer(txt):
-                names.add(m.group(1))
-    return names
+            stats["imports_dropped_always"] += 1
+            continue
+        if e["type"] != "CALLS":
+            continue
+        to = e["to_qn"]
+        if "." in to:
+            stats["calls_path_dropped"] += 1
+            continue
+        # Bare call: try resolve via fn_def_map.
+        resolved = fn_def_map.get(to)
+        if resolved is None:
+            stats["calls_bare_unresolved"] += 1
+            continue
+        stats["calls_bare_resolved"] += 1
+        kept.append(Edge(
+            from_qn=e["from_qn"],
+            to_qn=resolved,
+            type="CALLS",
+            file=e.get("file", ""),
+            line=int(e.get("line", 0) or 0),
+            source="syn",
+        ))
+    return kept, stats
 
 
 def build_ground_truth(fixture_id: str, force: bool = False) -> Path:
@@ -224,48 +211,41 @@ def build_ground_truth(fixture_id: str, force: bool = False) -> Path:
     fixture_path = Path(fixture["path"])
     subsets: list[str] = fixture.get("subset") or []
     if not subsets:
-        raise SystemExit(f"fixture {fixture_id}: no 'subset' key; Rust fixtures must list crate dirs")
+        raise SystemExit(f"fixture {fixture_id}: no 'subset' key; Rust fixtures must list subset dirs")
 
-    # Phase 1: discover all crates across subsets.
-    all_crates: list[tuple[str, Path]] = []
+    t0 = time.time()
+    all_edges: list[Edge] = []
+    per_subset_stats: dict[str, dict] = {}
     for sub in subsets:
         sub_dir = fixture_path / sub
         if not sub_dir.exists():
             print(f"  WARN: subset missing: {sub_dir}")
             continue
-        crates = find_crates(sub_dir)
-        print(f"[rust-syn] {sub}: {len(crates)} crate(s) -> {[c[0] for c in crates]}")
-        all_crates.extend(crates)
-
-    internal_crate_names = {n for n, _ in all_crates}
-    internal_fn_defs = collect_internal_fn_defs(fixture_path, subsets)
-    print(f"[rust-syn] internal: {len(internal_crate_names)} crates, {len(internal_fn_defs)} fn defs")
-
-    # Phase 2: run oracle per crate.
-    t0 = time.time()
-    all_raw: list[dict] = []
-    for name, crate_dir in all_crates:
-        print(f"[rust-syn] running on {name} at {crate_dir.relative_to(fixture_path)} ...")
-        raw = run_oracle_on_crate(name, crate_dir)
-        all_raw.extend(raw)
-
-    # Phase 3: filter internal.
-    kept, ext_imp, ext_calls = filter_internal(all_raw, internal_crate_names, internal_fn_defs)
-    print(
-        f"[rust-syn] raw edges: {len(all_raw)} | kept internal: {len(kept)} "
-        f"| filtered external: imports={ext_imp} calls={ext_calls}"
-    )
+        project = project_name_from_path(sub_dir.resolve())
+        print(f"[rust-syn] subset={sub} project={project}")
+        raw, defs = run_oracle_on_subset(project, sub_dir)
+        fn_def_map = build_fn_def_map_from_binary(defs)
+        print(f"  fn defs (binary-sourced): {len(fn_def_map)}")
+        kept, stats = resolve_and_filter(raw, fn_def_map)
+        per_subset_stats[sub] = {"raw_edges": len(raw), "kept": len(kept), **stats}
+        print(
+            f"  raw={len(raw)} kept={len(kept)} "
+            f"bare_resolved={stats['calls_bare_resolved']} "
+            f"bare_unresolved={stats['calls_bare_unresolved']} "
+            f"path_dropped={stats['calls_path_dropped']}"
+        )
+        all_edges.extend(kept)
 
     # Dedup by match_key.
     seen: set[tuple[str, str, str]] = set()
     deduped: list[Edge] = []
-    for e in kept:
+    for e in all_edges:
         if e.match_key() not in seen:
             seen.add(e.match_key())
             deduped.append(e)
 
     elapsed = time.time() - t0
-    print(f"[rust-syn] total: {len(deduped)} unique edges ({len(kept) - len(deduped)} dups) in {elapsed:.1f}s")
+    print(f"[rust-syn] total: {len(deduped)} unique edges ({len(all_edges) - len(deduped)} dups) in {elapsed:.1f}s")
 
     write_edges(deduped, cache_path)
     sidecar = cache_path.with_suffix(".meta.json")
@@ -275,13 +255,9 @@ def build_ground_truth(fixture_id: str, force: bool = False) -> Path:
                 "fixture": fixture_id,
                 "sha": fixture["sha"],
                 "elapsed_seconds": round(elapsed, 1),
-                "crates_analyzed": [n for n, _ in all_crates],
-                "internal_fn_defs": len(internal_fn_defs),
-                "raw_edges": len(all_raw),
-                "kept_edges": len(kept),
+                "subsets": subsets,
+                "per_subset": per_subset_stats,
                 "unique_edges": len(deduped),
-                "filtered_external_imports": ext_imp,
-                "filtered_external_calls": ext_calls,
             },
             indent=2,
         ).encode("utf-8")

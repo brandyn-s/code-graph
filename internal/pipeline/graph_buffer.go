@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/DeusData/codebase-memory-mcp/internal/store"
@@ -141,6 +142,33 @@ func (b *GraphBuffer) FindNodeIDsByQNs(qns []string) map[string]int64 {
 		}
 	}
 	return result
+}
+
+// FindNodeLabelsByQNs returns a map of QN → label for the given qualified names.
+// Mirrors store.FindNodeLabelsByQNs so the CALLS pass can filter non-callable
+// targets whether running through the buffer or the store.
+func (b *GraphBuffer) FindNodeLabelsByQNs(qns []string) map[string]string {
+	result := make(map[string]string, len(qns))
+	for _, qn := range qns {
+		if n, ok := b.nodeByQN[qn]; ok {
+			result[qn] = n.Label
+		}
+	}
+	return result
+}
+
+// FindNodesByQNSuffix returns nodes whose QN ends with "."+suffix. Used by
+// the IMPORTS resolver to find targets in nested source layouts (e.g., a
+// project's `src/flask/ctx.py` module matched by suffix `flask.ctx`).
+func (b *GraphBuffer) FindNodesByQNSuffix(suffix string) []*store.Node {
+	needle := "." + suffix
+	var out []*store.Node
+	for qn, n := range b.nodeByQN {
+		if strings.HasSuffix(qn, needle) || qn == suffix {
+			out = append(out, n)
+		}
+	}
+	return out
 }
 
 // InsertEdge inserts an edge with dedup by (sourceID, targetID, type).

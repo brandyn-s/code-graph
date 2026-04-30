@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -68,6 +69,12 @@ type Pipeline struct {
 	// envReaders maps env var key -> list of function QNs that read it.
 	// Built during semantic passes (pre-flush) for use in post-flush config linking.
 	envReaders map[string][]string
+	// rustCrateMap: Rust crate name (with `-` -> `_` normalized) -> the
+	// path dotted-segment prefix where that crate's src/ lives. Built at
+	// the start of pass2 by scanning Cargo.toml files under RepoPath.
+	// Used in passImports to resolve `use foo_crate::Y::Z` to the actual
+	// Module node at `<project>.<foo_crate_dir>.src.Y.Z`.
+	rustCrateMap map[string]string
 }
 
 // reportProgress safely calls the progress callback if set.
@@ -92,7 +99,104 @@ func New(ctx context.Context, s *store.Store, repoPath string, mode discover.Ind
 		extractionCache: make(map[string]*cachedExtraction),
 		registry:        NewFunctionRegistry(),
 		importMaps:      make(map[string]map[string]string),
+		rustCrateMap:    make(map[string]string),
 	}
+}
+
+// buildRustCrateMap scans Cargo.toml files under RepoPath, parses
+// `[package] name = "..."`, and maps the crate name (with `-` -> `_`
+// applied to match Rust's use-path convention) to the dotted rel-path
+// of the crate's `src/` directory.
+//
+// For a repo with layout:
+//   canstatd/Cargo.toml           (name = "canstatd")
+//   canstatd/src/main.rs
+//   canstatd/types/Cargo.toml     (name = "canstatd-types")
+//   canstatd/types/src/lib.rs
+// When indexed with RepoPath = canstatd/, we build:
+//   "canstatd"       -> "src"
+//   "canstatd_types" -> "types.src"
+//
+// Then in passImports, `use canstatd_types::CanError` gets rewritten to
+// `types.src.CanError` (dot-prefixed) for suffix-matching against the
+// actual node `<project>.types.src.lib.CanError`.
+func (p *Pipeline) buildRustCrateMap() {
+	_ = filepath.WalkDir(p.RepoPath, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if d.IsDir() {
+			// Skip target/ — contains build artifacts, not source.
+			if d.Name() == "target" || d.Name() == "node_modules" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if d.Name() != "Cargo.toml" {
+			return nil
+		}
+		data, rerr := os.ReadFile(path)
+		if rerr != nil {
+			return nil
+		}
+		name := parseCargoPackageName(string(data))
+		if name == "" {
+			return nil // workspace-only Cargo.toml
+		}
+		crateDir := filepath.Dir(path)
+		// Check if src/ exists; if not, skip (virtual manifest).
+		srcDir := filepath.Join(crateDir, "src")
+		if info, serr := os.Stat(srcDir); serr != nil || !info.IsDir() {
+			return nil
+		}
+		relDir, rerr := filepath.Rel(p.RepoPath, srcDir)
+		if rerr != nil {
+			return nil
+		}
+		relDotted := strings.ReplaceAll(filepath.ToSlash(relDir), "/", ".")
+		// Rust: `use foo-bar::...` is illegal; the crate name in code is
+		// always `foo_bar`. Normalize both directions.
+		key := strings.ReplaceAll(name, "-", "_")
+		if _, exists := p.rustCrateMap[key]; !exists {
+			p.rustCrateMap[key] = relDotted
+		}
+		return nil
+	})
+	if len(p.rustCrateMap) > 0 {
+		slog.Info("pipeline.rust_crate_map", "count", len(p.rustCrateMap))
+	}
+}
+
+// parseCargoPackageName extracts `[package] name = "..."` from Cargo.toml
+// text. Returns "" if there's no [package] section (workspace root) or
+// no name field. Deliberately minimal — doesn't need a full TOML parser
+// to grab a single field under a specific section.
+func parseCargoPackageName(text string) string {
+	idx := strings.Index(text, "[package]")
+	if idx < 0 {
+		return ""
+	}
+	// Bound the search to end at the next [section] header.
+	rest := text[idx+len("[package]"):]
+	if nextIdx := strings.Index(rest, "\n["); nextIdx >= 0 {
+		rest = rest[:nextIdx]
+	}
+	// Find `name = "X"` within the section.
+	for _, line := range strings.Split(rest, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "name") {
+			continue
+		}
+		// `name = "foo"` or `name="foo"`.
+		eq := strings.Index(line, "=")
+		if eq < 0 {
+			continue
+		}
+		v := strings.TrimSpace(line[eq+1:])
+		v = strings.Trim(v, `"'`)
+		return v
+	}
+	return ""
 }
 
 // ProjectNameFromPath derives a unique project name from an absolute path
@@ -187,6 +291,20 @@ func (p *Pipeline) findNodeIDsByQNs(project string, qns []string) (map[string]in
 		return p.buf.FindNodeIDsByQNs(qns), nil
 	}
 	return p.Store.FindNodeIDsByQNs(project, qns)
+}
+
+func (p *Pipeline) findNodeLabelsByQNs(project string, qns []string) (map[string]string, error) {
+	if p.buf != nil {
+		return p.buf.FindNodeLabelsByQNs(qns), nil
+	}
+	return p.Store.FindNodeLabelsByQNs(project, qns)
+}
+
+func (p *Pipeline) findNodesByQNSuffix(project, suffix string) ([]*store.Node, error) {
+	if p.buf != nil {
+		return p.buf.FindNodesByQNSuffix(suffix), nil
+	}
+	return p.Store.FindNodesByQNSuffix(project, suffix)
 }
 
 func (p *Pipeline) findEdgesBySourceAndType(sourceID int64, edgeType string) ([]*store.Edge, error) {
@@ -338,6 +456,10 @@ func (p *Pipeline) runFullPasses(files []discover.FileInfo) error {
 
 	p.reportProgress("imports", 40, "building import maps")
 	t = time.Now()
+	// Build the Rust crate-name → path map BEFORE passImports so it can
+	// use it for resolving `use crate_name::X::Y` paths. No-op for non-Rust
+	// projects (Cargo.toml walk returns nothing).
+	p.buildRustCrateMap()
 	p.passImports()
 	slog.Info("pass.timing", "pass", "imports", "elapsed", time.Since(t))
 	p.reportProgress("imports", 42, "import maps built")
@@ -1498,8 +1620,20 @@ func (p *Pipeline) flushResolvedEdges(results [][]resolvedEdge) {
 	// Create stub nodes for LSP-resolved targets that don't exist in the graph.
 	stubQNs := p.createLSPStubNodes(results, qnToID)
 
+	// Fetch labels so we can filter CALLS edges whose target isn't a Function
+	// or Method. Rust/TypeScript resolvers occasionally land on Variable nodes
+	// generated from config files (diesel.toml, Cargo.toml) — those aren't
+	// callable and inflate false-positive rate (2026-04-24 incident: 38% of
+	// CALLS targeted Variable, 0% of TPs did). Stub nodes get labels Function
+	// or Method by construction, so the filter lets them through.
+	labels, err := p.findNodeLabelsByQNs(p.ProjectName, qns)
+	if err != nil {
+		slog.Warn("pass3.resolve_labels.err", "err", err)
+		labels = map[string]string{}
+	}
+
 	// Build and insert edges
-	edges := buildEdgesFromResults(results, qnToID, p.ProjectName, totalEdges, stubQNs)
+	edges := buildEdgesFromResults(results, qnToID, labels, p.ProjectName, totalEdges, stubQNs)
 	if err := p.insertEdgeBatch(edges); err != nil {
 		slog.Warn("pass3.batch_edges.err", "err", err)
 	}
@@ -1574,45 +1708,85 @@ func (p *Pipeline) createLSPStubNodes(results [][]resolvedEdge, qnToID map[strin
 
 // buildEdgesFromResults converts QN-based resolved edges to store.Edge using the QN-to-ID map.
 //
-// stubQNs marks targets that were synthesized as LSP-resolved external stubs
-// (stdlib, vendored grammars, CGO targets). When a CALLS edge points at such
-// a target, the type is upgraded to CALLS_EXTERNAL so downstream consumers
-// can opt in/out of external-stub noise. CALLS_PSEUDO (synthetic module-level
-// caller) is set at resolve time and preserved here.
-func buildEdgesFromResults(results [][]resolvedEdge, qnToID map[string]int64, project string, totalEdges int, stubQNs map[string]bool) []*store.Edge {
+// Two CALLS-edge classification axes apply here:
+//
+//   1. stubQNs marks targets that were synthesized as LSP-resolved external
+//      stubs (stdlib, vendored grammars, CGO targets). CALLS edges pointing
+//      at stubs are upgraded to CALLS_EXTERNAL so downstream consumers can
+//      opt in/out of external-stub noise. CALLS_PSEUDO (synthetic
+//      module-level caller, set at resolve time) keeps its tag because the
+//      pseudo-caller property is the dominant signal — but `external`
+//      goes in the properties for power-user filtering.
+//
+//   2. labels marks the target node's label. CALLS to non-callable
+//      targets (Variable, Class, File) are re-typed as INDIRECT_CALLS
+//      rather than dropped — these are indirect-dispatch call sites
+//      (closures, function-pointer variables, stored callables) that users
+//      still want visible in the graph but marked as indirect so they
+//      don't pollute CALLS precision. `labels` can be nil to disable the
+//      filter (back-compat for callers that don't fetch labels). Stubs
+//      are always Function or Method, so they're not affected.
+//
+// Order: stub-target check first (CALLS → CALLS_EXTERNAL), then non-callable
+// check (remaining CALLS → INDIRECT_CALLS). Stubs are Function/Method-labeled
+// so they correctly pass the callable check; pseudo-callers retain PSEUDO.
+func buildEdgesFromResults(results [][]resolvedEdge, qnToID map[string]int64, labels map[string]string, project string, totalEdges int, stubQNs map[string]bool) []*store.Edge {
 	edges := make([]*store.Edge, 0, totalEdges)
+	droppedNonCallable := 0
+	indirectCalls := 0
 	for _, fileEdges := range results {
 		for _, re := range fileEdges {
 			srcID, srcOK := qnToID[re.CallerQN]
 			tgtID, tgtOK := qnToID[re.TargetQN]
-			if srcOK && tgtOK {
-				edgeType := re.Type
-				if (edgeType == "CALLS" || edgeType == "CALLS_PSEUDO") && stubQNs[re.TargetQN] {
-					if edgeType == "CALLS" {
-						edgeType = "CALLS_EXTERNAL"
-					} else {
-						// Pseudo caller invoking an external stub: keep PSEUDO
-						// as the dominant tag so module-level synthetic calls
-						// remain identifiable, but flag external in properties.
-						edgeType = "CALLS_PSEUDO"
-					}
-				}
-				props := re.Properties
-				if stubQNs[re.TargetQN] {
-					if props == nil {
-						props = map[string]any{}
-					}
-					props["external"] = true
-				}
-				edges = append(edges, &store.Edge{
-					Project:    project,
-					SourceID:   srcID,
-					TargetID:   tgtID,
-					Type:       edgeType,
-					Properties: props,
-				})
+			if !srcOK || !tgtOK {
+				continue
 			}
+
+			edgeType := re.Type
+
+			// Stub-target classification (CALLS_EXTERNAL upgrade).
+			if (edgeType == "CALLS" || edgeType == "CALLS_PSEUDO") && stubQNs[re.TargetQN] {
+				if edgeType == "CALLS" {
+					edgeType = "CALLS_EXTERNAL"
+				}
+				// CALLS_PSEUDO + stub target: keep PSEUDO as dominant tag,
+				// flag external in properties below.
+			}
+
+			// Non-callable target classification (INDIRECT_CALLS retype).
+			// Only applies to remaining CALLS edges — CALLS_EXTERNAL targets
+			// are stubs (Function/Method by construction), CALLS_PSEUDO
+			// keeps its tag.
+			if edgeType == "CALLS" && labels != nil {
+				tgtLabel, have := labels[re.TargetQN]
+				if have && tgtLabel != "Function" && tgtLabel != "Method" {
+					edgeType = "INDIRECT_CALLS"
+					indirectCalls++
+				}
+			}
+
+			props := re.Properties
+			if stubQNs[re.TargetQN] {
+				if props == nil {
+					props = map[string]any{}
+				}
+				props["external"] = true
+			}
+
+			edges = append(edges, &store.Edge{
+				Project:    project,
+				SourceID:   srcID,
+				TargetID:   tgtID,
+				Type:       edgeType,
+				Properties: props,
+			})
 		}
+	}
+	if droppedNonCallable > 0 {
+		slog.Info("pass3.calls.filter_non_callable", "project", project, "dropped", droppedNonCallable)
+	}
+	if indirectCalls > 0 {
+		slog.Info("pass3.calls.indirect_calls", "project", project, "count", indirectCalls)
 	}
 	return edges
 }
@@ -1683,6 +1857,7 @@ func hasFrameworkDecorator(decorators []string) bool {
 func (p *Pipeline) passImports() {
 	slog.Info("pass2b.imports")
 	count := 0
+	suffixHits := 0
 	for moduleQN, importMap := range p.importMaps {
 		moduleNode, _ := p.findNodeByQN(p.ProjectName, moduleQN)
 		if moduleNode == nil {
@@ -1696,6 +1871,117 @@ func (p *Pipeline) passImports() {
 				resolvedQN := fqn.ModuleQN(p.ProjectName, targetQN)
 				if resolvedQN != targetQN {
 					targetNode, _ = p.findNodeByQN(p.ProjectName, resolvedQN)
+				}
+			}
+			if targetNode == nil {
+				// Suffix fallback: nested packages. For a Python project laid
+				// out as `src/flask/` (PEP 518 src-layout), `from flask.ctx
+				// import X` extracts as targetQN=`flask.ctx.X` but the actual
+				// node lives at `<project>.src.flask.ctx`. A prefix-only
+				// resolver fails; suffix search finds it.
+				//
+				// Also handles Rust: the Rust extractor emits raw `use` paths
+				// with `::` separators (e.g. `canstatd_types::CanError`).
+				// Stored QNs use `.`, so we translate `::` -> `.` for the
+				// suffix search. Mirrors the 2026-04-24 Python fix but for
+				// the Rust import-path form.
+				//
+				// Constraints:
+				//  - Module-only targets. Allowing Function/Class regressed
+				//    mcp-servers IMPORTS precision by linking symbol imports
+				//    to their definition (asymmetric with oracle's
+				//    module-granularity emission).
+				//  - Single match required — ambiguous suffixes shouldn't guess.
+				//
+				// Candidates, most specific first:
+				//   `flask.ctx.X` -> `flask.ctx` (drop trailing segment)
+				//   (Rust) `foo::bar::Baz` -> `foo.bar.Baz` -> `foo.bar`
+				dotted := strings.ReplaceAll(targetQN, "::", ".")
+				candidates := []string{dotted}
+				if idx := strings.LastIndex(dotted, "."); idx > 0 {
+					candidates = append(candidates, dotted[:idx])
+				}
+				// Rust crate-name substitution: if the first segment of the
+				// dotted path matches a known crate in this workspace, also
+				// try the form with that segment replaced by the crate's
+				// actual directory path. `use canstatd_types::CanError` with
+				// crate_map["canstatd_types"] = "types.src" yields candidate
+				// `types.src.CanError`. Suffix-matched against the node
+				// `<project>.types.src.lib.CanError` it finds a hit.
+				if len(p.rustCrateMap) > 0 {
+					// For `use crate_name` or `use crate_name::rest`, the
+					// corresponding Module node is typically at
+					// `<project>.<crate_path>.lib` (library crates) or
+					// `<project>.<crate_path>.main` (binary crates) — since
+					// the filename (lib.rs / main.rs) gets included in the QN.
+					// We also try the crate_path as-is and with the remaining
+					// :: path appended, to cover edge cases.
+					var crateKey, restOfPath string
+					if firstDot := strings.Index(dotted, "."); firstDot > 0 {
+						crateKey = dotted[:firstDot]
+						restOfPath = dotted[firstDot:] // includes leading dot
+					} else {
+						crateKey = dotted
+						restOfPath = ""
+					}
+					if cratePath, ok := p.rustCrateMap[crateKey]; ok {
+						// Prefer lib.rs / main.rs first — most imports target
+						// the crate root which lives in one of these.
+						candidates = append(candidates, cratePath+".lib"+restOfPath)
+						candidates = append(candidates, cratePath+".main"+restOfPath)
+						// Then the non-file variants.
+						candidates = append(candidates, cratePath+restOfPath)
+						if restOfPath != "" {
+							// Strip trailing segment too.
+							if idx := strings.LastIndex(cratePath+restOfPath, "."); idx > 0 {
+								candidates = append(candidates, (cratePath + restOfPath)[:idx])
+							}
+						}
+					}
+				}
+				// Label policy for suffix matches:
+				//  - For Python/generic: Module-only (matches oracle form).
+				//  - For Rust crate-resolved candidates (those containing a
+				//    crate_map substitution): allow Module/Class/Struct/Enum/
+				//    Function. `use foo::Bar` is commonly importing a type or
+				//    function, not a module; the oracle doesn't measure Rust
+				//    IMPORTS so there's no F1 cost to being more inclusive.
+				for i, c := range candidates {
+					hits, err := p.findNodesByQNSuffix(p.ProjectName, c)
+					if err != nil || len(hits) == 0 {
+						continue
+					}
+					isRustCrateResolved := i >= 2 // candidates[0..1] are Python-style; [2..] are crate-substituted
+					// Filter by label. Rust crate-resolved allows symbols;
+					// Python-style is Module-only to preserve module-granularity
+					// matching against the ast oracle.
+					var pick *store.Node
+					for _, h := range hits {
+						label := h.Label
+						ok := false
+						if isRustCrateResolved {
+							ok = label == "Module" || label == "Class" || label == "Struct" ||
+								label == "Enum" || label == "Function" || label == "Trait"
+						} else {
+							ok = label == "Module"
+						}
+						if !ok {
+							continue
+						}
+						// Among eligible hits, prefer the SHORTEST QN — most
+						// specific match to the suffix, least speculative.
+						// `use foo::Bar` should resolve to the crate's root
+						// `Bar`, not a deeply-nested re-export.
+						if pick == nil || len(h.QualifiedName) < len(pick.QualifiedName) {
+							pick = h
+						}
+					}
+					if pick == nil {
+						continue
+					}
+					targetNode = pick
+					suffixHits++
+					break
 				}
 			}
 			if targetNode == nil {
@@ -1714,7 +2000,7 @@ func (p *Pipeline) passImports() {
 			count++
 		}
 	}
-	slog.Info("pass2b.imports.done", "edges", count)
+	slog.Info("pass2b.imports.done", "edges", count, "suffix_fallback_hits", suffixHits)
 }
 
 // passHTTPLinks runs the HTTP linker to discover cross-service HTTP calls.

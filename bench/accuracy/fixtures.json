@@ -25,8 +25,8 @@
     {
       "id": "code-graph-go",
       "path": "C:/Users/user/Documents/GitHub/code-graph",
-      "sha": "09ad069b0c173e82db3a972d6a78f84fb44140e4",
-      "short_sha": "09ad069",
+      "sha": "82de04884ae995c21803557167c8f41bb4393847",
+      "short_sha": "82de048",
       "languages": ["go"],
       "subset": ["internal/store", "internal/cypher", "internal/pipeline", "internal/tools", "internal/cbm"],
       "notes": "Self-hosting Go fixture on code-graph itself. Originally planned psm/auth-gateway but that module has sqlc-generated types that aren't checked in, so Go RTA fails type-checking. code-graph is a ~90% Go codebase that type-checks cleanly. Subset picked for variance: store (SQLite CRUD), cypher (parser+executor), pipeline (multi-pass orchestrator), tools (MCP handlers), cbm (CGO bridge).",

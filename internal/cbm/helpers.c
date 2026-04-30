@@ -389,6 +389,39 @@ const char* cbm_enclosing_func_qn(CBMArena* a, TSNode node, CBMLanguage lang,
         return module_qn;
     }
 
+    // Go methods: if the enclosing func has a `receiver` field, embed the
+    // receiver type in the QN. This must mirror extract_defs.c's
+    // receiver-qualified QN (`<module>.<RecvType>.<method>`) so call-site
+    // CallerQN aligns with the method node's stored QN — otherwise CALLS
+    // edges from inside Go methods can't be resolved against the def.
+    TSNode recv = ts_node_child_by_field_name(func_node, "receiver", 8);
+    if (!ts_node_is_null(recv)) {
+        const char* recv_type = NULL;
+        uint32_t rn = ts_node_child_count(recv);
+        for (uint32_t ri = 0; ri < rn; ri++) {
+            TSNode p = ts_node_child(recv, ri);
+            if (strcmp(ts_node_type(p), "parameter_declaration") != 0) continue;
+            TSNode tnode = ts_node_child_by_field_name(p, "type", 4);
+            if (ts_node_is_null(tnode)) continue;
+            char* tn = cbm_node_text(a, tnode, source);
+            if (!tn || !tn[0]) continue;
+            while (*tn == '*' || *tn == '&') tn++;
+            char* bracket = strchr(tn, '[');
+            if (bracket) *bracket = '\0';
+            recv_type = tn;
+            break;
+        }
+        if (recv_type && recv_type[0]) {
+            const char* recv_qn = cbm_fqn_compute(a, project, rel_path, "");
+            size_t mlen = strlen(recv_qn);
+            if (mlen > 0 && recv_qn[mlen-1] == '.') {
+                char* trimmed = cbm_arena_strndup(a, recv_qn, mlen - 1);
+                return cbm_arena_sprintf(a, "%s.%s.%s", trimmed, recv_type, name);
+            }
+            return cbm_arena_sprintf(a, "%s.%s.%s", recv_qn, recv_type, name);
+        }
+    }
+
     // Check if the function is inside a class — compute classQN.funcName
     const CBMLangSpec* spec = cbm_lang_spec(lang);
     if (spec && spec->class_node_types) {

@@ -87,6 +87,42 @@ static const char* compute_func_qn(CBMExtractCtx* ctx, TSNode node,
     if (state->enclosing_class_qn) {
         return cbm_arena_sprintf(ctx->arena, "%s.%s", state->enclosing_class_qn, name);
     }
+
+    // Go methods: if this function declaration has a receiver field, embed
+    // the receiver type in the QN so call-site CallerQN matches the
+    // method node's stored QN (which is also receiver-qualified — see
+    // extract_defs.c). Without this, edges from inside a Go method
+    // resolve their caller to `<file>.<method>` while the method's def
+    // is stored as `<file>.<RecvType>.<method>`, producing 0 outbound
+    // CALLS edges from any Method-label node.
+    TSNode recv = ts_node_child_by_field_name(node, "receiver", 8);
+    if (!ts_node_is_null(recv)) {
+        const char* recv_type = NULL;
+        uint32_t rn = ts_node_child_count(recv);
+        for (uint32_t ri = 0; ri < rn; ri++) {
+            TSNode p = ts_node_child(recv, ri);
+            if (strcmp(ts_node_type(p), "parameter_declaration") != 0) continue;
+            TSNode tnode = ts_node_child_by_field_name(p, "type", 4);
+            if (ts_node_is_null(tnode)) continue;
+            char* tn = cbm_node_text(ctx->arena, tnode, ctx->source);
+            if (!tn || !tn[0]) continue;
+            while (*tn == '*' || *tn == '&') tn++;
+            char* bracket = strchr(tn, '[');
+            if (bracket) *bracket = '\0';
+            recv_type = tn;
+            break;
+        }
+        if (recv_type && recv_type[0]) {
+            const char* module_qn = cbm_fqn_compute(ctx->arena, ctx->project, ctx->rel_path, "");
+            size_t mlen = strlen(module_qn);
+            if (mlen > 0 && module_qn[mlen-1] == '.') {
+                char* trimmed = cbm_arena_strndup(ctx->arena, module_qn, mlen - 1);
+                return cbm_arena_sprintf(ctx->arena, "%s.%s.%s", trimmed, recv_type, name);
+            }
+            return cbm_arena_sprintf(ctx->arena, "%s.%s.%s", module_qn, recv_type, name);
+        }
+    }
+
     return cbm_fqn_compute(ctx->arena, ctx->project, ctx->rel_path, name);
 }
 

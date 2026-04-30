@@ -824,11 +824,53 @@ static void extract_func_def(CBMExtractCtx* ctx, TSNode node, const CBMLangSpec*
         }
     }
 
-    // Receiver (Go methods)
+    // Receiver (Go methods). For `func (s *Store) Foo()`, the receiver field
+    // contains the full `(s *Store)` expression. We extract the type name
+    // (Store) and embed it in the QN: `<file>.<Store>.<method>` instead of
+    // `<file>.<method>`. Without this, all methods on different Go types
+    // with the same method name collapse to one node (e.g., `Close` on
+    // *Cache and *Config both became `<file>.Close`, losing disambiguation).
+    // Measured empirically 2026-04-24: code-graph stored store.Querier.QueryContext
+    // (with receiver) inconsistently vs edges.EdgeCountsByType (without).
+    // Making every method QN receiver-qualified fixes the inconsistency.
     TSNode recv = ts_node_child_by_field_name(node, "receiver", 8);
     if (!ts_node_is_null(recv)) {
         def.receiver = cbm_node_text(a, recv, ctx->source);
         def.label = "Method";
+        // Extract just the type name from the receiver. The receiver node
+        // is a parameter_list containing parameter_declarations. Walk for
+        // the type node.
+        const char* recv_type = NULL;
+        uint32_t rn = ts_node_child_count(recv);
+        for (uint32_t ri = 0; ri < rn; ri++) {
+            TSNode p = ts_node_child(recv, ri);
+            if (strcmp(ts_node_type(p), "parameter_declaration") != 0) continue;
+            TSNode tnode = ts_node_child_by_field_name(p, "type", 4);
+            if (ts_node_is_null(tnode)) continue;
+            char* tn = cbm_node_text(a, tnode, ctx->source);
+            if (!tn || !tn[0]) continue;
+            // Strip pointer prefix (`*Store` -> `Store`) and generic args
+            // (`Store[T]` -> `Store`).
+            while (*tn == '*' || *tn == '&') tn++;
+            char* bracket = strchr(tn, '[');
+            if (bracket) *bracket = '\0';
+            recv_type = tn;
+            break;
+        }
+        if (recv_type && recv_type[0]) {
+            // Reconstruct QN with receiver type: <module>.<Type>.<method>.
+            // cbm_fqn_compute(empty name) returns the module QN with a
+            // trailing "."; strip it before splicing in the receiver.
+            const char* module_qn = cbm_fqn_compute(a, ctx->project, ctx->rel_path, "");
+            size_t mlen = strlen(module_qn);
+            if (mlen > 0 && module_qn[mlen-1] == '.') {
+                char* trimmed = cbm_arena_strndup(a, module_qn, mlen - 1);
+                def.qualified_name = cbm_arena_sprintf(a, "%s.%s.%s", trimmed, recv_type, name);
+            } else {
+                def.qualified_name = cbm_arena_sprintf(a, "%s.%s.%s", module_qn, recv_type, name);
+            }
+            def.parent_class = recv_type;
+        }
     }
 
     // Decorators

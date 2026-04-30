@@ -244,14 +244,52 @@ def compare_fixture(fixture_id: str) -> tuple[dict, Path, Path]:
     results: dict[str, dict] = {}
 
     # CALLS from PyCG oracle
+    #
+    # The CALLS-family is split across three edge types as of PR #121:
+    #   CALLS          — real-to-real (precision-relevant)
+    #   CALLS_EXTERNAL — real-to-stub (LSP-resolved external symbol)
+    #   CALLS_PSEUDO   — synthetic module-default caller (top-level call site)
+    #
+    # The headline `results["CALLS"]` row uses real-to-real only (the oracle
+    # generally excludes external symbols and module-level callers). The
+    # `modal_split` sub-key publishes precision/recall/F1 for each
+    # union of types so reviewers can see how each population contributes
+    # to the previous undifferentiated CALLS aggregate.
     pycg_cache = CACHE_DIR / f"pycg-{fixture_id}-{fixture['short_sha']}.json"
     if pycg_cache.exists():
         oracle_calls = read_edges(pycg_cache)
         shards = _derive_caller_shards(oracle_calls)
         measured_calls = query_code_graph_edges(project, "CALLS", shards)
+        measured_external = query_code_graph_edges(project, "CALLS_EXTERNAL", shards)
+        measured_pseudo = query_code_graph_edges(project, "CALLS_PSEUDO", shards)
         results["CALLS"] = {
             "oracle": "pycg",
             **compute_metrics(oracle_calls, measured_calls),
+            "modal_split": {
+                "real_only": {
+                    "measured_count": len(measured_calls),
+                    **compute_metrics(oracle_calls, measured_calls),
+                },
+                "real_plus_external": {
+                    "measured_count": len(measured_calls) + len(measured_external),
+                    **compute_metrics(oracle_calls, measured_calls + measured_external),
+                },
+                "real_plus_pseudo": {
+                    "measured_count": len(measured_calls) + len(measured_pseudo),
+                    **compute_metrics(oracle_calls, measured_calls + measured_pseudo),
+                },
+                "all_calls_family": {
+                    "measured_count": (
+                        len(measured_calls)
+                        + len(measured_external)
+                        + len(measured_pseudo)
+                    ),
+                    **compute_metrics(
+                        oracle_calls,
+                        measured_calls + measured_external + measured_pseudo,
+                    ),
+                },
+            },
         }
     else:
         print(f"WARN: no PyCG cache at {pycg_cache}; run oracle_pycg.py first")
@@ -332,6 +370,41 @@ def compare_fixture(fixture_id: str) -> tuple[dict, Path, Path]:
             f"{a['precision']:.3f} / {a['recall']:.3f} / {a['f1']:.3f} |"
         )
     lines.append("")
+    # Modal split for CALLS-family edges (real / external / pseudo)
+    if "CALLS" in results and "modal_split" in results["CALLS"]:
+        ms = results["CALLS"]["modal_split"]
+        lines.extend([
+            "## CALLS modal split — by edge-kind union",
+            "",
+            "After PR #121, the CALLS family is partitioned into:",
+            "- `CALLS` — real-to-real (precision-relevant)",
+            "- `CALLS_EXTERNAL` — real-to-stub (LSP-resolved external)",
+            "- `CALLS_PSEUDO` — synthetic module-default caller",
+            "",
+            "Each row below recomputes precision/recall/F1 against the same",
+            "PyCG oracle but with a different union on the measured side.",
+            "Headline `results.CALLS` is the `real_only` row.",
+            "",
+            "| Union | Measured | Exact P/R/F1 | Suffix-3 P/R/F1 | Scope-aligned P/R/F1 |",
+            "|---|---|---|---|---|",
+        ])
+        for union_name, metrics in ms.items():
+            e = metrics["exact"]
+            s = metrics["suffix_3seg"]
+            a = metrics["scope_aligned"]
+            lines.append(
+                f"| {union_name} | {metrics['measured_count']} | "
+                f"{e['precision']:.3f} / {e['recall']:.3f} / {e['f1']:.3f} | "
+                f"{s['precision']:.3f} / {s['recall']:.3f} / {s['f1']:.3f} | "
+                f"{a['precision']:.3f} / {a['recall']:.3f} / {a['f1']:.3f} |"
+            )
+        lines.append("")
+        lines.append(
+            "Diverging rows expose how each non-real population dilutes the"
+            " aggregate. Most accuracy regressions live in `real_only`; the"
+            " other rows are diagnostic."
+        )
+        lines.append("")
     lines.append("## Samples (first 10 per edge type)")
     for edge_type, res in results.items():
         if res.get("status") == "pending":

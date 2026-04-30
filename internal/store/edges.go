@@ -19,26 +19,29 @@ import (
 // The tier is categorical; the legacy score is continuous.
 //
 // EXTRACTED
-//   Direct, source-proven relationship. The AST literally says the
-//   edge exists (a function call expression, an import statement, a
-//   class definition). This is the default for any edge whose creator
-//   does not set a confidence_tier property.
+//
+//	Direct, source-proven relationship. The AST literally says the
+//	edge exists (a function call expression, an import statement, a
+//	class definition). This is the default for any edge whose creator
+//	does not set a confidence_tier property.
 //
 // INFERRED
-//   Relationship deduced via static reasoning beyond the raw AST:
-//   interface satisfaction by method-set matching, inherited methods
-//   across class hierarchies, an HTTP caller matched to a route
-//   handler, a test function matched to its production target via a
-//   naming heuristic. Still high-signal, but a grammar change or a
-//   refactor could invalidate it.
+//
+//	Relationship deduced via static reasoning beyond the raw AST:
+//	interface satisfaction by method-set matching, inherited methods
+//	across class hierarchies, an HTTP caller matched to a route
+//	handler, a test function matched to its production target via a
+//	naming heuristic. Still high-signal, but a grammar change or a
+//	refactor could invalidate it.
 //
 // AMBIGUOUS
-//   Relationship asserted via a fuzzy match that may be wrong. A
-//   config file whose values happen to match a variable name, a git
-//   file-coupling metric below a high-confidence threshold, a
-//   parameterized URL path that could match multiple routes. Useful
-//   for suggestion-surface tools; filter these out for automated
-//   blast-radius calculations.
+//
+//	Relationship asserted via a fuzzy match that may be wrong. A
+//	config file whose values happen to match a variable name, a git
+//	file-coupling metric below a high-confidence threshold, a
+//	parameterized URL path that could match multiple routes. Useful
+//	for suggestion-surface tools; filter these out for automated
+//	blast-radius calculations.
 const (
 	ConfidenceExtracted = "EXTRACTED"
 	ConfidenceInferred  = "INFERRED"
@@ -412,23 +415,28 @@ func (s *Store) FindEdgesByTargetIDs(targetIDs []int64, edgeTypes []string) (map
 	return result, nil
 }
 
-// NodeDegree returns inbound and outbound CALLS edge counts for a node.
+// NodeDegree returns inbound and outbound CALLS-family edge counts for a node.
+// Includes CALLS, CALLS_EXTERNAL (real-to-stub), and CALLS_PSEUDO (module-default
+// caller) so degree reflects the same surface users saw before the type split.
 func (s *Store) NodeDegree(nodeID int64) (inbound, outbound int) {
-	_ = s.q.QueryRow("SELECT COUNT(*) FROM edges WHERE target_id=? AND type='CALLS'", nodeID).Scan(&inbound)
-	_ = s.q.QueryRow("SELECT COUNT(*) FROM edges WHERE source_id=? AND type='CALLS'", nodeID).Scan(&outbound)
+	const inSQL = "SELECT COUNT(*) FROM edges WHERE target_id=? AND type IN ('CALLS','CALLS_EXTERNAL','CALLS_PSEUDO')"
+	const outSQL = "SELECT COUNT(*) FROM edges WHERE source_id=? AND type IN ('CALLS','CALLS_EXTERNAL','CALLS_PSEUDO')"
+	_ = s.q.QueryRow(inSQL, nodeID).Scan(&inbound)
+	_ = s.q.QueryRow(outSQL, nodeID).Scan(&outbound)
 	return
 }
 
 // NodeNeighborNames returns the names of callers and callees for a node,
-// considering CALLS, HTTP_CALLS, and ASYNC_CALLS edge types.
+// considering CALLS-family (CALLS, CALLS_EXTERNAL, CALLS_PSEUDO), HTTP_CALLS,
+// and ASYNC_CALLS edge types.
 func (s *Store) NodeNeighborNames(nodeID int64, limit int) (callerNames, calleeNames []string) {
 	callerNames = queryNeighborNames(s.q,
 		`SELECT DISTINCT n.name FROM edges e JOIN nodes n ON e.source_id = n.id
-		 WHERE e.target_id = ? AND e.type IN ('CALLS','HTTP_CALLS','ASYNC_CALLS')
+		 WHERE e.target_id = ? AND e.type IN ('CALLS','CALLS_EXTERNAL','CALLS_PSEUDO','HTTP_CALLS','ASYNC_CALLS')
 		 ORDER BY n.name LIMIT ?`, nodeID, limit)
 	calleeNames = queryNeighborNames(s.q,
 		`SELECT DISTINCT n.name FROM edges e JOIN nodes n ON e.target_id = n.id
-		 WHERE e.source_id = ? AND e.type IN ('CALLS','HTTP_CALLS','ASYNC_CALLS')
+		 WHERE e.source_id = ? AND e.type IN ('CALLS','CALLS_EXTERNAL','CALLS_PSEUDO','HTTP_CALLS','ASYNC_CALLS')
 		 ORDER BY n.name LIMIT ?`, nodeID, limit)
 	return
 }

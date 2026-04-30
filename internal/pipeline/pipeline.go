@@ -1496,10 +1496,10 @@ func (p *Pipeline) flushResolvedEdges(results [][]resolvedEdge) {
 	}
 
 	// Create stub nodes for LSP-resolved targets that don't exist in the graph.
-	p.createLSPStubNodes(results, qnToID)
+	stubQNs := p.createLSPStubNodes(results, qnToID)
 
 	// Build and insert edges
-	edges := buildEdgesFromResults(results, qnToID, p.ProjectName, totalEdges)
+	edges := buildEdgesFromResults(results, qnToID, p.ProjectName, totalEdges, stubQNs)
 	if err := p.insertEdgeBatch(edges); err != nil {
 		slog.Warn("pass3.batch_edges.err", "err", err)
 	}
@@ -1521,7 +1521,11 @@ func collectEdgeQNs(results [][]resolvedEdge) (qnSet map[string]struct{}, totalE
 // createLSPStubNodes creates stub nodes for LSP-resolved targets that don't exist in the graph.
 // This happens for stdlib/external methods (e.g., context.Context.Done) that
 // the LSP resolver correctly identifies but aren't indexed as nodes.
-func (p *Pipeline) createLSPStubNodes(results [][]resolvedEdge, qnToID map[string]int64) {
+//
+// Returns the set of stub-target QNs so buildEdgesFromResults can upgrade
+// edges pointing at stubs to CALLS_EXTERNAL — this separates real-to-real
+// call edges from real-to-external-stub edges in the graph.
+func (p *Pipeline) createLSPStubNodes(results [][]resolvedEdge, qnToID map[string]int64) map[string]bool {
 	var stubs []*store.Node
 	stubQNs := make(map[string]bool)
 	for _, fileEdges := range results {
@@ -1565,22 +1569,47 @@ func (p *Pipeline) createLSPStubNodes(results [][]resolvedEdge, qnToID map[strin
 			slog.Info("pass3.stub_nodes", "count", len(stubs))
 		}
 	}
+	return stubQNs
 }
 
 // buildEdgesFromResults converts QN-based resolved edges to store.Edge using the QN-to-ID map.
-func buildEdgesFromResults(results [][]resolvedEdge, qnToID map[string]int64, project string, totalEdges int) []*store.Edge {
+//
+// stubQNs marks targets that were synthesized as LSP-resolved external stubs
+// (stdlib, vendored grammars, CGO targets). When a CALLS edge points at such
+// a target, the type is upgraded to CALLS_EXTERNAL so downstream consumers
+// can opt in/out of external-stub noise. CALLS_PSEUDO (synthetic module-level
+// caller) is set at resolve time and preserved here.
+func buildEdgesFromResults(results [][]resolvedEdge, qnToID map[string]int64, project string, totalEdges int, stubQNs map[string]bool) []*store.Edge {
 	edges := make([]*store.Edge, 0, totalEdges)
 	for _, fileEdges := range results {
 		for _, re := range fileEdges {
 			srcID, srcOK := qnToID[re.CallerQN]
 			tgtID, tgtOK := qnToID[re.TargetQN]
 			if srcOK && tgtOK {
+				edgeType := re.Type
+				if (edgeType == "CALLS" || edgeType == "CALLS_PSEUDO") && stubQNs[re.TargetQN] {
+					if edgeType == "CALLS" {
+						edgeType = "CALLS_EXTERNAL"
+					} else {
+						// Pseudo caller invoking an external stub: keep PSEUDO
+						// as the dominant tag so module-level synthetic calls
+						// remain identifiable, but flag external in properties.
+						edgeType = "CALLS_PSEUDO"
+					}
+				}
+				props := re.Properties
+				if stubQNs[re.TargetQN] {
+					if props == nil {
+						props = map[string]any{}
+					}
+					props["external"] = true
+				}
 				edges = append(edges, &store.Edge{
 					Project:    project,
 					SourceID:   srcID,
 					TargetID:   tgtID,
-					Type:       re.Type,
-					Properties: re.Properties,
+					Type:       edgeType,
+					Properties: props,
 				})
 			}
 		}

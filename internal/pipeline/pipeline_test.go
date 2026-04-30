@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/DeusData/codebase-memory-mcp/internal/cbm"
 	"github.com/DeusData/codebase-memory-mcp/internal/discover"
 	"github.com/DeusData/codebase-memory-mcp/internal/store"
 )
@@ -863,5 +864,99 @@ func TestFORMProcedureCallResolution(t *testing.T) {
 	}
 	if !found {
 		t.Error("expected a CALLS edge from caller to callee, got none")
+	}
+}
+
+// TestBuildEdgesFromResults_EdgeTypeSplit verifies that buildEdgesFromResults
+// upgrades a CALLS edge whose target is a stub (real-to-external) to
+// CALLS_EXTERNAL while preserving CALLS_PSEUDO emitted at resolve time and
+// leaving real-to-real CALLS edges untouched.
+func TestBuildEdgesFromResults_EdgeTypeSplit(t *testing.T) {
+	qnToID := map[string]int64{
+		"proj.main.runMain":         1, // real caller
+		"proj.main":                 2, // module-level synthetic caller
+		"proj.helpers.Helper":       3, // real callee
+		"github.com/x/ext.SomeFunc": 4, // stub callee (created in pass3)
+	}
+	stubQNs := map[string]bool{
+		"github.com/x/ext.SomeFunc": true,
+	}
+	results := [][]resolvedEdge{
+		{
+			// real-to-real → stays CALLS
+			{CallerQN: "proj.main.runMain", TargetQN: "proj.helpers.Helper", Type: "CALLS"},
+			// real-to-stub → upgraded to CALLS_EXTERNAL
+			{CallerQN: "proj.main.runMain", TargetQN: "github.com/x/ext.SomeFunc", Type: "CALLS"},
+			// pseudo-to-real → stays CALLS_PSEUDO
+			{CallerQN: "proj.main", TargetQN: "proj.helpers.Helper", Type: "CALLS_PSEUDO"},
+			// pseudo-to-stub → stays CALLS_PSEUDO (dominant tag), external flagged in props
+			{CallerQN: "proj.main", TargetQN: "github.com/x/ext.SomeFunc", Type: "CALLS_PSEUDO"},
+		},
+	}
+	edges := buildEdgesFromResults(results, qnToID, "proj", 4, stubQNs)
+	if len(edges) != 4 {
+		t.Fatalf("want 4 edges, got %d", len(edges))
+	}
+	want := []struct {
+		src, tgt int64
+		typ      string
+		external bool
+	}{
+		{1, 3, "CALLS", false},
+		{1, 4, "CALLS_EXTERNAL", true},
+		{2, 3, "CALLS_PSEUDO", false},
+		{2, 4, "CALLS_PSEUDO", true},
+	}
+	for i, e := range edges {
+		if e.SourceID != want[i].src || e.TargetID != want[i].tgt {
+			t.Errorf("edge[%d] src=%d tgt=%d, want src=%d tgt=%d", i, e.SourceID, e.TargetID, want[i].src, want[i].tgt)
+		}
+		if e.Type != want[i].typ {
+			t.Errorf("edge[%d] type=%q, want %q", i, e.Type, want[i].typ)
+		}
+		extProp, _ := e.Properties["external"].(bool)
+		if extProp != want[i].external {
+			t.Errorf("edge[%d] external=%v, want %v", i, extProp, want[i].external)
+		}
+	}
+}
+
+// TestResolveCallEdge_ModuleDefaultProducesPseudo verifies that resolveCallEdge
+// emits CALLS_PSEUDO when the call site has no enclosing function and the
+// caller defaults to the module-level QN.
+func TestResolveCallEdge_ModuleDefaultProducesPseudo(t *testing.T) {
+	p := &Pipeline{
+		ProjectName: "proj",
+		registry:    NewFunctionRegistry(),
+	}
+	p.registry.Register("Helper", "proj.helpers.Helper", "Function")
+
+	moduleQN := "proj.main"
+	importMap := map[string]string{}
+	typeMap := TypeMap{}
+	lspCallerMethods := map[string]bool{}
+
+	// Call site with empty EnclosingFuncQN — should default to moduleQN
+	// and emit CALLS_PSEUDO.
+	pseudoCall := cbm.Call{CalleeName: "Helper", EnclosingFuncQN: ""}
+	got, ok := p.resolveCallEdge(pseudoCall, moduleQN, importMap, typeMap, lspCallerMethods)
+	if !ok {
+		t.Fatal("resolveCallEdge returned ok=false for module-default caller")
+	}
+	if got.Type != "CALLS_PSEUDO" {
+		t.Errorf("module-default caller produced Type=%q, want CALLS_PSEUDO", got.Type)
+	}
+	if got.CallerQN != moduleQN {
+		t.Errorf("module-default caller QN=%q, want %q", got.CallerQN, moduleQN)
+	}
+
+	// Real caller — should be CALLS.
+	realCall := cbm.Call{CalleeName: "Helper", EnclosingFuncQN: "proj.main.run"}
+	got2, ok := p.resolveCallEdge(realCall, moduleQN, importMap, typeMap, lspCallerMethods)
+	if !ok {
+		t.Fatal("resolveCallEdge returned ok=false for real caller")
+	}
+	if got2.Type != "CALLS" {
+		t.Errorf("real caller produced Type=%q, want CALLS", got2.Type)
 	}
 }

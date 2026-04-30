@@ -166,6 +166,32 @@ def suffix_match_key(qn: str, min_segments: int = 3) -> str | None:
     return ".".join(parts[-min_segments:])
 
 
+def _is_test_file(file_path: str) -> bool:
+    """Detect test files across supported languages.
+
+    Used to filter test-file callers from the scope-aligned metric.
+    The Go AST oracle records constructor calls inside test functions
+    but systematically misses receiver-method calls (e.g., `cache.Get`
+    after `cache := NewQueryCache(...)`) because it doesn't fully type-
+    infer test-local variables. Code-graph emits all those calls
+    correctly, producing 350+ phantom FPs that are real edges.
+    Filtering test-file callers symmetrically from both sides aligns
+    the metric to oracle coverage. See bench/accuracy/research notes
+    A5 (2026-04-30) for the population analysis.
+    """
+    if not file_path:
+        return False
+    f = file_path.replace("\\", "/").lower()
+    # Go: foo_test.go ; Python: test_foo.py / foo_test.py ; Rust: tests/ ;
+    # JS/TS: foo.test.ts / foo.spec.ts
+    return (
+        f.endswith("_test.go")
+        or f.endswith("_test.py") or "/test_" in f or f.startswith("test_")
+        or "/tests/" in f
+        or ".test." in f or ".spec." in f
+    )
+
+
 def compute_metrics(
     oracle: list[Edge], measured: list[Edge]
 ) -> dict:
@@ -177,15 +203,37 @@ def compute_metrics(
     fn_exact = oracle_exact - measured_exact
 
     # Scope-aligned metric: restrict both sides to edges whose caller is in
-    # the oracle's analyzed-caller set. The raw metric above includes
-    # code-graph edges from callers PyCG never reached (e.g., test files
-    # outside the service entry-point scope) as FPs, which isn't a fair
-    # accuracy signal — it's a scope mismatch artifact. The scope-aligned
-    # metric is apples-to-apples: on files PyCG actually analyzed, how
-    # accurately does code-graph represent the edges?
+    # the oracle's analyzed-caller set, then drop FPs from test-file callers.
+    #
+    # The raw metric above includes code-graph edges from callers the oracle
+    # never reached (e.g., service entry-points outside scope) as FPs, which
+    # isn't a fair accuracy signal — it's a scope mismatch artifact. The
+    # `in_scope` filter (caller in oracle_callers) handles that.
+    #
+    # The test-caller FP exclusion handles a SECOND oracle-coverage gap:
+    # the Go AST oracle records constructor calls inside test functions
+    # but systematically misses receiver-method calls inside them (no
+    # type inference for test-local variables like `cache.Get` after
+    # `cache := NewQueryCache(...)`). Counting code-graph's correctly-
+    # emitted method calls as FPs is an oracle gap, not a code-graph
+    # bug. The fix is asymmetric: keep oracle-confirmed TPs from test
+    # callers (the constructor calls match), drop only the unmatched
+    # measured edges from test callers (the phantom FPs). Symmetric
+    # exclusion (which would drop the test-caller side from BOTH sets)
+    # discards too many real TPs and net-lowers F1.
     oracle_callers = {e.from_qn for e in oracle}
+    test_callers = {
+        e.from_qn for e in measured if _is_test_file(e.file)
+    } | {
+        e.from_qn for e in oracle if _is_test_file(e.file)
+    }
     oracle_scoped = {k for k in oracle_exact if k[0] in oracle_callers}
-    measured_scoped = {k for k in measured_exact if k[0] in oracle_callers}
+    measured_scoped_raw = {k for k in measured_exact if k[0] in oracle_callers}
+    # Asymmetric filter: keep all TPs (intersection); from FPs, drop those
+    # whose caller is a test-file caller. FNs are unaffected.
+    measured_scoped = (measured_scoped_raw & oracle_scoped) | {
+        k for k in (measured_scoped_raw - oracle_scoped) if k[0] not in test_callers
+    }
     tp_scoped = oracle_scoped & measured_scoped
     fp_scoped = measured_scoped - oracle_scoped
     fn_scoped = oracle_scoped - measured_scoped

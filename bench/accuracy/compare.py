@@ -288,6 +288,75 @@ def query_caller_node_kinds_sharded(
     return out
 
 
+def query_resolver_rules(
+    projects: list[str], edge_type: str
+) -> dict[tuple[str, str, str], str]:
+    """Return a (from_qn, to_qn, type) -> resolver_rule map for `edge_type`.
+
+    Reads `resolver_rule` out of edge properties (populated by the
+    resolver — see internal/pipeline/resolver_rule.go for the taxonomy).
+    Edges from indexes that predate the property always return NULL via
+    json_extract; we filter those out so callers can detect "feature
+    not yet emitted" by getting an empty dict back.
+
+    Multi-project flavor for Rust/Go subset fixtures. The keys use
+    full project-prefixed QNs to match `query_edges_multi_project`'s
+    output exactly.
+
+    Step 4 of the 2026-05-02 plateau-2 plan. Used by compute_metrics
+    to stratify precision by resolver pathway.
+    """
+    out: dict[tuple[str, str, str], str] = {}
+    for project in projects:
+        cypher = (
+            f"MATCH (a)-[r:{edge_type}]->(b) "
+            f"RETURN a.qualified_name AS f, b.qualified_name AS t, "
+            f"r.resolver_rule AS rule LIMIT 100000"
+        )
+        rows = _run_cypher(project, cypher, max_rows=10000)
+        for r in rows:
+            if not isinstance(r, dict):
+                continue
+            f = r.get("f") or ""
+            t = r.get("t") or ""
+            rule = r.get("rule") or ""
+            if not (f and t and rule):
+                continue
+            out[(f, t, edge_type)] = rule
+    return out
+
+
+def query_resolver_rules_sharded(
+    project: str, edge_type: str, caller_shards: list[str]
+) -> dict[tuple[str, str, str], str]:
+    """Single-project sharded variant of query_resolver_rules.
+
+    Mirrors the sharding in `query_caller_node_kinds_sharded`. Used by
+    the Python fixture path. Keys use project-prefix-stripped QNs so
+    they match the Edge.match_key() form returned by
+    query_code_graph_edges.
+    """
+    out: dict[tuple[str, str, str], str] = {}
+    for shard in caller_shards:
+        cypher = (
+            f"MATCH (a)-[r:{edge_type}]->(b) "
+            f'WHERE a.qualified_name CONTAINS ".{shard}." '
+            f"RETURN a.qualified_name AS f, b.qualified_name AS t, "
+            f"r.resolver_rule AS rule LIMIT 100000"
+        )
+        rows = _run_cypher(project, cypher, max_rows=10000)
+        for r in rows:
+            if not isinstance(r, dict):
+                continue
+            f = r.get("f") or ""
+            t = r.get("t") or ""
+            rule = r.get("rule") or ""
+            if not (f and t and rule):
+                continue
+            out[(strip_project_prefix(f, project), strip_project_prefix(t, project), edge_type)] = rule
+    return out
+
+
 def _derive_caller_shards(oracle_edges: list[Edge]) -> list[str]:
     """Pull the set of top-level-dir prefixes from the oracle's callers.
 
@@ -509,10 +578,265 @@ def compute_caller_kind_metrics(
     }
 
 
+# Go stdlib package prefixes used to classify callee_package_relation.
+# A QN whose first dot-segment is one of these is a Go stdlib reference
+# (e.g. "fmt.Println", "strings.HasPrefix", "encoding/json.Marshal" —
+# only the bare-name form lands as a single segment, but the path-form
+# also lands here when the resolver emitted the import as the prefix).
+# Conservative list — covers the most common stdlib packages seen in
+# resolver output. False negatives just bucket as
+# cross-package-imported, which is fine.
+_GO_STDLIB_PREFIXES = frozenset({
+    "archive", "bufio", "builtin", "bytes", "cmp", "compress",
+    "container", "context", "crypto", "database", "debug", "embed",
+    "encoding", "errors", "expvar", "flag", "fmt", "go", "hash",
+    "html", "image", "index", "io", "iter", "log", "maps", "math",
+    "mime", "net", "os", "path", "plugin", "reflect", "regexp",
+    "runtime", "slices", "sort", "strconv", "strings", "structs",
+    "sync", "syscall", "testing", "text", "time", "unicode",
+    "unique", "unsafe",
+})
+
+
+def _package_prefix(qn: str) -> str:
+    """Return the package portion of a QN — everything up to the last
+    dot-segment, which is conventionally the symbol name.
+
+    For `proj.foo.bar.Func` returns `proj.foo.bar`; for `Func` (no
+    dots) returns "". Used to compare same-package vs cross-package.
+    """
+    idx = qn.rfind(".")
+    if idx < 0:
+        return ""
+    return qn[:idx]
+
+
+def _callee_package_relation(caller_qn: str, callee_qn: str) -> str:
+    """Classify the package-relationship between caller and callee.
+
+    Buckets:
+      same-package            — caller and callee share package prefix
+      cross-package-imported  — different packages, both project-internal
+      cross-package-stdlib    — callee's first segment matches a Go
+                                stdlib package
+      external-stub           — callee QN looks synthesized
+                                (no dots, OR matches an external pattern)
+      unknown                 — caller_qn or callee_qn missing
+
+    Step 4 of the 2026-05-02 plateau-2 plan. Derived at metric time
+    from the QN strings; not stored on the edge.
+    """
+    if not caller_qn or not callee_qn:
+        return "unknown"
+
+    # Stdlib check: callee's first dot-segment matches a known Go
+    # stdlib package. Catches both `fmt.Println` and richer paths
+    # like `encoding/json.Marshal` if the resolver collapses them.
+    callee_first = callee_qn.split(".", 1)[0] if "." in callee_qn else callee_qn
+    # Strip any path-style prefix (e.g. `encoding/json` → `encoding`)
+    callee_first_root = callee_first.split("/", 1)[0]
+    if callee_first_root in _GO_STDLIB_PREFIXES:
+        return "cross-package-stdlib"
+
+    # External-stub heuristic: callee QN with no dots is a bare name —
+    # typically a resolver synthesized stub or unresolved external. The
+    # CALLS_EXTERNAL modal classification covers most of these via
+    # resolver_rule = modal-external; the package-relation derivation
+    # is a fallback for callers that look at this dimension without
+    # the modal join.
+    if "." not in callee_qn:
+        return "external-stub"
+
+    caller_pkg = _package_prefix(caller_qn)
+    callee_pkg = _package_prefix(callee_qn)
+    if not caller_pkg or not callee_pkg:
+        return "unknown"
+    if caller_pkg == callee_pkg:
+        return "same-package"
+    return "cross-package-imported"
+
+
+def _gini(shares: list[float]) -> float:
+    """Compute the Gini coefficient of a non-negative share vector.
+
+    Uses the standard formula: G = sum_i sum_j |x_i - x_j| / (2*n*sum_i x_i).
+    Returns 0.0 for an empty or zero-sum vector. High Gini ≈ one share
+    dominates (concentration); low Gini ≈ shares spread evenly.
+    """
+    if not shares:
+        return 0.0
+    total = sum(shares)
+    if total <= 0:
+        return 0.0
+    n = len(shares)
+    if n == 1:
+        return 0.0
+    pair_sum = 0.0
+    for i in range(n):
+        for j in range(n):
+            pair_sum += abs(shares[i] - shares[j])
+    return pair_sum / (2 * n * total)
+
+
+def compute_modality_metrics(
+    tp_scoped: set[tuple[str, str, str]],
+    fp_scoped: set[tuple[str, str, str]],
+    resolver_rules: dict[tuple[str, str, str], str] | None,
+    caller_kinds: dict[tuple[str, str, str], str] | None = None,
+    projects: list[str] | None = None,
+) -> dict:
+    """Stratify scope-aligned precision by resolver_rule and joint
+    (caller_kind × callee_package_relation) cells.
+
+    Three signals (Step 4 of the 2026-05-02 plateau-2 plan):
+
+    1. modality_precision[rule]: for each rule with support >= 50 in
+       scope-aligned set, {tp, fp, precision, support}. Alarm fires on
+       precision < 0.6 AND support > 50 — a low-precision dominant
+       rule is the signal Step 2's LLM-Judge taxonomy predicts will
+       expose `cross_package_heuristic_overreach`.
+
+    2. modality_mix_gini: Gini coefficient of resolver-rule share,
+       computed per project. Reported as {project: gini_value, ...}.
+       High Gini = a project relies heavily on one rule
+       (concentration); low Gini = mix is spread out. Computed only
+       on the rule labels actually emitted; projects with empty
+       resolver-rule data return 0.0.
+
+    3. caller_context_tuple_precision[(caller_kind, callee_package_relation)]:
+       cells of the (caller_kind × callee_package_relation) table.
+       caller_kind comes from Step 3. callee_package_relation is
+       derived at metric time from caller_qn / callee_qn (values:
+       same-package, cross-package-imported, cross-package-stdlib,
+       external-stub, unknown). Cell: {tp, fp, precision, support},
+       only emitted when support >= 20.
+
+    If `resolver_rules` is None or empty, returns an empty dict and a
+    `note` field signaling the property isn't yet emitted (e.g. the
+    binary running this comparison predates the resolver change).
+    """
+    if not resolver_rules:
+        return {
+            "modality_precision": {},
+            "modality_mix_gini": {},
+            "caller_context_tuple_precision": {},
+            "modality_note": "resolver_rule not yet emitted by the indexed binary; metrics skipped.",
+        }
+
+    # 1. Per-rule precision from TPs and FPs.
+    by_rule_tp: dict[str, int] = defaultdict(int)
+    by_rule_fp: dict[str, int] = defaultdict(int)
+    for k in tp_scoped:
+        rule = resolver_rules.get(k, "unknown")
+        by_rule_tp[rule] += 1
+    for k in fp_scoped:
+        rule = resolver_rules.get(k, "unknown")
+        by_rule_fp[rule] += 1
+
+    per_rule: dict[str, dict] = {}
+    rule_alarms: list[str] = []
+    for rule in sorted(set(by_rule_tp) | set(by_rule_fp)):
+        tp = by_rule_tp[rule]
+        fp = by_rule_fp[rule]
+        support = tp + fp
+        if support < 50:
+            continue
+        precision = tp / support if support else 0.0
+        cell = {
+            "tp": tp,
+            "fp": fp,
+            "precision": round(precision, 4),
+            "support": support,
+        }
+        if support > 50 and precision < 0.6:
+            cell["alarm"] = True
+            rule_alarms.append(rule)
+        per_rule[rule] = cell
+
+    # 2. Per-project Gini of resolver-rule mix. Project membership is
+    #    inferred from QN prefix (caller QN's first segment when keys
+    #    use full project-prefixed form, OR all-keys-as-one when
+    #    `projects` is None or empty). The harness passes `projects`
+    #    when it has the multi-project key form (Rust/Go subsets).
+    gini_by_project: dict[str, float] = {}
+    population = tp_scoped | fp_scoped
+    if projects:
+        for project in projects:
+            prefix = project + "."
+            project_rules: list[str] = []
+            for k in population:
+                caller = k[0]
+                if caller.startswith(prefix):
+                    rule = resolver_rules.get(k)
+                    if rule:
+                        project_rules.append(rule)
+            counts: dict[str, int] = defaultdict(int)
+            for r in project_rules:
+                counts[r] += 1
+            shares = [float(c) for c in counts.values()]
+            gini_by_project[project] = round(_gini(shares), 4)
+    else:
+        # No project list provided — compute one Gini for the whole
+        # population. Used by Python fixture path where keys are
+        # already project-prefix-stripped.
+        all_rules = [
+            resolver_rules[k] for k in population if k in resolver_rules
+        ]
+        counts = defaultdict(int)
+        for r in all_rules:
+            counts[r] += 1
+        shares = [float(c) for c in counts.values()]
+        gini_by_project["__all__"] = round(_gini(shares), 4)
+
+    # 3. (caller_kind, callee_package_relation) tuple precision.
+    #    caller_kinds may be None — in that case the caller_kind axis
+    #    becomes "unknown" for all cells, which is still actionable.
+    by_tuple_tp: dict[tuple[str, str], int] = defaultdict(int)
+    by_tuple_fp: dict[tuple[str, str], int] = defaultdict(int)
+    for k in tp_scoped:
+        kind = (caller_kinds or {}).get(k, "unknown")
+        relation = _callee_package_relation(k[0], k[1])
+        by_tuple_tp[(kind, relation)] += 1
+    for k in fp_scoped:
+        kind = (caller_kinds or {}).get(k, "unknown")
+        relation = _callee_package_relation(k[0], k[1])
+        by_tuple_fp[(kind, relation)] += 1
+
+    tuple_cells: dict[str, dict] = {}
+    for cell_key in sorted(set(by_tuple_tp) | set(by_tuple_fp)):
+        tp = by_tuple_tp[cell_key]
+        fp = by_tuple_fp[cell_key]
+        support = tp + fp
+        if support < 20:
+            continue
+        precision = tp / support if support else 0.0
+        # JSON-friendly key: "kind|relation". Tuple keys don't survive
+        # json.dumps; this stringification keeps the report readable.
+        tuple_cells[f"{cell_key[0]}|{cell_key[1]}"] = {
+            "caller_kind": cell_key[0],
+            "callee_package_relation": cell_key[1],
+            "tp": tp,
+            "fp": fp,
+            "precision": round(precision, 4),
+            "support": support,
+        }
+
+    out: dict = {
+        "modality_precision": per_rule,
+        "modality_mix_gini": gini_by_project,
+        "caller_context_tuple_precision": tuple_cells,
+    }
+    if rule_alarms:
+        out["modality_alarms"] = rule_alarms
+    return out
+
+
 def compute_metrics(
     oracle: list[Edge],
     measured: list[Edge],
     caller_kinds: dict[tuple[str, str, str], str] | None = None,
+    resolver_rules: dict[tuple[str, str, str], str] | None = None,
+    modality_projects: list[str] | None = None,
 ) -> dict:
     oracle_exact = {e.match_key() for e in oracle}
     measured_exact = {e.match_key() for e in measured}
@@ -607,6 +931,15 @@ def compute_metrics(
         tp_scoped, fp_scoped, fn_scoped, caller_kinds
     )
 
+    # Modality stratification (Step 4 of plateau-2 plan, 2026-05-02).
+    # Three new metrics: per-rule precision, per-project Gini of rule
+    # mix, and joint (caller_kind × callee_package_relation) cells.
+    # compute_modality_metrics handles the "feature not yet emitted"
+    # case identically. See compute_modality_metrics for the full spec.
+    modality_metrics = compute_modality_metrics(
+        tp_scoped, fp_scoped, resolver_rules, caller_kinds, modality_projects
+    )
+
     return {
         "oracle_count": len(oracle),
         "measured_count": len(measured),
@@ -628,6 +961,7 @@ def compute_metrics(
         "fp_scoped_full": sorted(fp_scoped),
         "fn_scoped_full": sorted(fn_scoped),
         **caller_kind_metrics,
+        **modality_metrics,
     }
 
 
@@ -677,9 +1011,10 @@ def compare_fixture(fixture_id: str) -> tuple[dict, Path, Path]:
             # dict if the indexed binary predates the resolver change
             # (compute_caller_kind_metrics handles that).
             caller_kinds_calls = query_caller_node_kinds_sharded(single_project, "CALLS", shards)
+            resolver_rules_calls = query_resolver_rules_sharded(single_project, "CALLS", shards)
             results["CALLS"] = {
                 "oracle": "pycg",
-                **compute_metrics(oracle_calls, measured_calls, caller_kinds_calls),
+                **compute_metrics(oracle_calls, measured_calls, caller_kinds_calls, resolver_rules_calls),
                 "modal_split": {
                     "real_only": {
                         "measured_count": len(measured_calls),
@@ -745,10 +1080,14 @@ def compare_fixture(fixture_id: str) -> tuple[dict, Path, Path]:
             oracle_calls = [e for e in read_edges(rust_cache) if e.type == "CALLS"]
             measured_calls = query_edges_multi_project(projects, "CALLS")
             caller_kinds_calls = query_caller_node_kinds(projects, "CALLS")
+            resolver_rules_calls = query_resolver_rules(projects, "CALLS")
             results["CALLS"] = {
                 "oracle": "syn",
                 "per_project": compute_per_project_metrics(oracle_calls, measured_calls, projects),
-                **compute_metrics(oracle_calls, measured_calls, caller_kinds_calls),
+                **compute_metrics(
+                    oracle_calls, measured_calls, caller_kinds_calls,
+                    resolver_rules_calls, modality_projects=projects,
+                ),
             }
             oracle_imports = [e for e in read_edges(rust_cache) if e.type == "IMPORTS"]
             # NOTE: Rust oracle drops IMPORTS by design (see oracle_rust_syn.py
@@ -785,10 +1124,14 @@ def compare_fixture(fixture_id: str) -> tuple[dict, Path, Path]:
             measured_calls = query_edges_multi_project(projects, "CALLS")
             measured_imports = query_edges_multi_project(projects, "IMPORTS")
             caller_kinds_calls = query_caller_node_kinds(projects, "CALLS")
+            resolver_rules_calls = query_resolver_rules(projects, "CALLS")
             results["CALLS"] = {
                 "oracle": oracle_tag,
                 "per_project": compute_per_project_metrics(oracle_calls, measured_calls, projects),
-                **compute_metrics(oracle_calls, measured_calls, caller_kinds_calls),
+                **compute_metrics(
+                    oracle_calls, measured_calls, caller_kinds_calls,
+                    resolver_rules_calls, modality_projects=projects,
+                ),
             }
             if oracle_imports:
                 results["IMPORTS"] = {

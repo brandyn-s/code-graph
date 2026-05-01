@@ -283,6 +283,11 @@ func (p *Pipeline) runGoLSPCrossFileResolution(ext *cachedExtraction, moduleQN, 
 // LSP-resolved edges always carry edgeType="CALLS"; the kind branches on
 // the caller's registry label. registry may be nil in tests; callers
 // then receive CallerKindUnknown which is the safe fallback.
+//
+// resolver_rule (added Step 4, 2026-05-02 plateau-2 plan) is derived from
+// the LSP strategy string via resolverRuleFromLSPStrategy. Modal upgrades
+// (CALLS → CALLS_EXTERNAL on stub targets) happen later in
+// buildEdgesFromResults and override the original rule there.
 func collectLSPResolvedEdges(resolvedCalls []cbm.ResolvedCall, registry *FunctionRegistry) (edges []resolvedEdge, lspCallerMethods map[string]bool) {
 	lspResolved := make(map[string]bool)
 	lspCallerMethods = make(map[string]bool)
@@ -305,6 +310,7 @@ func collectLSPResolvedEdges(resolvedCalls []cbm.ResolvedCall, registry *Functio
 				"confidence_band":     confidenceBand(float64(rc.Confidence)),
 				"resolution_strategy": rc.Strategy,
 				"caller_node_kind":    callerKindFromContext(rc.CallerQN, "CALLS", registry),
+				"resolver_rule":       resolverRuleFromLSPStrategy(rc.Strategy),
 			},
 		})
 
@@ -357,18 +363,30 @@ func (p *Pipeline) resolveCallEdge(
 	// label lookup. See caller_kind.go for the decision rules.
 	callerKind := callerKindFromContext(callerQN, edgeType, p.registry)
 
+	// resolver_rule classifies WHICH resolver pathway emitted this edge.
+	// CALLS_PSEUDO is the dominant modal classification — it overrides
+	// any underlying registry/type-dispatch rule. Each non-pseudo emit
+	// branch picks its own rule from the resolver-rule taxonomy in
+	// resolver_rule.go. Step 4 of the 2026-05-02 plateau-2 plan.
+	pseudoRule := edgeType == "CALLS_PSEUDO"
+
 	// Python self.method() resolution
 	if strings.HasPrefix(calleeName, "self.") {
 		classQN := extractClassFromMethodQN(callerQN)
 		if classQN != "" {
 			candidate := classQN + "." + calleeName[5:]
 			if p.registry.Exists(candidate) {
+				rule := ResolverRuleSelfMethod
+				if pseudoRule {
+					rule = ResolverRuleModalPseudo
+				}
 				return resolvedEdge{
 					CallerQN: callerQN,
 					TargetQN: candidate,
 					Type:     edgeType,
 					Properties: map[string]any{
 						"caller_node_kind": callerKind,
+						"resolver_rule":    rule,
 					},
 				}, true
 			}
@@ -379,6 +397,10 @@ func (p *Pipeline) resolveCallEdge(
 	result := p.resolveCallWithTypes(calleeName, moduleQN, importMap, typeMap)
 	if result.QualifiedName == "" {
 		if fuzzyResult, ok := p.registry.FuzzyResolve(calleeName, moduleQN, importMap); ok && fuzzyResult.Confidence >= 0.10 {
+			rule := ResolverRuleFuzzyResolve
+			if pseudoRule {
+				rule = ResolverRuleModalPseudo
+			}
 			return resolvedEdge{
 				CallerQN: callerQN,
 				TargetQN: fuzzyResult.QualifiedName,
@@ -388,6 +410,7 @@ func (p *Pipeline) resolveCallEdge(
 					"confidence_band":     confidenceBand(fuzzyResult.Confidence),
 					"resolution_strategy": fuzzyResult.Strategy,
 					"caller_node_kind":    callerKind,
+					"resolver_rule":       rule,
 				},
 			}, true
 		}
@@ -396,6 +419,10 @@ func (p *Pipeline) resolveCallEdge(
 
 	if result.Confidence < 0.10 {
 		return resolvedEdge{}, false
+	}
+	rule := resolverRuleFromRegistryStrategy(result.Strategy)
+	if pseudoRule {
+		rule = ResolverRuleModalPseudo
 	}
 	return resolvedEdge{
 		CallerQN: callerQN,
@@ -406,6 +433,7 @@ func (p *Pipeline) resolveCallEdge(
 			"confidence_band":     confidenceBand(result.Confidence),
 			"resolution_strategy": result.Strategy,
 			"caller_node_kind":    callerKind,
+			"resolver_rule":       rule,
 		},
 	}, true
 }

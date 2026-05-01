@@ -1743,11 +1743,18 @@ func buildEdgesFromResults(results [][]resolvedEdge, qnToID map[string]int64, la
 			}
 
 			edgeType := re.Type
+			// resolverRuleUpgrade tracks whether the modal-classification
+			// override (Step 4, 2026-05-02 plateau-2) needs to overwrite
+			// the resolver_rule property. Set when CALLS upgrades to
+			// CALLS_EXTERNAL on a stub target. CALLS_PSEUDO already has
+			// modal-pseudo set at resolve time.
+			var resolverRuleUpgrade string
 
 			// Stub-target classification (CALLS_EXTERNAL upgrade).
 			if (edgeType == "CALLS" || edgeType == "CALLS_PSEUDO") && stubQNs[re.TargetQN] {
 				if edgeType == "CALLS" {
 					edgeType = "CALLS_EXTERNAL"
+					resolverRuleUpgrade = ResolverRuleModalExternal
 				}
 				// CALLS_PSEUDO + stub target: keep PSEUDO as dominant tag,
 				// flag external in properties below.
@@ -1771,6 +1778,12 @@ func buildEdgesFromResults(results [][]resolvedEdge, qnToID map[string]int64, la
 					props = map[string]any{}
 				}
 				props["external"] = true
+			}
+			if resolverRuleUpgrade != "" {
+				if props == nil {
+					props = map[string]any{}
+				}
+				props["resolver_rule"] = resolverRuleUpgrade
 			}
 
 			edges = append(edges, &store.Edge{

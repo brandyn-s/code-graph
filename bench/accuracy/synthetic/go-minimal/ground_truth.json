@@ -16,5 +16,24 @@
     "expected_kinds_present": ["function-body"],
     "rationale": "Every caller is a free function body — no methods, no tests, no init(), no package-level var initializers, no closures. The kinds_present check is asserted by check_go_minimal_caller_kind.py against whatever sanitized-path QN form the indexer chooses; the kind property is what the gate verifies. Acts as the prove-the-instrument gate per verify-effectiveness.md before publishing real-fixture caller-kind metrics."
   },
-  "notes": "5 internal CALLS, 1 internal IMPORTS. RTA resolves interface methods; we don't have any interfaces so RTA = CHA = static here. External imports (none explicit) excluded. The expected_internal_calls QNs use Go-import-path form for human readability; code-graph emits sanitized-path form (c-Users-...) — equivalent edges, different string representation. Gate asserts on caller_node_kind property, not on the QN form."
+  "expected_resolver_rule_invariants": {
+    "every_edge_has_resolver_rule": true,
+    "expected_rules_subset": [
+      "same-package-shadow",
+      "cross-package-heuristic",
+      "exact-qn-match",
+      "receiver-qualified",
+      "interface-dispatch"
+    ],
+    "forbidden_rules": [
+      "fuzzy-resolve",
+      "unresolved-emitted",
+      "unknown",
+      "modal-pseudo",
+      "package-block-fallback"
+    ],
+    "modality_mix_gini_finite": true,
+    "rationale": "Every edge is a free-function call, no init(), no closures, no test bodies. The 4 same-package edges (entry->leaf, leaf->helper, main->entry, helpers.Greet->helpers.innerGreet) must classify as same-package-shadow (registry same_module strategy) or an LSP-resolved variant. The 1 cross-package edge (entry->helpers.Greet) must classify as one of the cross-package-heuristic family OR an LSP-resolved variant (exact-qn-match / receiver-qualified / interface-dispatch) depending on which pathway resolved it. fuzzy-resolve / unresolved-emitted / unknown indicate a resolver failure; modal-pseudo would mean the caller scope was lost; package-block-fallback is unused in current paths. Step 4 prove-the-instrument gate per verify-effectiveness.md."
+  },
+  "notes": "5 internal CALLS, 1 internal IMPORTS. RTA resolves interface methods; we don't have any interfaces so RTA = CHA = static here. External imports (none explicit) excluded. The expected_internal_calls QNs use Go-import-path form for human readability; code-graph emits sanitized-path form (c-Users-...) — equivalent edges, different string representation. Gates assert on caller_node_kind / resolver_rule properties, not on the QN form."
 }

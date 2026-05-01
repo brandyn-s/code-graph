@@ -411,6 +411,29 @@ func (s *Store) initSchema() error {
 	}
 	_, _ = s.db.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_edges_caller_node_kind ON edges(project, caller_node_kind_gen)`)
 
+	// Migration: add resolver_rule generated column to edges. Reads the
+	// "resolver_rule" key out of properties JSON (populated by the
+	// resolver — see internal/pipeline/resolver_rule.go for the
+	// taxonomy and emit-site mapping). NULL on pre-migration rows; new
+	// rows always populate when the edge is a CALLS-family emission.
+	// Lets bench/accuracy/compare.py stratify precision by resolver
+	// pathway (cross-package-heuristic, fuzzy-resolve, etc.) without
+	// scanning the JSON blob.
+	//
+	// Index on (project, resolver_rule_gen) keeps per-rule precision
+	// queries cheap — typical access pattern is "how many CALLS edges
+	// in project X have resolver_rule = 'cross-package-heuristic'?".
+	// Step 4 of the 2026-05-02 plateau-2 plan.
+	var rrCol int
+	_ = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM pragma_table_xinfo('edges') WHERE name='resolver_rule_gen'`).Scan(&rrCol)
+	if rrCol == 0 {
+		_, err = s.db.ExecContext(ctx, `ALTER TABLE edges ADD COLUMN resolver_rule_gen TEXT GENERATED ALWAYS AS (json_extract(properties, '$.resolver_rule'))`)
+		if err != nil {
+			slog.Warn("schema.resolver_rule_gen.skip", "err", err)
+		}
+	}
+	_, _ = s.db.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_edges_resolver_rule ON edges(project, resolver_rule_gen)`)
+
 	// Migration: add mtime_ns and size columns to file_hashes for stat pre-filtering.
 	var mtimeCol int
 	_ = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM pragma_table_xinfo('file_hashes') WHERE name='mtime_ns'`).Scan(&mtimeCol)

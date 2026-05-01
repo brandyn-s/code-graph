@@ -357,6 +357,86 @@ def query_resolver_rules_sharded(
     return out
 
 
+def query_candidate_sets(
+    projects: list[str], edge_type: str
+) -> dict[tuple[str, str, str], int]:
+    """Return a (from_qn, to_qn, type) -> candidate_set_size map for `edge_type`.
+
+    Reads `candidate_set_size` out of edge properties (populated by the
+    resolver — see internal/pipeline/candidate_set.go). Edges from
+    indexes that predate the property always return NULL via
+    json_extract; we filter those out so callers can detect "feature
+    not yet emitted" by getting an empty dict back.
+
+    Multi-project flavor for Rust/Go subset fixtures. The keys use
+    full project-prefixed QNs to match `query_edges_multi_project`'s
+    output exactly.
+
+    Step 5 of the 2026-05-02 plateau-2 plan. Used by compute_metrics
+    to stratify precision by call-site ambiguity (Janusian split).
+    """
+    out: dict[tuple[str, str, str], int] = {}
+    for project in projects:
+        cypher = (
+            f"MATCH (a)-[r:{edge_type}]->(b) "
+            f"RETURN a.qualified_name AS f, b.qualified_name AS t, "
+            f"r.candidate_set_size AS size LIMIT 100000"
+        )
+        rows = _run_cypher(project, cypher, max_rows=10000)
+        for r in rows:
+            if not isinstance(r, dict):
+                continue
+            f = r.get("f") or ""
+            t = r.get("t") or ""
+            size = r.get("size")
+            # NULL/None — pre-migration row OR an emit path that didn't
+            # populate the property; skip so callers can detect "not yet
+            # emitted." Keep 0 / -1 sentinels (resolver-bug or
+            # explicit-unknown signals) so the harness can surface them.
+            if not (f and t) or size is None:
+                continue
+            try:
+                size_int = int(size)
+            except (TypeError, ValueError):
+                continue
+            out[(f, t, edge_type)] = size_int
+    return out
+
+
+def query_candidate_sets_sharded(
+    project: str, edge_type: str, caller_shards: list[str]
+) -> dict[tuple[str, str, str], int]:
+    """Single-project sharded variant of query_candidate_sets.
+
+    Mirrors the sharding in `query_resolver_rules_sharded`. Used by the
+    Python fixture path. Keys use project-prefix-stripped QNs so they
+    match the Edge.match_key() form returned by query_code_graph_edges.
+    """
+    out: dict[tuple[str, str, str], int] = {}
+    for shard in caller_shards:
+        cypher = (
+            f"MATCH (a)-[r:{edge_type}]->(b) "
+            f'WHERE a.qualified_name CONTAINS ".{shard}." '
+            f"RETURN a.qualified_name AS f, b.qualified_name AS t, "
+            f"r.candidate_set_size AS size LIMIT 100000"
+        )
+        rows = _run_cypher(project, cypher, max_rows=10000)
+        for r in rows:
+            if not isinstance(r, dict):
+                continue
+            f = r.get("f") or ""
+            t = r.get("t") or ""
+            size = r.get("size")
+            if not (f and t) or size is None:
+                continue
+            try:
+                size_int = int(size)
+            except (TypeError, ValueError):
+                continue
+            out[(strip_project_prefix(f, project), strip_project_prefix(t, project), edge_type)] = size_int
+    return out
+
+
 def _derive_caller_shards(oracle_edges: list[Edge]) -> list[str]:
     """Pull the set of top-level-dir prefixes from the oracle's callers.
 
@@ -831,12 +911,165 @@ def compute_modality_metrics(
     return out
 
 
+# Threshold at which a call site is considered "Janusian" (ambiguous).
+# A site with >= 2 candidates is one where the resolver picked among
+# alternatives — Step 2's LLM-Judge taxonomy predicts these are where
+# same_named_method_disambiguation FPs concentrate.
+JANUSIAN_AMBIGUITY_THRESHOLD = 2
+
+
+def compute_ambiguity_metrics(
+    tp_scoped: set[tuple[str, str, str]],
+    fp_scoped: set[tuple[str, str, str]],
+    candidate_sets: dict[tuple[str, str, str], int] | None,
+    projects: list[str] | None = None,
+) -> dict:
+    """Stratify scope-aligned precision by call-site Janusian ambiguity.
+
+    Two signals (Step 5 of the 2026-05-02 plateau-2 plan):
+
+    1. method_set_ambiguity_index[project]: share of distinct call sites
+       in the scope-aligned (TPs ∪ FPs) population whose candidate-set
+       size >= JANUSIAN_AMBIGUITY_THRESHOLD (=2). Reported per-project
+       when `projects` is supplied; otherwise reported as a single
+       "__all__" key (Python fixture path uses the latter).
+
+       A "call site" is identified by the caller QN (k[0] of an edge
+       key). Multiple emitted edges from the same site collapse to one
+       site for the index — though today the resolver is single-target
+       so this is rarely consequential.
+
+    2. janusian_site_precision_split: precision conditional on whether
+       the call site was Janusian. {"ambiguous": {...}, "unambiguous":
+       {...}}, each cell with {tp, fp, precision, support}. Hypothesis
+       under test: P_ambiguous << P_unambiguous on store; the gap is
+       much smaller on cbm. If true, the residual collapse on store is
+       a Janusian-ambiguity signal.
+
+    If `candidate_sets` is None or empty, returns an empty dict and a
+    `note` field signaling the property isn't yet emitted (e.g. the
+    binary running this comparison predates the resolver change).
+    """
+    if not candidate_sets:
+        return {
+            "method_set_ambiguity_index": {},
+            "janusian_site_precision_split": {},
+            "ambiguity_note": (
+                "candidate_set_size not yet emitted by the indexed binary; "
+                "metrics skipped."
+            ),
+        }
+
+    # 1. method_set_ambiguity_index per project.
+    #    Site identity: caller QN (k[0]). A site is "Janusian" if ANY of
+    #    its emitted edges has size >= threshold; in practice the resolver
+    #    emits one edge per site so this collapses to a per-edge check
+    #    grouped by caller. Caller-QN granularity is intentionally
+    #    permissive: if a single function has ten call sites and one of
+    #    them is ambiguous, the function is one Janusian site for the
+    #    index. Coarser than per-call-site, but the harness can't
+    #    distinguish individual call sites without (file, line, col)
+    #    metadata which the edge doesn't carry.
+    population = tp_scoped | fp_scoped
+
+    def _ambiguity_index_for_keys(keys: set) -> tuple[float, int, int]:
+        """Return (index, ambiguous_sites, total_sites) for a key subset."""
+        site_max: dict[str, int] = {}
+        for k in keys:
+            caller = k[0]
+            size = candidate_sets.get(k)
+            if size is None or size < 1:
+                continue
+            if size > site_max.get(caller, 0):
+                site_max[caller] = size
+        total = len(site_max)
+        if total == 0:
+            return 0.0, 0, 0
+        ambiguous = sum(1 for v in site_max.values() if v >= JANUSIAN_AMBIGUITY_THRESHOLD)
+        return round(ambiguous / total, 4), ambiguous, total
+
+    index_by_project: dict[str, dict] = {}
+    if projects:
+        for project in projects:
+            prefix = project + "."
+            project_keys = {k for k in population if k[0].startswith(prefix)}
+            value, amb, total = _ambiguity_index_for_keys(project_keys)
+            index_by_project[project] = {
+                "value": value,
+                "ambiguous_sites": amb,
+                "total_sites": total,
+            }
+    else:
+        # Python fixture path / single-project path: one bucket.
+        value, amb, total = _ambiguity_index_for_keys(population)
+        index_by_project["__all__"] = {
+            "value": value,
+            "ambiguous_sites": amb,
+            "total_sites": total,
+        }
+
+    # 2. janusian_site_precision_split: precision conditional on
+    #    candidate_set_size bucket (ambiguous vs unambiguous). Cell
+    #    granularity is per-EDGE (not per-site) because TP/FP is
+    #    defined at edge level — an edge is a TP iff it's in the
+    #    oracle set; the candidate-set-size of that edge tells us
+    #    whether its emit was Janusian.
+    bucket_tp: dict[str, int] = {"ambiguous": 0, "unambiguous": 0}
+    bucket_fp: dict[str, int] = {"ambiguous": 0, "unambiguous": 0}
+
+    def _bucket_for(k) -> str | None:
+        size = candidate_sets.get(k)
+        if size is None or size < 1:
+            return None
+        return "ambiguous" if size >= JANUSIAN_AMBIGUITY_THRESHOLD else "unambiguous"
+
+    for k in tp_scoped:
+        b = _bucket_for(k)
+        if b is not None:
+            bucket_tp[b] += 1
+    for k in fp_scoped:
+        b = _bucket_for(k)
+        if b is not None:
+            bucket_fp[b] += 1
+
+    split: dict[str, dict] = {}
+    for bucket in ("ambiguous", "unambiguous"):
+        tp = bucket_tp[bucket]
+        fp = bucket_fp[bucket]
+        support = tp + fp
+        precision = tp / support if support else 0.0
+        split[bucket] = {
+            "tp": tp,
+            "fp": fp,
+            "precision": round(precision, 4),
+            "support": support,
+        }
+
+    out: dict = {
+        "method_set_ambiguity_index": index_by_project,
+        "janusian_site_precision_split": split,
+    }
+
+    # Diagnostic gap: the predicted Janusian signal is precision on
+    # ambiguous sites significantly LOWER than on unambiguous. Surface
+    # the gap as a derived field so the report doesn't require manual
+    # subtraction. Negative gap (ambiguous > unambiguous precision)
+    # would be evidence against the Step 2 hypothesis.
+    if split["ambiguous"]["support"] > 0 and split["unambiguous"]["support"] > 0:
+        out["janusian_precision_gap"] = round(
+            split["unambiguous"]["precision"] - split["ambiguous"]["precision"], 4
+        )
+
+    return out
+
+
 def compute_metrics(
     oracle: list[Edge],
     measured: list[Edge],
     caller_kinds: dict[tuple[str, str, str], str] | None = None,
     resolver_rules: dict[tuple[str, str, str], str] | None = None,
     modality_projects: list[str] | None = None,
+    candidate_sets: dict[tuple[str, str, str], int] | None = None,
 ) -> dict:
     oracle_exact = {e.match_key() for e in oracle}
     measured_exact = {e.match_key() for e in measured}
@@ -940,6 +1173,15 @@ def compute_metrics(
         tp_scoped, fp_scoped, resolver_rules, caller_kinds, modality_projects
     )
 
+    # Janusian ambiguity stratification (Step 5 of plateau-2 plan,
+    # 2026-05-02). Two new metrics: method_set_ambiguity_index per
+    # project and precision split conditional on call-site ambiguity.
+    # See compute_ambiguity_metrics for the full spec. Handles the
+    # "feature not yet emitted" case identically to Step 3/4 metrics.
+    ambiguity_metrics = compute_ambiguity_metrics(
+        tp_scoped, fp_scoped, candidate_sets, modality_projects
+    )
+
     return {
         "oracle_count": len(oracle),
         "measured_count": len(measured),
@@ -962,6 +1204,7 @@ def compute_metrics(
         "fn_scoped_full": sorted(fn_scoped),
         **caller_kind_metrics,
         **modality_metrics,
+        **ambiguity_metrics,
     }
 
 
@@ -1012,9 +1255,13 @@ def compare_fixture(fixture_id: str) -> tuple[dict, Path, Path]:
             # (compute_caller_kind_metrics handles that).
             caller_kinds_calls = query_caller_node_kinds_sharded(single_project, "CALLS", shards)
             resolver_rules_calls = query_resolver_rules_sharded(single_project, "CALLS", shards)
+            candidate_sets_calls = query_candidate_sets_sharded(single_project, "CALLS", shards)
             results["CALLS"] = {
                 "oracle": "pycg",
-                **compute_metrics(oracle_calls, measured_calls, caller_kinds_calls, resolver_rules_calls),
+                **compute_metrics(
+                    oracle_calls, measured_calls, caller_kinds_calls,
+                    resolver_rules_calls, candidate_sets=candidate_sets_calls,
+                ),
                 "modal_split": {
                     "real_only": {
                         "measured_count": len(measured_calls),
@@ -1081,12 +1328,14 @@ def compare_fixture(fixture_id: str) -> tuple[dict, Path, Path]:
             measured_calls = query_edges_multi_project(projects, "CALLS")
             caller_kinds_calls = query_caller_node_kinds(projects, "CALLS")
             resolver_rules_calls = query_resolver_rules(projects, "CALLS")
+            candidate_sets_calls = query_candidate_sets(projects, "CALLS")
             results["CALLS"] = {
                 "oracle": "syn",
                 "per_project": compute_per_project_metrics(oracle_calls, measured_calls, projects),
                 **compute_metrics(
                     oracle_calls, measured_calls, caller_kinds_calls,
                     resolver_rules_calls, modality_projects=projects,
+                    candidate_sets=candidate_sets_calls,
                 ),
             }
             oracle_imports = [e for e in read_edges(rust_cache) if e.type == "IMPORTS"]
@@ -1125,12 +1374,14 @@ def compare_fixture(fixture_id: str) -> tuple[dict, Path, Path]:
             measured_imports = query_edges_multi_project(projects, "IMPORTS")
             caller_kinds_calls = query_caller_node_kinds(projects, "CALLS")
             resolver_rules_calls = query_resolver_rules(projects, "CALLS")
+            candidate_sets_calls = query_candidate_sets(projects, "CALLS")
             results["CALLS"] = {
                 "oracle": oracle_tag,
                 "per_project": compute_per_project_metrics(oracle_calls, measured_calls, projects),
                 **compute_metrics(
                     oracle_calls, measured_calls, caller_kinds_calls,
                     resolver_rules_calls, modality_projects=projects,
+                    candidate_sets=candidate_sets_calls,
                 ),
             }
             if oracle_imports:
@@ -1299,6 +1550,87 @@ def compare_fixture(fixture_id: str) -> tuple[dict, Path, Path]:
                     f"{comp.get('population_total', 0)})"
                 )
                 lines.append("")
+
+    # Janusian ambiguity stratification (Step 5 of the 2026-05-02
+    # plateau-2 plan). Each CALLS edge carries a `candidate_set_size`
+    # property — the resolver's pre-tie-break candidate cardinality at
+    # the call site. Aggregate F1 is blind to ambiguity; the per-bucket
+    # split surfaces whether precision collapses on multi-candidate
+    # ("Janusian") sites.
+    have_ambiguity = any(
+        res.get("method_set_ambiguity_index") or "janusian_site_precision_split" in res
+        for res in results.values()
+    )
+    if have_ambiguity:
+        lines.append("")
+        lines.append("## Janusian ambiguity stratified precision")
+        lines.append("")
+        lines.append(
+            "Each CALLS edge carries the resolver's pre-tie-break "
+            "candidate cardinality (`candidate_set_size`). A call site "
+            f"with >= {JANUSIAN_AMBIGUITY_THRESHOLD} candidates is "
+            "**Janusian** — the resolver picked among alternatives. "
+            "Step 2's LLM-Judge taxonomy predicted "
+            "`same_named_method_disambiguation` (60% of judged FPs) "
+            "concentrates on Janusian sites; the precision split below "
+            "tests that hypothesis on real-fixture data. LSP-resolved "
+            "edges carry size=1 by definition (LSP returns one target "
+            "without enumerating alternates), so the Janusian signal "
+            "lives in the registry strategies."
+        )
+        lines.append("")
+        for edge_type, res in results.items():
+            if res.get("status") in ("pending", "known_limitation"):
+                continue
+            mai = res.get("method_set_ambiguity_index")
+            split = res.get("janusian_site_precision_split")
+            if not (mai or split):
+                continue
+            lines.append(f"### {edge_type}")
+            lines.append("")
+            note = res.get("ambiguity_note")
+            if note:
+                lines.append(f"> Note: {note}")
+                lines.append("")
+                continue
+            if mai:
+                lines.append("**method_set_ambiguity_index** — share of call sites with >= 2 candidates:")
+                lines.append("")
+                lines.append("| Project | Ambiguous sites | Total sites | Index |")
+                lines.append("|---|---:|---:|---:|")
+                for project in sorted(mai):
+                    cell = mai[project]
+                    short = project.split("-")[-1] if "-" in project else project
+                    lines.append(
+                        f"| {short} | {cell.get('ambiguous_sites', 0)} | "
+                        f"{cell.get('total_sites', 0)} | "
+                        f"{cell.get('value', 0):.4f} |"
+                    )
+                lines.append("")
+            if split:
+                lines.append("**janusian_site_precision_split** — precision conditional on call-site ambiguity:")
+                lines.append("")
+                lines.append("| Bucket | TP | FP | Precision | Support |")
+                lines.append("|---|---:|---:|---:|---:|")
+                for bucket in ("ambiguous", "unambiguous"):
+                    cell = split.get(bucket, {})
+                    lines.append(
+                        f"| `{bucket}` | {cell.get('tp', 0)} | "
+                        f"{cell.get('fp', 0)} | "
+                        f"{cell.get('precision', 0):.4f} | "
+                        f"{cell.get('support', 0)} |"
+                    )
+                lines.append("")
+                gap = res.get("janusian_precision_gap")
+                if gap is not None:
+                    lines.append(
+                        f"**janusian_precision_gap** "
+                        f"(unambiguous − ambiguous precision): {gap:+.4f}. "
+                        f"Positive = unambiguous sites resolve more accurately, "
+                        f"consistent with Step 2's prediction. Negative or "
+                        f"near-zero = ambiguity is not the dominant FP driver."
+                    )
+                    lines.append("")
 
     lines.append("")
     # Modal split for CALLS-family edges (real / external / pseudo)

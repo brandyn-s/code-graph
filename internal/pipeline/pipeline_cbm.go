@@ -288,6 +288,13 @@ func (p *Pipeline) runGoLSPCrossFileResolution(ext *cachedExtraction, moduleQN, 
 // the LSP strategy string via resolverRuleFromLSPStrategy. Modal upgrades
 // (CALLS → CALLS_EXTERNAL on stub targets) happen later in
 // buildEdgesFromResults and override the original rule there.
+//
+// candidate_set_size (added Step 5, 2026-05-02 plateau-2 plan) is the
+// pre-tie-break candidate cardinality. LSP returns one definite target
+// per call site without enumerating alternates, so LSP-resolved edges
+// carry size=1 by definition (CandidateSetSizeLSPDefault). The Janusian
+// signal lives in the registry/type-dispatch paths in resolveCallEdge.
+// See candidate_set.go for the rationale.
 func collectLSPResolvedEdges(resolvedCalls []cbm.ResolvedCall, registry *FunctionRegistry) (edges []resolvedEdge, lspCallerMethods map[string]bool) {
 	lspResolved := make(map[string]bool)
 	lspCallerMethods = make(map[string]bool)
@@ -306,11 +313,12 @@ func collectLSPResolvedEdges(resolvedCalls []cbm.ResolvedCall, registry *Functio
 			TargetQN: rc.CalleeQN,
 			Type:     "CALLS",
 			Properties: map[string]any{
-				"confidence":          float64(rc.Confidence),
-				"confidence_band":     confidenceBand(float64(rc.Confidence)),
-				"resolution_strategy": rc.Strategy,
-				"caller_node_kind":    callerKindFromContext(rc.CallerQN, "CALLS", registry),
-				"resolver_rule":       resolverRuleFromLSPStrategy(rc.Strategy),
+				"confidence":               float64(rc.Confidence),
+				"confidence_band":          confidenceBand(float64(rc.Confidence)),
+				"resolution_strategy":      rc.Strategy,
+				"caller_node_kind":         callerKindFromContext(rc.CallerQN, "CALLS", registry),
+				"resolver_rule":            resolverRuleFromLSPStrategy(rc.Strategy),
+				CandidateSetPropertyName:   CandidateSetSizeLSPDefault,
 			},
 		})
 
@@ -380,13 +388,16 @@ func (p *Pipeline) resolveCallEdge(
 				if pseudoRule {
 					rule = ResolverRuleModalPseudo
 				}
+				// self.method() is always a single-target resolution:
+				// the callee is the unique class+method pair. Size=1.
 				return resolvedEdge{
 					CallerQN: callerQN,
 					TargetQN: candidate,
 					Type:     edgeType,
 					Properties: map[string]any{
-						"caller_node_kind": callerKind,
-						"resolver_rule":    rule,
+						"caller_node_kind":       callerKind,
+						"resolver_rule":          rule,
+						CandidateSetPropertyName: 1,
 					},
 				}, true
 			}
@@ -406,11 +417,12 @@ func (p *Pipeline) resolveCallEdge(
 				TargetQN: fuzzyResult.QualifiedName,
 				Type:     edgeType,
 				Properties: map[string]any{
-					"confidence":          fuzzyResult.Confidence,
-					"confidence_band":     confidenceBand(fuzzyResult.Confidence),
-					"resolution_strategy": fuzzyResult.Strategy,
-					"caller_node_kind":    callerKind,
-					"resolver_rule":       rule,
+					"confidence":             fuzzyResult.Confidence,
+					"confidence_band":        confidenceBand(fuzzyResult.Confidence),
+					"resolution_strategy":    fuzzyResult.Strategy,
+					"caller_node_kind":       callerKind,
+					"resolver_rule":          rule,
+					CandidateSetPropertyName: candidateSetSizeFromResolution(fuzzyResult),
 				},
 			}, true
 		}
@@ -429,11 +441,12 @@ func (p *Pipeline) resolveCallEdge(
 		TargetQN: result.QualifiedName,
 		Type:     edgeType,
 		Properties: map[string]any{
-			"confidence":          result.Confidence,
-			"confidence_band":     confidenceBand(result.Confidence),
-			"resolution_strategy": result.Strategy,
-			"caller_node_kind":    callerKind,
-			"resolver_rule":       rule,
+			"confidence":             result.Confidence,
+			"confidence_band":        confidenceBand(result.Confidence),
+			"resolution_strategy":    result.Strategy,
+			"caller_node_kind":       callerKind,
+			"resolver_rule":          rule,
+			CandidateSetPropertyName: candidateSetSizeFromResolution(result),
 		},
 	}, true
 }

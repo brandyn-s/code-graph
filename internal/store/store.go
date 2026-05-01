@@ -434,6 +434,28 @@ func (s *Store) initSchema() error {
 	}
 	_, _ = s.db.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_edges_resolver_rule ON edges(project, resolver_rule_gen)`)
 
+	// Migration: add candidate_set_size_gen generated column to edges. Reads
+	// the "candidate_set_size" key out of properties JSON (populated by the
+	// resolver — see internal/pipeline/candidate_set.go for the rationale
+	// and emit-site mapping). NULL on pre-migration rows; new rows always
+	// populate when the edge is a CALLS-family emission.
+	//
+	// Lets bench/accuracy/compare.py stratify precision by call-site
+	// ambiguity (Janusian ambiguous vs unambiguous) without scanning the
+	// JSON blob. Index on (project, candidate_set_size_gen) keeps the
+	// per-bucket count queries cheap — typical access pattern is
+	// "how many CALLS edges in project X have candidate_set_size >= 2?".
+	// Step 5 of the 2026-05-02 plateau-2 plan.
+	var csCol int
+	_ = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM pragma_table_xinfo('edges') WHERE name='candidate_set_size_gen'`).Scan(&csCol)
+	if csCol == 0 {
+		_, err = s.db.ExecContext(ctx, `ALTER TABLE edges ADD COLUMN candidate_set_size_gen INTEGER GENERATED ALWAYS AS (json_extract(properties, '$.candidate_set_size'))`)
+		if err != nil {
+			slog.Warn("schema.candidate_set_size_gen.skip", "err", err)
+		}
+	}
+	_, _ = s.db.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_edges_candidate_set_size ON edges(project, candidate_set_size_gen)`)
+
 	// Migration: add mtime_ns and size columns to file_hashes for stat pre-filtering.
 	var mtimeCol int
 	_ = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM pragma_table_xinfo('file_hashes') WHERE name='mtime_ns'`).Scan(&mtimeCol)

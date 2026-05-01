@@ -8,6 +8,7 @@ permissions:
 
 jobs:
   lint:
+    if: github.repository_owner != 'redacted-brandyn'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -22,6 +23,7 @@ jobs:
           args: --timeout=5m
 
   test-unix:
+    if: github.repository_owner != 'redacted-brandyn'
     needs: [lint]
     strategy:
       matrix:
@@ -59,6 +61,7 @@ jobs:
         run: bash scripts/smoke-test.sh ./codebase-memory-mcp
 
   test-asan:
+    if: github.repository_owner != 'redacted-brandyn'
     needs: [lint]
     runs-on: ubuntu-latest
     steps:
@@ -78,6 +81,7 @@ jobs:
         run: go test -run TestMemoryStability -v -count=1 -timeout=5m ./internal/pipeline/
 
   test-windows:
+    if: github.repository_owner != 'redacted-brandyn'
     needs: [lint]
     runs-on: windows-latest
     steps:

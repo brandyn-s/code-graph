@@ -24,6 +24,7 @@ permissions:
 
 jobs:
   lint:
+    if: github.repository_owner != 'redacted-brandyn'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -38,6 +39,7 @@ jobs:
           args: --timeout=10m
 
   build-unix:
+    if: github.repository_owner != 'redacted-brandyn'
     needs: [lint]
     strategy:
       matrix:
@@ -88,6 +90,7 @@ jobs:
           path: "*.tar.gz"
 
   build-windows:
+    if: github.repository_owner != 'redacted-brandyn'
     needs: [lint]
     runs-on: windows-latest
     steps:
@@ -136,6 +139,7 @@ jobs:
           path: "*.zip"
 
   release:
+    if: github.repository_owner != 'redacted-brandyn'
     needs: [build-unix, build-windows]
     runs-on: ubuntu-latest
     permissions:

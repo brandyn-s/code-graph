@@ -34,6 +34,7 @@ permissions:
 
 jobs:
   accuracy:
+    if: github.repository_owner != 'redacted-brandyn'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:

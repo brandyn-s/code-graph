@@ -610,10 +610,32 @@ static size_t strip_ext_len(const char* s, size_t len) {
     return len;
 }
 
+// is_jsts_ext returns true when `ext` (including the leading dot) is a
+// JS/TS-family extension whose `index.<ext>` file should be treated as
+// a module index (segment stripped from QN). MUST stay aligned with
+// internal/fqn/fqn.go's `jsTsIndexExts` set.
+static bool is_jsts_ext(const char* ext, size_t ext_len) {
+    if (ext_len < 3) return false;
+    static const char* exts[] = {".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".mts", ".cts", NULL};
+    for (size_t i = 0; exts[i]; i++) {
+        size_t l = strlen(exts[i]);
+        if (l == ext_len && memcmp(ext, exts[i], l) == 0) return true;
+    }
+    return false;
+}
+
+// is_python_ext returns true when `ext` is `.py` (so __init__ stripping
+// only applies to actual Python sources, not e.g. a hypothetical
+// `__init__.go`).
+static bool is_python_ext(const char* ext, size_t ext_len) {
+    return ext_len == 3 && memcmp(ext, ".py", 3) == 0;
+}
+
 char* cbm_fqn_compute(CBMArena* a, const char* project, const char* rel_path, const char* name) {
     // Build: project.path1.path2.filename.name
     // where rel_path = "path1/path2/filename.ext"
-    // Strip extension, replace / with ., drop __init__ and index
+    // Strip extension, replace / with ., drop __init__ (Python only)
+    // and index (JS/TS only).
     size_t proj_len = strlen(project);
     size_t path_len = strlen(rel_path);
     size_t name_len = name ? strlen(name) : 0;
@@ -628,8 +650,13 @@ char* cbm_fqn_compute(CBMArena* a, const char* project, const char* rel_path, co
     out += proj_len;
 
     // Process path: strip extension, split by /, replace with dots
-    // Skip trailing extension
+    // Skip trailing extension. Capture the extension first so the
+    // language-scoped index/__init__ strips below stay correct.
     size_t plen = strip_ext_len(rel_path, path_len);
+    const char* ext_ptr = rel_path + plen;
+    size_t ext_len = path_len - plen;
+    bool jsts_ext = is_jsts_ext(ext_ptr, ext_len);
+    bool py_ext = is_python_ext(ext_ptr, ext_len);
 
     // Split by '/' and append each part as .part
     const char* start = rel_path;
@@ -640,12 +667,14 @@ char* cbm_fqn_compute(CBMArena* a, const char* project, const char* rel_path, co
         size_t part_len = (size_t)(part_end - start);
 
         if (part_len > 0) {
-            // Skip __init__ (Python) and index (JS/TS) if it's the last part
+            // Skip __init__ (Python only) and index (JS/TS only) if last part.
+            // Stripping these for other languages drops a real path segment
+            // (e.g. internal/tools/index.go's Methods would lose `.index.`).
             bool is_last = (part_end == end_ptr);
             bool skip = false;
             if (is_last) {
-                if (part_len == 8 && memcmp(start, "__init__", 8) == 0) skip = true;
-                if (part_len == 5 && memcmp(start, "index", 5) == 0) skip = true;
+                if (py_ext && part_len == 8 && memcmp(start, "__init__", 8) == 0) skip = true;
+                if (jsts_ext && part_len == 5 && memcmp(start, "index", 5) == 0) skip = true;
             }
             if (!skip) {
                 *out++ = '.';

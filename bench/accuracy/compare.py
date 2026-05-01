@@ -433,6 +433,14 @@ def compute_metrics(
         "sample_fn_exact": sorted(fn_exact)[:10],
         "sample_fp_scoped": sorted(fp_scoped)[:10],
         "sample_fn_scoped": sorted(fn_scoped)[:10],
+        # Full FP/FN sets, scope-aligned. Used by post-hoc analyses that
+        # need the complete edge lists (per-call-site blast-radius,
+        # caller-kind stratification, LLM-judge taxonomy). The "sample_*"
+        # slices above remain the human-readable summary in the report;
+        # these full lists feed downstream tooling. See
+        # bench/accuracy/blast_radius.py.
+        "fp_scoped_full": sorted(fp_scoped),
+        "fn_scoped_full": sorted(fn_scoped),
     }
 
 

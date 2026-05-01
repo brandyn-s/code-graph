@@ -436,6 +436,18 @@ func (p *Pipeline) resolveCallEdge(
 	if pseudoRule {
 		rule = ResolverRuleModalPseudo
 	}
+	// Y.3 (2026-05-02 plateau-2 plan): Janusian-ambiguity penalty.
+	// Step 6 baseline showed ambiguous-site (candidate_set_size>=2)
+	// precision was 0.20 vs unambiguous 0.82 — a 62pp gap. Refuse to
+	// emit ambiguous cross-package-heuristic edges: the resolver's
+	// import-distance tie-break on 2+ candidates is unreliable
+	// (60% of judged FPs were "same_named_method_disambiguation"
+	// per the Step 2 LLM-Judge taxonomy). Pseudo-caller cases are
+	// excluded — pkg_block_caller_FP_rate=0 in baseline.
+	candSize := candidateSetSizeFromResolution(result)
+	if rule == ResolverRuleCrossPackageHeuristic && candSize >= 2 {
+		return resolvedEdge{}, false
+	}
 	return resolvedEdge{
 		CallerQN: callerQN,
 		TargetQN: result.QualifiedName,
@@ -446,7 +458,7 @@ func (p *Pipeline) resolveCallEdge(
 			"resolution_strategy":    result.Strategy,
 			"caller_node_kind":       callerKind,
 			"resolver_rule":          rule,
-			CandidateSetPropertyName: candidateSetSizeFromResolution(result),
+			CandidateSetPropertyName: candSize,
 		},
 	}, true
 }

@@ -135,60 +135,68 @@ func TestResolveCallEdge_UniqueNameAcrossPackages_CandidateSetSizeOne(t *testing
 	}
 }
 
-// TestResolveCallEdge_SameNamedMethodOnTwoStructs_CandidateSetSizeTwo —
-// two struct types with a same-named method. Without TypeMap binding,
-// the resolver falls through to suffix_match across both candidates and
-// MUST surface candidate_set_size=2 (the Janusian ambiguity signal that
-// Step 2's LLM-Judge taxonomy predicted dominates the FP class).
-//
-// Note: this is the structurally-ambiguous case the harness is built
-// to surface. The chosen target may be either of the two — we don't
-// assert which (the resolver picks by import distance). What we assert
-// is that the size property correctly reports the pre-tie-break
-// cardinality.
-func TestResolveCallEdge_SameNamedMethodOnTwoStructs_CandidateSetSizeTwo(t *testing.T) {
+// TestResolveCallEdge_SameNamedMethodOnTwoStructs_DroppedByJanusianPenalty —
+// two struct types with a same-named method. Without TypeMap binding, the
+// resolver previously fell through to suffix_match across both candidates
+// and emitted an ambiguous edge. After Y.3 (2026-05-02 plateau-2 plan),
+// emissions where rule==cross-package-heuristic AND candidate_set_size>=2
+// are refused — the import-distance tie-break on multi-candidate same-
+// named methods has measured P=0.20 vs P=0.82 for unambiguous sites
+// (Step 6 baseline), a 62pp gap. The "right" behavior at an ambiguous
+// site is to NOT emit; the dropped TPs (~8 on Go fixture) are
+// outweighed by the dropped FPs (~32) for a net F1 lift.
+func TestResolveCallEdge_SameNamedMethodOnTwoStructs_DroppedByJanusianPenalty(t *testing.T) {
 	p := &Pipeline{
 		ProjectName: "proj",
 		registry:    NewFunctionRegistry(),
 	}
 	// Two methods with the same simple name "Run" on different types.
 	// No TypeMap entry for `obj` — the type-dispatch path won't fire,
-	// and resolution falls through to same_module / unique_name /
-	// suffix_match. With two candidates project-wide and no type
-	// binding, this lands in the multi-candidate path.
+	// and resolution falls through to project-wide name lookup. Two
+	// candidates → suffix_match with CandidateCount=2. Y.3 refuses to
+	// emit this case because rule=cross-package-heuristic AND size>=2.
 	p.registry.Register("Run", "proj.foo.TypeA.Run", "Method")
 	p.registry.Register("Run", "proj.bar.TypeB.Run", "Method")
 	p.registry.Register("Caller", "proj.app.Caller", "Function")
 
 	moduleQN := "proj.app"
 	importMap := map[string]string{}
-	typeMap := TypeMap{} // no obj→type binding — forces ambiguity through
+	typeMap := TypeMap{}
 	lspCallerMethods := map[string]bool{}
 
-	// `obj.Run()` with no type binding for obj. The resolver tries
-	// type_dispatch (fails: typeMap empty), falls to same_module
-	// (fails: not in proj.app), then to project-wide name lookup.
-	// Two candidates → suffix_match path with CandidateCount=2.
 	call := cbm.Call{CalleeName: "obj.Run", EnclosingFuncQN: "proj.app.Caller"}
+	if _, ok := p.resolveCallEdge(call, moduleQN, importMap, typeMap, lspCallerMethods); ok {
+		t.Errorf("ambiguous cross-package-heuristic edge (size>=2) should be dropped by Y.3")
+	}
+}
+
+// TestResolveCallEdge_JanusianPenalty_PreservesSamePackageShadow verifies
+// that Y.3's penalty is scoped to cross-package-heuristic only — same-
+// package-shadow with size>=2 is not dropped, since same-package precision
+// is 0.99 in the baseline and ambiguity within a package is meaningful
+// (the resolver already picks correctly via local scope).
+func TestResolveCallEdge_JanusianPenalty_PreservesSamePackageShadow(t *testing.T) {
+	p := &Pipeline{
+		ProjectName: "proj",
+		registry:    NewFunctionRegistry(),
+	}
+	// Single same-module candidate — same-package-shadow strategy fires
+	// at confidence 0.90 and CandidateCount=1, so the Janusian penalty
+	// (size>=2) doesn't apply regardless. This test pins the rule scope.
+	p.registry.Register("local", "proj.app.local", "Function")
+
+	moduleQN := "proj.app"
+	importMap := map[string]string{}
+	typeMap := TypeMap{}
+	lspCallerMethods := map[string]bool{}
+
+	call := cbm.Call{CalleeName: "local", EnclosingFuncQN: "proj.app.Caller"}
 	edge, ok := p.resolveCallEdge(call, moduleQN, importMap, typeMap, lspCallerMethods)
 	if !ok {
-		t.Fatalf("expected resolveCallEdge to emit despite ambiguity (resolver picks one)")
+		t.Fatal("same-package-shadow should not be affected by Y.3 penalty")
 	}
-	got, present := edge.Properties[CandidateSetPropertyName]
-	if !present {
-		t.Fatalf("candidate_set_size missing on multi-candidate edge: %v", edge.Properties)
-	}
-	gotInt, ok := got.(int)
-	if !ok {
-		t.Fatalf("candidate_set_size must be int, got %T %v", got, got)
-	}
-	if gotInt < 2 {
-		t.Errorf("two same-named methods: expected candidate_set_size >= 2, got %d", gotInt)
-	}
-	// Chosen target must be one of the two candidates (resolver picks
-	// by import distance; we don't assert which).
-	if edge.TargetQN != "proj.foo.TypeA.Run" && edge.TargetQN != "proj.bar.TypeB.Run" {
-		t.Errorf("chosen target must be one of the two same-named methods, got %q", edge.TargetQN)
+	if edge.Properties["resolver_rule"] != ResolverRuleSamePackageShadow {
+		t.Errorf("got rule=%q, want %q", edge.Properties["resolver_rule"], ResolverRuleSamePackageShadow)
 	}
 }
 

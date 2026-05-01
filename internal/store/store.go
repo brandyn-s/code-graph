@@ -390,6 +390,27 @@ func (s *Store) initSchema() error {
 	}
 	_, _ = s.db.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_edges_confidence_tier ON edges(project, confidence_tier_gen)`)
 
+	// Migration: add caller_node_kind generated column to edges. Reads
+	// the "caller_node_kind" key out of properties JSON (populated by
+	// the resolver — see internal/pipeline/caller_kind.go for the
+	// decision rules). NULL on pre-migration rows; new rows always
+	// populate. Lets bench/accuracy/compare.py stratify precision by
+	// caller scope (function-body, method-body, file-block, etc.)
+	// without scanning the JSON blob.
+	//
+	// Index on (project, caller_node_kind_gen) keeps per-kind precision
+	// queries cheap — typical access pattern is "how many CALLS edges
+	// in project X have caller_node_kind = 'file-block'?".
+	var ckCol int
+	_ = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM pragma_table_xinfo('edges') WHERE name='caller_node_kind_gen'`).Scan(&ckCol)
+	if ckCol == 0 {
+		_, err = s.db.ExecContext(ctx, `ALTER TABLE edges ADD COLUMN caller_node_kind_gen TEXT GENERATED ALWAYS AS (json_extract(properties, '$.caller_node_kind'))`)
+		if err != nil {
+			slog.Warn("schema.caller_node_kind_gen.skip", "err", err)
+		}
+	}
+	_, _ = s.db.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_edges_caller_node_kind ON edges(project, caller_node_kind_gen)`)
+
 	// Migration: add mtime_ns and size columns to file_hashes for stat pre-filtering.
 	var mtimeCol int
 	_ = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM pragma_table_xinfo('file_hashes') WHERE name='mtime_ns'`).Scan(&mtimeCol)

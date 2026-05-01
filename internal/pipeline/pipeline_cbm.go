@@ -244,7 +244,7 @@ func (p *Pipeline) resolveFileCallsCBM(relPath string, ext *cachedExtraction) []
 	typeMap := inferTypesCBM(ext.Result.TypeAssigns, p.registry, moduleQN, importMap)
 
 	// LSP-resolved calls take priority (high confidence, type-aware).
-	edges, lspCallerMethods := collectLSPResolvedEdges(ext.Result.ResolvedCalls)
+	edges, lspCallerMethods := collectLSPResolvedEdges(ext.Result.ResolvedCalls, p.registry)
 
 	// Resolve remaining calls via registry + fuzzy matching
 	for _, call := range ext.Result.Calls {
@@ -277,7 +277,13 @@ func (p *Pipeline) runGoLSPCrossFileResolution(ext *cachedExtraction, moduleQN, 
 }
 
 // collectLSPResolvedEdges converts LSP-resolved calls to edges and builds a caller+method dedup set.
-func collectLSPResolvedEdges(resolvedCalls []cbm.ResolvedCall) (edges []resolvedEdge, lspCallerMethods map[string]bool) {
+//
+// `registry` is consulted to classify the caller's AST scope kind for the
+// `caller_node_kind` property (added 2026-05-02 plateau-2 plan, Step 3).
+// LSP-resolved edges always carry edgeType="CALLS"; the kind branches on
+// the caller's registry label. registry may be nil in tests; callers
+// then receive CallerKindUnknown which is the safe fallback.
+func collectLSPResolvedEdges(resolvedCalls []cbm.ResolvedCall, registry *FunctionRegistry) (edges []resolvedEdge, lspCallerMethods map[string]bool) {
 	lspResolved := make(map[string]bool)
 	lspCallerMethods = make(map[string]bool)
 
@@ -298,6 +304,7 @@ func collectLSPResolvedEdges(resolvedCalls []cbm.ResolvedCall) (edges []resolved
 				"confidence":          float64(rc.Confidence),
 				"confidence_band":     confidenceBand(float64(rc.Confidence)),
 				"resolution_strategy": rc.Strategy,
+				"caller_node_kind":    callerKindFromContext(rc.CallerQN, "CALLS", registry),
 			},
 		})
 
@@ -343,13 +350,27 @@ func (p *Pipeline) resolveCallEdge(
 		return resolvedEdge{}, false
 	}
 
+	// caller_node_kind classifies the AST scope that emitted this CALLS
+	// edge. Computed once per call site and attached to every edge this
+	// function returns. CALLS_PSEUDO + module-defaulted callerQN maps to
+	// CallerKindFileBlock; everything else routes through the registry
+	// label lookup. See caller_kind.go for the decision rules.
+	callerKind := callerKindFromContext(callerQN, edgeType, p.registry)
+
 	// Python self.method() resolution
 	if strings.HasPrefix(calleeName, "self.") {
 		classQN := extractClassFromMethodQN(callerQN)
 		if classQN != "" {
 			candidate := classQN + "." + calleeName[5:]
 			if p.registry.Exists(candidate) {
-				return resolvedEdge{CallerQN: callerQN, TargetQN: candidate, Type: edgeType}, true
+				return resolvedEdge{
+					CallerQN: callerQN,
+					TargetQN: candidate,
+					Type:     edgeType,
+					Properties: map[string]any{
+						"caller_node_kind": callerKind,
+					},
+				}, true
 			}
 		}
 	}
@@ -366,6 +387,7 @@ func (p *Pipeline) resolveCallEdge(
 					"confidence":          fuzzyResult.Confidence,
 					"confidence_band":     confidenceBand(fuzzyResult.Confidence),
 					"resolution_strategy": fuzzyResult.Strategy,
+					"caller_node_kind":    callerKind,
 				},
 			}, true
 		}
@@ -383,6 +405,7 @@ func (p *Pipeline) resolveCallEdge(
 			"confidence":          result.Confidence,
 			"confidence_band":     confidenceBand(result.Confidence),
 			"resolution_strategy": result.Strategy,
+			"caller_node_kind":    callerKind,
 		},
 	}, true
 }

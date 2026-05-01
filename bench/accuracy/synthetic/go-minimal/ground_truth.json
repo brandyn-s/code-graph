@@ -10,5 +10,11 @@
   "expected_internal_imports": [
     {"from_qn": "github.com/example/go-minimal", "to_qn": "github.com/example/go-minimal/helpers"}
   ],
-  "notes": "5 internal CALLS, 1 internal IMPORTS. RTA resolves interface methods; we don't have any interfaces so RTA = CHA = static here. External imports (none explicit) excluded."
+  "expected_caller_kind_invariants": {
+    "every_edge_has_caller_node_kind": true,
+    "pkg_block_caller_FP_rate": 0.0,
+    "expected_kinds_present": ["function-body"],
+    "rationale": "Every caller is a free function body — no methods, no tests, no init(), no package-level var initializers, no closures. The kinds_present check is asserted by check_go_minimal_caller_kind.py against whatever sanitized-path QN form the indexer chooses; the kind property is what the gate verifies. Acts as the prove-the-instrument gate per verify-effectiveness.md before publishing real-fixture caller-kind metrics."
+  },
+  "notes": "5 internal CALLS, 1 internal IMPORTS. RTA resolves interface methods; we don't have any interfaces so RTA = CHA = static here. External imports (none explicit) excluded. The expected_internal_calls QNs use Go-import-path form for human readability; code-graph emits sanitized-path form (c-Users-...) — equivalent edges, different string representation. Gate asserts on caller_node_kind property, not on the QN form."
 }

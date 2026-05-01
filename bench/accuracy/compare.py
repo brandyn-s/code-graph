@@ -214,6 +214,80 @@ def query_edges_multi_project(projects: list[str], edge_type: str) -> list[Edge]
     return out
 
 
+def query_caller_node_kinds(
+    projects: list[str], edge_type: str
+) -> dict[tuple[str, str, str], str]:
+    """Return a (from_qn, to_qn, type) -> caller_node_kind map for `edge_type`.
+
+    Reads `caller_node_kind` out of edge properties (populated by the
+    resolver — see internal/pipeline/caller_kind.go for the decision
+    rules). Edges from indexes that predate the property always return
+    NULL via json_extract; we filter those out so callers can detect
+    "feature not yet emitted" by getting an empty dict back.
+
+    Multi-project flavor for Rust/Go subset fixtures. The keys use
+    full project-prefixed QNs to match `query_edges_multi_project`'s
+    output exactly.
+
+    Step 3 of the 2026-05-02 plateau-2 plan. Used by compute_metrics
+    to stratify precision by caller-shape.
+    """
+    # Note: code-graph's Cypher engine does not implement `IS NOT NULL`,
+    # so we return all rows including kind=None and filter on the Python
+    # side. This was intentionally NOT pushed into Cypher to keep the
+    # query language simple — null-detection is rare elsewhere.
+    out: dict[tuple[str, str, str], str] = {}
+    for project in projects:
+        cypher = (
+            f"MATCH (a)-[r:{edge_type}]->(b) "
+            f"RETURN a.qualified_name AS f, b.qualified_name AS t, "
+            f"r.caller_node_kind AS kind LIMIT 100000"
+        )
+        rows = _run_cypher(project, cypher, max_rows=10000)
+        for r in rows:
+            if not isinstance(r, dict):
+                continue
+            f = r.get("f") or ""
+            t = r.get("t") or ""
+            kind = r.get("kind") or ""
+            if not (f and t and kind):
+                continue
+            out[(f, t, edge_type)] = kind
+    return out
+
+
+def query_caller_node_kinds_sharded(
+    project: str, edge_type: str, caller_shards: list[str]
+) -> dict[tuple[str, str, str], str]:
+    """Single-project sharded variant of query_caller_node_kinds.
+
+    Mirrors the sharding in `query_code_graph_edges`. Used by the Python
+    fixture path. Keys use project-prefix-stripped QNs so they match
+    the Edge.match_key() form returned by query_code_graph_edges.
+    """
+    # See note in `query_caller_node_kinds`: NULL filter happens in
+    # Python, not Cypher.
+    out: dict[tuple[str, str, str], str] = {}
+    for shard in caller_shards:
+        cypher = (
+            f"MATCH (a)-[r:{edge_type}]->(b) "
+            f'WHERE a.qualified_name CONTAINS ".{shard}." '
+            f"RETURN a.qualified_name AS f, b.qualified_name AS t, "
+            f"r.caller_node_kind AS kind LIMIT 100000"
+        )
+        rows = _run_cypher(project, cypher, max_rows=10000)
+        for r in rows:
+            if not isinstance(r, dict):
+                continue
+            f = r.get("f") or ""
+            t = r.get("t") or ""
+            kind = r.get("kind") or ""
+            if not (f and t and kind):
+                continue
+            out[(strip_project_prefix(f, project), strip_project_prefix(t, project), edge_type)] = kind
+    return out
+
+
 def _derive_caller_shards(oracle_edges: list[Edge]) -> list[str]:
     """Pull the set of top-level-dir prefixes from the oracle's callers.
 
@@ -334,8 +408,111 @@ def _is_test_file(file_path: str) -> bool:
     )
 
 
+def compute_caller_kind_metrics(
+    tp_scoped: set[tuple[str, str, str]],
+    fp_scoped: set[tuple[str, str, str]],
+    fn_scoped: set[tuple[str, str, str]],
+    caller_kinds: dict[tuple[str, str, str], str] | None,
+) -> dict:
+    """Stratify scope-aligned precision by caller AST scope.
+
+    Three signals (Step 3 of the 2026-05-02 plateau-2 plan):
+
+    1. caller_kind_precision[kind]: tp / (tp + fp) per caller-kind
+       cell, restricted to kinds with support >= 20 (smaller cells
+       have too much sampling variance to act on).
+    2. pkg_block_caller_FP_rate: share of scope-aligned FPs whose
+       caller_node_kind is in the package-block family
+       (file-block / package-init-block / type-decl / var-init).
+       Alarm at > 5% — this is the "ghost caller" defect class
+       converged on by 9 of 15 personas in the discovery dispatch.
+    3. caller_kind_complement_legitimacy: share of all scope-aligned
+       edges (TPs + FPs + FNs) whose caller_node_kind is in
+       {function-body, method-body}. Direct measurement of how much
+       of the population represents "real-callable-emits-call"
+       semantics, the complement of the ghost-caller class.
+
+    If `caller_kinds` is None or empty, returns an empty dict and a
+    `note` field signaling the property isn't yet emitted (e.g. the
+    binary running this comparison predates the resolver change).
+    """
+    if not caller_kinds:
+        return {
+            "caller_kind_precision": {},
+            "pkg_block_caller_FP_rate": {"value": 0.0, "alarm": False},
+            "caller_kind_complement_legitimacy": {"value": 0.0},
+            "note": "caller_node_kind not yet emitted by the indexed binary; metrics skipped.",
+        }
+
+    PKG_BLOCK_KINDS = {"file-block", "package-init-block", "type-decl", "var-init"}
+    LEGITIMATE_KINDS = {"function-body", "method-body"}
+
+    # Per-kind precision from TPs and FPs.
+    by_kind_tp: dict[str, int] = defaultdict(int)
+    by_kind_fp: dict[str, int] = defaultdict(int)
+    for k in tp_scoped:
+        kind = caller_kinds.get(k, "unknown")
+        by_kind_tp[kind] += 1
+    for k in fp_scoped:
+        kind = caller_kinds.get(k, "unknown")
+        by_kind_fp[kind] += 1
+
+    per_kind: dict[str, dict] = {}
+    for kind in sorted(set(by_kind_tp) | set(by_kind_fp)):
+        tp = by_kind_tp[kind]
+        fp = by_kind_fp[kind]
+        support = tp + fp
+        if support < 20:
+            continue
+        precision = tp / support if support else 0.0
+        per_kind[kind] = {
+            "tp": tp,
+            "fp": fp,
+            "precision": round(precision, 4),
+            "support": support,
+        }
+
+    # Package-block caller FP rate.
+    fp_total = len(fp_scoped)
+    pkg_block_fps = sum(
+        1 for k in fp_scoped if caller_kinds.get(k, "unknown") in PKG_BLOCK_KINDS
+    )
+    pkg_block_rate = pkg_block_fps / fp_total if fp_total else 0.0
+
+    # Complement legitimacy: share of (TP ∪ FP ∪ FN) whose caller is a
+    # function or method body. FNs were never emitted by the resolver so
+    # they have no caller_node_kind; we count them but they contribute 0
+    # to the legitimate share unless the oracle also sees them as
+    # function/method callers (which we can't verify here without
+    # re-running the oracle), so we use a conservative denominator that
+    # includes FNs as "unknown."
+    population = tp_scoped | fp_scoped | fn_scoped
+    pop_total = len(population)
+    legitimate_count = sum(
+        1 for k in population if caller_kinds.get(k, "unknown") in LEGITIMATE_KINDS
+    )
+    legitimacy_rate = legitimate_count / pop_total if pop_total else 0.0
+
+    return {
+        "caller_kind_precision": per_kind,
+        "pkg_block_caller_FP_rate": {
+            "value": round(pkg_block_rate, 4),
+            "alarm": pkg_block_rate > 0.05,
+            "fp_count": pkg_block_fps,
+            "fp_total": fp_total,
+        },
+        "caller_kind_complement_legitimacy": {
+            "value": round(legitimacy_rate, 4),
+            "legitimate_count": legitimate_count,
+            "population_total": pop_total,
+        },
+    }
+
+
 def compute_metrics(
-    oracle: list[Edge], measured: list[Edge]
+    oracle: list[Edge],
+    measured: list[Edge],
+    caller_kinds: dict[tuple[str, str, str], str] | None = None,
 ) -> dict:
     oracle_exact = {e.match_key() for e in oracle}
     measured_exact = {e.match_key() for e in measured}
@@ -421,6 +598,15 @@ def compute_metrics(
     fp_impl = measured_impl - oracle_impl
     fn_impl = oracle_impl - measured_impl
 
+    # Caller-kind stratification (Step 3 of plateau-2 plan, 2026-05-02).
+    # Three new metrics: per-kind precision, ghost-caller FP rate, and
+    # complement legitimacy. compute_caller_kind_metrics handles the
+    # "feature not yet emitted" case (returns a sentinel dict with a
+    # note field). See compute_caller_kind_metrics for the full spec.
+    caller_kind_metrics = compute_caller_kind_metrics(
+        tp_scoped, fp_scoped, fn_scoped, caller_kinds
+    )
+
     return {
         "oracle_count": len(oracle),
         "measured_count": len(measured),
@@ -441,6 +627,7 @@ def compute_metrics(
         # bench/accuracy/blast_radius.py.
         "fp_scoped_full": sorted(fp_scoped),
         "fn_scoped_full": sorted(fn_scoped),
+        **caller_kind_metrics,
     }
 
 
@@ -486,9 +673,13 @@ def compare_fixture(fixture_id: str) -> tuple[dict, Path, Path]:
             measured_calls = query_code_graph_edges(single_project, "CALLS", shards)
             measured_external = query_code_graph_edges(single_project, "CALLS_EXTERNAL", shards)
             measured_pseudo = query_code_graph_edges(single_project, "CALLS_PSEUDO", shards)
+            # Caller-kind map for stratified precision metrics. Empty
+            # dict if the indexed binary predates the resolver change
+            # (compute_caller_kind_metrics handles that).
+            caller_kinds_calls = query_caller_node_kinds_sharded(single_project, "CALLS", shards)
             results["CALLS"] = {
                 "oracle": "pycg",
-                **compute_metrics(oracle_calls, measured_calls),
+                **compute_metrics(oracle_calls, measured_calls, caller_kinds_calls),
                 "modal_split": {
                     "real_only": {
                         "measured_count": len(measured_calls),
@@ -553,10 +744,11 @@ def compare_fixture(fixture_id: str) -> tuple[dict, Path, Path]:
         if rust_cache.exists():
             oracle_calls = [e for e in read_edges(rust_cache) if e.type == "CALLS"]
             measured_calls = query_edges_multi_project(projects, "CALLS")
+            caller_kinds_calls = query_caller_node_kinds(projects, "CALLS")
             results["CALLS"] = {
                 "oracle": "syn",
                 "per_project": compute_per_project_metrics(oracle_calls, measured_calls, projects),
-                **compute_metrics(oracle_calls, measured_calls),
+                **compute_metrics(oracle_calls, measured_calls, caller_kinds_calls),
             }
             oracle_imports = [e for e in read_edges(rust_cache) if e.type == "IMPORTS"]
             # NOTE: Rust oracle drops IMPORTS by design (see oracle_rust_syn.py
@@ -592,10 +784,11 @@ def compare_fixture(fixture_id: str) -> tuple[dict, Path, Path]:
             oracle_imports = [e for e in oracle_all if e.type == "IMPORTS"]
             measured_calls = query_edges_multi_project(projects, "CALLS")
             measured_imports = query_edges_multi_project(projects, "IMPORTS")
+            caller_kinds_calls = query_caller_node_kinds(projects, "CALLS")
             results["CALLS"] = {
                 "oracle": oracle_tag,
                 "per_project": compute_per_project_metrics(oracle_calls, measured_calls, projects),
-                **compute_metrics(oracle_calls, measured_calls),
+                **compute_metrics(oracle_calls, measured_calls, caller_kinds_calls),
             }
             if oracle_imports:
                 results["IMPORTS"] = {
@@ -696,6 +889,72 @@ def compare_fixture(fixture_id: str) -> tuple[dict, Path, Path]:
             f1_values = [p["f1"] for p in pp if p["oracle_count"] > 0]
             if f1_values:
                 lines.append(f"**Spread**: min F1 = {min(f1_values):.3f}, max F1 = {max(f1_values):.3f}, range = {max(f1_values) - min(f1_values):.3f}")
+                lines.append("")
+
+    # Caller-kind stratified precision (Step 3 of the 2026-05-02
+    # plateau-2 plan). Each CALLS edge carries a `caller_node_kind`
+    # property telling us which AST scope emitted it. Aggregate F1 is
+    # blind to caller-shape — the per-kind breakdown surfaces the
+    # "ghost caller" defect class (FPs from package-level scopes
+    # rather than function/method bodies).
+    have_caller_kind = any(
+        res.get("caller_kind_precision") or "caller_kind_complement_legitimacy" in res
+        for res in results.values()
+    )
+    if have_caller_kind:
+        lines.append("")
+        lines.append("## Caller-kind stratified precision")
+        lines.append("")
+        lines.append(
+            "Each CALLS edge is tagged with the AST scope of its caller "
+            "(`function-body`, `method-body`, `file-block`, `package-init-block`, "
+            "`var-init`, `type-decl`, `test-body`, `closure`, `unknown`). The "
+            "harness reads this property and stratifies precision by it. The "
+            "**ghost-caller FP rate** is the share of FPs whose caller is a "
+            "package-level scope rather than a real function/method — alarms "
+            "above 5%."
+        )
+        lines.append("")
+        for edge_type, res in results.items():
+            if res.get("status") in ("pending", "known_limitation"):
+                continue
+            ck = res.get("caller_kind_precision")
+            if ck is None and "caller_kind_complement_legitimacy" not in res:
+                continue
+            lines.append(f"### {edge_type}")
+            lines.append("")
+            note = res.get("note")
+            if note:
+                lines.append(f"> Note: {note}")
+                lines.append("")
+                continue
+            if ck:
+                lines.append("| Kind | TP | FP | Precision | Support |")
+                lines.append("|---|---:|---:|---:|---:|")
+                for kind in sorted(ck):
+                    cell = ck[kind]
+                    lines.append(
+                        f"| `{kind}` | {cell['tp']} | {cell['fp']} | "
+                        f"{cell['precision']:.3f} | {cell['support']} |"
+                    )
+                lines.append("")
+            pkg = res.get("pkg_block_caller_FP_rate", {})
+            if pkg:
+                alarm = " ALARM" if pkg.get("alarm") else ""
+                lines.append(
+                    f"**Package-block caller FP rate**: "
+                    f"{pkg.get('value', 0):.4f} "
+                    f"({pkg.get('fp_count', 0)} of {pkg.get('fp_total', 0)} FPs){alarm}"
+                )
+                lines.append("")
+            comp = res.get("caller_kind_complement_legitimacy", {})
+            if comp:
+                lines.append(
+                    f"**Caller-kind complement legitimacy** (function/method-body share of all "
+                    f"scope-aligned edges): {comp.get('value', 0):.4f} "
+                    f"({comp.get('legitimate_count', 0)} of "
+                    f"{comp.get('population_total', 0)})"
+                )
                 lines.append("")
 
     lines.append("")

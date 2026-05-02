@@ -31,6 +31,16 @@
       "subset": ["internal/store", "internal/cypher", "internal/pipeline", "internal/tools", "internal/cbm"],
       "notes": "Self-hosting Go fixture on code-graph itself. Originally planned psm/auth-gateway but that module has sqlc-generated types that aren't checked in, so Go RTA fails type-checking. code-graph is a ~90% Go codebase that type-checks cleanly. Subset picked for variance: store (SQLite CRUD), cypher (parser+executor), pipeline (multi-pass orchestrator), tools (MCP handlers), cbm (CGO bridge).",
       "edge_types_in_scope": ["CALLS", "IMPORTS"]
+    },
+    {
+      "id": "cobra-go",
+      "path": "C:/Users/user/Documents/bench-fixtures/cobra",
+      "sha": "f2878bab8c96afd6e36968af96343b35dbb82a82",
+      "short_sha": "f2878ba",
+      "languages": ["go"],
+      "subset": ["."],
+      "notes": "Non-self-hosting Go fixture (added 2026-05-02 per claude-knowledge-base PR #368 plateau-fix improvements). spf13/cobra at f2878ba — CLI-building library, ~10K LOC, 36 .go files, type-clean (no CGO, no generated code). Heavy receiver-method usage on the Command struct exercises Y.5 oracle resolver-method resolution. Self-hosting fixtures hit a ceiling where remaining residuals are oracle-specific limitations against the harness's own static analysis depth — adding a 2nd Go repo proves whether F1 generalizes outside the self-hosting case.",
+      "edge_types_in_scope": ["CALLS", "IMPORTS"]
     }
   ]
 }

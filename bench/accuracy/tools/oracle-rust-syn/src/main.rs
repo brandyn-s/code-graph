@@ -158,8 +158,9 @@ impl<'ast> Visit<'ast> for Visitor {
     fn visit_expr_method_call(&mut self, i: &'ast ExprMethodCall) {
         // receiver.method(args). We can only name the method syntactically;
         // receiver type is unresolved (same limit code-graph tree-sitter has).
-        // Emit with bare method name as to_qn — the Python wrapper will filter
-        // these the same way code-graph does (no target -> no internal edge).
+        // Emit with bare method name as to_qn — the Python wrapper filters
+        // by ambiguity (only emit when the bare name has exactly one def
+        // in the project, regardless of whether ExprCall or ExprMethodCall).
         let callee = i.method.to_string();
         self.edges.push(Edge {
             from_qn: self.current_caller(),

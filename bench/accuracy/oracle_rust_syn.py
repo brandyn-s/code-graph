@@ -123,31 +123,34 @@ def run_oracle_on_subset(project: str, subset_dir: Path, timeout: int = 300) -> 
     return [], []
 
 
-def build_fn_def_map_from_binary(defs: list[str]) -> dict[str, str]:
-    """Map bare-name -> full QN using def QNs from the Rust binary.
+def build_fn_def_map_from_binary(defs: list[str]) -> dict[str, list[str]]:
+    """Map bare-name -> [full QNs] using def QNs from the Rust binary.
 
     Def QNs look like:
       "c-Users-...canstatd.src.main.main"                    (free fn)
       "c-Users-...canstatd.src.main.AdsbDecoder.process_message"  (method)
       "c-Users-...canstatd.src.main.tests.altitude_defaults_to_zero"  (mod tests)
 
-    For bare-call resolution we key by the LAST segment (the fn ident). Ambiguous
-    names where multiple defs share an ident: keep the first encountered (matches
-    code-graph's resolver which typically picks one).
+    For bare-call resolution we key by the LAST segment (the fn ident). Returns
+    ALL defs sharing each bare name; resolve_and_filter drops ambiguous names
+    (count > 1) to avoid the bare-name conflation pattern that produced 5/5
+    instrument-artifact FNs in the 2026-05-02 plateau-diagnose Step 6 sample
+    (e.g., `service.call(req)` resolved to `TailscaleAuthService.call` because
+    `call` had multiple defs and the first-encountered policy picked one).
     """
-    fn_to_qn: dict[str, str] = {}
+    fn_to_qns: dict[str, list[str]] = {}
     for def_qn in defs:
         last = def_qn.rsplit(".", 1)[-1]
-        if last and last not in fn_to_qn:
-            fn_to_qn[last] = def_qn
-    return fn_to_qn
+        if last:
+            fn_to_qns.setdefault(last, []).append(def_qn)
+    return fn_to_qns
 
 
 def resolve_and_filter(
     raw_edges: list[dict],
-    fn_def_map: dict[str, str],
+    fn_def_map: dict[str, list[str]],
 ) -> tuple[list[Edge], dict[str, int]]:
-    """Resolve bare calls, drop external/unresolvable edges, match code-graph.
+    """Resolve bare calls, drop external/unresolvable/ambiguous edges.
 
     Rules:
       IMPORTS: drop — code-graph's Rust IMPORTS resolver only emits edges for
@@ -159,14 +162,22 @@ def resolve_and_filter(
       CALLS path-form (`a.b.c`): drop — these are external references
         (`std.fs.read_to_string`, `Duration.from_secs`) that code-graph
         can't resolve without type info. Symmetric drop.
-      CALLS bare (`foo`): if `foo` is defined in the subset, upgrade to
-        full QN `<project>.<def_file>.foo`. Otherwise drop (external or
-        method call).
+      CALLS bare (`foo`):
+        - 0 defs: drop (external or test-only).
+        - 1 def: emit upgraded to full QN.
+        - 2+ defs: drop (ambiguous). syn has no type info, so any pick among
+          multiple same-named defs is a guess. Mirrors code-graph's
+          discrimination ladder (Phase 3a-3d) which drops the same shape.
+          2026-05-02 plateau-diagnose Step 6 verified 5/5 of these were
+          oracle over-emissions on assetman: e.g., `service.call(req)` was
+          resolving to TailscaleAuthService.call (one of multiple `call`
+          defs) and emerging as a phantom FN against code-graph.
     """
     stats = {
         "imports_dropped_always": 0,
         "calls_bare_resolved": 0,
         "calls_bare_unresolved": 0,
+        "calls_bare_ambiguous_dropped": 0,
         "calls_path_dropped": 0,
     }
     kept: list[Edge] = []
@@ -181,14 +192,17 @@ def resolve_and_filter(
             stats["calls_path_dropped"] += 1
             continue
         # Bare call: try resolve via fn_def_map.
-        resolved = fn_def_map.get(to)
-        if resolved is None:
+        candidates = fn_def_map.get(to) or []
+        if not candidates:
             stats["calls_bare_unresolved"] += 1
+            continue
+        if len(candidates) > 1:
+            stats["calls_bare_ambiguous_dropped"] += 1
             continue
         stats["calls_bare_resolved"] += 1
         kept.append(Edge(
             from_qn=e["from_qn"],
-            to_qn=resolved,
+            to_qn=candidates[0],
             type="CALLS",
             file=e.get("file", ""),
             line=int(e.get("line", 0) or 0),

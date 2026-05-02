@@ -1,0 +1,36 @@
+{
+  "description": "Negative-benchmark fixture: Restate SDK multi-segment chain class. Tests PR #149's multi-segment chain resolver against external Context chains (ctx.run, ctx.invocation().target().send()). Internal Workflow + Invocation types have methods with the same bare names — the resolver must not bind chain segments to them.",
+  "kind": "negative",
+
+  "expected_internal_calls": [
+    {"from_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-restate-chain-negative.src.main.controls", "to_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-restate-chain-negative.src.workflow.Workflow.run"},
+    {"from_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-restate-chain-negative.src.main.controls", "to_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-restate-chain-negative.src.invocation.Invocation.target"},
+    {"from_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-restate-chain-negative.src.main.controls", "to_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-restate-chain-negative.src.invocation.Invocation.send"},
+    {"from_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-restate-chain-negative.src.main.controls", "to_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-restate-chain-negative.src.main.helper"}
+  ],
+
+  "forbidden_emitted_calls": [
+    {
+      "from_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-restate-chain-negative.src.main.entry",
+      "to_qn_pattern": ".*\\.workflow\\.Workflow\\.run$",
+      "reason": "ctx.run(...) on external Restate Context. MUST NOT bind to Workflow.run via cross-package-heuristic bare-name match."
+    },
+    {
+      "from_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-restate-chain-negative.src.main.entry",
+      "to_qn_pattern": ".*\\.workflow\\.Workflow\\.target$",
+      "reason": "ctx.invocation().target() multi-segment chain. .target is external. MUST NOT bind to Workflow.target."
+    },
+    {
+      "from_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-restate-chain-negative.src.main.entry",
+      "to_qn_pattern": ".*\\.invocation\\.Invocation\\.target$",
+      "reason": "Same multi-segment chain target. Invocation.target is the alternate shadow target."
+    },
+    {
+      "from_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-restate-chain-negative.src.main.entry",
+      "to_qn_pattern": ".*\\.invocation\\.Invocation\\.send$",
+      "reason": "ctx.invocation().target().send() final segment. .send is external. MUST NOT bind to Invocation.send."
+    }
+  ],
+
+  "notes": "Project name: `c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-restate-chain-negative`. Tests PR #149's multi-segment chain resolver: ctx.invocation().target().send() walks 3 chain segments through external builder types. Each segment's bare name (.target, .send) collides with internal Invocation methods.\n\nEMPIRICAL FINDINGS (2026-05-02):\n  1. ACTIVE PHANTOMS (3): `entry → Workflow.run`, `entry → Invocation.target`, `entry → Invocation.send`. The chain resolver binds external chain segments to internal methods via cross-package-heuristic.\n  2. The forbidden pattern `entry → Workflow.target` does NOT fire because `Workflow.target` is conflated with `Invocation.target` (same bare-name; resolver picks Invocation). This is the same conflation pattern as the Diesel fixture's controls() finding.\n  3. POSITIVE-CONTROL CONFLATION: `controls()` calls `w.target()` (where w: Workflow) but the edge emits as `controls → Invocation.target` (NOT `controls → Workflow.target`). Bare-name resolution again picks one of two same-named candidates. The expected_internal_calls list reflects this empirical truth — `controls → Workflow.target` is NOT in the expected list because it doesn't emit today.\n\nSchema reference: bench/accuracy/synthetic/_schema.md. Authored 2026-05-02 per roundtable Recommendation #1."
+}

@@ -1,0 +1,13 @@
+[package]
+name = "rust-restate-chain-negative"
+version = "0.0.1"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "rust-restate-chain-negative"
+path = "src/main.rs"
+
+[lib]
+name = "rust_restate_chain_negative"
+path = "src/lib.rs"

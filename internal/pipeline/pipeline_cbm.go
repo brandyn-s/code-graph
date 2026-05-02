@@ -457,7 +457,7 @@ func (p *Pipeline) resolveCallEdge(
 	}
 
 	// Type-based method dispatch for qualified calls like obj.method()
-	result := p.resolveCallWithTypes(calleeName, moduleQN, importMap, typeMap)
+	result := p.resolveCallWithTypes(calleeName, callerQN, moduleQN, importMap, typeMap)
 	if result.QualifiedName == "" {
 		if fuzzyResult, ok := p.registry.FuzzyResolve(calleeName, moduleQN, importMap); ok && fuzzyResult.Confidence >= 0.10 {
 			rule := ResolverRuleFuzzyResolve

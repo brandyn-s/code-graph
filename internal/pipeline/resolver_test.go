@@ -298,3 +298,83 @@ func TestIsImportReachable(t *testing.T) {
 		}
 	}
 }
+
+// --- registry.Resolve consolidation: Phase 1 forwarding equivalence ---
+
+// TestResolveCtx_ForwardsToLegacy pins the Phase 1 invariant: ResolveCtx
+// must produce the same ResolutionResult as the legacy Resolve(calleeName,
+// moduleQN, importMap) signature for the same inputs. The Phase 2+ fields
+// on CallContext (ReceiverType, ImportBindings, Aliases) are reserved and
+// must NOT influence resolution today.
+//
+// If this test fails, Phase 1 has introduced a behavior change — the
+// negative-fixture corpus baseline at bench/accuracy/negative_baselines.json
+// is no longer the right comparator and the consolidation has lost its
+// no-op guarantee.
+func TestResolveCtx_ForwardsToLegacy(t *testing.T) {
+	reg := NewFunctionRegistry()
+	reg.Register("CreateOrder", "svcA.handlers.CreateOrder", "Function")
+	reg.Register("Process", "svcB.workers.Process", "Function")
+	reg.Register("Process", "svcC.helpers.Process", "Function")
+	reg.Register("Validate", "svcA.validators.Validate", "Method")
+
+	imports := map[string]string{
+		"svcA": "svcA",
+		"svcB": "svcB",
+	}
+
+	cases := []struct {
+		name       string
+		calleeName string
+		moduleQN   string
+		importMap  map[string]string
+	}{
+		{"unique-name-no-imports", "CreateOrder", "svcZ.caller", nil},
+		{"unique-name-with-imports", "CreateOrder", "svcZ.caller", imports},
+		{"qualified-import-map-hit", "svcA.CreateOrder", "svcZ.caller", imports},
+		{"multi-candidate-suffix-match", "Process", "svcB.caller", imports},
+		{"unresolvable-bare-name", "Nonexistent", "svcZ.caller", nil},
+		{"empty-callee", "", "svcZ.caller", nil},
+		{"method-call-shape", "v.Validate", "svcA.caller", imports},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			legacy := reg.Resolve(tc.calleeName, tc.moduleQN, tc.importMap)
+			ctx := CallContext{
+				CalleeName: tc.calleeName,
+				CallerQN:   "svcZ.caller.SomeFunc", // Phase 1: unused
+				ModuleQN:   tc.moduleQN,
+				ImportMap:  tc.importMap,
+				// Phase 2+ fields: deliberately set to non-empty values that
+				// MUST NOT influence resolution today. If they ever do,
+				// this test catches it.
+				ReceiverType:   "svcA.handlers.SomeStruct",
+				ImportBindings: map[string]string{"CreateOrder": "external.lib.CreateOrder"},
+				Aliases:        map[string]string{"alias": "svcA.something"},
+			}
+			ctxResult := reg.ResolveCtx(ctx)
+			if ctxResult != legacy {
+				t.Errorf("ResolveCtx diverged from Resolve\n  legacy = %#v\n  ctx    = %#v", legacy, ctxResult)
+			}
+		})
+	}
+}
+
+// TestCallContext_FieldsArePresent guards against accidental removal of the
+// Phase 2+ fields. Their existence is the Phase 1 commitment: callers can
+// populate them today (a no-op) and Phase 2+ ships consumption without
+// requiring upstream signature changes.
+func TestCallContext_FieldsArePresent(t *testing.T) {
+	// Construct with every field set. Compile-failure here means a field
+	// was renamed or removed.
+	_ = CallContext{
+		CalleeName:     "x",
+		CallerQN:       "x",
+		ModuleQN:       "x",
+		ImportMap:      map[string]string{},
+		ReceiverType:   "x",
+		ImportBindings: map[string]string{},
+		Aliases:        map[string]string{},
+	}
+}

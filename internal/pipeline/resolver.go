@@ -14,6 +14,50 @@ type ResolutionResult struct {
 	Strategy       string  // "import_map", "import_map_suffix", "same_module", "unique_name", "suffix_match", "fuzzy", "type_dispatch"
 	Confidence     float64 // 0.0–1.0
 	CandidateCount int     // how many candidates were considered
+
+	// DiscriminationApplied — populated when CandidateCount > 1 and a
+	// tiebreaker fired. Empty string means the candidate set was unique
+	// or no discrimination was needed. Populated by Phase 3+ of the
+	// registry.Resolve consolidation
+	// (bench/research/registry-resolve-consolidation-plan.md). Today
+	// always empty; reading this field is a forward-compat hook.
+	DiscriminationApplied string
+}
+
+// CallContext bundles every signal a resolver strategy may consult when
+// choosing among bare-name candidates. Phase 1 of the registry.Resolve
+// consolidation: introduce the surface, forward to legacy implementation,
+// no behavior change.
+//
+// Phase 1 fields (consumed today):
+//   - CalleeName, CallerQN, ModuleQN, ImportMap match the legacy
+//     Resolve(calleeName, moduleQN, importMap) signature plus an explicit
+//     CallerQN slot. CallerQN is unused today and is reserved for Phase 3+
+//     when receiver-type discrimination needs the caller's enclosing
+//     function QN to look up type bindings.
+//
+// Phase 2+ fields (reserved, always empty today):
+//   - ReceiverType — set by callers when a receiver-type can be inferred
+//     from the call site (e.g. PR #149's PerFuncTypeMap). Used by Phase 3a.
+//   - ImportBindings — bare-name → qualified-target from `use` statements
+//     in scope at the caller. Used by Phase 3b.
+//   - Aliases — `use X as alias` mappings. Always empty until ACC-004
+//     (bench/accuracy/FOLLOWUPS.md) ships the import-table tracking that
+//     populates aliases. Reserved here so the struct shape doesn't churn.
+//
+// The shape is finalized at Phase 1 so Phase 2 only changes how the
+// strategies CONSUME these fields, not the struct itself.
+type CallContext struct {
+	// Phase 1 — present today.
+	CalleeName string
+	CallerQN   string
+	ModuleQN   string
+	ImportMap  map[string]string
+
+	// Phase 2+ — reserved, populated as later phases ship.
+	ReceiverType   string
+	ImportBindings map[string]string
+	Aliases        map[string]string
 }
 
 // FunctionRegistry indexes all Function, Method, and Class nodes by qualified
@@ -50,6 +94,20 @@ func (r *FunctionRegistry) Register(name, qualifiedName, nodeLabel string) {
 		}
 	}
 	r.byName[simple] = append(r.byName[simple], qualifiedName)
+}
+
+// ResolveCtx is the CallContext-shaped entry point introduced in Phase 1
+// of the registry.Resolve consolidation
+// (bench/research/registry-resolve-consolidation-plan.md). It forwards
+// to the legacy Resolve signature today; Phase 2 will rewire the
+// strategies to consume CallContext directly, and Phase 3 will add
+// discrimination using ctx.ReceiverType / ctx.ImportBindings.
+//
+// Forwarding-equivalence is pinned by TestResolveCtx_ForwardsToLegacy
+// in resolver_test.go. Callers can migrate to ResolveCtx incrementally
+// without behavior change.
+func (r *FunctionRegistry) ResolveCtx(ctx CallContext) ResolutionResult {
+	return r.Resolve(ctx.CalleeName, ctx.ModuleQN, ctx.ImportMap)
 }
 
 // Resolve attempts to find the qualified name of a callee using a prioritized

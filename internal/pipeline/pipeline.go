@@ -1901,8 +1901,14 @@ func buildEdgesFromResults(results [][]resolvedEdge, qnToID map[string]int64, la
 // `self.stage_repo.get_job_progress()`, `data.updater_client.cancel()`, and
 // `service.call(req)` style chains where the receiver is a parameter or
 // self-field rather than a `let x = Constructor()` local.
+//
+// callerQN is threaded through for the registry.Resolve consolidation
+// (Phase 1, bench/research/registry-resolve-consolidation-plan.md). The
+// chain-resolution logic doesn't consume it today; it flows into the
+// CallContext passed to ResolveCtx so Phase 2+ can use it for
+// receiver-type lookup against PerFuncTypeMap.
 func (p *Pipeline) resolveCallWithTypes(
-	calleeName, moduleQN string,
+	calleeName, callerQN, moduleQN string,
 	importMap map[string]string,
 	typeMap TypeMap,
 ) ResolutionResult {
@@ -1955,8 +1961,17 @@ func (p *Pipeline) resolveCallWithTypes(
 		}
 	}
 
-	// Delegate to the registry's resolution strategy
-	return p.registry.Resolve(calleeName, moduleQN, importMap)
+	// Delegate to the registry's resolution strategy.
+	// Phase 1 of the registry.Resolve consolidation: route through
+	// ResolveCtx with a CallContext. Behavior is unchanged today
+	// (ResolveCtx forwards to legacy Resolve); callerQN is captured
+	// for Phase 2+ consumption (receiver-type discrimination).
+	return p.registry.ResolveCtx(CallContext{
+		CalleeName: calleeName,
+		CallerQN:   callerQN,
+		ModuleQN:   moduleQN,
+		ImportMap:  importMap,
+	})
 }
 
 // buildFieldTypeMap walks every extracted file's TypeAssigns and identifies

@@ -376,6 +376,16 @@ func (r *FunctionRegistry) applyImportBindingFilter(ctx CallContext, candidates 
 	}
 	// Normalize Rust `::` separators to QN-style `.` for comparison.
 	targetQN := strings.ReplaceAll(target, "::", ".")
+	// Rust `crate::` is the implicit crate root, not a registered QN
+	// segment. Registry QNs carry the project-name prefix
+	// (`<project>.apid.src.v1.util.error_response`) without `crate`.
+	// Strip the leading `crate.` so suffix-match catches internal
+	// imports of the form `use crate::v1::util::error_response;`.
+	// Without this, every internal Rust use that travels through `crate::`
+	// is misclassified as external and its bindings dropped — caused
+	// the apid -14.3pp F1 regression on psm's
+	// 2026-05-02 measurement after Phase 3b shipped.
+	targetQN = strings.TrimPrefix(targetQN, "crate.")
 	dotTarget := "." + targetQN
 
 	// Look for internal candidate(s) whose QN ends with the import

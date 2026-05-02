@@ -117,7 +117,23 @@ func (r *FunctionRegistry) resolveViaSameModule(calleeName, suffix, moduleQN str
 	}
 	if suffix != "" {
 		sameModuleQualified := moduleQN + "." + suffix
-		if _, exists := r.exact[sameModuleQualified]; exists {
+		if label, exists := r.exact[sameModuleQualified]; exists {
+			// Type-aware tiebreak (2026-05-02): a method-call shape
+			// (calleeName has a dot, e.g. `args.run`) shouldn't auto-
+			// resolve to a same-module FREE FUNCTION just because the
+			// simple name matches. Methods on a struct are the more
+			// likely target. Defer to nameLookup which can also see
+			// Method candidates project-wide.
+			//
+			// FN #3 from psm plateau-diagnose
+			// (2026-05-02): `args.run()` inside MigrationArgs.run was
+			// resolving to the free fn `cmd.db.run` instead of the
+			// method `Commands.run` because the same_module suffix
+			// shortcut hit at confidence 0.90 before suffix_match
+			// could consider methods.
+			if strings.Contains(calleeName, ".") && label == "Function" {
+				return ResolutionResult{}
+			}
 			return ResolutionResult{QualifiedName: sameModuleQualified, Strategy: "same_module", Confidence: 0.90, CandidateCount: 1}
 		}
 	}
@@ -149,7 +165,7 @@ func (r *FunctionRegistry) resolveViaNameLookup(calleeName, suffix, moduleQN str
 		}
 	}
 
-	return pickBestCandidate(candidates, moduleQN, importMap)
+	return r.pickBestCandidate(candidates, moduleQN, calleeName, importMap)
 }
 
 // resolveSuffixMatch handles Strategy 4 — suffix-based matching among multiple candidates.
@@ -171,14 +187,16 @@ func (r *FunctionRegistry) resolveSuffixMatch(calleeName, suffix, moduleQN strin
 		return ResolutionResult{QualifiedName: matches[0], Strategy: "suffix_match", Confidence: candidateCountPenalty(0.55, len(candidates)), CandidateCount: len(candidates)}
 	}
 	if len(matches) > 1 {
-		best := bestByImportDistance(matches, moduleQN)
+		best := r.bestByImportDistancePreferMethod(matches, moduleQN, calleeName)
 		return ResolutionResult{QualifiedName: best, Strategy: "suffix_match", Confidence: candidateCountPenalty(0.55, len(matches)), CandidateCount: len(matches)}
 	}
 	return ResolutionResult{}
 }
 
-// pickBestCandidate selects the best match from multiple candidates with import filtering.
-func pickBestCandidate(candidates []string, moduleQN string, importMap map[string]string) ResolutionResult {
+// pickBestCandidate selects the best match from multiple candidates with
+// import filtering. Method receiver of the registry so we can apply the
+// type-aware tiebreak (prefer Method over Function for method-call shape).
+func (r *FunctionRegistry) pickBestCandidate(candidates []string, moduleQN, calleeName string, importMap map[string]string) ResolutionResult {
 	if len(candidates) <= 1 {
 		return ResolutionResult{}
 	}
@@ -187,13 +205,13 @@ func pickBestCandidate(candidates []string, moduleQN string, importMap map[strin
 		filtered = filterImportReachable(candidates, importMap)
 	}
 	if len(filtered) == 0 {
-		best := bestByImportDistance(candidates, moduleQN)
+		best := r.bestByImportDistancePreferMethod(candidates, moduleQN, calleeName)
 		return ResolutionResult{QualifiedName: best, Strategy: "suffix_match", Confidence: candidateCountPenalty(0.55*0.5, len(candidates)), CandidateCount: len(candidates)}
 	}
 	if len(filtered) == 1 {
 		return ResolutionResult{QualifiedName: filtered[0], Strategy: "suffix_match", Confidence: candidateCountPenalty(0.55, len(candidates)), CandidateCount: len(candidates)}
 	}
-	best := bestByImportDistance(filtered, moduleQN)
+	best := r.bestByImportDistancePreferMethod(filtered, moduleQN, calleeName)
 	return ResolutionResult{QualifiedName: best, Strategy: "suffix_match", Confidence: candidateCountPenalty(0.55, len(filtered)), CandidateCount: len(filtered)}
 }
 
@@ -347,6 +365,40 @@ func bestByImportDistance(candidates []string, callerModuleQN string) string {
 		if prefixLen > bestLen {
 			bestLen = prefixLen
 			best = c
+		}
+	}
+	return best
+}
+
+// bestByImportDistancePreferMethod is the type-aware variant: when calleeName
+// looks like a method call (`obj.method`), and there are import-distance ties,
+// prefer Method-labeled candidates over Function-labeled ones. Falls back to
+// bestByImportDistance for path calls and bare-name calls.
+//
+// 2026-05-02 plateau-diagnose Step 6 finding: FN #3 had `args.run()` resolved
+// to free fn `cmd.db.run` because three method candidates and the free fn all
+// shared the same import-distance score; bestByImportDistance picked the
+// first-encountered (slice iteration order). The type-aware tiebreak fixes
+// the FN #3 class without affecting non-method-call resolution.
+func (r *FunctionRegistry) bestByImportDistancePreferMethod(candidates []string, callerModuleQN, calleeName string) string {
+	if !strings.Contains(calleeName, ".") {
+		// Bare-name calls: original behavior, no method preference.
+		return bestByImportDistance(candidates, callerModuleQN)
+	}
+	best := ""
+	bestLen := -1
+	bestIsMethod := false
+	for _, c := range candidates {
+		prefixLen := commonPrefixLen(c, callerModuleQN)
+		isMethod := r.exact[c] == "Method"
+		switch {
+		case prefixLen > bestLen:
+			bestLen = prefixLen
+			best = c
+			bestIsMethod = isMethod
+		case prefixLen == bestLen && isMethod && !bestIsMethod:
+			best = c
+			bestIsMethod = true
 		}
 	}
 	return best

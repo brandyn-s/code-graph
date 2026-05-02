@@ -1618,14 +1618,17 @@ def compare_fixture(fixture_id: str) -> tuple[dict, Path, Path]:
         "",
         "## Summary",
         "",
-        "Four metrics per edge type:",
+        "Five metrics per edge type:",
         "- **Exact**: strict (from_qn, to_qn, type) equality between oracle and code-graph.",
         "- **Suffix-3**: permissive match on the last 3 QN segments — identifies QN-drift artifacts.",
-        "- **Scope-aligned**: restricted to edges whose caller is in the oracle's analyzed-caller set. Filters out scope-mismatch artifacts (e.g., code-graph edges from test files PyCG never reached).",
+        "- **Scope-aligned (all bands)**: restricted to edges whose caller is in the oracle's analyzed-caller set, INCLUDING speculative-janusian band emissions (Janusian-ambiguous cross-package edges). Reflects the recall-friendly operating point — what consumers see by default if they don't filter `confidence_band`.",
+        "- **Scope-aligned (high-confidence)**: same scope, EXCLUDING `confidence_band=speculative-janusian` edges. Reflects the precision-friendly operating point for consumers who filter to high-trust edges only.",
         "- **Impl-normalized**: Rust-specific. Strips `Impl` suffix from penultimate QN segment symmetrically on both sides — treats `FooImpl.bar` and `Foo.bar` as the same function. Captures code-graph's trait-form vs oracle's impl-form resolution disagreement.",
         "",
-        "| Edge type | Oracle | Oracle / Measured | Exact P/R/F1 | Scope-aligned P/R/F1 | Impl-normalized P/R/F1 |",
-        "|---|---|---|---|---|---|",
+        "Two operating points are reported because the resolver emits Janusian-ambiguous edges (multiple cross-package candidates with same simple name) at the speculative-janusian band rather than dropping them. Find-one-function-reliably queries should filter to high-confidence; blast-radius / impact-analysis queries should use all-bands.",
+        "",
+        "| Edge type | Oracle | Oracle / Measured | Exact P/R/F1 | Scope-aligned P/R/F1 (all) | Scope-aligned P/R/F1 (high-conf) | Impl-normalized P/R/F1 |",
+        "|---|---|---|---|---|---|---|",
     ]
     for edge_type, res in results.items():
         if res.get("status") in ("pending", "known_limitation"):
@@ -1639,12 +1642,14 @@ def compare_fixture(fixture_id: str) -> tuple[dict, Path, Path]:
             continue
         e = res["exact"]
         a = res["scope_aligned"]
+        h = res.get("scope_aligned_high_confidence", a)  # fallback for older reports
         i = res.get("scope_impl_normalized", a)  # fallback for older reports
         lines.append(
             f"| {edge_type} | {res['oracle']} | "
             f"{res['oracle_count']} / {res['measured_count']} | "
             f"{e['precision']:.3f} / {e['recall']:.3f} / {e['f1']:.3f} | "
             f"{a['precision']:.3f} / {a['recall']:.3f} / {a['f1']:.3f} | "
+            f"{h['precision']:.3f} / {h['recall']:.3f} / {h['f1']:.3f} | "
             f"{i['precision']:.3f} / {i['recall']:.3f} / {i['f1']:.3f} |"
         )
     # Per-project breakdown (only present for multi-project Rust/Go fixtures).

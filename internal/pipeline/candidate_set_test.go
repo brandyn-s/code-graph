@@ -135,26 +135,22 @@ func TestResolveCallEdge_UniqueNameAcrossPackages_CandidateSetSizeOne(t *testing
 	}
 }
 
-// TestResolveCallEdge_SameNamedMethodOnTwoStructs_DroppedByJanusianPenalty —
+// TestResolveCallEdge_SameNamedMethodOnTwoStructs_TaggedSpeculativeJanusian —
 // two struct types with a same-named method. Without TypeMap binding, the
-// resolver previously fell through to suffix_match across both candidates
-// and emitted an ambiguous edge. After Y.3 (2026-05-02 plateau-2 plan),
-// emissions where rule==cross-package-heuristic AND candidate_set_size>=2
-// are refused — the import-distance tie-break on multi-candidate same-
-// named methods has measured P=0.20 vs P=0.82 for unambiguous sites
-// (Step 6 baseline), a 62pp gap. The "right" behavior at an ambiguous
-// site is to NOT emit; the dropped TPs (~8 on Go fixture) are
-// outweighed by the dropped FPs (~32) for a net F1 lift.
-func TestResolveCallEdge_SameNamedMethodOnTwoStructs_DroppedByJanusianPenalty(t *testing.T) {
+// resolver falls through to suffix_match across both candidates. Originally
+// (Y.3, 2026-05-02 plateau-2 plan), these emissions where
+// rule==cross-package-heuristic AND candidate_set_size>=2 were REFUSED.
+// 2026-05-02 PR follow-up: instead of dropping, emit with
+// confidence_band="speculative-janusian" and janusian_ambiguous=true so
+// downstream consumers can filter by band per their precision/recall needs.
+// This recovers ~60% TPs that the blanket-drop sacrificed (per the Step 2
+// LLM-Judge taxonomy in PR #135) while preserving the high-precision
+// operating point for consumers that filter to non-speculative bands.
+func TestResolveCallEdge_SameNamedMethodOnTwoStructs_TaggedSpeculativeJanusian(t *testing.T) {
 	p := &Pipeline{
 		ProjectName: "proj",
 		registry:    NewFunctionRegistry(),
 	}
-	// Two methods with the same simple name "Run" on different types.
-	// No TypeMap entry for `obj` — the type-dispatch path won't fire,
-	// and resolution falls through to project-wide name lookup. Two
-	// candidates → suffix_match with CandidateCount=2. Y.3 refuses to
-	// emit this case because rule=cross-package-heuristic AND size>=2.
 	p.registry.Register("Run", "proj.foo.TypeA.Run", "Method")
 	p.registry.Register("Run", "proj.bar.TypeB.Run", "Method")
 	p.registry.Register("Caller", "proj.app.Caller", "Function")
@@ -165,8 +161,15 @@ func TestResolveCallEdge_SameNamedMethodOnTwoStructs_DroppedByJanusianPenalty(t 
 	lspCallerMethods := map[string]bool{}
 
 	call := cbm.Call{CalleeName: "obj.Run", EnclosingFuncQN: "proj.app.Caller"}
-	if _, ok := p.resolveCallEdge(call, moduleQN, importMap, typeMap, lspCallerMethods); ok {
-		t.Errorf("ambiguous cross-package-heuristic edge (size>=2) should be dropped by Y.3")
+	edge, ok := p.resolveCallEdge(call, moduleQN, importMap, typeMap, lspCallerMethods)
+	if !ok {
+		t.Fatal("ambiguous cross-package-heuristic edge should be EMITTED with speculative-janusian band, not dropped")
+	}
+	if got := edge.Properties["confidence_band"]; got != "speculative-janusian" {
+		t.Errorf("confidence_band: got %q, want %q", got, "speculative-janusian")
+	}
+	if got := edge.Properties["janusian_ambiguous"]; got != true {
+		t.Errorf("janusian_ambiguous flag: got %v, want true", got)
 	}
 }
 

@@ -418,6 +418,39 @@ def query_resolver_rules_sharded(
     return out
 
 
+def query_confidence_bands(
+    projects: list[str], edge_type: str
+) -> dict[tuple[str, str, str], str]:
+    """Return a (from_qn, to_qn, type) -> confidence_band map for `edge_type`.
+
+    Reads `confidence_band` out of edge properties (set by the resolver
+    based on the resolution's confidence score, plus a special override
+    `speculative-janusian` for edges that survived the Janusian-ambiguity
+    softening introduced 2026-05-02 — see internal/pipeline/pipeline_cbm.go).
+
+    Multi-project flavor for Rust/Go subset fixtures. Used by compute_metrics
+    to compute `scope_aligned_high_confidence` (excludes speculative-janusian).
+    """
+    out: dict[tuple[str, str, str], str] = {}
+    for project in projects:
+        cypher = (
+            f"MATCH (a)-[r:{edge_type}]->(b) "
+            f"RETURN a.qualified_name AS f, b.qualified_name AS t, "
+            f"r.confidence_band AS band LIMIT 100000"
+        )
+        rows = _run_cypher(project, cypher, max_rows=10000)
+        for r in rows:
+            if not isinstance(r, dict):
+                continue
+            f = r.get("f") or ""
+            t = r.get("t") or ""
+            band = r.get("band") or ""
+            if not (f and t and band):
+                continue
+            out[(f, t, edge_type)] = band
+    return out
+
+
 def query_candidate_sets(
     projects: list[str], edge_type: str
 ) -> dict[tuple[str, str, str], int]:
@@ -1156,6 +1189,7 @@ def compute_metrics(
     resolver_rules: dict[tuple[str, str, str], str] | None = None,
     modality_projects: list[str] | None = None,
     candidate_sets: dict[tuple[str, str, str], int] | None = None,
+    confidence_bands: dict[tuple[str, str, str], str] | None = None,
 ) -> dict:
     oracle_exact = {e.match_key() for e in oracle}
     measured_exact = {e.match_key() for e in measured}
@@ -1199,6 +1233,28 @@ def compute_metrics(
     tp_scoped = oracle_scoped & measured_scoped
     fp_scoped = measured_scoped - oracle_scoped
     fn_scoped = oracle_scoped - measured_scoped
+
+    # High-confidence-only filter (2026-05-02): the resolver now emits
+    # Janusian-ambiguous edges with confidence_band="speculative-janusian"
+    # instead of dropping them (PR follow-up to revert THEME D). Two
+    # downstream operating points:
+    #   - scope_aligned        — all bands; max recall, lower precision
+    #   - scope_aligned_high_confidence — drops speculative-janusian
+    #                            from measured side; reflects "do you trust
+    #                            this edge?" precision tier
+    # Both are reported so consumers pick the operating point matching
+    # their use case (high-precision queries vs blast-radius / impact
+    # analysis).
+    if confidence_bands:
+        high_conf_filter = {
+            k for k in measured_scoped
+            if confidence_bands.get(k) != "speculative-janusian"
+        }
+        tp_high = oracle_scoped & high_conf_filter
+        fp_high = high_conf_filter - oracle_scoped
+        fn_high = oracle_scoped - high_conf_filter
+    else:
+        tp_high, fp_high, fn_high = tp_scoped, fp_scoped, fn_scoped
 
     # Suffix match: (from_suffix, to_suffix, type)
     def suffix_key(k: tuple[str, str, str]) -> tuple[str, str, str] | None:
@@ -1307,6 +1363,7 @@ def compute_metrics(
         "exact": pr(len(tp_exact), len(fp_exact), len(fn_exact)),
         "suffix_3seg": pr(len(tp_suffix), len(fp_suffix), len(fn_suffix)),
         "scope_aligned": pr(len(tp_scoped), len(fp_scoped), len(fn_scoped)),
+        "scope_aligned_high_confidence": pr(len(tp_high), len(fp_high), len(fn_high)),
         "scope_impl_normalized": pr(len(tp_impl), len(fp_impl), len(fn_impl)),
         "scope_generic_normalized": pr(len(tp_generic), len(fp_generic), len(fn_generic)),
         "scope_canonical": pr(len(tp_canon), len(fp_canon), len(fn_canon)),
@@ -1464,6 +1521,7 @@ def compare_fixture(fixture_id: str) -> tuple[dict, Path, Path]:
             caller_kinds_calls = query_caller_node_kinds(projects, "CALLS")
             resolver_rules_calls = query_resolver_rules(projects, "CALLS")
             candidate_sets_calls = query_candidate_sets(projects, "CALLS")
+            confidence_bands_calls = query_confidence_bands(projects, "CALLS")
             results["CALLS"] = {
                 "oracle": "syn",
                 "per_project": compute_per_project_metrics(oracle_calls, measured_calls, projects),
@@ -1471,6 +1529,7 @@ def compare_fixture(fixture_id: str) -> tuple[dict, Path, Path]:
                     oracle_calls, measured_calls, caller_kinds_calls,
                     resolver_rules_calls, modality_projects=projects,
                     candidate_sets=candidate_sets_calls,
+                    confidence_bands=confidence_bands_calls,
                 ),
             }
             oracle_imports = [e for e in read_edges(rust_cache) if e.type == "IMPORTS"]

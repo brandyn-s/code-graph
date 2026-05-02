@@ -445,21 +445,43 @@ func (p *Pipeline) resolveCallEdge(
 	// per the Step 2 LLM-Judge taxonomy). Pseudo-caller cases are
 	// excluded — pkg_block_caller_FP_rate=0 in baseline.
 	candSize := candidateSetSizeFromResolution(result)
-	if rule == ResolverRuleCrossPackageHeuristic && candSize >= 2 {
-		return resolvedEdge{}, false
+	// Janusian penalty (#135) used to DROP cross-package-heuristic emissions
+	// with candidate_set_size >= 2 entirely. The 2026-05-02 plateau-diagnose
+	// session showed that drop trades 60% legitimate TPs for 40% FPs (per
+	// the Step 2 LLM-Judge taxonomy in #135) — collectively responsible for
+	// most of the recall regression from R=0.798 (stale) to R=0.685 (fresh)
+	// on the psm Rust fixture.
+	//
+	// New behavior (2026-05-02 PR follow-up): emit the edge but tag it as
+	// `confidence_band="speculative-janusian"` so downstream consumers can
+	// filter ambiguous Janusian emissions out of high-precision use cases
+	// while retaining them for recall-sensitive ones (impact analysis,
+	// blast-radius queries, "find any plausible caller").
+	//
+	// The harness now reports both `scope_aligned` (all bands, includes
+	// these speculative emissions) and `scope_aligned_high_confidence`
+	// (excludes speculative-janusian) so the precision tier is preserved.
+	janusianAmbiguous := rule == ResolverRuleCrossPackageHeuristic && candSize >= 2
+	confBand := confidenceBand(result.Confidence)
+	if janusianAmbiguous {
+		confBand = "speculative-janusian"
+	}
+	props := map[string]any{
+		"confidence":             result.Confidence,
+		"confidence_band":        confBand,
+		"resolution_strategy":    result.Strategy,
+		"caller_node_kind":       callerKind,
+		"resolver_rule":          rule,
+		CandidateSetPropertyName: candSize,
+	}
+	if janusianAmbiguous {
+		props["janusian_ambiguous"] = true
 	}
 	return resolvedEdge{
-		CallerQN: callerQN,
-		TargetQN: result.QualifiedName,
-		Type:     edgeType,
-		Properties: map[string]any{
-			"confidence":             result.Confidence,
-			"confidence_band":        confidenceBand(result.Confidence),
-			"resolution_strategy":    result.Strategy,
-			"caller_node_kind":       callerKind,
-			"resolver_rule":          rule,
-			CandidateSetPropertyName: candSize,
-		},
+		CallerQN:   callerQN,
+		TargetQN:   result.QualifiedName,
+		Type:       edgeType,
+		Properties: props,
 	}, true
 }
 

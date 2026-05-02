@@ -91,34 +91,25 @@ impl<'ast> Visit<'ast> for Visitor {
     }
 
     fn visit_item_impl(&mut self, i: &'ast syn::ItemImpl) {
-        // Theme D (2026-05-02): for `impl Trait for Struct`, push the
-        // *trait* name onto impl_stack — not the struct. Code-graph's
-        // resolver emits `Trait.method` for these calls (it has both
-        // trait-signature and impl-block defs and prefers the trait
-        // node). Pushing self_ty produced `StructImpl.method` and made
-        // 36 of 91 assetman scope-aligned FPs trait/impl mismatches
-        // (40% of the failure mass). Pushing the trait name makes the
-        // oracle's def QN match what code-graph emits — eliminating the
-        // mismatch as a measurement artifact.
+        // Extract the self type name for method qualification.
+        // `impl Foo` -> "Foo", `impl Trait for Foo` -> "Foo".
         //
-        // Inherent impls (`impl Foo`) and unparseable trait paths fall
-        // back to self_ty as before.
-        let ty_name: String = if let Some((_, trait_path, _)) = &i.trait_ {
-            trait_path
-                .segments
-                .last()
-                .map(|s| s.ident.to_string())
-                .unwrap_or_default()
-        } else {
-            match &*i.self_ty {
-                syn::Type::Path(tp) => tp
-                    .path
-                    .segments
-                    .last()
-                    .map(|s| s.ident.to_string())
-                    .unwrap_or_default(),
-                _ => String::new(),
-            }
+        // 2026-05-02: a brief experiment (THEME D, PR #144) pushed the
+        // *trait* name on trait impls instead of self_ty. Measured
+        // +3.3pp F1 against stale per-subset indexes (predating the
+        // Janusian penalty in #135). Re-validation against fresh
+        // indexes showed the change was a -2.9pp F1 *regression*
+        // (0.820 → 0.791): Janusian penalty already drops trait/impl
+        // mismatch FPs, leaving only ~3 for THEME D to fix, while the
+        // recall slip (-32 TPs) from oracle/CG-form disagreement
+        // remained. Reverted to self_ty. See
+        // baselines/2026-05-02-rust-theme-d-revert.md for full
+        // attribution and why the stale-index discipline check that
+        // ships alongside this revert would have caught the surprise
+        // earlier.
+        let ty_name = match &*i.self_ty {
+            syn::Type::Path(tp) => tp.path.segments.last().map(|s| s.ident.to_string()).unwrap_or_default(),
+            _ => String::new(),
         };
         self.impl_stack.push(ty_name);
         syn::visit::visit_item_impl(self, i);

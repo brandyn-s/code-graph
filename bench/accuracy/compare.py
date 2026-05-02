@@ -46,6 +46,67 @@ CODE_GRAPH_BINARY = (
 )
 
 
+def check_index_freshness(projects: list[str]) -> list[str]:
+    """Warn if any per-project DB was indexed before the binary was built.
+
+    Detects stale-index drift — the failure mode that produced the
+    F1=0.860 → 0.791 surprise on 2026-05-02 (per-subset DBs predated the
+    Janusian penalty commit; the metric was measuring an obsolete operating
+    point). One git-mtime-equivalent check would have caught it.
+
+    Returns a list of warning strings (one per stale project). Empty list
+    means all DBs are fresh enough.
+
+    Heuristic: each project's indexed_at must be >= the binary mtime.
+    The binary is the latest production code; if a DB predates it, the
+    DB reflects an older code path. False positives (binary rebuilt for
+    unrelated reasons) are tolerable — the warning is informational, not
+    blocking.
+    """
+    import sqlite3
+
+    if not CODE_GRAPH_BINARY.exists():
+        return []  # No binary to compare against; skip silently.
+    binary_mtime = CODE_GRAPH_BINARY.stat().st_mtime
+    cache_dir = Path.home() / ".cache" / "codebase-memory-mcp"
+    if not cache_dir.exists():
+        return []
+
+    warnings: list[str] = []
+    for project in projects:
+        db_path = cache_dir / f"{project}.db"
+        if not db_path.exists():
+            warnings.append(
+                f"  ! project DB missing: {project}.db (was the project ever indexed?)"
+            )
+            continue
+        try:
+            conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT indexed_at FROM projects WHERE name = ?", (project,)
+            )
+            row = cur.fetchone()
+            conn.close()
+        except sqlite3.Error:
+            continue
+        if not row or not row[0]:
+            continue
+        # indexed_at is ISO 8601; convert to epoch
+        try:
+            iat_dt = datetime.datetime.fromisoformat(row[0].replace("Z", "+00:00"))
+            iat_epoch = iat_dt.timestamp()
+        except (ValueError, AttributeError):
+            continue
+        if iat_epoch < binary_mtime - 60:  # 60s tolerance for clock skew
+            age_hours = (binary_mtime - iat_epoch) / 3600
+            warnings.append(
+                f"  ! stale index: {project} (indexed_at={row[0]}, "
+                f"binary {age_hours:.1f}h newer) — re-index to reflect current code"
+            )
+    return warnings
+
+
 def _sanitize_path(path: str) -> str:
     """Mirror code-graph's `pipeline.ProjectNameFromPath` sanitization."""
     s = path.replace("\\", "/")
@@ -1270,6 +1331,21 @@ def compute_metrics(
 def compare_fixture(fixture_id: str) -> tuple[dict, Path, Path]:
     fixture = get_fixture(fixture_id)
     verify_fixture_sha(fixture)
+
+    # Stale-index detection (added 2026-05-02 after stale-baseline drift
+    # surprise). Warn loudly before reporting metrics if any per-project
+    # DB predates the binary. Informational — does NOT block the run.
+    projects_for_check = projects_for_fixture(fixture)
+    if not projects_for_check:
+        projects_for_check = [project_name_for_fixture(fixture)]
+    stale_warnings = check_index_freshness(projects_for_check)
+    if stale_warnings:
+        print()
+        print("WARN: stale per-project index detected — metrics may not "
+              "reflect current code-graph behavior:")
+        for w in stale_warnings:
+            print(w)
+        print()
 
     today = datetime.date.today().isoformat()
     BASELINES_DIR.mkdir(parents=True, exist_ok=True)

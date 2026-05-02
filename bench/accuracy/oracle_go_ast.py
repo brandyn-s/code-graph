@@ -96,6 +96,12 @@ def build_fn_def_map_from_binary(defs: list[str]) -> dict[str, str]:
     functions and methods since code-graph's Go QN form is
     `<project>.<file>.<name>` uniformly (no receiver type segment).
     Ambiguity (multiple methods with the same name) resolves to first-seen.
+
+    Note (follow-up #5, 2026-05-02): callers should prefer
+    `_build_def_indexes` for ambiguity-aware bare-name resolution and
+    receiver-type-resolved lookups. This single-value first-write-wins
+    map is preserved for backward compatibility but is the source of
+    the `Store.Close -> ConfigStore.Close` hallucination fixed in #5.
     """
     fn_to_qn: dict[str, str] = {}
     for def_qn in defs:
@@ -105,22 +111,71 @@ def build_fn_def_map_from_binary(defs: list[str]) -> dict[str, str]:
     return fn_to_qn
 
 
+def _build_def_indexes(
+    defs: list[str], project: str
+) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
+    """Build two ambiguity-preserving def indexes for follow-up #5.
+
+    Returns:
+      bare_to_qns: simple_name -> list of QNs.
+        Used for bare-name callee resolution. Only resolves when the list
+        has exactly one entry — multi-candidate bare-names are DROPPED
+        instead of arbitrarily picking the first (which produced the
+        `Store.Close -> ConfigStore.Close` hallucination in PR #139).
+
+      recv_method_to_qns: '<RecvType>.<method>' -> list of QNs.
+        Built from method defs (those with >= 3 dot-segments after the
+        project prefix: `<file>.<RecvType>.<method>`). Used to resolve
+        the `<RecvType>.<method>` callee form emitted by the oracle
+        binary's Y.5 self-receiver substitution.
+
+    Project name is treated as opaque — projects like
+    `c-Users-...-internal-tools` use hyphens, not dots, in code-graph's
+    sanitized form, so a single project-prefix-strip is sufficient.
+    """
+    project_prefix = project + "."
+    bare: dict[str, list[str]] = {}
+    recv_method: dict[str, list[str]] = {}
+    for qn in defs:
+        if not qn.startswith(project_prefix):
+            continue
+        rest = qn[len(project_prefix):]
+        rest_parts = rest.split(".")
+        if not rest_parts:
+            continue
+        simple = rest_parts[-1]
+        if simple:
+            bare.setdefault(simple, []).append(qn)
+        # Method def shape: <file>.<RecvType>.<method> (>= 3 segments
+        # after project prefix). Free functions are 2 segments and skip
+        # this branch.
+        if len(rest_parts) >= 3:
+            key = rest_parts[-2] + "." + rest_parts[-1]
+            recv_method.setdefault(key, []).append(qn)
+    return bare, recv_method
+
+
 def resolve_and_filter(
     raw_edges: list[dict],
     fn_def_map: dict[str, str],
     project: str,
+    defs: list[str] | None = None,
 ) -> tuple[list[Edge], dict[str, int]]:
     """Filter to internal-only edges with resolved QNs.
 
     CALLS rules:
-      - bare ident (single segment): look up in fn_def_map. If found, use full QN.
-        Else drop (external or unresolved method receiver).
-      - "recv.sel" (2 segments): ambiguous — could be package-qualified call
-        (internal file) or method on external var. Heuristic: if the first
-        segment matches any known filename (last segment of a def), we
-        treat as package-local call and resolve the bare `sel` via fn_def_map.
-        Otherwise drop as external.
-      - 3+ segments: drop (fully-qualified external reference).
+      - bare ident (single segment): look up in `bare_to_qns`. Resolve only
+        if exactly one candidate. Multi-candidate bare-names are DROPPED
+        (rather than arbitrarily picked) — fixes the
+        `Store.Close -> ConfigStore.Close` hallucination from PR #139.
+      - `<RecvType>.<method>` (2 segments, RecvType is a known struct):
+        resolve via `recv_method_to_qns`. Emitted by the oracle binary's
+        Y.5 self-receiver substitution (PR following #137). When inside a
+        method `func (p *Pipeline) X() { p.Y() }`, the oracle emits
+        callee `Pipeline.Y` instead of the unresolvable `p.Y`.
+      - `<file>.<fn>` (2 segments, first is a known file segment): existing
+        package-local resolution path.
+      - All else: drop.
 
     IMPORTS rules:
       - Keep only paths starting with the module prefix. We detect module
@@ -133,10 +188,18 @@ def resolve_and_filter(
     between file modules), we'd need to resolve import paths to internal
     file QNs — deferred. IMPORTS are dropped for now; the `.meta.json`
     sidecar records counts.
+
+    Backward compatibility: `fn_def_map` argument retained for callers that
+    haven't switched to passing `defs`. When `defs` is None, behavior
+    falls back to the legacy first-write-wins resolution path (with the
+    Store.Close hallucination still present).
     """
     stats = {
         "calls_bare_resolved": 0,
         "calls_bare_unresolved": 0,
+        "calls_bare_ambiguous_dropped": 0,
+        "calls_recv_method_resolved": 0,
+        "calls_recv_method_ambiguous_dropped": 0,
         "calls_path_resolved": 0,
         "calls_path_dropped": 0,
         "imports_dropped": 0,
@@ -154,6 +217,15 @@ def resolve_and_filter(
         if len(parts) >= 2:
             # For `<project>.<file>.<fn>`, parts[0] is the file
             file_segments.add(parts[0])
+
+    # Build the ambiguity-aware indexes (follow-up #5). When `defs` is not
+    # provided, fall back to single-value fn_def_map for backward compat.
+    if defs is not None:
+        bare_to_qns, recv_method_to_qns = _build_def_indexes(defs, project)
+    else:
+        bare_to_qns = {k: [v] for k, v in fn_def_map.items()}
+        recv_method_to_qns = {}
+
     kept: list[Edge] = []
 
     for e in raw_edges:
@@ -166,29 +238,61 @@ def resolve_and_filter(
             continue
         segs = to.split(".")
         if len(segs) == 1:
-            resolved = fn_def_map.get(to)
-            if resolved:
+            # Bare-name resolution: only emit when uniquely resolvable.
+            # Multi-candidate bare names produce the Store.Close
+            # hallucination if we pick first-seen.
+            candidates = bare_to_qns.get(to, [])
+            if len(candidates) == 1:
                 kept.append(Edge(
                     from_qn=e["from_qn"],
-                    to_qn=resolved,
+                    to_qn=candidates[0],
                     type="CALLS",
                     file=e.get("file", ""),
                     line=int(e.get("line", 0) or 0),
                     source="go-ast",
                 ))
                 stats["calls_bare_resolved"] += 1
+            elif len(candidates) > 1:
+                stats["calls_bare_ambiguous_dropped"] += 1
             else:
                 stats["calls_bare_unresolved"] += 1
         elif len(segs) == 2:
+            # Try Y.5 receiver-type resolution FIRST. The oracle binary's
+            # self-receiver substitution emits `<RecvType>.<method>` for
+            # calls like `p.Method()` inside a `func (p *Pipeline) ...`.
+            rm_candidates = recv_method_to_qns.get(to, [])
+            if len(rm_candidates) == 1:
+                kept.append(Edge(
+                    from_qn=e["from_qn"],
+                    to_qn=rm_candidates[0],
+                    type="CALLS",
+                    file=e.get("file", ""),
+                    line=int(e.get("line", 0) or 0),
+                    source="go-ast",
+                ))
+                stats["calls_recv_method_resolved"] += 1
+                continue
+            elif len(rm_candidates) > 1:
+                # Multiple `<RecvType>.<method>` defs across files (e.g.
+                # split-file methods in the same package). Pick the first
+                # — these are still semantically the same method,
+                # disambiguated only by file. Code-graph stores each in
+                # its own file's QN, so the resolved QN we pick here may
+                # not match exactly. Conservative choice: drop. If this
+                # bucket gets large, we can re-evaluate.
+                stats["calls_recv_method_ambiguous_dropped"] += 1
+                continue
+
+            # Fall back to file-segment-based package-local resolution.
             pkg, fn = segs
             # Package-local call: `router.ForProject()` where router.go is in
-            # the same indexed subset. Resolve via fn_def_map by fn name.
+            # the same indexed subset. Resolve via bare_to_qns by fn name.
             if pkg in file_segments:
-                resolved = fn_def_map.get(fn)
-                if resolved:
+                resolved_candidates = bare_to_qns.get(fn, [])
+                if len(resolved_candidates) == 1:
                     kept.append(Edge(
                         from_qn=e["from_qn"],
-                        to_qn=resolved,
+                        to_qn=resolved_candidates[0],
                         type="CALLS",
                         file=e.get("file", ""),
                         line=int(e.get("line", 0) or 0),
@@ -241,12 +345,14 @@ def build_ground_truth(fixture_id: str, force: bool = False) -> Path:
         raw, defs = run_oracle_on_subset(project, sub_dir)
         fn_def_map = build_fn_def_map_from_binary(defs)
         print(f"  fn defs (binary-sourced): {len(fn_def_map)}")
-        kept, stats = resolve_and_filter(raw, fn_def_map, project)
+        kept, stats = resolve_and_filter(raw, fn_def_map, project, defs=defs)
         per_subset_stats[sub] = {"raw_edges": len(raw), "kept": len(kept), **stats}
         print(
             f"  raw={len(raw)} kept={len(kept)} "
-            f"bare={stats['calls_bare_resolved']} path={stats['calls_path_resolved']} "
-            f"dropped={stats['calls_bare_unresolved'] + stats['calls_path_dropped']}"
+            f"bare={stats['calls_bare_resolved']} "
+            f"recv_method={stats.get('calls_recv_method_resolved', 0)} "
+            f"path={stats['calls_path_resolved']} "
+            f"dropped={stats['calls_bare_unresolved'] + stats['calls_path_dropped'] + stats.get('calls_bare_ambiguous_dropped', 0) + stats.get('calls_recv_method_ambiguous_dropped', 0)}"
         )
         all_edges.extend(kept)
 

@@ -46,13 +46,15 @@ type Output struct {
 }
 
 type visitor struct {
-	fset    *token.FileSet
-	project string
-	fileQN  string // <project>.<file_no_ext>
-	fileRel string // for edge.File
-	fnStack []string
-	edges   []Edge
-	defs    []string
+	fset          *token.FileSet
+	project       string
+	fileQN        string // <project>.<file_no_ext>
+	fileRel       string // for edge.File
+	fnStack       []string
+	recvNameStack []string // parallel to fnStack: receiver var name (e.g. "p" in `func (p *Pipeline) ...`), "" for free funcs
+	recvTypeStack []string // parallel to fnStack: receiver type name (e.g. "Pipeline"), "" for free funcs
+	edges         []Edge
+	defs          []string
 }
 
 func (v *visitor) currentCaller() string {
@@ -73,22 +75,54 @@ func (v *visitor) Visit(node ast.Node) ast.Visitor {
 		// which matched by accident). The fix makes both sides agree on
 		// the receiver-qualified form.
 		seg := n.Name.Name
+		recvName := ""
+		recvType := ""
 		if n.Recv != nil && len(n.Recv.List) > 0 {
-			recvType := receiverTypeName(n.Recv.List[0].Type)
+			recvType = receiverTypeName(n.Recv.List[0].Type)
 			if recvType != "" {
 				seg = recvType + "." + n.Name.Name
+				// Capture the receiver identifier (e.g., "p" in
+				// `func (p *Pipeline) ...`). Empty when the receiver is
+				// anonymous (`func (*Pipeline) ...`). Used by the
+				// CallExpr branch below to resolve self-receiver calls.
+				if len(n.Recv.List[0].Names) > 0 {
+					recvName = n.Recv.List[0].Names[0].Name
+				}
 			}
 		}
 		v.fnStack = append(v.fnStack, seg)
+		v.recvNameStack = append(v.recvNameStack, recvName)
+		v.recvTypeStack = append(v.recvTypeStack, recvType)
 		v.defs = append(v.defs, v.currentCaller())
 		if n.Body != nil {
 			ast.Walk(v, n.Body)
 		}
 		v.fnStack = v.fnStack[:len(v.fnStack)-1]
+		v.recvNameStack = v.recvNameStack[:len(v.recvNameStack)-1]
+		v.recvTypeStack = v.recvTypeStack[:len(v.recvTypeStack)-1]
 		return nil
 
 	case *ast.CallExpr:
 		callee := extractCallee(n.Fun)
+		// Follow-up #5 (2026-05-02 plateau plan): resolve self-receiver
+		// method calls. When inside `func (p *Pipeline) X() { ... p.Y() ... }`,
+		// extractCallee returned "p.Y". The Python wrapper has no resolution
+		// path for "p.Y" (it expects either a bare name or "<file>.<fn>"),
+		// so it dropped the edge as `calls_path_dropped`. By substituting
+		// the recv identifier with the recv type name, we emit "Pipeline.Y"
+		// which the wrapper can resolve to the matching `*.Pipeline.Y` def.
+		// This eliminates ~30-100+ fake FPs per the runIncrementalPasses
+		// investigation (PR #137).
+		if callee != "" && len(v.recvNameStack) > 0 {
+			rn := v.recvNameStack[len(v.recvNameStack)-1]
+			rt := v.recvTypeStack[len(v.recvTypeStack)-1]
+			if rn != "" && rt != "" {
+				prefix := rn + "."
+				if strings.HasPrefix(callee, prefix) && !strings.Contains(callee[len(prefix):], ".") {
+					callee = rt + "." + callee[len(prefix):]
+				}
+			}
+		}
 		if callee != "" {
 			line := 0
 			if v.fset != nil {

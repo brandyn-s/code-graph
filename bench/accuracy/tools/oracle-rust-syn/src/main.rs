@@ -91,11 +91,34 @@ impl<'ast> Visit<'ast> for Visitor {
     }
 
     fn visit_item_impl(&mut self, i: &'ast syn::ItemImpl) {
-        // Extract the self type name for method qualification.
-        // `impl Foo` -> "Foo", `impl Trait for Foo` -> "Foo".
-        let ty_name = match &*i.self_ty {
-            syn::Type::Path(tp) => tp.path.segments.last().map(|s| s.ident.to_string()).unwrap_or_default(),
-            _ => String::new(),
+        // Theme D (2026-05-02): for `impl Trait for Struct`, push the
+        // *trait* name onto impl_stack — not the struct. Code-graph's
+        // resolver emits `Trait.method` for these calls (it has both
+        // trait-signature and impl-block defs and prefers the trait
+        // node). Pushing self_ty produced `StructImpl.method` and made
+        // 36 of 91 assetman scope-aligned FPs trait/impl mismatches
+        // (40% of the failure mass). Pushing the trait name makes the
+        // oracle's def QN match what code-graph emits — eliminating the
+        // mismatch as a measurement artifact.
+        //
+        // Inherent impls (`impl Foo`) and unparseable trait paths fall
+        // back to self_ty as before.
+        let ty_name: String = if let Some((_, trait_path, _)) = &i.trait_ {
+            trait_path
+                .segments
+                .last()
+                .map(|s| s.ident.to_string())
+                .unwrap_or_default()
+        } else {
+            match &*i.self_ty {
+                syn::Type::Path(tp) => tp
+                    .path
+                    .segments
+                    .last()
+                    .map(|s| s.ident.to_string())
+                    .unwrap_or_default(),
+                _ => String::new(),
+            }
         };
         self.impl_stack.push(ty_name);
         syn::visit::visit_item_impl(self, i);

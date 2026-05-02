@@ -463,6 +463,31 @@ def suffix_match_key(qn: str, min_segments: int = 3) -> str | None:
     return ".".join(parts[-min_segments:])
 
 
+def normalize_generics(qn: str) -> str:
+    """Strip type-parameter brackets from each dotted segment of a QN.
+
+    THEME E (2026-05-02). Rust-specific. Code-graph extracts `Foo<S>`
+    from impl-block `type` fields verbatim (full source text), while
+    syn-based callees often arrive without the parameter list. The two
+    forms refer to the same definition; treating them as different
+    inflates the FP/FN count by a small but recurring margin (4 FPs
+    on assetman post-THEME-D).
+
+    Examples:
+      `pkg.src.file.Foo<S>.bar` -> `pkg.src.file.Foo.bar`
+      `pkg.src.file.Foo.bar`    -> `pkg.src.file.Foo.bar` (unchanged)
+      `pkg.src.Map<K,V>.iter`   -> `pkg.src.Map.iter`
+    """
+    out_parts: list[str] = []
+    for part in qn.split("."):
+        idx = part.find("<")
+        if idx > 0 and part.endswith(">"):
+            out_parts.append(part[:idx])
+        else:
+            out_parts.append(part)
+    return ".".join(out_parts)
+
+
 def normalize_impl_suffix(qn: str) -> str:
     """Strip `Impl` suffix from the penultimate segment of a dotted QN.
 
@@ -1155,6 +1180,38 @@ def compute_metrics(
     fp_impl = measured_impl - oracle_impl
     fn_impl = oracle_impl - measured_impl
 
+    # Generic-normalized (Rust) match: strip type-parameter brackets
+    # (`<S>`, `<K,V>`) from each segment of from_qn and to_qn
+    # symmetrically. THEME E (2026-05-02). Reflects code-graph's
+    # impl-block emission of `Foo<S>.method` vs the oracle's bare
+    # `Foo.method`. Combined with impl_suffix normalization for the
+    # `scope_canonical` metric below.
+    def generic_norm_key(k: tuple[str, str, str]) -> tuple[str, str, str]:
+        return (normalize_generics(k[0]), normalize_generics(k[1]), k[2])
+    oracle_generic = {generic_norm_key(k) for k in oracle_scoped}
+    measured_generic = {generic_norm_key(k) for k in measured_scoped}
+    tp_generic = oracle_generic & measured_generic
+    fp_generic = measured_generic - oracle_generic
+    fn_generic = oracle_generic - measured_generic
+
+    # Fully canonical (impl + generic) — THEME D + E composed. Best
+    # estimate of "F1 if both naming-convention artifacts were
+    # eliminated." If this is meaningfully above scope_aligned but
+    # close to scope_impl_normalized, generics aren't the main issue;
+    # if it's substantially above scope_impl_normalized, generics
+    # are pulling weight that impl-strip alone misses.
+    def canonical_key(k: tuple[str, str, str]) -> tuple[str, str, str]:
+        return (
+            normalize_generics(normalize_impl_suffix(k[0])),
+            normalize_generics(normalize_impl_suffix(k[1])),
+            k[2],
+        )
+    oracle_canon = {canonical_key(k) for k in oracle_scoped}
+    measured_canon = {canonical_key(k) for k in measured_scoped}
+    tp_canon = oracle_canon & measured_canon
+    fp_canon = measured_canon - oracle_canon
+    fn_canon = oracle_canon - measured_canon
+
     # Caller-kind stratification (Step 3 of plateau-2 plan, 2026-05-02).
     # Three new metrics: per-kind precision, ghost-caller FP rate, and
     # complement legitimacy. compute_caller_kind_metrics handles the
@@ -1190,6 +1247,8 @@ def compute_metrics(
         "suffix_3seg": pr(len(tp_suffix), len(fp_suffix), len(fn_suffix)),
         "scope_aligned": pr(len(tp_scoped), len(fp_scoped), len(fn_scoped)),
         "scope_impl_normalized": pr(len(tp_impl), len(fp_impl), len(fn_impl)),
+        "scope_generic_normalized": pr(len(tp_generic), len(fp_generic), len(fn_generic)),
+        "scope_canonical": pr(len(tp_canon), len(fp_canon), len(fn_canon)),
         "sample_fp_exact": sorted(fp_exact)[:10],
         "sample_fn_exact": sorted(fn_exact)[:10],
         "sample_fp_scoped": sorted(fp_scoped)[:10],

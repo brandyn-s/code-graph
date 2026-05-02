@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "description": "SHA-pinned fixtures for code-graph edge-level accuracy measurement. Every fixture must be at the pinned SHA before measurement; the harness exits 2 on drift.",
+  "description": "SHA-pinned fixtures for code-graph edge-level accuracy measurement. Every fixture must be at the pinned SHA before measurement; the harness exits 2 on drift. The `fixtures` array drives the syn-oracle path (compare.py + oracle_rust_syn.py / oracle_go_*.py). The `negative_fixtures` array is for hand-authored co-hallucination regression fixtures; those are evaluated independently by check_negative_fixtures.py with no syn-oracle in the loop.",
   "fixtures": [
     {
       "id": "mcp-servers",
@@ -41,6 +41,17 @@
       "subset": ["."],
       "notes": "Non-self-hosting Go fixture (added 2026-05-02 per claude-knowledge-base PR #368 plateau-fix improvements). spf13/cobra at f2878ba — CLI-building library, ~10K LOC, 36 .go files, type-clean (no CGO, no generated code). Heavy receiver-method usage on the Command struct exercises Y.5 oracle resolver-method resolution. Self-hosting fixtures hit a ceiling where remaining residuals are oracle-specific limitations against the harness's own static analysis depth — adding a 2nd Go repo proves whether F1 generalizes outside the self-hosting case.",
       "edge_types_in_scope": ["CALLS", "IMPORTS"]
+    }
+  ],
+  "negative_fixtures": [
+    {
+      "id": "rust-diesel-negative",
+      "path": "bench/accuracy/synthetic/rust-diesel-negative",
+      "kind": "negative",
+      "languages": ["rust"],
+      "failure_class": "co-hallucination via cross-package-heuristic bare-name suffix-match",
+      "notes": "Hand-authored fixture per 2026-05-02 roundtable Recommendation #1. Exercises the Diesel-chain co-hallucination class observed on assetman: external trait methods (.get_result/.load/.execute) chained on a query builder share bare names with internal methods on AssetRepo + IntrospectService. Evaluated by check_negative_fixtures.py against forbidden_emitted_calls in its ground_truth.json. Baseline phantom_count: 1 (see baselines/2026-05-02-diesel-negative-baseline.md). No SHA pinning — fixture lives in this repo and version-tracks with code-graph.",
+      "harness": "bench/accuracy/check_negative_fixtures.py rust-diesel-negative"
     }
   ]
 }

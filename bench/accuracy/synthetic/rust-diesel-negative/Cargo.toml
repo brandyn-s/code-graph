@@ -1,0 +1,13 @@
+[package]
+name = "rust-diesel-negative"
+version = "0.0.1"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "rust-diesel-negative"
+path = "src/main.rs"
+
+[lib]
+name = "rust_diesel_negative"
+path = "src/lib.rs"

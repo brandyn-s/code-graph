@@ -1,0 +1,38 @@
+{
+  "description": "Negative-benchmark fixture: Diesel-chain co-hallucination class. Reproduces the assetman pattern where external trait methods (.get_result/.load/.execute) chained on a query builder share bare names with internal methods on AssetRepo + IntrospectService. Any edge from `entry` to an internal *.get_result/*.load/*.execute is a phantom by construction.",
+  "kind": "negative",
+
+  "expected_internal_calls": [
+    {"from_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-diesel-negative.src.main.controls", "to_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-diesel-negative.src.repo.AssetRepo.get_result"},
+    {"from_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-diesel-negative.src.main.controls", "to_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-diesel-negative.src.repo.AssetRepo.load"},
+    {"from_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-diesel-negative.src.main.controls", "to_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-diesel-negative.src.repo.AssetRepo.execute"},
+    {"from_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-diesel-negative.src.main.controls", "to_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-diesel-negative.src.main.helper"},
+    {"from_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-diesel-negative.src.main.main", "to_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-diesel-negative.src.main.entry"},
+    {"from_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-diesel-negative.src.main.main", "to_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-diesel-negative.src.main.controls"}
+  ],
+
+  "forbidden_emitted_calls": [
+    {
+      "from_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-diesel-negative.src.main.entry",
+      "to_qn_pattern": ".*\\.get_result$",
+      "reason": "Diesel RunQueryDsl::get_result is an external trait method; chained on users.filter(...).get_result(). MUST NOT bind to AssetRepo.get_result or IntrospectService.get_result via bare-name suffix-match or fuzzy fallback."
+    },
+    {
+      "from_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-diesel-negative.src.main.entry",
+      "to_qn_pattern": ".*\\.load$",
+      "reason": "Diesel RunQueryDsl::load is an external trait method; chained on users.filter(...).load(). MUST NOT bind to AssetRepo.load."
+    },
+    {
+      "from_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-diesel-negative.src.main.entry",
+      "to_qn_pattern": ".*\\.execute$",
+      "reason": "Diesel RunQueryDsl::execute is an external trait method; chained on users.execute(). MUST NOT bind to AssetRepo.execute."
+    },
+    {
+      "from_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-diesel-negative.src.main.entry",
+      "to_qn_pattern": ".*\\.filter$",
+      "reason": "Diesel QueryDsl::filter is an external trait method on the query builder. No internal `filter` method exists in this fixture; the pattern is here to catch future shadow targets if the resolver loosens."
+    }
+  ],
+
+  "notes": "Project name resolves to `c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-diesel-negative` per pipeline.ProjectNameFromPath (verified via bench/accuracy/check_go_minimal_resolver_rule.py:project_for_path). QN format follows the FLATTENED-mod convention from rust-minimal/ground_truth.json: impl scope IS included (AssetRepo.get_result), inline mod scope IS NOT (helper, not main.helper for fn directly under file scope). Schema reference: bench/accuracy/synthetic/_schema.md. Authored 2026-05-02 per roundtable Recommendation #1.\n\nEMPIRICAL FINDINGS DISCOVERED VIA THIS FIXTURE (2026-05-02):\n  1. cross-package-heuristic emits `entry -> AssetRepo.execute` even though `entry` only calls `users.execute(conn)` (Diesel chain). Real co-hallucination, exactly as the roundtable flagged.\n  2. Bare-name resolution conflates same-named methods across receiver types. `controls()` calls both `repo.get_result()` and `service.get_result()`; only the first emits (to AssetRepo.get_result). The IntrospectService.get_result edge is silently absorbed. This is a separate but related class — same `cross-package-heuristic` rule, no receiver-type discrimination.\n  3. Turbofish-suffixed chain calls (`.get_result::<User>(conn)`) don't appear to emit method-call edges. The `entry -> *.get_result` and `entry -> *.load` phantoms are absent because of the turbofish form, not because the resolver is correct. The simple form `.execute(conn)` does emit the phantom. Investigate as separate finding.\n  4. Constructor calls (`AssetRepo::new()`, `IntrospectService::new()`) don't emit CALLS edges. Different code path than instance method calls. Note for receiver-type tracking work.\n\nThe positive_internal_calls list reflects what code-graph emits TODAY (2026-05-02), not what an ideal resolver would emit. When the bare-name conflation bug is fixed, expect IntrospectService.get_result and the constructor edges to be added to this list."
+}

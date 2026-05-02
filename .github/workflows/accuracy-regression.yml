@@ -117,6 +117,16 @@ jobs:
           print(f'PASS: go-minimal CALLS subset match ({len(expected)}/{len(expected)})')
           PY
 
+      - name: Run negative-fixture regression gate
+        run: |
+          # Negative fixtures (synthetic/rust-diesel-negative/, etc.) check that
+          # code-graph does NOT emit phantom CALLS edges from external chain
+          # methods to internal targets via bare-name suffix-match. Independent
+          # of the syn-oracle path. Fails if phantom_count exceeds the per-fixture
+          # baseline pinned in negative_baselines.json.
+          # Authored 2026-05-02 per roundtable Recommendation #1.
+          python bench/accuracy/check_negative_fixtures.py --regression-gate
+
       - name: Self-host Go baseline (code-graph indexing code-graph)
         run: |
           # Index one subset (internal/store) and assert edge count is within

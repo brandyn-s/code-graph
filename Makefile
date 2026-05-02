@@ -1,4 +1,4 @@
-.PHONY: build test lint clean install check bench-memory
+.PHONY: build test lint clean install check bench-memory bench-negative bench-negative-baseline
 
 BINARY=codebase-memory-mcp
 MODULE=github.com/DeusData/codebase-memory-mcp
@@ -34,3 +34,9 @@ install:
 
 bench-memory:  ## Run memory stability benchmark
 	go test -run TestMemoryStability -v -count=1 -timeout=5m ./internal/pipeline/
+
+bench-negative: build  ## Run negative-fixture regression gate (fails on phantom-count increase)
+	python bench/accuracy/check_negative_fixtures.py --regression-gate
+
+bench-negative-baseline: build  ## Re-pin negative-fixture baselines (use after intentional resolver changes)
+	python bench/accuracy/check_negative_fixtures.py --write-baseline

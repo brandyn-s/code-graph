@@ -46,15 +46,16 @@ type Output struct {
 }
 
 type visitor struct {
-	fset          *token.FileSet
-	project       string
-	fileQN        string // <project>.<file_no_ext>
-	fileRel       string // for edge.File
-	fnStack       []string
-	recvNameStack []string // parallel to fnStack: receiver var name (e.g. "p" in `func (p *Pipeline) ...`), "" for free funcs
-	recvTypeStack []string // parallel to fnStack: receiver type name (e.g. "Pipeline"), "" for free funcs
-	edges         []Edge
-	defs          []string
+	fset           *token.FileSet
+	project        string
+	fileQN         string // <project>.<file_no_ext>
+	fileRel        string // for edge.File
+	fnStack        []string
+	recvNameStack  []string                       // parallel to fnStack: receiver var name (e.g. "p" in `func (p *Pipeline) ...`), "" for free funcs
+	recvTypeStack  []string                       // parallel to fnStack: receiver type name (e.g. "Pipeline"), "" for free funcs
+	paramTypeStack []map[string]string            // parallel to fnStack: param identifier -> param type name (Y.6, 2026-05-02). Used to resolve `cmd.Method` callees inside `func writeCommands(cmd *Command, ...)` where cmd is a function parameter, not a receiver.
+	edges          []Edge
+	defs           []string
 }
 
 func (v *visitor) currentCaller() string {
@@ -90,9 +91,16 @@ func (v *visitor) Visit(node ast.Node) ast.Visitor {
 				}
 			}
 		}
+		// Y.6: extract parameter types so calls like `cmd.Method()` inside a
+		// free function `func writeCommands(cmd *Command, ...)` can be
+		// resolved the same way as method-receiver calls. Mirrors Y.5 but
+		// applies to function parameters of typed-struct shape.
+		paramTypes := extractParamTypes(n.Type)
+
 		v.fnStack = append(v.fnStack, seg)
 		v.recvNameStack = append(v.recvNameStack, recvName)
 		v.recvTypeStack = append(v.recvTypeStack, recvType)
+		v.paramTypeStack = append(v.paramTypeStack, paramTypes)
 		v.defs = append(v.defs, v.currentCaller())
 		if n.Body != nil {
 			ast.Walk(v, n.Body)
@@ -100,6 +108,7 @@ func (v *visitor) Visit(node ast.Node) ast.Visitor {
 		v.fnStack = v.fnStack[:len(v.fnStack)-1]
 		v.recvNameStack = v.recvNameStack[:len(v.recvNameStack)-1]
 		v.recvTypeStack = v.recvTypeStack[:len(v.recvTypeStack)-1]
+		v.paramTypeStack = v.paramTypeStack[:len(v.paramTypeStack)-1]
 		return nil
 
 	case *ast.CallExpr:
@@ -120,6 +129,31 @@ func (v *visitor) Visit(node ast.Node) ast.Visitor {
 				prefix := rn + "."
 				if strings.HasPrefix(callee, prefix) && !strings.Contains(callee[len(prefix):], ".") {
 					callee = rt + "." + callee[len(prefix):]
+				}
+			}
+		}
+		// Y.6 (2026-05-02 plateau plan, follow-up to PR #140): extend
+		// receiver-type substitution to function parameters. When inside
+		// `func writeCommands(cmd *Command, ...)`, a call `cmd.Method()`
+		// has callee "cmd.Method" — Y.5 doesn't fire because cmd is a
+		// parameter, not a method receiver. The wrapper drops "cmd.Method"
+		// because "cmd" isn't a known file segment. Substituting to
+		// "Command.Method" lets the wrapper resolve via recv_method_to_qns.
+		// Discovered while running /plateau-diagnose on cobra-go's
+		// function-body precision drop (P=0.60); 67/67 sampled FPs were
+		// real edges that the oracle couldn't see.
+		if callee != "" && len(v.paramTypeStack) > 0 {
+			pt := v.paramTypeStack[len(v.paramTypeStack)-1]
+			if len(pt) > 0 {
+				if dotIdx := strings.Index(callee, "."); dotIdx > 0 {
+					paramName := callee[:dotIdx]
+					methodName := callee[dotIdx+1:]
+					// Single-level call only (skip `p.field.method`)
+					if !strings.Contains(methodName, ".") {
+						if paramType, ok := pt[paramName]; ok && paramType != "" {
+							callee = paramType + "." + methodName
+						}
+					}
 				}
 			}
 		}
@@ -183,6 +217,88 @@ func receiverTypeName(e ast.Expr) string {
 	case *ast.IndexListExpr:
 		return receiverTypeName(t.X)
 	}
+	return ""
+}
+
+// extractParamTypes returns a map of parameter identifier -> simple type name
+// for a function declaration. Used by Y.6 to substitute callee form when a
+// CallExpr targets a method on a parameter of typed-struct shape.
+//
+// Type extraction handles:
+//   - `cmd *Command`        -> {"cmd": "Command"}
+//   - `a, b *Command`       -> {"a": "Command", "b": "Command"}
+//   - `cmd Command`         -> {"cmd": "Command"}
+//   - `args ...*Command`    -> {} (variadic skipped — calling args.Method
+//                             on a slice is a different shape)
+//
+// SKIPPED (returned as empty entries / not added):
+//   - Interface types (io.Writer, context.Context) — methods aren't owned
+//     by a single type; substituting to "Writer.Close" produces no match.
+//     Handled via the SelectorExpr branch returning "".
+//   - Map / slice types — Type is *ast.MapType / *ast.ArrayType; method
+//     calls on these don't resolve to a single struct type.
+//   - Function types — `cb func(int) string` — no struct methods to
+//     resolve.
+//   - Channel types — same reasoning.
+//
+// The result map is intentionally conservative: only single-struct types
+// that the wrapper's recv_method_to_qns index can resolve get included.
+// Other shapes are silently dropped — the oracle will keep emitting the
+// pre-substitution form, which the wrapper will (correctly) drop as
+// unresolvable.
+func extractParamTypes(funcType *ast.FuncType) map[string]string {
+	result := make(map[string]string)
+	if funcType == nil || funcType.Params == nil {
+		return result
+	}
+	for _, field := range funcType.Params.List {
+		if len(field.Names) == 0 {
+			// Anonymous param — can't reference it from a CallExpr anyway
+			continue
+		}
+		typeName := paramTypeName(field.Type)
+		if typeName == "" {
+			continue
+		}
+		for _, name := range field.Names {
+			if name.Name != "" && name.Name != "_" {
+				result[name.Name] = typeName
+			}
+		}
+	}
+	return result
+}
+
+// paramTypeName extracts the simple struct-type name from a parameter type
+// expression. Returns "" for anything that isn't a concrete struct type
+// (interfaces, maps, slices, channels, function types, generics with
+// constraints).
+//
+// Handles:
+//   - `*Command`             -> "Command"
+//   - `Command`              -> "Command"
+//   - `**Command`            -> "Command"  (pointer-to-pointer, rare)
+//   - `Command[T]`           -> "Command"  (generic struct)
+//
+// Returns "" for:
+//   - `io.Writer` (SelectorExpr — interface or qualified type, type identity unclear)
+//   - `[]Command` (ArrayType — calling method on slice doesn't resolve)
+//   - `map[string]int`, `chan T`, `func()`, etc.
+//   - Anonymous struct literals
+func paramTypeName(e ast.Expr) string {
+	switch t := e.(type) {
+	case *ast.StarExpr:
+		return paramTypeName(t.X)
+	case *ast.Ident:
+		return t.Name
+	case *ast.IndexExpr:
+		return paramTypeName(t.X)
+	case *ast.IndexListExpr:
+		return paramTypeName(t.X)
+	}
+	// SelectorExpr (qualified types like io.Writer, context.Context),
+	// ArrayType, MapType, ChanType, FuncType, InterfaceType,
+	// Ellipsis (variadic), StructType, all return "".
 	return ""
 }
 

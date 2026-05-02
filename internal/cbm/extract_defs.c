@@ -1329,6 +1329,31 @@ static void extract_class_methods(CBMExtractCtx* ctx, TSNode class_node,
 
 // --- Rust impl block extraction ---
 
+// Strip generic-parameter suffix from a Rust type name in place.
+// `TailscaleAuthService<S>` -> `TailscaleAuthService`
+// `Foo<T, U>`               -> `Foo`
+// `Result<X, Y>`            -> `Result`
+// Also handles whitespace before the `<`. Returns input unchanged if no '<'.
+//
+// Why: `impl<S> ... for TailscaleAuthService<S>` produces a type-name token
+// `TailscaleAuthService<S>`. Composing `TailscaleAuthService<S>.call` as the
+// method's QN diverges from oracle and from how callers reference the type
+// (`service.call(req)`), inflating FPs/FNs by pure rendering. The 2026-05-02
+// plateau-diagnose Step 6 wide sample on psm assetman
+// found 6% of method-residual was this exact rendering disagreement
+// (Pattern E, "CALLER_GENERIC"). Stripping generics here makes the canonical
+// QN match oracle's syn-extracted form.
+static void rust_strip_generic_suffix(char* type_name) {
+    if (!type_name) return;
+    char* p = type_name;
+    // Walk to the first `<` (if any) at the top level.
+    while (*p && *p != '<') p++;
+    if (*p != '<') return;
+    // Trim any trailing whitespace before the `<`.
+    while (p > type_name && (p[-1] == ' ' || p[-1] == '\t')) p--;
+    *p = '\0';
+}
+
 static void extract_rust_impl(CBMExtractCtx* ctx, TSNode node, const CBMLangSpec* spec) {
     CBMArena* a = ctx->arena;
 
@@ -1337,16 +1362,23 @@ static void extract_rust_impl(CBMExtractCtx* ctx, TSNode node, const CBMLangSpec
 
     char* type_name = cbm_node_text(a, type_node, ctx->source);
     if (!type_name || !type_name[0]) return;
+    rust_strip_generic_suffix(type_name);
+    if (!type_name[0]) return;
 
     // Check for "impl Trait for Struct" pattern
     TSNode trait_node = ts_node_child_by_field_name(node, "trait", 5);
     if (!ts_node_is_null(trait_node)) {
         char* trait_name = cbm_node_text(a, trait_node, ctx->source);
         if (trait_name && trait_name[0]) {
-            CBMImplTrait it;
-            it.trait_name = trait_name;
-            it.struct_name = type_name;
-            cbm_impltrait_push(&ctx->result->impl_traits, a, it);
+            // Strip `<...>` from trait names too, e.g. `Service<ServiceRequest>`
+            // -> `Service`. Matches the rendering used by oracle and callers.
+            rust_strip_generic_suffix(trait_name);
+            if (trait_name[0]) {
+                CBMImplTrait it;
+                it.trait_name = trait_name;
+                it.struct_name = type_name;
+                cbm_impltrait_push(&ctx->result->impl_traits, a, it);
+            }
         }
     }
 

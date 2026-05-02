@@ -5,6 +5,129 @@
 #include <string.h>
 #include <ctype.h>
 
+// Deref-style wrapper types whose inner generic parameter is the
+// "logical" type for method-dispatch purposes. `Arc<T>.method()` calls
+// T::method via Deref; same for the rest. Includes Actix `web::Data<T>`,
+// Rocket `State<T>`, and the common smart-pointer / interior-mutability
+// crew. Excludes container types like `Vec<T>`, `HashMap<K,V>`, `Option<T>`,
+// `Result<T,E>` whose method calls are on the container, not the inner.
+//
+// Order: longest first so `web::Data` is recognized before `Data`.
+static const char* RUST_DEREF_WRAPPERS[] = {
+    "web::Data", "actix_web::web::Data", "rocket::State",
+    "Arc", "Rc", "Box", "Pin", "Cow",
+    "Mutex", "RwLock", "RefCell", "Cell",
+    "Lazy", "OnceCell", "OnceLock",
+    NULL,
+};
+
+// True if `name` (already scope-stripped) matches any deref-style wrapper.
+static bool is_deref_wrapper(const char* name) {
+    if (!name) return false;
+    for (const char** w = RUST_DEREF_WRAPPERS; *w; w++) {
+        if (strcmp(name, *w) == 0) return true;
+        // Also accept the leaf segment of a scoped wrapper.
+        const char* slash = strrchr(*w, ':');
+        if (slash && slash[1] && strcmp(name, slash + 1) == 0) return true;
+    }
+    return false;
+}
+
+// Strip leading `&`, `&mut `, and trailing `<...>` generics from a Rust type
+// text in place. Peels deref-style wrappers (`Arc<T>` -> `T`, recursively).
+// Examples:
+//   `&BarType`               -> `BarType`
+//   `&mut BarType`           -> `BarType`
+//   `&'a BarType`            -> `BarType`  (lifetime annotation)
+//   `Foo<T>`                 -> `Foo`         (non-wrapper: keep outer)
+//   `Arc<MyType>`            -> `MyType`      (deref wrapper: peel)
+//   `web::Data<AppState>`    -> `AppState`    (Actix wrapper)
+//   `Arc<Mutex<MyType>>`     -> `MyType`      (recursive peel)
+//   `Result<MyType, Error>`  -> `Result`      (non-wrapper: keep outer)
+// Used for parameter / let-ascription / field type extraction so the bound
+// type matches the canonical struct/trait/enum identifier in the registry.
+static char* rust_type_text_normalize(char* text) {
+    if (!text) return NULL;
+    char* p = text;
+    // Skip whitespace
+    while (*p == ' ' || *p == '\t') p++;
+    // Strip references: `&` (with optional mut/lifetime)
+    if (*p == '&') {
+        p++;
+        while (*p == ' ' || *p == '\t') p++;
+        // `'a ` lifetime
+        if (*p == '\'') {
+            p++;
+            while (*p && !(*p == ' ' || *p == '\t')) p++;
+            while (*p == ' ' || *p == '\t') p++;
+        }
+        // `mut`
+        if (strncmp(p, "mut", 3) == 0 && (p[3] == ' ' || p[3] == '\t')) {
+            p += 4;
+            while (*p == ' ' || *p == '\t') p++;
+        }
+    }
+    // Find outer type and any generic argument list. `Foo<bar>` -> name=Foo,
+    // generic_inner=bar. For wrapper types we want to recurse on the inner.
+    char* lt = strchr(p, '<');
+    if (lt) {
+        // Make a copy of the outer type so we can compare against the
+        // wrapper list without mutating the caller's buffer for the inner
+        // peel. We classify wrappers using the leaf identifier of the
+        // outer (after `::` chain).
+        char outer_buf[128];
+        size_t outer_len = (size_t)(lt - p);
+        // Trim trailing whitespace before `<`.
+        while (outer_len > 0 && (p[outer_len - 1] == ' ' || p[outer_len - 1] == '\t')) {
+            outer_len--;
+        }
+        if (outer_len < sizeof(outer_buf)) {
+            memcpy(outer_buf, p, outer_len);
+            outer_buf[outer_len] = '\0';
+            // For wrapper detection, also check the scoped form.
+            const char* leaf = strrchr(outer_buf, ':');
+            leaf = leaf ? leaf + 1 : outer_buf;
+            if (is_deref_wrapper(outer_buf) || is_deref_wrapper(leaf)) {
+                // Recurse on the inner. Find the matching `>` (handle nesting).
+                char* inner_start = lt + 1;
+                char* inner_end = NULL;
+                int depth = 1;
+                for (char* q = inner_start; *q; q++) {
+                    if (*q == '<') depth++;
+                    else if (*q == '>') {
+                        depth--;
+                        if (depth == 0) { inner_end = q; break; }
+                    }
+                }
+                if (inner_end) {
+                    *inner_end = '\0';
+                    // For multi-arg generics like Cow<'a, T>, take the last
+                    // comma-separated argument (which is the actual data type
+                    // in deref wrappers).
+                    char* last_comma = strrchr(inner_start, ',');
+                    char* recurse_on = last_comma ? last_comma + 1 : inner_start;
+                    return rust_type_text_normalize(recurse_on);
+                }
+            }
+        }
+    }
+    // Non-wrapper or no generics: scope-strip and generic-strip the outer.
+    // For scoped paths (`a::b::Type`), keep only the trailing identifier.
+    char* last_colon = strstr(p, "::");
+    while (last_colon) {
+        p = last_colon + 2;
+        last_colon = strstr(p, "::");
+    }
+    // Strip trailing `<...>` generic suffix.
+    char* gt = strchr(p, '<');
+    if (gt) *gt = '\0';
+    // Trim trailing whitespace
+    char* end = p + strlen(p);
+    while (end > p && (end[-1] == ' ' || end[-1] == '\t')) end--;
+    *end = '\0';
+    return p;
+}
+
 // Extract class/type name from a constructor expression.
 // e.g., new Foo() -> "Foo", Foo() -> "Foo" (if uppercase), Foo{} -> "Foo"
 static const char* extract_constructor_type(CBMArena* a, TSNode rhs, const char* source, CBMLanguage lang) {
@@ -240,16 +363,136 @@ void handle_type_assigns(CBMExtractCtx* ctx, TSNode node, const CBMLangSpec* spe
     if (strcmp(kind, "let_declaration") == 0 && ctx->language == CBM_LANG_RUST) {
         TSNode pat = ts_node_child_by_field_name(node, "pattern", 7);
         TSNode val = ts_node_child_by_field_name(node, "value", 5);
-        if (!ts_node_is_null(pat) && !ts_node_is_null(val)) {
+        TSNode type_annot = ts_node_child_by_field_name(node, "type", 4);
+        if (!ts_node_is_null(pat)) {
             if (strcmp(ts_node_type(pat), "identifier") == 0) {
                 char* var_name = cbm_node_text(ctx->arena, pat, ctx->source);
-                const char* type_name = extract_constructor_type(ctx->arena, val,
-                                                                  ctx->source, ctx->language);
-                if (var_name && var_name[0] && type_name && type_name[0]) {
+                if (var_name && var_name[0]) {
+                    const char* type_name = NULL;
+                    // Prefer the explicit `let x: T = ...` annotation;
+                    // fall back to constructor-RHS detection for
+                    // `let x = T { ... }` / `let x = T::new(...)`.
+                    if (!ts_node_is_null(type_annot)) {
+                        char* tt = cbm_node_text(ctx->arena, type_annot, ctx->source);
+                        type_name = rust_type_text_normalize(tt);
+                    }
+                    if ((!type_name || !type_name[0]) && !ts_node_is_null(val)) {
+                        type_name = extract_constructor_type(ctx->arena, val,
+                                                              ctx->source, ctx->language);
+                    }
+                    if (type_name && type_name[0]) {
+                        CBMTypeAssign ta;
+                        ta.var_name = var_name;
+                        ta.type_name = type_name;
+                        ta.enclosing_func_qn = state->enclosing_func_qn;
+                        cbm_typeassign_push(&ctx->result->type_assigns, ctx->arena, ta);
+                    }
+                }
+            }
+        }
+    }
+
+    // Rust: function parameter — `fn foo(bar: BarType, ...)` binds bar->BarType.
+    // 2026-05-02 plateau-diagnose Step 6 (wide sample): receiver-resolution
+    // failure dominates 87% of the assetman residual. The dominant pattern is
+    // `obj.method(...)` where `obj` is a function parameter whose type was
+    // never bound in the TypeMap because CBM only emitted variable
+    // assignments (`let x = Constructor()`), not parameter type ascriptions.
+    if (strcmp(kind, "parameter") == 0 && ctx->language == CBM_LANG_RUST) {
+        TSNode pat = ts_node_child_by_field_name(node, "pattern", 7);
+        TSNode tnode = ts_node_child_by_field_name(node, "type", 4);
+        if (!ts_node_is_null(pat) && !ts_node_is_null(tnode)) {
+            const char* pk = ts_node_type(pat);
+            if (strcmp(pk, "identifier") == 0) {
+                char* var_name = cbm_node_text(ctx->arena, pat, ctx->source);
+                char* type_text = cbm_node_text(ctx->arena, tnode, ctx->source);
+                const char* type_name = rust_type_text_normalize(type_text);
+                if (var_name && var_name[0] && type_name && type_name[0] &&
+                    state->enclosing_func_qn) {
                     CBMTypeAssign ta;
                     ta.var_name = var_name;
                     ta.type_name = type_name;
                     ta.enclosing_func_qn = state->enclosing_func_qn;
+                    cbm_typeassign_push(&ctx->result->type_assigns, ctx->arena, ta);
+                }
+            }
+        }
+    }
+
+    // Rust: self_parameter — `&self`, `&mut self`, `self`. Inside an impl
+    // block, `self` binds to the impl's type so that `self.field.method()`
+    // chains can be type-resolved. enclosing_class_qn is the impl-scope QN.
+    if (strcmp(kind, "self_parameter") == 0 && ctx->language == CBM_LANG_RUST) {
+        if (state->enclosing_class_qn && state->enclosing_func_qn) {
+            // The class QN may still carry generic suffixes from the impl
+            // header (e.g. `TailscaleAuthService<S>`); strip them so the
+            // binding matches the canonical struct definition's QN.
+            char* cqn = (char*)state->enclosing_class_qn;
+            char* lt = strchr(cqn, '<');
+            char* normalized;
+            if (lt) {
+                size_t n = (size_t)(lt - cqn);
+                normalized = cbm_arena_strndup(ctx->arena, cqn, n);
+            } else {
+                normalized = cqn;
+            }
+            // Strip any trailing whitespace from normalized.
+            size_t nl = strlen(normalized);
+            while (nl > 0 && (normalized[nl - 1] == ' ' || normalized[nl - 1] == '\t')) {
+                normalized[nl - 1] = '\0';
+                nl--;
+            }
+            if (normalized && normalized[0]) {
+                // We bind self -> the *short* struct name, not the full QN.
+                // The pipeline's resolveAsClass will canonicalize via the
+                // registry, matching how other type names are resolved.
+                const char* short_name = strrchr(normalized, '.');
+                short_name = short_name ? short_name + 1 : normalized;
+                CBMTypeAssign ta;
+                ta.var_name = "self";
+                ta.type_name = short_name;
+                ta.enclosing_func_qn = state->enclosing_func_qn;
+                cbm_typeassign_push(&ctx->result->type_assigns, ctx->arena, ta);
+            }
+        }
+    }
+
+    // Rust: field_declaration inside struct/enum/union — bind field name to
+    // its declared type, scoped to the enclosing struct's QN. Emitted with
+    // `enclosing_func_qn = struct_QN` (i.e. enclosing CLASS scope) so the
+    // pipeline can distinguish field bindings from local-variable bindings
+    // by checking the label on enclosing_func_qn (Class/Struct vs Function).
+    if (strcmp(kind, "field_declaration") == 0 && ctx->language == CBM_LANG_RUST) {
+        if (state->enclosing_class_qn) {
+            TSNode name_node = ts_node_child_by_field_name(node, "name", 4);
+            TSNode type_node = ts_node_child_by_field_name(node, "type", 4);
+            if (!ts_node_is_null(name_node) && !ts_node_is_null(type_node)) {
+                char* var_name = cbm_node_text(ctx->arena, name_node, ctx->source);
+                char* type_text = cbm_node_text(ctx->arena, type_node, ctx->source);
+                const char* type_name = rust_type_text_normalize(type_text);
+                if (var_name && var_name[0] && type_name && type_name[0]) {
+                    // Strip generic suffix from class scope QN to match
+                    // canonical struct QN in registry.
+                    char* cqn = (char*)state->enclosing_class_qn;
+                    char* lt = strchr(cqn, '<');
+                    const char* class_qn;
+                    if (lt) {
+                        size_t n = (size_t)(lt - cqn);
+                        char* trimmed = cbm_arena_strndup(ctx->arena, cqn, n);
+                        // Trim trailing whitespace
+                        size_t tl = strlen(trimmed);
+                        while (tl > 0 && (trimmed[tl - 1] == ' ' || trimmed[tl - 1] == '\t')) {
+                            trimmed[tl - 1] = '\0';
+                            tl--;
+                        }
+                        class_qn = trimmed;
+                    } else {
+                        class_qn = cqn;
+                    }
+                    CBMTypeAssign ta;
+                    ta.var_name = var_name;
+                    ta.type_name = type_name;
+                    ta.enclosing_func_qn = class_qn;
                     cbm_typeassign_push(&ctx->result->type_assigns, ctx->arena, ta);
                 }
             }

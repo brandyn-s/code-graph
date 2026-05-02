@@ -64,6 +64,12 @@ type Pipeline struct {
 	importMaps map[string]map[string]string
 	// returnTypes maps function QN -> return type QN for return-type-based type inference
 	returnTypes ReturnTypeMap
+	// fieldTypes maps "<structQN>.<fieldName>" -> field type's class QN.
+	// Populated globally from struct/enum field declarations in every file
+	// before passCalls runs, then consulted by resolveCallWithTypes to walk
+	// receiver chains like `obj.field.method()` (2026-05-02 plateau-diagnose
+	// THEME F: ~87% of assetman residual is receiver-resolution failure).
+	fieldTypes FieldTypeMap
 	// goLSPIdx indexes Go cross-file definitions for LSP resolution in pass3
 	goLSPIdx *goLSPDefIndex
 	// envReaders maps env var key -> list of function QNs that read it.
@@ -474,6 +480,7 @@ func (p *Pipeline) runFullPasses(files []discover.FileInfo) error {
 
 	t = time.Now()
 	p.buildReturnTypeMap()
+	p.buildFieldTypeMap()
 	p.goLSPIdx = p.buildGoLSPDefIndex()
 	if p.goLSPIdx != nil {
 		p.goLSPIdx.integrateThirdPartyDeps(p.RepoPath, p.importMaps)
@@ -752,6 +759,7 @@ func (p *Pipeline) runIncrementalPasses(
 
 	// Re-resolve calls + usages for changed + dependent files
 	p.buildReturnTypeMap()
+	p.buildFieldTypeMap()
 	p.goLSPIdx = p.buildGoLSPDefIndex()
 	if p.goLSPIdx != nil {
 		p.goLSPIdx.integrateThirdPartyDeps(p.RepoPath, p.importMaps)
@@ -1872,28 +1880,119 @@ func buildEdgesFromResults(results [][]resolvedEdge, qnToID map[string]int64, la
 
 // resolveCallWithTypes resolves a callee name using the registry, import maps,
 // and type inference for method dispatch.
+//
+// Receiver-chain resolution: for a calleeName like `obj.field.method()`:
+//  1. Look up `obj` in the per-function TypeMap (-> objType)
+//  2. Walk intermediate field segments via p.fieldTypes:
+//     fieldTypes[objType + "." + field] -> nextType, repeat
+//  3. The final segment is the method name; look up `<finalType>.<method>`
+//     in the registry.
+//
+// This catches the dominant Rust receiver-resolution failure pattern from
+// the 2026-05-02 plateau-diagnose Step 6 sample (87% of assetman residual):
+// `self.stage_repo.get_job_progress()`, `data.updater_client.cancel()`, and
+// `service.call(req)` style chains where the receiver is a parameter or
+// self-field rather than a `let x = Constructor()` local.
 func (p *Pipeline) resolveCallWithTypes(
 	calleeName, moduleQN string,
 	importMap map[string]string,
 	typeMap TypeMap,
 ) ResolutionResult {
-	// First, try type-based method dispatch for qualified calls like obj.method()
+	// Multi-segment chain: a.b.c.method
 	if strings.Contains(calleeName, ".") {
-		parts := strings.SplitN(calleeName, ".", 2)
-		objName := parts[0]
-		methodName := parts[1]
+		parts := strings.Split(calleeName, ".")
+		// Last segment is the method name; everything before is the receiver
+		// expression.
+		if len(parts) >= 2 {
+			rootName := parts[0]
+			fieldChain := parts[1 : len(parts)-1]
+			methodName := parts[len(parts)-1]
 
-		// Check if the object has a known type from type inference
-		if classQN, ok := typeMap[objName]; ok {
-			candidate := classQN + "." + methodName
-			if p.registry.Exists(candidate) {
-				return ResolutionResult{QualifiedName: candidate, Strategy: "type_dispatch", Confidence: 0.90, CandidateCount: 1}
+			// Resolve the root identifier via the per-function TypeMap
+			// (parameters, self, let-bindings).
+			rootType, ok := typeMap[rootName]
+			if ok && rootType != "" {
+				currentType := rootType
+				resolved := true
+				// Walk the field chain. Each step must succeed via the
+				// global FieldTypeMap; otherwise, the receiver couldn't
+				// be type-dispatched.
+				for _, field := range fieldChain {
+					next, fieldOk := p.fieldTypes[currentType+"."+field]
+					if !fieldOk || next == "" {
+						resolved = false
+						break
+					}
+					currentType = next
+				}
+				if resolved {
+					candidate := currentType + "." + methodName
+					if p.registry.Exists(candidate) {
+						return ResolutionResult{
+							QualifiedName:  candidate,
+							Strategy:       "type_dispatch",
+							Confidence:     0.90,
+							CandidateCount: 1,
+						}
+					}
+				}
+				// Chain resolution didn't land on a known method. Fall
+				// through to registry.Resolve below. (Earlier iteration
+				// returned empty here to avoid suffix-match FPs, but
+				// measurement showed strict-drop sacrificed too much
+				// recall: ~3.8pp on assetman + 2 apid TPs lost. The
+				// fuzzy/registry fallback catches real correct edges
+				// the chain analysis can't validate.)
 			}
 		}
 	}
 
 	// Delegate to the registry's resolution strategy
 	return p.registry.Resolve(calleeName, moduleQN, importMap)
+}
+
+// buildFieldTypeMap walks every extracted file's TypeAssigns and identifies
+// struct/enum field bindings (CBM emits these with `enclosing_func_qn` set
+// to the struct's QN — distinguishable from local-variable bindings whose
+// enclosing_func_qn is a Function/Method QN).
+//
+// Stores the result on p.fieldTypes for use by resolveCallWithTypes.
+func (p *Pipeline) buildFieldTypeMap() {
+	p.fieldTypes = make(FieldTypeMap)
+	classLabels := map[string]bool{
+		"Class": true, "Struct": true, "Type": true,
+		"Interface": true, "Enum": true, "Trait": true,
+	}
+	for relPath, ext := range p.extractionCache {
+		if ext == nil || ext.Result == nil {
+			continue
+		}
+		moduleQN := fqn.ModuleQN(p.ProjectName, relPath)
+		importMap := p.importMaps[moduleQN]
+		for _, ta := range ext.Result.TypeAssigns {
+			if ta.VarName == "" || ta.TypeName == "" || ta.EnclosingFuncQN == "" {
+				continue
+			}
+			// Distinguish field bindings from local-variable bindings by
+			// checking the enclosing scope's label. Field bindings have
+			// enclosing_func_qn pointing at a struct/enum; locals point at
+			// a Function/Method.
+			p.registry.mu.RLock()
+			label, ok := p.registry.exact[ta.EnclosingFuncQN]
+			p.registry.mu.RUnlock()
+			if !ok || !classLabels[label] {
+				continue
+			}
+			classQN := resolveAsClass(ta.TypeName, p.registry, moduleQN, importMap)
+			if classQN == "" {
+				continue
+			}
+			p.fieldTypes[ta.EnclosingFuncQN+"."+ta.VarName] = classQN
+		}
+	}
+	if len(p.fieldTypes) > 0 {
+		slog.Info("field_types.built", "entries", len(p.fieldTypes))
+	}
 }
 
 // frameworkDecoratorPrefixes are decorator prefixes that indicate a function

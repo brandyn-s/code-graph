@@ -202,33 +202,55 @@ func enrichModuleNodeCBM(moduleNode *store.Node, cbmResult *cbm.FileResult, _ *p
 	// (e.g., macros, constants, global_vars from CBMFileResult)
 }
 
-// inferTypesCBM builds a TypeMap from CBM TypeAssign data + registry resolution.
-// Replaces the 14 language-specific infer*Types() functions.
+// inferTypesCBM builds per-function TypeMaps from CBM TypeAssign data plus
+// registry resolution. Replaces the 14 language-specific infer*Types().
+//
+// CBM emits one TypeAssign per binding with EnclosingFuncQN identifying the
+// scope. Function-scoped bindings (EnclosingFuncQN is a Function/Method) go
+// into the per-function TypeMap so callers in different functions don't
+// collide on shared variable names like `data` or `service`. Class-scoped
+// bindings (EnclosingFuncQN is a Struct/Enum) are skipped here — they're
+// handled by the global p.fieldTypes map built in buildFieldTypeMap().
+//
+// Bindings with empty or unknown EnclosingFuncQN fall through to the
+// module-scope map (key ""), used as a fallback for free-fn calls.
 func inferTypesCBM(
 	typeAssigns []cbm.TypeAssign,
 	registry *FunctionRegistry,
 	moduleQN string,
 	importMap map[string]string,
-) TypeMap {
-	types := make(TypeMap, len(typeAssigns))
+) PerFuncTypeMap {
+	out := make(PerFuncTypeMap)
+	classLabels := map[string]bool{
+		"Class": true, "Struct": true, "Type": true,
+		"Interface": true, "Enum": true, "Trait": true,
+	}
 
 	for _, ta := range typeAssigns {
 		if ta.VarName == "" || ta.TypeName == "" {
 			continue
 		}
-		classQN := resolveAsClass(ta.TypeName, registry, moduleQN, importMap)
-		if classQN != "" {
-			types[ta.VarName] = classQN
+		// Skip class-scoped (field) bindings — they're handled globally.
+		registry.mu.RLock()
+		label, hasLabel := registry.exact[ta.EnclosingFuncQN]
+		registry.mu.RUnlock()
+		if hasLabel && classLabels[label] {
+			continue
 		}
+
+		classQN := resolveAsClass(ta.TypeName, registry, moduleQN, importMap)
+		if classQN == "" {
+			continue
+		}
+
+		key := ta.EnclosingFuncQN
+		if out[key] == nil {
+			out[key] = make(TypeMap)
+		}
+		out[key][ta.VarName] = classQN
 	}
 
-	// Return type propagation is handled by CBM TypeAssigns which already
-	// detect constructor patterns. Additional return-type-based inference
-	// from the returnTypes map is still useful for non-constructor calls.
-	// This would require the call data which we have in CBM Calls.
-	// For now, constructor-based inference covers the primary use case.
-
-	return types
+	return out
 }
 
 // resolveFileCallsCBM resolves all call targets using pre-extracted CBM data.
@@ -248,8 +270,8 @@ func (p *Pipeline) resolveFileCallsCBM(relPath string, ext *cachedExtraction) ([
 	// Cross-file LSP resolution for Go files
 	p.runGoLSPCrossFileResolution(ext, moduleQN, relPath, importMap)
 
-	// Build type map from CBM type assignments
-	typeMap := inferTypesCBM(ext.Result.TypeAssigns, p.registry, moduleQN, importMap)
+	// Build per-function type map from CBM type assignments.
+	perFuncTypeMap := inferTypesCBM(ext.Result.TypeAssigns, p.registry, moduleQN, importMap)
 
 	// LSP-resolved calls take priority (high confidence, type-aware).
 	edges, lspCallerMethods := collectLSPResolvedEdges(ext.Result.ResolvedCalls, p.registry)
@@ -261,11 +283,20 @@ func (p *Pipeline) resolveFileCallsCBM(relPath string, ext *cachedExtraction) ([
 	// call sites but emits zero edges" via a node property check.
 	unresolvedByCaller := make(map[string]int)
 
-	// Resolve remaining calls via registry + fuzzy matching
+	// Resolve remaining calls via registry + fuzzy matching.
+	// Each call's TypeMap is selected by its enclosing function so that
+	// parameters / locals / `self` from one function don't shadow another's.
 	for _, call := range ext.Result.Calls {
 		callerQN := call.EnclosingFuncQN
 		if callerQN == "" {
 			callerQN = moduleQN
+		}
+		typeMap := perFuncTypeMap[call.EnclosingFuncQN]
+		if typeMap == nil {
+			typeMap = perFuncTypeMap[""]
+		}
+		if typeMap == nil {
+			typeMap = TypeMap{}
 		}
 		if edge, ok := p.resolveCallEdge(call, moduleQN, importMap, typeMap, lspCallerMethods); ok {
 			edges = append(edges, edge)

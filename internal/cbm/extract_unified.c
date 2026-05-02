@@ -176,14 +176,26 @@ void cbm_extract_unified(CBMExtractCtx* ctx) {
             if (cqn) push_scope(&state, SCOPE_CLASS, depth, cqn);
         } else if (ctx->language == CBM_LANG_RUST &&
                    strcmp(ts_node_type(node), "impl_item") == 0) {
-            // Rust impl block acts as class scope for methods
+            // Rust impl block acts as class scope for methods.
+            // Strip generic-parameter suffix (`Foo<T>` -> `Foo`) so the
+            // class scope QN matches the canonical struct/trait QN — the
+            // method-definition extraction in extract_defs.c does the same.
             TSNode type_node = ts_node_child_by_field_name(node, "type", 4);
             if (!ts_node_is_null(type_node)) {
                 char* type_name = cbm_node_text(ctx->arena, type_node, ctx->source);
                 if (type_name && type_name[0]) {
-                    const char* tqn = cbm_fqn_compute(ctx->arena, ctx->project,
-                                                       ctx->rel_path, type_name);
-                    push_scope(&state, SCOPE_CLASS, depth, tqn);
+                    char* lt = strchr(type_name, '<');
+                    if (lt) {
+                        // Trim trailing whitespace before `<` and terminate.
+                        char* p = lt;
+                        while (p > type_name && (p[-1] == ' ' || p[-1] == '\t')) p--;
+                        *p = '\0';
+                    }
+                    if (type_name[0]) {
+                        const char* tqn = cbm_fqn_compute(ctx->arena, ctx->project,
+                                                           ctx->rel_path, type_name);
+                        push_scope(&state, SCOPE_CLASS, depth, tqn);
+                    }
                 }
             }
         }

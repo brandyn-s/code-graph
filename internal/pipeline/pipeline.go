@@ -70,6 +70,12 @@ type Pipeline struct {
 	// receiver chains like `obj.field.method()` (2026-05-02 plateau-diagnose
 	// THEME F: ~87% of assetman residual is receiver-resolution failure).
 	fieldTypes FieldTypeMap
+	// traitImpls maps trait QN -> list of struct QNs that implement it
+	// (Rust `impl Trait for Struct`). When a call resolves to `Trait.method`
+	// and exactly one impl struct exists with `Struct.method`, the resolver
+	// prefers the impl. Closes the trait/Impl naming-disagreement residual
+	// (Pattern D in the 2026-05-02 categorization, ~27 method residuals).
+	traitImpls map[string][]string
 	// goLSPIdx indexes Go cross-file definitions for LSP resolution in pass3
 	goLSPIdx *goLSPDefIndex
 	// envReaders maps env var key -> list of function QNs that read it.
@@ -481,6 +487,7 @@ func (p *Pipeline) runFullPasses(files []discover.FileInfo) error {
 	t = time.Now()
 	p.buildReturnTypeMap()
 	p.buildFieldTypeMap()
+	p.buildTraitImplMap()
 	p.goLSPIdx = p.buildGoLSPDefIndex()
 	if p.goLSPIdx != nil {
 		p.goLSPIdx.integrateThirdPartyDeps(p.RepoPath, p.importMaps)
@@ -760,6 +767,7 @@ func (p *Pipeline) runIncrementalPasses(
 	// Re-resolve calls + usages for changed + dependent files
 	p.buildReturnTypeMap()
 	p.buildFieldTypeMap()
+	p.buildTraitImplMap()
 	p.goLSPIdx = p.buildGoLSPDefIndex()
 	if p.goLSPIdx != nil {
 		p.goLSPIdx.integrateThirdPartyDeps(p.RepoPath, p.importMaps)
@@ -1993,6 +2001,89 @@ func (p *Pipeline) buildFieldTypeMap() {
 	if len(p.fieldTypes) > 0 {
 		slog.Info("field_types.built", "entries", len(p.fieldTypes))
 	}
+}
+
+// buildTraitImplMap walks every Rust file's CBM ImplTraits and records
+// `trait_name -> [struct_name1, struct_name2, ...]`. Used by the
+// resolver's trait-impl swap (preferImplOverTrait) to convert a resolved
+// `Trait.method` target to `StructImpl.method` when exactly one impl
+// pair exists with a same-named method.
+func (p *Pipeline) buildTraitImplMap() {
+	p.traitImpls = make(map[string][]string)
+	for relPath, ext := range p.extractionCache {
+		if ext == nil || ext.Result == nil || ext.Language != lang.Rust {
+			continue
+		}
+		moduleQN := fqn.ModuleQN(p.ProjectName, relPath)
+		importMap := p.importMaps[moduleQN]
+		for _, it := range ext.Result.ImplTraits {
+			traitQN := resolveAsClass(it.TraitName, p.registry, moduleQN, importMap)
+			if traitQN == "" {
+				continue
+			}
+			structQN := resolveAsClass(it.StructName, p.registry, moduleQN, importMap)
+			if structQN == "" {
+				continue
+			}
+			// Avoid duplicate entries if the same impl pair appears in
+			// multiple files (rare but possible with macro expansion).
+			already := false
+			for _, existing := range p.traitImpls[traitQN] {
+				if existing == structQN {
+					already = true
+					break
+				}
+			}
+			if !already {
+				p.traitImpls[traitQN] = append(p.traitImpls[traitQN], structQN)
+			}
+		}
+	}
+	if len(p.traitImpls) > 0 {
+		slog.Info("trait_impls.built", "traits", len(p.traitImpls))
+	}
+}
+
+// preferImplOverTrait swaps a resolved `Trait.method` target to
+// `StructImpl.method` when exactly one struct implements the trait AND
+// that struct has the same method name in the registry. This matches
+// oracle-rust-syn's convention of recording the impl method, not the
+// trait method, for trait-method dispatch sites.
+//
+// Returns the (possibly swapped) target QN. Caller should use the
+// return value as the edge target.
+func (p *Pipeline) preferImplOverTrait(targetQN string) string {
+	if targetQN == "" || len(p.traitImpls) == 0 {
+		return targetQN
+	}
+	dotIdx := strings.LastIndex(targetQN, ".")
+	if dotIdx <= 0 || dotIdx >= len(targetQN)-1 {
+		return targetQN
+	}
+	parentQN := targetQN[:dotIdx]
+	methodName := targetQN[dotIdx+1:]
+
+	// Only swap when parent is a trait (Interface label). Don't swap when
+	// parent is already a Struct/Class — caller already picked an impl.
+	p.registry.mu.RLock()
+	parentLabel := p.registry.exact[parentQN]
+	p.registry.mu.RUnlock()
+	if parentLabel != "Interface" {
+		return targetQN
+	}
+
+	impls := p.traitImpls[parentQN]
+	if len(impls) != 1 {
+		// 0 impls: trait may be implemented externally; don't guess.
+		// 2+ impls: ambiguous; oracle's pick depends on call-site type
+		//          information we don't have.
+		return targetQN
+	}
+	candidate := impls[0] + "." + methodName
+	if p.registry.Exists(candidate) {
+		return candidate
+	}
+	return targetQN
 }
 
 // frameworkDecoratorPrefixes are decorator prefixes that indicate a function

@@ -444,7 +444,7 @@ func (p *Pipeline) resolveCallEdge(
 				// the callee is the unique class+method pair. Size=1.
 				return resolvedEdge{
 					CallerQN: callerQN,
-					TargetQN: candidate,
+					TargetQN: p.preferImplOverTrait(candidate),
 					Type:     edgeType,
 					Properties: map[string]any{
 						"caller_node_kind":       callerKind,
@@ -466,7 +466,7 @@ func (p *Pipeline) resolveCallEdge(
 			}
 			return resolvedEdge{
 				CallerQN: callerQN,
-				TargetQN: fuzzyResult.QualifiedName,
+				TargetQN: p.preferImplOverTrait(fuzzyResult.QualifiedName),
 				Type:     edgeType,
 				Properties: map[string]any{
 					"confidence":             fuzzyResult.Confidence,
@@ -531,7 +531,7 @@ func (p *Pipeline) resolveCallEdge(
 	}
 	return resolvedEdge{
 		CallerQN:   callerQN,
-		TargetQN:   result.QualifiedName,
+		TargetQN:   p.preferImplOverTrait(result.QualifiedName),
 		Type:       edgeType,
 		Properties: props,
 	}, true

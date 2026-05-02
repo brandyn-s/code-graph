@@ -457,6 +457,53 @@ void handle_type_assigns(CBMExtractCtx* ctx, TSNode node, const CBMLangSpec* spe
         }
     }
 
+    // Rust: function-scoped use_declaration — `use foo::bar::Baz;` inside
+    // fn body brings `Baz` into scope. Emit a TypeAssign so the per-function
+    // TypeMap can resolve `Baz.method()` calls. File-scoped uses are
+    // handled by parse_rust_imports.
+    //
+    // Phase 3d (bench/research/registry-resolve-consolidation-plan.md):
+    // targets the rust-diesel-negative `use schema::users::dsl::users;`
+    // pattern where `users` is brought into scope inside `fn entry`.
+    // Without this, `users.execute(conn)` had no receiver-type signal
+    // and fell through to phantom-emitting suffix-match against
+    // AssetRepo.execute.
+    //
+    // var_name and type_name are both set to the local (last) segment
+    // so resolveAsClass can find an internal Class via byName lookup.
+    // External crate types fall through to Phase 3c's raw recording and
+    // get dropped by Tier 2.
+    //
+    // Skips use_list (`use foo::{a, b}`), glob (`use foo::*`), and `as`
+    // rename forms — simple single-path uses only. More elaborate forms
+    // can be added when the corpus surfaces them.
+    if (strcmp(kind, "use_declaration") == 0 && ctx->language == CBM_LANG_RUST) {
+        if (state->enclosing_func_qn) {
+            char* full = cbm_node_text(ctx->arena, node, ctx->source);
+            if (full) {
+                char* p = full;
+                if (strncmp(p, "use ", 4) == 0) p += 4;
+                size_t len = strlen(p);
+                while (len > 0 && (p[len - 1] == ';' || p[len - 1] == ' ' ||
+                                   p[len - 1] == '\t' || p[len - 1] == '\n')) {
+                    p[--len] = '\0';
+                }
+                if (p[0] && !strchr(p, '{') && !strchr(p, '*') && !strstr(p, " as ")) {
+                    const char* local = strrchr(p, ':');
+                    local = local ? local + 1 : p;
+                    if (local[0]) {
+                        char* local_copy = cbm_arena_strdup(ctx->arena, local);
+                        CBMTypeAssign ta;
+                        ta.var_name = local_copy;
+                        ta.type_name = local_copy;
+                        ta.enclosing_func_qn = state->enclosing_func_qn;
+                        cbm_typeassign_push(&ctx->result->type_assigns, ctx->arena, ta);
+                    }
+                }
+            }
+        }
+    }
+
     // Rust: field_declaration inside struct/enum/union — bind field name to
     // its declared type, scoped to the enclosing struct's QN. Emitted with
     // `enclosing_func_qn = struct_QN` (i.e. enclosing CLASS scope) so the

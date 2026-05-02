@@ -25,7 +25,7 @@
     {
       "from_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-diesel-negative.src.main.entry",
       "to_qn_pattern": ".*\\.execute$",
-      "reason": "Diesel RunQueryDsl::execute is an external trait method; chained on users.execute(). MUST NOT bind to AssetRepo.execute."
+      "reason": "Regression-prevention (FIXED by Phase 3d). Diesel RunQueryDsl::execute is an external trait method; chained on users.execute(). The previous resolver bound `users.execute(conn)` to AssetRepo.execute via cross-package-heuristic because `users` was brought into scope by a function-scoped `use schema::users::dsl::users;` that parse_rust_imports didn't see (it walks file scope only). Phase 3d adds use_declaration handling in handle_type_assigns: function-scoped uses now emit a TypeAssign so `users` has a known receiver type (the local Struct). Tier 2's existing dropAll path drops bindings on `users.execute()` because no AssetRepo Method has parent matching."
     },
     {
       "from_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-diesel-negative.src.main.entry",

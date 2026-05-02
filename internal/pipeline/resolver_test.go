@@ -378,3 +378,81 @@ func TestCallContext_FieldsArePresent(t *testing.T) {
 		Aliases:        map[string]string{},
 	}
 }
+
+// TestFuzzyResolveCtx_ForwardsToLegacy pins the Phase 2 invariant for the
+// fuzzy path: FuzzyResolveCtx must produce the same (ResolutionResult,
+// ok) tuple as the legacy FuzzyResolve(calleeName, moduleQN, importMap)
+// signature for the same inputs. The Phase 2+ fields on CallContext must
+// not influence resolution today.
+func TestFuzzyResolveCtx_ForwardsToLegacy(t *testing.T) {
+	reg := NewFunctionRegistry()
+	reg.Register("CreateOrder", "svcA.handlers.CreateOrder", "Function")
+	reg.Register("Process", "svcB.workers.Process", "Function")
+	reg.Register("Process", "svcC.helpers.Process", "Function")
+
+	imports := map[string]string{"svcA": "svcA"}
+
+	cases := []struct {
+		name       string
+		calleeName string
+		moduleQN   string
+		importMap  map[string]string
+	}{
+		{"unique-name", "CreateOrder", "svcZ.caller", nil},
+		{"qualified-callee", "unknown.CreateOrder", "svcZ.caller", nil},
+		{"multi-candidate-by-distance-A", "Process", "svcB.x", imports},
+		{"multi-candidate-by-distance-C", "Process", "svcC.x", imports},
+		{"unresolvable-bare", "Nonexistent", "svcZ.caller", nil},
+		{"deep-qualified", "some.deep.path.CreateOrder", "svcZ.caller", nil},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			legacyRes, legacyOk := reg.FuzzyResolve(tc.calleeName, tc.moduleQN, tc.importMap)
+			ctx := CallContext{
+				CalleeName: tc.calleeName,
+				CallerQN:   "svcZ.caller.SomeFunc",
+				ModuleQN:   tc.moduleQN,
+				ImportMap:  tc.importMap,
+				// Phase 2+ fields populated to prove they don't influence today.
+				ReceiverType:   "svcA.handlers.SomeStruct",
+				ImportBindings: map[string]string{"CreateOrder": "external.lib.CreateOrder"},
+				Aliases:        map[string]string{"alias": "svcA.something"},
+			}
+			ctxRes, ctxOk := reg.FuzzyResolveCtx(ctx)
+			if ctxOk != legacyOk {
+				t.Errorf("FuzzyResolveCtx ok diverged: legacy=%v ctx=%v", legacyOk, ctxOk)
+			}
+			if ctxRes != legacyRes {
+				t.Errorf("FuzzyResolveCtx result diverged\n  legacy = %#v\n  ctx    = %#v", legacyRes, ctxRes)
+			}
+		})
+	}
+}
+
+// TestSplitCalleeName pins the helper extracted in Phase 2 — every strategy
+// that needs prefix/suffix relies on it. Behavior must match the inline
+// code each strategy used pre-Phase-2.
+func TestSplitCalleeName(t *testing.T) {
+	cases := []struct {
+		in            string
+		wantPrefix    string
+		wantSuffix    string
+	}{
+		{"", "", ""},
+		{"bare", "bare", ""},
+		{"pkg.Func", "pkg", "Func"},
+		{"obj.field.method", "obj", "field.method"}, // SplitN(2) keeps tail intact
+		{".leading", "", "leading"},
+		{"trailing.", "trailing", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.in, func(t *testing.T) {
+			gotPrefix, gotSuffix := splitCalleeName(tc.in)
+			if gotPrefix != tc.wantPrefix || gotSuffix != tc.wantSuffix {
+				t.Errorf("splitCalleeName(%q) = (%q, %q), want (%q, %q)",
+					tc.in, gotPrefix, gotSuffix, tc.wantPrefix, tc.wantSuffix)
+			}
+		})
+	}
+}

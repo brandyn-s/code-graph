@@ -96,55 +96,68 @@ func (r *FunctionRegistry) Register(name, qualifiedName, nodeLabel string) {
 	r.byName[simple] = append(r.byName[simple], qualifiedName)
 }
 
-// ResolveCtx is the CallContext-shaped entry point introduced in Phase 1
-// of the registry.Resolve consolidation
-// (bench/research/registry-resolve-consolidation-plan.md). It forwards
-// to the legacy Resolve signature today; Phase 2 will rewire the
-// strategies to consume CallContext directly, and Phase 3 will add
-// discrimination using ctx.ReceiverType / ctx.ImportBindings.
+// ResolveCtx is the CallContext-shaped entry point. As of Phase 2 of the
+// registry.Resolve consolidation
+// (bench/research/registry-resolve-consolidation-plan.md), this is the
+// PRIMARY resolver path: every strategy receives the full CallContext.
+// The legacy Resolve(calleeName, moduleQN, importMap) signature now
+// builds a CallContext and forwards here, so existing callers see no
+// behavior change.
 //
-// Forwarding-equivalence is pinned by TestResolveCtx_ForwardsToLegacy
-// in resolver_test.go. Callers can migrate to ResolveCtx incrementally
-// without behavior change.
+// Phase 2 still does NOT consume ctx.ReceiverType, ctx.ImportBindings, or
+// ctx.Aliases — those land in Phase 3 (discrimination ladder). The
+// strategies receive them so Phase 3 can add discrimination at each
+// strategy's CandidateCount > 1 branch without further signature churn.
+//
+// Forwarding-equivalence is pinned by TestResolveCtx_ForwardsToLegacy.
 func (r *FunctionRegistry) ResolveCtx(ctx CallContext) ResolutionResult {
-	return r.Resolve(ctx.CalleeName, ctx.ModuleQN, ctx.ImportMap)
-}
-
-// Resolve attempts to find the qualified name of a callee using a prioritized
-// resolution strategy:
-//  1. Import map lookup
-//  2. Same-module match
-//  3. Project-wide single match by simple name
-//  4. Suffix match with import distance scoring
-func (r *FunctionRegistry) Resolve(calleeName, moduleQN string, importMap map[string]string) ResolutionResult {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	// Split calleeName for qualified calls like "pkg.Func" or "obj.method"
+	if result := r.resolveViaImportMap(ctx); result.QualifiedName != "" {
+		return result
+	}
+
+	if result := r.resolveViaSameModule(ctx); result.QualifiedName != "" {
+		return result
+	}
+
+	return r.resolveViaNameLookup(ctx)
+}
+
+// Resolve is the legacy entry point. Builds a CallContext and forwards to
+// ResolveCtx. Existing callers (decorates.go, pipeline.go, pipeline_cbm.go
+// references/exceptions/variables/types paths, tests) continue to work
+// unchanged. Phase 4 may migrate or remove this wrapper.
+func (r *FunctionRegistry) Resolve(calleeName, moduleQN string, importMap map[string]string) ResolutionResult {
+	return r.ResolveCtx(CallContext{
+		CalleeName: calleeName,
+		ModuleQN:   moduleQN,
+		ImportMap:  importMap,
+	})
+}
+
+// splitCalleeName extracts the leading prefix and remainder of a callee
+// name like "pkg.Func" -> ("pkg", "Func") or "obj.field.method" ->
+// ("obj", "field.method"). Bare names yield (calleeName, "").
+//
+// Centralized so each strategy doesn't re-implement the split.
+func splitCalleeName(calleeName string) (prefix, suffix string) {
 	parts := strings.SplitN(calleeName, ".", 2)
-	prefix := parts[0]
-	var suffix string
+	prefix = parts[0]
 	if len(parts) > 1 {
 		suffix = parts[1]
 	}
-
-	if result := r.resolveViaImportMap(prefix, suffix, importMap); result.QualifiedName != "" {
-		return result
-	}
-
-	if result := r.resolveViaSameModule(calleeName, suffix, moduleQN); result.QualifiedName != "" {
-		return result
-	}
-
-	return r.resolveViaNameLookup(calleeName, suffix, moduleQN, importMap)
+	return prefix, suffix
 }
 
 // resolveViaImportMap tries to resolve a callee using the import map (Strategy 1).
-func (r *FunctionRegistry) resolveViaImportMap(prefix, suffix string, importMap map[string]string) ResolutionResult {
-	if importMap == nil {
+func (r *FunctionRegistry) resolveViaImportMap(ctx CallContext) ResolutionResult {
+	if ctx.ImportMap == nil {
 		return ResolutionResult{}
 	}
-	resolved, ok := importMap[prefix]
+	prefix, suffix := splitCalleeName(ctx.CalleeName)
+	resolved, ok := ctx.ImportMap[prefix]
 	if !ok {
 		return ResolutionResult{}
 	}
@@ -168,13 +181,14 @@ func (r *FunctionRegistry) resolveViaImportMap(prefix, suffix string, importMap 
 }
 
 // resolveViaSameModule tries to resolve a callee within the same module (Strategy 2).
-func (r *FunctionRegistry) resolveViaSameModule(calleeName, suffix, moduleQN string) ResolutionResult {
-	sameModule := moduleQN + "." + calleeName
+func (r *FunctionRegistry) resolveViaSameModule(ctx CallContext) ResolutionResult {
+	_, suffix := splitCalleeName(ctx.CalleeName)
+	sameModule := ctx.ModuleQN + "." + ctx.CalleeName
 	if _, exists := r.exact[sameModule]; exists {
 		return ResolutionResult{QualifiedName: sameModule, Strategy: "same_module", Confidence: 0.90, CandidateCount: 1}
 	}
 	if suffix != "" {
-		sameModuleQualified := moduleQN + "." + suffix
+		sameModuleQualified := ctx.ModuleQN + "." + suffix
 		if label, exists := r.exact[sameModuleQualified]; exists {
 			// Type-aware tiebreak (2026-05-02): a method-call shape
 			// (calleeName has a dot, e.g. `args.run`) shouldn't auto-
@@ -189,7 +203,7 @@ func (r *FunctionRegistry) resolveViaSameModule(calleeName, suffix, moduleQN str
 			// method `Commands.run` because the same_module suffix
 			// shortcut hit at confidence 0.90 before suffix_match
 			// could consider methods.
-			if strings.Contains(calleeName, ".") && label == "Function" {
+			if strings.Contains(ctx.CalleeName, ".") && label == "Function" {
 				return ResolutionResult{}
 			}
 			return ResolutionResult{QualifiedName: sameModuleQualified, Strategy: "same_module", Confidence: 0.90, CandidateCount: 1}
@@ -199,8 +213,9 @@ func (r *FunctionRegistry) resolveViaSameModule(calleeName, suffix, moduleQN str
 }
 
 // resolveViaNameLookup tries project-wide name lookup and suffix matching (Strategies 3+4).
-func (r *FunctionRegistry) resolveViaNameLookup(calleeName, suffix, moduleQN string, importMap map[string]string) ResolutionResult {
-	lookupName := calleeName
+func (r *FunctionRegistry) resolveViaNameLookup(ctx CallContext) ResolutionResult {
+	_, suffix := splitCalleeName(ctx.CalleeName)
+	lookupName := ctx.CalleeName
 	if suffix != "" {
 		lookupName = suffix
 	}
@@ -210,7 +225,7 @@ func (r *FunctionRegistry) resolveViaNameLookup(calleeName, suffix, moduleQN str
 	// Strategy 3: unique name — single candidate project-wide
 	if len(candidates) == 1 {
 		conf := 0.75
-		if importMap != nil && !isImportReachable(candidates[0], importMap) {
+		if ctx.ImportMap != nil && !isImportReachable(candidates[0], ctx.ImportMap) {
 			conf *= 0.5
 		}
 		return ResolutionResult{QualifiedName: candidates[0], Strategy: "unique_name", Confidence: conf, CandidateCount: 1}
@@ -218,34 +233,35 @@ func (r *FunctionRegistry) resolveViaNameLookup(calleeName, suffix, moduleQN str
 
 	// Strategy 4: suffix match with import distance scoring
 	if suffix != "" {
-		if res := r.resolveSuffixMatch(calleeName, suffix, moduleQN, importMap, candidates); res.QualifiedName != "" {
+		if res := r.resolveSuffixMatch(ctx, candidates); res.QualifiedName != "" {
 			return res
 		}
 	}
 
-	return r.pickBestCandidate(candidates, moduleQN, calleeName, importMap)
+	return r.pickBestCandidate(ctx, candidates)
 }
 
 // resolveSuffixMatch handles Strategy 4 — suffix-based matching among multiple candidates.
-func (r *FunctionRegistry) resolveSuffixMatch(calleeName, suffix, moduleQN string, importMap map[string]string, candidates []string) ResolutionResult {
+func (r *FunctionRegistry) resolveSuffixMatch(ctx CallContext, candidates []string) ResolutionResult {
+	_, suffix := splitCalleeName(ctx.CalleeName)
 	var matches []string
 	for _, qn := range candidates {
-		if strings.HasSuffix(qn, "."+calleeName) {
-			conf := candidateCountPenalty(importAdjustedConfidence(0.55, qn, importMap), len(candidates))
+		if strings.HasSuffix(qn, "."+ctx.CalleeName) {
+			conf := candidateCountPenalty(importAdjustedConfidence(0.55, qn, ctx.ImportMap), len(candidates))
 			return ResolutionResult{QualifiedName: qn, Strategy: "suffix_match", Confidence: conf, CandidateCount: len(candidates)}
 		}
 		if strings.HasSuffix(qn, "."+suffix) {
 			matches = append(matches, qn)
 		}
 	}
-	if importMap != nil {
-		matches = filterImportReachable(matches, importMap)
+	if ctx.ImportMap != nil {
+		matches = filterImportReachable(matches, ctx.ImportMap)
 	}
 	if len(matches) == 1 {
 		return ResolutionResult{QualifiedName: matches[0], Strategy: "suffix_match", Confidence: candidateCountPenalty(0.55, len(candidates)), CandidateCount: len(candidates)}
 	}
 	if len(matches) > 1 {
-		best := r.bestByImportDistancePreferMethod(matches, moduleQN, calleeName)
+		best := r.bestByImportDistancePreferMethod(matches, ctx.ModuleQN, ctx.CalleeName)
 		return ResolutionResult{QualifiedName: best, Strategy: "suffix_match", Confidence: candidateCountPenalty(0.55, len(matches)), CandidateCount: len(matches)}
 	}
 	return ResolutionResult{}
@@ -254,22 +270,22 @@ func (r *FunctionRegistry) resolveSuffixMatch(calleeName, suffix, moduleQN strin
 // pickBestCandidate selects the best match from multiple candidates with
 // import filtering. Method receiver of the registry so we can apply the
 // type-aware tiebreak (prefer Method over Function for method-call shape).
-func (r *FunctionRegistry) pickBestCandidate(candidates []string, moduleQN, calleeName string, importMap map[string]string) ResolutionResult {
+func (r *FunctionRegistry) pickBestCandidate(ctx CallContext, candidates []string) ResolutionResult {
 	if len(candidates) <= 1 {
 		return ResolutionResult{}
 	}
 	filtered := candidates
-	if importMap != nil {
-		filtered = filterImportReachable(candidates, importMap)
+	if ctx.ImportMap != nil {
+		filtered = filterImportReachable(candidates, ctx.ImportMap)
 	}
 	if len(filtered) == 0 {
-		best := r.bestByImportDistancePreferMethod(candidates, moduleQN, calleeName)
+		best := r.bestByImportDistancePreferMethod(candidates, ctx.ModuleQN, ctx.CalleeName)
 		return ResolutionResult{QualifiedName: best, Strategy: "suffix_match", Confidence: candidateCountPenalty(0.55*0.5, len(candidates)), CandidateCount: len(candidates)}
 	}
 	if len(filtered) == 1 {
 		return ResolutionResult{QualifiedName: filtered[0], Strategy: "suffix_match", Confidence: candidateCountPenalty(0.55, len(candidates)), CandidateCount: len(candidates)}
 	}
-	best := r.bestByImportDistancePreferMethod(filtered, moduleQN, calleeName)
+	best := r.bestByImportDistancePreferMethod(filtered, ctx.ModuleQN, ctx.CalleeName)
 	return ResolutionResult{QualifiedName: best, Strategy: "suffix_match", Confidence: candidateCountPenalty(0.55, len(filtered)), CandidateCount: len(filtered)}
 }
 
@@ -292,19 +308,19 @@ func candidateCountPenalty(base float64, count int) float64 {
 	return base * math.Min(1.0, 3.0/float64(count))
 }
 
-// FuzzyResolve attempts a loose match when Resolve() returns "".
-// It searches for any registered function whose simple name matches the callee's
-// last name segment. Returns the best match (by import distance) with confidence,
-// or an empty result and false if no match is found.
+// FuzzyResolveCtx is the CallContext-shaped fuzzy resolver. As of Phase 2
+// this is the primary fuzzy path; FuzzyResolve forwards here. See ResolveCtx
+// for the consolidation rationale.
 //
-// Unlike Resolve(), this does not require prefix/import agreement — it purely
-// matches on the function name.
-func (r *FunctionRegistry) FuzzyResolve(calleeName, moduleQN string, importMap map[string]string) (ResolutionResult, bool) {
+// Phase 2 still does NOT consume ctx.ReceiverType or ctx.ImportBindings —
+// those land in Phase 3. The fuzzy path is the most likely to benefit from
+// receiver-type discrimination since CandidateCount > 1 is common here.
+func (r *FunctionRegistry) FuzzyResolveCtx(ctx CallContext) (ResolutionResult, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
 	// Extract the simple name (last segment after dots)
-	lookupName := simpleName(calleeName)
+	lookupName := simpleName(ctx.CalleeName)
 	candidates := r.byName[lookupName]
 
 	if len(candidates) == 0 {
@@ -314,7 +330,7 @@ func (r *FunctionRegistry) FuzzyResolve(calleeName, moduleQN string, importMap m
 	// If there's exactly one candidate, use it
 	if len(candidates) == 1 {
 		conf := 0.40
-		if importMap != nil && !isImportReachable(candidates[0], importMap) {
+		if ctx.ImportMap != nil && !isImportReachable(candidates[0], ctx.ImportMap) {
 			conf *= 0.5
 		}
 		return ResolutionResult{
@@ -325,12 +341,12 @@ func (r *FunctionRegistry) FuzzyResolve(calleeName, moduleQN string, importMap m
 
 	// Multiple candidates: filter by import reachability, then pick best by distance
 	filtered := candidates
-	if importMap != nil {
-		filtered = filterImportReachable(candidates, importMap)
+	if ctx.ImportMap != nil {
+		filtered = filterImportReachable(candidates, ctx.ImportMap)
 	}
 	if len(filtered) == 0 {
 		// No import-reachable candidates — use original with penalty
-		best := bestByImportDistance(candidates, moduleQN)
+		best := bestByImportDistance(candidates, ctx.ModuleQN)
 		if best == "" {
 			return ResolutionResult{}, false
 		}
@@ -345,7 +361,7 @@ func (r *FunctionRegistry) FuzzyResolve(calleeName, moduleQN string, importMap m
 			Confidence: candidateCountPenalty(0.40, len(candidates)), CandidateCount: len(candidates),
 		}, true
 	}
-	best := bestByImportDistance(filtered, moduleQN)
+	best := bestByImportDistance(filtered, ctx.ModuleQN)
 	if best == "" {
 		return ResolutionResult{}, false
 	}
@@ -353,6 +369,20 @@ func (r *FunctionRegistry) FuzzyResolve(calleeName, moduleQN string, importMap m
 		QualifiedName: best, Strategy: "fuzzy",
 		Confidence: candidateCountPenalty(0.30, len(filtered)), CandidateCount: len(filtered),
 	}, true
+}
+
+// FuzzyResolve is the legacy fuzzy entry point. Builds a CallContext and
+// forwards to FuzzyResolveCtx. Existing callers (pipeline_cbm.go:462) work
+// unchanged.
+//
+// Unlike Resolve(), this does not require prefix/import agreement — it purely
+// matches on the function name.
+func (r *FunctionRegistry) FuzzyResolve(calleeName, moduleQN string, importMap map[string]string) (ResolutionResult, bool) {
+	return r.FuzzyResolveCtx(CallContext{
+		CalleeName: calleeName,
+		ModuleQN:   moduleQN,
+		ImportMap:  importMap,
+	})
 }
 
 // LabelOf returns the node label for a qualified name, or "" if not registered.

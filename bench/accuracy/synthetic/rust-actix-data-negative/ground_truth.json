@@ -1,0 +1,47 @@
+{
+  "description": "Negative-benchmark fixture: web::Data<T> deref-wrapper class + same-file shadow class. PR #149 added recursive peeling of Arc/Rc/Box/Mutex/web::Data wrappers; from `entry(data: web::Data<AppState>)` the resolver should peel to AppState. This fixture confirms the peel works AND surfaces a separate finding: from `controls()`, the resolver binds `metrics.record(42)` and `cache.record(\"k\")` to `AppState.record` (same-file shadow) instead of MetricsCollector.record / Cache.record (the actual receiver types).",
+  "kind": "negative",
+
+  "expected_internal_calls": [
+    {"from_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-actix-data-negative.src.main.entry", "to_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-actix-data-negative.src.main.AppState.record"},
+    {"from_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-actix-data-negative.src.main.entry", "to_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-actix-data-negative.src.main.AppState.flush"},
+    {"from_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-actix-data-negative.src.main.controls", "to_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-actix-data-negative.src.main.helper"},
+    {"from_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-actix-data-negative.src.main.main", "to_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-actix-data-negative.src.main.entry"},
+    {"from_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-actix-data-negative.src.main.main", "to_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-actix-data-negative.src.main.controls"}
+  ],
+
+  "forbidden_emitted_calls": [
+    {
+      "from_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-actix-data-negative.src.main.entry",
+      "to_qn_pattern": ".*\\.metrics\\.MetricsCollector\\.record$",
+      "reason": "Regression-prevention. `entry(data: web::Data<AppState>) { data.record(1); }` — PR #149's deref peeler correctly resolves this to AppState.record today. Binding to MetricsCollector.record would be a phantom from cross-package-heuristic if peeling regresses."
+    },
+    {
+      "from_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-actix-data-negative.src.main.entry",
+      "to_qn_pattern": ".*\\.metrics\\.MetricsCollector\\.flush$",
+      "reason": "Regression-prevention. `data.flush()` should peel to AppState.flush. Binding to MetricsCollector.flush is a phantom."
+    },
+    {
+      "from_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-actix-data-negative.src.main.entry",
+      "to_qn_pattern": ".*\\.cache\\.Cache\\.record$",
+      "reason": "Regression-prevention. Cache.record is the alternate shadow target out of scope from `entry`."
+    },
+    {
+      "from_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-actix-data-negative.src.main.entry",
+      "to_qn_pattern": ".*\\.cache\\.Cache\\.flush$",
+      "reason": "Regression-prevention. Cache.flush is the alternate shadow target out of scope from `entry`."
+    },
+    {
+      "from_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-actix-data-negative.src.main.controls",
+      "to_qn_pattern": ".*\\.main\\.AppState\\.record$",
+      "reason": "Active phantom. `controls()` has no AppState binding in scope — only `metrics: MetricsCollector` and `cache: Cache`. Calls are `metrics.record(42)` and `cache.record(\"k\")`. Binding to AppState.record is the same-file-shadow phantom: the resolver prefers a same-file Method node over the actual receiver-type's method when both share a bare name."
+    },
+    {
+      "from_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-actix-data-negative.src.main.controls",
+      "to_qn_pattern": ".*\\.main\\.AppState\\.flush$",
+      "reason": "Active phantom. `controls()` calls `metrics.flush()` and `cache.flush()`. Binding to AppState.flush is the same-file-shadow phantom."
+    }
+  ],
+
+  "notes": "Project name: `c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-actix-data-negative`.\n\nEMPIRICAL FINDINGS (2026-05-02):\n  1. PR #149's deref-wrapper peeling on `web::Data<AppState>` works correctly: `entry → AppState.record/flush` emit via cross-package-heuristic + interface-dispatch. NO phantoms from `entry` to MetricsCollector or Cache.\n  2. SAME-FILE SHADOW PHANTOM: `controls()` calls `metrics.record(42)` (where `metrics: MetricsCollector`) but the resolver binds it to `AppState.record` (same-file Method node) instead of `MetricsCollector.record` (correct receiver-type method). Same pattern for `cache.record/flush`. The same-file Method node wins over the cross-file receiver-type method even though the receiver-type binding is unambiguous in source.\n  3. Cross-file edges to metrics/cache modules don't emit at all — `controls → MetricsCollector.record` etc. are absorbed into the AppState shadow.\n  4. The Diesel fixture's bare-name conflation finding (`controls → AssetRepo.get_result` shadows `controls → IntrospectService.get_result`) is the cross-FILE form of the same pattern this fixture's controls() exposes in same-FILE form.\n\nThe `from entry` forbidden patterns serve as regression prevention: they don't fire today (good) but if PR #149's deref peeler regresses, they will. The `from controls` forbidden patterns ARE active phantoms today.\n\nSchema reference: bench/accuracy/synthetic/_schema.md. Authored 2026-05-02 per roundtable Recommendation #1."
+}

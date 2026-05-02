@@ -272,7 +272,10 @@ def main() -> int:
         return 2
 
     baselines = load_baselines() if args.regression_gate else {}
-    new_baselines: dict = {}
+    # When writing baselines, start from existing file content and update
+    # only the entries for fixtures that actually ran. A name-filtered run
+    # must NOT drop other fixtures' baselines.
+    new_baselines: dict = load_baselines() if args.write_baseline else {}
     overall_failed = False
 
     for fixture in fixtures:

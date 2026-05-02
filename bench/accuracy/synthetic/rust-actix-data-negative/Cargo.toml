@@ -1,0 +1,13 @@
+[package]
+name = "rust-actix-data-negative"
+version = "0.0.1"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "rust-actix-data-negative"
+path = "src/main.rs"
+
+[lib]
+name = "rust_actix_data_negative"
+path = "src/lib.rs"

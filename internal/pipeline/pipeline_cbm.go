@@ -233,7 +233,15 @@ func inferTypesCBM(
 
 // resolveFileCallsCBM resolves all call targets using pre-extracted CBM data.
 // Replaces resolveFileCalls() — no AST walking needed.
-func (p *Pipeline) resolveFileCallsCBM(relPath string, ext *cachedExtraction) []resolvedEdge {
+//
+// Returns (edges, unresolvedByCaller). The latter maps each caller QN seen
+// in CBM call sites to the count of calls that the resolver did NOT
+// successfully emit. Used by passWriteUnresolvedCounts to set the
+// unresolved_call_count property on Function/Method nodes for diagnostic
+// queries (e.g., "find callers with missing call sites" — the plateau-
+// diagnose Step 6 finding that 3 of 5 sampled FN callers had ZERO outbound
+// edges due to silent resolver drops).
+func (p *Pipeline) resolveFileCallsCBM(relPath string, ext *cachedExtraction) ([]resolvedEdge, map[string]int) {
 	moduleQN := fqn.ModuleQN(p.ProjectName, relPath)
 	importMap := p.importMaps[moduleQN]
 
@@ -246,14 +254,27 @@ func (p *Pipeline) resolveFileCallsCBM(relPath string, ext *cachedExtraction) []
 	// LSP-resolved calls take priority (high confidence, type-aware).
 	edges, lspCallerMethods := collectLSPResolvedEdges(ext.Result.ResolvedCalls, p.registry)
 
+	// Track per-caller unresolved counts. CBM emits one Call entry per
+	// detected call site. For each, we either emit a resolved edge (success)
+	// or return (zero, false) (failure). The diagnostic counter records the
+	// failure count per caller so consumers can detect "this fn body has
+	// call sites but emits zero edges" via a node property check.
+	unresolvedByCaller := make(map[string]int)
+
 	// Resolve remaining calls via registry + fuzzy matching
 	for _, call := range ext.Result.Calls {
+		callerQN := call.EnclosingFuncQN
+		if callerQN == "" {
+			callerQN = moduleQN
+		}
 		if edge, ok := p.resolveCallEdge(call, moduleQN, importMap, typeMap, lspCallerMethods); ok {
 			edges = append(edges, edge)
+		} else {
+			unresolvedByCaller[callerQN]++
 		}
 	}
 
-	return edges
+	return edges, unresolvedByCaller
 }
 
 // runGoLSPCrossFileResolution re-runs LSP with cross-file definitions from imported packages.

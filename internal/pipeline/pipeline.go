@@ -69,6 +69,11 @@ type Pipeline struct {
 	// envReaders maps env var key -> list of function QNs that read it.
 	// Built during semantic passes (pre-flush) for use in post-flush config linking.
 	envReaders map[string][]string
+	// unresolvedCallCounts maps caller QN -> number of CBM call sites that
+	// the resolver did NOT successfully emit. Populated by passCalls; written
+	// to Function/Method node properties by passWriteUnresolvedCounts in the
+	// post-flush phase (must run AFTER buffer flush to avoid being clobbered).
+	unresolvedCallCounts map[string]int
 	// rustCrateMap: Rust crate name (with `-` -> `_` normalized) -> the
 	// path dotted-segment prefix where that crate's src/ lives. Built at
 	// the start of pass2 by scanning Cargo.toml files under RepoPath.
@@ -526,8 +531,16 @@ func (p *Pipeline) runFullPasses(files []discover.FileInfo) error {
 
 // runPostFlushPasses runs passes that require SQLite indexes (post graph-buffer flush).
 func (p *Pipeline) runPostFlushPasses(files []discover.FileInfo) error {
-	p.reportProgress("tests", 75, "resolving test edges")
+	// passWriteUnresolvedCounts writes the unresolved_call_count diagnostic
+	// property staged by passCalls. Runs FIRST in post-flush so subsequent
+	// passes see the property if they read node properties (none currently
+	// do, but ordering invariants are cheap to maintain).
 	t := time.Now()
+	p.passWriteUnresolvedCounts()
+	slog.Info("pass.timing", "pass", "unresolved_counts", "elapsed", time.Since(t))
+
+	p.reportProgress("tests", 75, "resolving test edges")
+	t = time.Now()
 	p.passTests() // TESTS/TESTS_FILE edges (DB-only)
 	slog.Info("pass.timing", "pass", "tests", "elapsed", time.Since(t))
 
@@ -969,7 +982,7 @@ func (p *Pipeline) passCallsForFiles(files []discover.FileInfo) {
 			ext = &cachedExtraction{Result: cbmResult, Language: f.Language}
 			p.extractionCache[f.RelPath] = ext
 		}
-		edges := p.resolveFileCallsCBM(f.RelPath, ext)
+		edges, unresolved := p.resolveFileCallsCBM(f.RelPath, ext)
 		// Release Definitions/Imports per-file after call resolution
 		if ext.Result != nil {
 			ext.Result.Definitions = nil
@@ -986,6 +999,13 @@ func (p *Pipeline) passCallsForFiles(files []discover.FileInfo) {
 					Type:       re.Type,
 					Properties: re.Properties,
 				})
+			}
+		}
+		// Single-file path: write unresolved counts inline (parallel
+		// path uses passWriteUnresolvedCounts after the file batch).
+		for callerQN, count := range unresolved {
+			if count > 0 {
+				_, _ = p.Store.SetNodeIntProperty(p.ProjectName, callerQN, "unresolved_call_count", count)
 			}
 		}
 	}
@@ -1554,6 +1574,7 @@ func (p *Pipeline) passCalls() {
 
 	// Stage 1: Parallel per-file call resolution using CBM data
 	results := make([][]resolvedEdge, len(files))
+	unresolvedPerFile := make([]map[string]int, len(files))
 	numWorkers := runtime.NumCPU()
 	if numWorkers > len(files) {
 		numWorkers = len(files)
@@ -1571,7 +1592,7 @@ func (p *Pipeline) passCalls() {
 			if gctx.Err() != nil {
 				return gctx.Err()
 			}
-			results[i] = p.resolveFileCallsCBM(fe.relPath, fe.ext)
+			results[i], unresolvedPerFile[i] = p.resolveFileCallsCBM(fe.relPath, fe.ext)
 			// Release heavy fields per-file immediately after call resolution.
 			// Definitions + Imports are only needed for Go LSP cross-file inside
 			// resolveFileCallsCBM. Releasing here reduces peak from O(all_files)
@@ -1597,6 +1618,51 @@ func (p *Pipeline) passCalls() {
 	// Stage 2: Batch QN→ID resolution + batch edge insert
 	p.reportProgress("calls:flush", 57, "flushing call edges to graph")
 	p.flushResolvedEdges(results)
+
+	// Stage 3: Aggregate unresolved counts per caller. A caller may appear
+	// in multiple files (Rust impl spread across files, partial classes).
+	// Stored on Pipeline; written to node properties by
+	// passWriteUnresolvedCounts AFTER the buffer flush (otherwise the
+	// flush at the end of runFullPasses overwrites our updates).
+	aggregated := make(map[string]int)
+	for _, m := range unresolvedPerFile {
+		for caller, count := range m {
+			aggregated[caller] += count
+		}
+	}
+	p.unresolvedCallCounts = aggregated
+	slog.Info("pass3.unresolved_counts.staged",
+		"callers_with_unresolved", len(aggregated))
+}
+
+// passWriteUnresolvedCounts writes the unresolved_call_count property to
+// each caller's Function/Method node. Runs after the graph buffer flush
+// so the writes survive — earlier writes via passCalls were being
+// clobbered by the bulk node-upsert phase that happens during flush.
+func (p *Pipeline) passWriteUnresolvedCounts() {
+	if len(p.unresolvedCallCounts) == 0 {
+		return
+	}
+	written := 0
+	missing := 0
+	errs := 0
+	for callerQN, count := range p.unresolvedCallCounts {
+		if count <= 0 {
+			continue
+		}
+		rows, err := p.Store.SetNodeIntProperty(p.ProjectName, callerQN, "unresolved_call_count", count)
+		switch {
+		case err != nil:
+			errs++
+		case rows > 0:
+			written++
+		default:
+			missing++
+		}
+	}
+	slog.Info("pass.unresolved_counts.write",
+		"total", len(p.unresolvedCallCounts),
+		"written", written, "node_missing", missing, "errors", errs)
 }
 
 // flushResolvedEdges converts QN-based resolved edges to ID-based edges and batch-inserts them.

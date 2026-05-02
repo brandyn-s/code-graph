@@ -167,6 +167,25 @@ func (s *Store) FindNodesByIDs(ids []int64) (map[int64]*Node, error) {
 	return result, nil
 }
 
+// SetNodeIntProperty atomically sets a single integer property on a node by
+// project + qualified_name. Uses SQLite's json_set so the rest of the
+// properties map is preserved. Returns the number of rows updated (0 if
+// the node doesn't exist).
+//
+// Added 2026-05-02 for the unresolved_call_count diagnostic. Generalized so
+// future int counters (e.g. cyclomatic_call_count, dispatch_count) can use
+// the same path without re-implementing read-modify-write.
+func (s *Store) SetNodeIntProperty(project, qualifiedName, key string, value int) (int64, error) {
+	path := "$." + key
+	res, err := s.q.Exec(`UPDATE nodes SET properties = json_set(COALESCE(properties, '{}'), ?, ?)
+		WHERE project=? AND qualified_name=?`, path, value, project, qualifiedName)
+	if err != nil {
+		return 0, fmt.Errorf("set node int property %s: %w", key, err)
+	}
+	n, _ := res.RowsAffected()
+	return n, nil
+}
+
 // FindNodesByFileOverlap returns nodes whose line range overlaps [startLine, endLine].
 // The fileSuffix is matched with LIKE '%' || ? against the file_path column to handle
 // relative/absolute path differences.

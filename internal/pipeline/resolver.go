@@ -239,6 +239,18 @@ func (r *FunctionRegistry) resolveViaNameLookup(ctx CallContext) ResolutionResul
 		candidates = discriminated
 	}
 
+	// Phase 3b discrimination: free-function calls with a `use` import
+	// binding for the bare name. If the import target is external,
+	// drop internal candidates instead of falling through to bare-name
+	// suffix-match. If the import target IS internal, prefer the
+	// matching candidate.
+	if discriminated, applied, dropAll := r.applyImportBindingFilter(ctx, candidates); applied != "" {
+		if dropAll {
+			return ResolutionResult{}
+		}
+		candidates = discriminated
+	}
+
 	// Strategy 3: unique name — single candidate project-wide
 	if len(candidates) == 1 {
 		conf := 0.75
@@ -322,6 +334,74 @@ func (r *FunctionRegistry) applyReceiverTypeFilter(ctx CallContext, candidates [
 		return matching, "receiver-type-match", false
 	}
 	return candidates, "", false
+}
+
+// applyImportBindingFilter is the Phase 3b Tier 3 discriminator
+// (bench/research/registry-resolve-consolidation-plan.md).
+//
+// Targets free-function bare-name calls where the calleeName is brought
+// into scope via a `use`/`import` statement. Three outcomes:
+//
+//   - applied="import-binding-match", dropAll=false: at least one
+//     internal candidate's QN ends with the import binding's target.
+//     The filter narrows to the matching candidate(s); legacy logic
+//     picks among them.
+//   - applied="import-binding-external", dropAll=true: a binding exists
+//     for this bare name but no internal candidate matches AND no
+//     registered QN ends with the target. The call is external; caller
+//     should return empty to drop the binding.
+//   - applied="" otherwise: no binding for this bare name, call shape
+//     is method-call, or the target IS internal (registered somewhere)
+//     but didn't surface in current candidates — pass through and let
+//     legacy logic decide.
+//
+// Comparison uses suffix match because import targets are written in
+// the user's source-relative form (`utils.fetch_data` for Python's
+// `from utils import fetch_data`, `futures_util::future::ready` for
+// Rust's `use futures_util::future::ready;`) while registry QNs carry
+// the project-name prefix (`<project>.utils.fetch_data`). Rust's `::`
+// separator is normalized to QN-style `.` first.
+func (r *FunctionRegistry) applyImportBindingFilter(ctx CallContext, candidates []string) (filtered []string, applied string, dropAll bool) {
+	if len(ctx.ImportBindings) == 0 || len(candidates) == 0 {
+		return candidates, "", false
+	}
+	// Tier 3 only fires for free-function calls. Method calls go
+	// through Tier 2.
+	if strings.Contains(ctx.CalleeName, ".") {
+		return candidates, "", false
+	}
+	target, ok := ctx.ImportBindings[ctx.CalleeName]
+	if !ok {
+		return candidates, "", false
+	}
+	// Normalize Rust `::` separators to QN-style `.` for comparison.
+	targetQN := strings.ReplaceAll(target, "::", ".")
+	dotTarget := "." + targetQN
+
+	// Look for internal candidate(s) whose QN ends with the import
+	// target. Exact equality OR suffix match catches both
+	// "<project>.utils.fetch_data" and the (rare) bare "utils.fetch_data"
+	// case where no project prefix is added.
+	var matching []string
+	for _, qn := range candidates {
+		if qn == targetQN || strings.HasSuffix(qn, dotTarget) {
+			matching = append(matching, qn)
+		}
+	}
+	if len(matching) > 0 {
+		return matching, "import-binding-match", false
+	}
+	// Binding exists; not in current candidate set. Check if it
+	// resolves to ANY registered QN — if yes, the target IS internal
+	// (current candidates didn't include it for some other reason),
+	// pass through rather than risk silently dropping.
+	for qn := range r.exact {
+		if qn == targetQN || strings.HasSuffix(qn, dotTarget) {
+			return candidates, "", false
+		}
+	}
+	// External: drop internal candidates entirely.
+	return nil, "import-binding-external", true
 }
 
 // resolveSuffixMatch handles Strategy 4 — suffix-based matching among multiple candidates.
@@ -414,6 +494,17 @@ func (r *FunctionRegistry) FuzzyResolveCtx(ctx CallContext) (ResolutionResult, b
 	// resolveViaNameLookup. Fuzzy is the most permissive resolver path
 	// and benefits most from receiver-type filtering.
 	if discriminated, applied, dropAll := r.applyReceiverTypeFilter(ctx, candidates); applied != "" {
+		if dropAll {
+			return ResolutionResult{}, false
+		}
+		candidates = discriminated
+	}
+
+	// Phase 3b Tier 3: import-binding discrimination. Drop internal
+	// candidates when a `use` import binds the bare name to an external
+	// target. Most permissive resolver path → most likely to phantom-
+	// emit on external calls if not gated.
+	if discriminated, applied, dropAll := r.applyImportBindingFilter(ctx, candidates); applied != "" {
 		if dropAll {
 			return ResolutionResult{}, false
 		}

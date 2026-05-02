@@ -75,15 +75,33 @@ func cbmParseFileFromSource(projectName string, f discover.FileInfo, source []by
 	// Enrich module node with properties from CBM result
 	enrichModuleNodeCBM(moduleNode, cbmResult, result)
 
-	// Build import map from CBM imports
+	// Build import map from CBM imports.
+	//
+	// Two maps come out of this loop:
+	//   - importMap (existing): LocalName → ModulePath. For Rust this is
+	//     full-path → full-path; for Python typically bare-alias → module.
+	//     Used by resolveViaImportMap for prefix-resolution.
+	//   - importBindings (Phase 3b): bareName → ModulePath. The bare name
+	//     is the last `::` or `.` segment of LocalName. Used by Tier 3
+	//     receiver-type discrimination for free-function calls — when
+	//     `entry()` calls `ready(42)` after `use futures_util::future::ready;`,
+	//     importBindings["ready"] = "futures_util::future::ready" and the
+	//     resolver knows to drop internal `*::ready` candidates.
 	if len(cbmResult.Imports) > 0 {
 		importMap := make(map[string]string, len(cbmResult.Imports))
+		importBindings := make(map[string]string, len(cbmResult.Imports))
 		for _, imp := range cbmResult.Imports {
-			if imp.LocalName != "" && imp.ModulePath != "" {
-				importMap[imp.LocalName] = imp.ModulePath
+			if imp.LocalName == "" || imp.ModulePath == "" {
+				continue
+			}
+			importMap[imp.LocalName] = imp.ModulePath
+			bare := bareNameOfImport(imp.LocalName)
+			if bare != "" {
+				importBindings[bare] = imp.ModulePath
 			}
 		}
 		result.ImportMap = importMap
+		result.ImportBindings = importBindings
 	}
 
 	moduleNode.Properties["imports_count"] = cbmResult.ImportCount
@@ -297,6 +315,38 @@ func stripRustConstructorSuffix(typeName string) string {
 	return typeName
 }
 
+// bareNameOfImport returns the bare (unqualified) name an import brings
+// into scope. For Rust `use futures_util::future::ready;`, LocalName is
+// the full `futures_util::future::ready` path and the bare name is
+// `ready`. For Python `import foo` or `from x import bar`, LocalName is
+// already the bare alias name. Splits on `::` and `.` and returns the
+// last non-empty segment.
+//
+// Used by Phase 3b's Tier 3 discriminator
+// (bench/research/registry-resolve-consolidation-plan.md): the registry
+// maps the bare name to the full import target so it can drop internal
+// candidates when the import points outside the project.
+func bareNameOfImport(localName string) string {
+	if localName == "" {
+		return ""
+	}
+	// Rust path separator first.
+	if idx := strings.LastIndex(localName, "::"); idx >= 0 {
+		tail := localName[idx+2:]
+		if tail != "" {
+			localName = tail
+		}
+	}
+	// Python / Go separator second (catches mixed forms too).
+	if idx := strings.LastIndex(localName, "."); idx >= 0 {
+		tail := localName[idx+1:]
+		if tail != "" {
+			localName = tail
+		}
+	}
+	return localName
+}
+
 // resolveFileCallsCBM resolves all call targets using pre-extracted CBM data.
 // Replaces resolveFileCalls() — no AST walking needed.
 //
@@ -503,7 +553,25 @@ func (p *Pipeline) resolveCallEdge(
 	// Type-based method dispatch for qualified calls like obj.method()
 	result := p.resolveCallWithTypes(calleeName, callerQN, moduleQN, importMap, typeMap)
 	if result.QualifiedName == "" {
-		if fuzzyResult, ok := p.registry.FuzzyResolve(calleeName, moduleQN, importMap); ok && fuzzyResult.Confidence >= 0.10 {
+		// Phase 3a/b: route the fuzzy fallback through FuzzyResolveCtx
+		// so Tier 2 (receiver-type) and Tier 3 (import-binding)
+		// discrimination apply here too. Without this, the fuzzy path
+		// silently bypasses both discriminators and re-emits phantoms
+		// the upstream paths correctly dropped.
+		fuzzyCtx := CallContext{
+			CalleeName:     calleeName,
+			CallerQN:       callerQN,
+			ModuleQN:       moduleQN,
+			ImportMap:      importMap,
+			ImportBindings: p.importBindings[moduleQN],
+		}
+		if strings.Contains(calleeName, ".") {
+			rootName := strings.SplitN(calleeName, ".", 2)[0]
+			if t, ok := typeMap[rootName]; ok && t != "" {
+				fuzzyCtx.ReceiverType = t
+			}
+		}
+		if fuzzyResult, ok := p.registry.FuzzyResolveCtx(fuzzyCtx); ok && fuzzyResult.Confidence >= 0.10 {
 			rule := ResolverRuleFuzzyResolve
 			if pseudoRule {
 				rule = ResolverRuleModalPseudo

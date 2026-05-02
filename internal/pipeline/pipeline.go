@@ -62,6 +62,14 @@ type Pipeline struct {
 	registry *FunctionRegistry
 	// importMaps stores per-module import maps: moduleQN -> localName -> resolvedQN
 	importMaps map[string]map[string]string
+	// importBindings stores per-module bare-name → full-import-path bindings
+	// (Phase 3b of the registry.Resolve consolidation). For Rust
+	// `use futures_util::future::ready;`, this map carries
+	// "ready" → "futures_util::future::ready". The Tier 3 discriminator in
+	// applyImportBindingFilter consults it to drop internal bare-name
+	// candidates when the import target is external (or to prefer the
+	// matching internal candidate when one exists).
+	importBindings map[string]map[string]string
 	// returnTypes maps function QN -> return type QN for return-type-based type inference
 	returnTypes ReturnTypeMap
 	// fieldTypes maps "<structQN>.<fieldName>" -> field type's class QN.
@@ -116,6 +124,7 @@ func New(ctx context.Context, s *store.Store, repoPath string, mode discover.Ind
 		extractionCache: make(map[string]*cachedExtraction),
 		registry:        NewFunctionRegistry(),
 		importMaps:      make(map[string]map[string]string),
+		importBindings:  make(map[string]map[string]string),
 		rustCrateMap:    make(map[string]string),
 	}
 }
@@ -1331,12 +1340,13 @@ type pendingEdge struct {
 
 // parseResult holds the output of a pure file parse (no DB access).
 type parseResult struct {
-	File         discover.FileInfo
-	Nodes        []*store.Node
-	PendingEdges []pendingEdge
-	ImportMap    map[string]string
-	CBMResult    *cbm.FileResult // CBM extraction result (nil when using legacy AST path)
-	Err          error
+	File           discover.FileInfo
+	Nodes          []*store.Node
+	PendingEdges   []pendingEdge
+	ImportMap      map[string]string
+	ImportBindings map[string]string // Phase 3b: bare-name → import target path
+	CBMResult      *cbm.FileResult   // CBM extraction result (nil when using legacy AST path)
+	Err            error
 }
 
 // progressTicker logs a progress line every 5 seconds for long-running parallel phases.
@@ -1465,6 +1475,9 @@ func (p *Pipeline) passDefinitions(files []discover.FileInfo) {
 		moduleQN := fqn.ModuleQN(p.ProjectName, r.File.RelPath)
 		if len(r.ImportMap) > 0 {
 			p.importMaps[moduleQN] = r.ImportMap
+		}
+		if len(r.ImportBindings) > 0 {
+			p.importBindings[moduleQN] = r.ImportBindings
 		}
 		allNodes = append(allNodes, r.Nodes...)
 		allPendingEdges = append(allPendingEdges, r.PendingEdges...)
@@ -1984,12 +1997,18 @@ func (p *Pipeline) resolveCallWithTypes(
 			receiverType = t
 		}
 	}
+	// Phase 3b: include the per-module import-bindings map so the
+	// registry's Tier 3 discriminator can drop bare-name candidates
+	// for free-function calls whose name is bound by a `use` import
+	// to an external (non-internal) target.
+	importBindings := p.importBindings[moduleQN]
 	return p.registry.ResolveCtx(CallContext{
-		CalleeName:   calleeName,
-		CallerQN:     callerQN,
-		ModuleQN:     moduleQN,
-		ImportMap:    importMap,
-		ReceiverType: receiverType,
+		CalleeName:     calleeName,
+		CallerQN:       callerQN,
+		ModuleQN:       moduleQN,
+		ImportMap:      importMap,
+		ReceiverType:   receiverType,
+		ImportBindings: importBindings,
 	})
 }
 

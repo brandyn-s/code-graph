@@ -6,7 +6,7 @@
     "phantom_count": 1
   },
   "rust-futures-ready-negative": {
-    "phantom_count": 1
+    "phantom_count": 0
   },
   "rust-restate-chain-negative": {
     "phantom_count": 3

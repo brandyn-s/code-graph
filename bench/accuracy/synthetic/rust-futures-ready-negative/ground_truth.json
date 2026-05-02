@@ -17,7 +17,7 @@
     {
       "from_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-futures-ready-negative.src.main.entry",
       "to_qn_pattern": ".*\\.signal\\.ready$",
-      "reason": "Active phantom (today). Same shadow class as state::ready. The resolver picks signal::ready (one of two same-named internal candidates) for `entry`'s bare-name `ready(...)` calls despite the explicit external import."
+      "reason": "Regression-prevention (FIXED by Phase 3b). The resolver previously picked signal::ready for `entry`'s bare-name `ready(...)` calls despite the explicit external import. Phase 3b's Tier 3 import-binding discrimination now drops internal `*::ready` candidates because the import target `futures_util::future::ready` is external (not registered)."
     }
   ],
 

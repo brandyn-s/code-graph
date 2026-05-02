@@ -270,15 +270,43 @@ func inferTypesCBM(
 		// `MetricsCollector`.
 		typeName := stripRustConstructorSuffix(ta.TypeName)
 		classQN := resolveAsClass(typeName, registry, moduleQN, importMap)
-		if classQN == "" {
-			continue
-		}
 
 		key := ta.EnclosingFuncQN
 		if out[key] == nil {
 			out[key] = make(TypeMap)
 		}
-		out[key][ta.VarName] = classQN
+		if classQN != "" {
+			out[key][ta.VarName] = classQN
+			continue
+		}
+
+		// Phase 3c (external-type-receiver passthrough,
+		// bench/research/registry-resolve-consolidation-plan.md):
+		// when the type isn't a registered internal class, record the
+		// raw type name instead of dropping the binding. This lets the
+		// resolver's Tier 2 (applyReceiverTypeFilter) recognize the
+		// receiver as external — no internal Method's parent will equal
+		// the raw external name, so dropAll fires and the call is NOT
+		// bound to a same-named internal Method via cross-package-
+		// heuristic.
+		//
+		// Targets the rust-restate-chain-negative fixture:
+		// `entry(ctx: Context)` where Context is external (restate_sdk).
+		// Without this, `ctx.run(...)` and chain segments
+		// `ctx.invocation().target().send()` bound to internal
+		// Workflow.run / Invocation.target / Invocation.send via bare-
+		// name suffix-match (3 phantoms).
+		//
+		// Risk: types whose label isn't in resolveAsClass's allowed set
+		// (Trait, Macro, Variable) get recorded raw too. For Trait
+		// receivers, Tier 2 will drop bindings that today suffix-match
+		// to some random internal method — usually a phantom-removal
+		// win, but if the trait's method is genuinely implemented by
+		// the suffix-matched type, recall drops. Hard rollback at >5pp
+		// real-fixture syn-oracle F1 drop applies.
+		if typeName != "" {
+			out[key][ta.VarName] = typeName
+		}
 	}
 
 	return out

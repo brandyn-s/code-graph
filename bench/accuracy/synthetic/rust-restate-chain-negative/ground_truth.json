@@ -13,22 +13,22 @@
     {
       "from_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-restate-chain-negative.src.main.entry",
       "to_qn_pattern": ".*\\.workflow\\.Workflow\\.run$",
-      "reason": "ctx.run(...) on external Restate Context. MUST NOT bind to Workflow.run via cross-package-heuristic bare-name match."
+      "reason": "Regression-prevention (FIXED by Phase 3c). ctx.run(...) on external Restate Context. The previous resolver bound bare `run` to Workflow.run via cross-package-heuristic because `ctx: Context` was external (Context isn't registered) and inferTypesCBM dropped the binding entirely → ReceiverType empty → Tier 2 didn't fire. Phase 3c records the raw external type name; Tier 2 now drops the binding."
     },
     {
       "from_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-restate-chain-negative.src.main.entry",
       "to_qn_pattern": ".*\\.workflow\\.Workflow\\.target$",
-      "reason": "ctx.invocation().target() multi-segment chain. .target is external. MUST NOT bind to Workflow.target."
+      "reason": "Regression-prevention. ctx.invocation().target() multi-segment chain — .target is external."
     },
     {
       "from_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-restate-chain-negative.src.main.entry",
       "to_qn_pattern": ".*\\.invocation\\.Invocation\\.target$",
-      "reason": "Same multi-segment chain target. Invocation.target is the alternate shadow target."
+      "reason": "Regression-prevention (FIXED by Phase 3c). Same multi-segment chain target. Phase 3c's external-receiver passthrough handles all three chain phantoms (Workflow.run, Invocation.target, Invocation.send) via the same mechanism — `ctx` parameter type is recorded raw, Tier 2 drops bindings."
     },
     {
       "from_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-restate-chain-negative.src.main.entry",
       "to_qn_pattern": ".*\\.invocation\\.Invocation\\.send$",
-      "reason": "ctx.invocation().target().send() final segment. .send is external. MUST NOT bind to Invocation.send."
+      "reason": "Regression-prevention (FIXED by Phase 3c). ctx.invocation().target().send() final segment."
     }
   ],
 

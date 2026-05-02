@@ -238,7 +238,20 @@ func inferTypesCBM(
 			continue
 		}
 
-		classQN := resolveAsClass(ta.TypeName, registry, moduleQN, importMap)
+		// Rust constructor-call shape: the C extractor captures
+		// `let x = Foo::new()` as TypeName="Foo::new" (the full
+		// path expression). Strip the trailing `::method` segment for
+		// well-known constructor methods so resolveAsClass can find
+		// `Foo` in the registry. Without this, every let-bound
+		// constructor binding was silently dropped — critical for
+		// Phase 3a's receiver-type discrimination
+		// (bench/research/registry-resolve-consolidation-plan.md).
+		// Empirically discovered when Tier 2 didn't fire on the
+		// rust-actix-data-negative fixture: TypeAssigns showed
+		// `metrics` bound to `MetricsCollector::new`, not
+		// `MetricsCollector`.
+		typeName := stripRustConstructorSuffix(ta.TypeName)
+		classQN := resolveAsClass(typeName, registry, moduleQN, importMap)
 		if classQN == "" {
 			continue
 		}
@@ -251,6 +264,37 @@ func inferTypesCBM(
 	}
 
 	return out
+}
+
+// rustConstructorMethods enumerates the trailing `::<method>` segments
+// that the Rust extractor may capture in a let-binding's TypeName when
+// the binding is `let x = Type::<method>(...)`. For these, the binding's
+// type is `Type`, not `Type::<method>`. Conservative list — only the
+// canonical "returns Self" idioms. UFCS method calls
+// (`let x = Type::method(self, ...)`) where method is NOT a constructor
+// would silently misbind here, but those are rare in practice and the
+// alternative (no inference at all) costs more than the rare misbind.
+var rustConstructorMethods = map[string]bool{
+	"new":           true,
+	"default":       true,
+	"from":          true,
+	"with_capacity": true,
+	"from_str":      true,
+	"build":         true,
+	"empty":         true,
+	"zero":          true,
+}
+
+func stripRustConstructorSuffix(typeName string) string {
+	idx := strings.LastIndex(typeName, "::")
+	if idx < 0 {
+		return typeName
+	}
+	suffix := typeName[idx+2:]
+	if rustConstructorMethods[suffix] {
+		return typeName[:idx]
+	}
+	return typeName
 }
 
 // resolveFileCallsCBM resolves all call targets using pre-extracted CBM data.

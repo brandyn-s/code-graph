@@ -301,16 +301,17 @@ func TestIsImportReachable(t *testing.T) {
 
 // --- registry.Resolve consolidation: Phase 1 forwarding equivalence ---
 
-// TestResolveCtx_ForwardsToLegacy pins the Phase 1 invariant: ResolveCtx
-// must produce the same ResolutionResult as the legacy Resolve(calleeName,
-// moduleQN, importMap) signature for the same inputs. The Phase 2+ fields
-// on CallContext (ReceiverType, ImportBindings, Aliases) are reserved and
-// must NOT influence resolution today.
+// TestResolveCtx_ForwardsToLegacy pins the forwarding equivalence
+// when CallContext's discrimination fields are empty. As of Phase 3a,
+// ReceiverType DOES influence resolution when set — this test is now
+// scoped to the "no receiver-type info" path that legacy callers hit.
 //
-// If this test fails, Phase 1 has introduced a behavior change — the
-// negative-fixture corpus baseline at bench/accuracy/negative_baselines.json
-// is no longer the right comparator and the consolidation has lost its
-// no-op guarantee.
+// The Phase 3a discrimination behavior is pinned separately by
+// TestApplyReceiverTypeFilter_* and TestResolveCtx_ReceiverType*.
+//
+// If this test fails, the legacy Resolve(calleeName, moduleQN,
+// importMap) wrapper has stopped producing the same result as
+// ResolveCtx with empty discrimination fields.
 func TestResolveCtx_ForwardsToLegacy(t *testing.T) {
 	reg := NewFunctionRegistry()
 	reg.Register("CreateOrder", "svcA.handlers.CreateOrder", "Function")
@@ -343,15 +344,11 @@ func TestResolveCtx_ForwardsToLegacy(t *testing.T) {
 			legacy := reg.Resolve(tc.calleeName, tc.moduleQN, tc.importMap)
 			ctx := CallContext{
 				CalleeName: tc.calleeName,
-				CallerQN:   "svcZ.caller.SomeFunc", // Phase 1: unused
+				CallerQN:   "svcZ.caller.SomeFunc",
 				ModuleQN:   tc.moduleQN,
 				ImportMap:  tc.importMap,
-				// Phase 2+ fields: deliberately set to non-empty values that
-				// MUST NOT influence resolution today. If they ever do,
-				// this test catches it.
-				ReceiverType:   "svcA.handlers.SomeStruct",
-				ImportBindings: map[string]string{"CreateOrder": "external.lib.CreateOrder"},
-				Aliases:        map[string]string{"alias": "svcA.something"},
+				// Phase 3a+ discrimination fields left empty: this
+				// test pins the legacy-shape invariant only.
 			}
 			ctxResult := reg.ResolveCtx(ctx)
 			if ctxResult != legacy {
@@ -379,11 +376,10 @@ func TestCallContext_FieldsArePresent(t *testing.T) {
 	}
 }
 
-// TestFuzzyResolveCtx_ForwardsToLegacy pins the Phase 2 invariant for the
-// fuzzy path: FuzzyResolveCtx must produce the same (ResolutionResult,
-// ok) tuple as the legacy FuzzyResolve(calleeName, moduleQN, importMap)
-// signature for the same inputs. The Phase 2+ fields on CallContext must
-// not influence resolution today.
+// TestFuzzyResolveCtx_ForwardsToLegacy pins the legacy-shape forwarding
+// invariant for the fuzzy path: with empty discrimination fields,
+// FuzzyResolveCtx must produce the same tuple as legacy FuzzyResolve.
+// Phase 3a discrimination is pinned separately.
 func TestFuzzyResolveCtx_ForwardsToLegacy(t *testing.T) {
 	reg := NewFunctionRegistry()
 	reg.Register("CreateOrder", "svcA.handlers.CreateOrder", "Function")
@@ -414,10 +410,7 @@ func TestFuzzyResolveCtx_ForwardsToLegacy(t *testing.T) {
 				CallerQN:   "svcZ.caller.SomeFunc",
 				ModuleQN:   tc.moduleQN,
 				ImportMap:  tc.importMap,
-				// Phase 2+ fields populated to prove they don't influence today.
-				ReceiverType:   "svcA.handlers.SomeStruct",
-				ImportBindings: map[string]string{"CreateOrder": "external.lib.CreateOrder"},
-				Aliases:        map[string]string{"alias": "svcA.something"},
+				// Phase 3a+ discrimination fields left empty.
 			}
 			ctxRes, ctxOk := reg.FuzzyResolveCtx(ctx)
 			if ctxOk != legacyOk {
@@ -427,6 +420,205 @@ func TestFuzzyResolveCtx_ForwardsToLegacy(t *testing.T) {
 				t.Errorf("FuzzyResolveCtx result diverged\n  legacy = %#v\n  ctx    = %#v", legacyRes, ctxRes)
 			}
 		})
+	}
+}
+
+// --- Phase 3a: receiver-type discrimination ---
+
+// TestApplyReceiverTypeFilter_PrefersMatchingMethod proves that when
+// ctx.ReceiverType matches one Method candidate's parent class,
+// the filter selects only that candidate.
+func TestApplyReceiverTypeFilter_PrefersMatchingMethod(t *testing.T) {
+	reg := NewFunctionRegistry()
+	reg.Register("get_result", "proj.repo.AssetRepo.get_result", "Method")
+	reg.Register("get_result", "proj.svc.IntrospectService.get_result", "Method")
+
+	candidates := []string{
+		"proj.repo.AssetRepo.get_result",
+		"proj.svc.IntrospectService.get_result",
+	}
+
+	ctx := CallContext{
+		CalleeName:   "repo.get_result", // method-call shape
+		ReceiverType: "proj.repo.AssetRepo",
+	}
+
+	filtered, applied, dropAll := reg.applyReceiverTypeFilter(ctx, candidates)
+	if applied != "receiver-type-match" {
+		t.Errorf("applied = %q, want %q", applied, "receiver-type-match")
+	}
+	if dropAll {
+		t.Error("dropAll = true, want false")
+	}
+	if len(filtered) != 1 || filtered[0] != "proj.repo.AssetRepo.get_result" {
+		t.Errorf("filtered = %v, want [proj.repo.AssetRepo.get_result]", filtered)
+	}
+}
+
+// TestApplyReceiverTypeFilter_DropsExternalCall proves that when
+// ctx.ReceiverType is set but no Method candidate's parent class
+// matches, the filter signals "drop the binding". This is the case
+// that eliminates phantom emissions for external chain calls.
+func TestApplyReceiverTypeFilter_DropsExternalCall(t *testing.T) {
+	reg := NewFunctionRegistry()
+	reg.Register("execute", "proj.repo.AssetRepo.execute", "Method")
+	reg.Register("execute", "proj.cache.Cache.execute", "Method")
+
+	candidates := []string{
+		"proj.repo.AssetRepo.execute",
+		"proj.cache.Cache.execute",
+	}
+
+	ctx := CallContext{
+		CalleeName:   "users.execute", // method-call shape
+		ReceiverType: "diesel.query.Users", // external — no internal candidate matches
+	}
+
+	_, applied, dropAll := reg.applyReceiverTypeFilter(ctx, candidates)
+	if applied != "receiver-type-no-internal-match" {
+		t.Errorf("applied = %q, want %q", applied, "receiver-type-no-internal-match")
+	}
+	if !dropAll {
+		t.Error("dropAll = false, want true (external receiver)")
+	}
+}
+
+// TestApplyReceiverTypeFilter_BareNameCallPassesThrough proves that
+// free-function calls (no dot in calleeName) are NOT filtered by
+// receiver-type — Phase 3b's import-binding tier handles those.
+func TestApplyReceiverTypeFilter_BareNameCallPassesThrough(t *testing.T) {
+	reg := NewFunctionRegistry()
+	reg.Register("ready", "proj.state.ready", "Function")
+
+	candidates := []string{"proj.state.ready"}
+
+	ctx := CallContext{
+		CalleeName:   "ready", // bare-name shape
+		ReceiverType: "futures.future.ReadyFuture",
+	}
+
+	filtered, applied, dropAll := reg.applyReceiverTypeFilter(ctx, candidates)
+	if applied != "" {
+		t.Errorf("applied = %q, want empty (bare-name call should pass through)", applied)
+	}
+	if dropAll {
+		t.Error("dropAll = true, want false")
+	}
+	if len(filtered) != 1 {
+		t.Errorf("filtered should be unchanged, got %v", filtered)
+	}
+}
+
+// TestApplyReceiverTypeFilter_NoReceiverTypeUnknown proves that when
+// ctx.ReceiverType is empty (the legacy / chain-resolution-failed
+// case), no discrimination occurs and candidates pass through.
+func TestApplyReceiverTypeFilter_EmptyReceiverPassesThrough(t *testing.T) {
+	reg := NewFunctionRegistry()
+	reg.Register("Process", "svcA.Process", "Method")
+	reg.Register("Process", "svcB.Process", "Method")
+
+	candidates := []string{"svcA.Process", "svcB.Process"}
+
+	ctx := CallContext{
+		CalleeName:   "obj.Process",
+		ReceiverType: "", // unknown — Phase 1/2 path
+	}
+
+	filtered, applied, dropAll := reg.applyReceiverTypeFilter(ctx, candidates)
+	if applied != "" || dropAll || len(filtered) != 2 {
+		t.Errorf("expected pass-through, got applied=%q dropAll=%v filtered=%v", applied, dropAll, filtered)
+	}
+}
+
+// TestApplyReceiverTypeFilter_NonMethodCandidatesPassThrough proves
+// that Function/Class/etc. candidates are not filtered when mixed
+// with Method candidates — they have no parent-class semantics.
+// Method-vs-Method discrimination still applies to the Method subset.
+func TestApplyReceiverTypeFilter_NonMethodCandidatesPassThrough(t *testing.T) {
+	reg := NewFunctionRegistry()
+	reg.Register("execute", "proj.repo.AssetRepo.execute", "Method")
+	reg.Register("execute", "proj.helpers.execute", "Function") // not a method
+
+	candidates := []string{
+		"proj.repo.AssetRepo.execute",
+		"proj.helpers.execute",
+	}
+
+	ctx := CallContext{
+		CalleeName:   "repo.execute",
+		ReceiverType: "proj.repo.AssetRepo",
+	}
+
+	filtered, applied, dropAll := reg.applyReceiverTypeFilter(ctx, candidates)
+	// Both candidates should survive: AssetRepo.execute matches by
+	// receiver type; the Function candidate passes through because
+	// receiver-type discrimination is undefined for non-Methods.
+	// Since the candidate set is unchanged, no discrimination was
+	// "applied" — the function returns "" so the caller's legacy
+	// suffix-match / import-distance logic decides.
+	if applied != "" {
+		t.Errorf("applied = %q, want \"\" (unchanged candidate set)", applied)
+	}
+	if dropAll {
+		t.Error("dropAll = true, want false")
+	}
+	if len(filtered) != 2 {
+		t.Errorf("filtered = %v, want both candidates", filtered)
+	}
+}
+
+// TestResolveCtx_ReceiverTypeDiscrimination_EndToEnd verifies the
+// full ResolveCtx path with Tier 2 active: a method-call with a
+// known receiver type binds to the correct internal Method even
+// when bare-name suffix-match would otherwise produce conflation.
+func TestResolveCtx_ReceiverTypeDiscrimination_EndToEnd(t *testing.T) {
+	reg := NewFunctionRegistry()
+	// Two Methods with the same bare name — classic conflation setup.
+	reg.Register("get_result", "proj.repo.AssetRepo.get_result", "Method")
+	reg.Register("get_result", "proj.svc.IntrospectService.get_result", "Method")
+
+	// Without ReceiverType: legacy bare-name resolution picks one
+	// (whichever the resolver's tiebreak prefers).
+	legacyCtx := CallContext{
+		CalleeName: "obj.get_result",
+		ModuleQN:   "proj.main",
+	}
+	legacyRes := reg.ResolveCtx(legacyCtx)
+	if legacyRes.QualifiedName == "" {
+		t.Fatal("legacy resolution should produce some result")
+	}
+
+	// With ReceiverType pointing at IntrospectService: discrimination
+	// must select that target specifically, regardless of which one
+	// legacy picked.
+	discrimCtx := CallContext{
+		CalleeName:   "service.get_result",
+		ModuleQN:     "proj.main",
+		ReceiverType: "proj.svc.IntrospectService",
+	}
+	discrimRes := reg.ResolveCtx(discrimCtx)
+	if discrimRes.QualifiedName != "proj.svc.IntrospectService.get_result" {
+		t.Errorf("discriminated result = %q, want proj.svc.IntrospectService.get_result", discrimRes.QualifiedName)
+	}
+}
+
+// TestResolveCtx_ExternalReceiverDropsBinding proves that when the
+// receiver type is external (no internal candidate matches), the
+// resolver returns empty instead of falling through to a bare-name
+// suffix-match phantom. This is the specific case that eliminates
+// `entry → AssetRepo.execute` for a Diesel `users.execute(conn)` call.
+func TestResolveCtx_ExternalReceiverDropsBinding(t *testing.T) {
+	reg := NewFunctionRegistry()
+	reg.Register("execute", "proj.repo.AssetRepo.execute", "Method")
+
+	ctx := CallContext{
+		CalleeName:   "users.execute",
+		ModuleQN:     "proj.main",
+		ReceiverType: "diesel.query.Users", // external receiver
+	}
+	res := reg.ResolveCtx(ctx)
+	if res.QualifiedName != "" {
+		t.Errorf("expected empty result (external receiver should drop binding), got %q", res.QualifiedName)
 	}
 }
 

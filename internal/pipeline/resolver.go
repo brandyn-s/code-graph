@@ -222,6 +222,23 @@ func (r *FunctionRegistry) resolveViaNameLookup(ctx CallContext) ResolutionResul
 	simple := simpleName(lookupName)
 	candidates := r.byName[simple]
 
+	// Phase 3a discrimination: when the call site has a known receiver
+	// type, prefer candidates whose parent class matches it. If the
+	// receiver type is non-empty AND no candidate matches, the call is
+	// almost certainly external — drop the binding rather than fall
+	// through to bare-name suffix-match (the path that produced every
+	// phantom in the negative-fixture corpus).
+	//
+	// Only fires for method-call shape (calleeName contains "."). Free-
+	// function calls (`bare(args)`) keep legacy behavior; Phase 3b's
+	// import-binding tier handles those.
+	if discriminated, applied, dropAll := r.applyReceiverTypeFilter(ctx, candidates); applied != "" {
+		if dropAll {
+			return ResolutionResult{}
+		}
+		candidates = discriminated
+	}
+
 	// Strategy 3: unique name — single candidate project-wide
 	if len(candidates) == 1 {
 		conf := 0.75
@@ -239,6 +256,72 @@ func (r *FunctionRegistry) resolveViaNameLookup(ctx CallContext) ResolutionResul
 	}
 
 	return r.pickBestCandidate(ctx, candidates)
+}
+
+// applyReceiverTypeFilter is the Phase 3a Tier 2 discriminator
+// (bench/research/registry-resolve-consolidation-plan.md).
+//
+// Returns (filtered, applied, dropAll):
+//   - applied=""  → discrimination did not fire (receiver type unknown,
+//                   or call shape is not method-call). Caller continues
+//                   with the unfiltered candidate set.
+//   - applied="receiver-type-match" → at least one candidate's parent
+//                   class equals ctx.ReceiverType. Caller proceeds with
+//                   the filtered set.
+//   - applied="receiver-type-no-internal-match", dropAll=true →
+//                   ctx.ReceiverType is set but no internal candidate
+//                   matches. The call is almost certainly external
+//                   (the receiver type isn't a registered class, or
+//                   none of its methods share this bare name). Caller
+//                   should return empty to drop the binding entirely.
+//
+// Method candidates have parent class = the QN segment immediately
+// before the method name. Function/Class/etc. candidates have no
+// parent-class semantics; they pass through unfiltered.
+func (r *FunctionRegistry) applyReceiverTypeFilter(ctx CallContext, candidates []string) (filtered []string, applied string, dropAll bool) {
+	if ctx.ReceiverType == "" || len(candidates) == 0 {
+		return candidates, "", false
+	}
+	// Only fire on method-call shape. Free-function calls go through
+	// Phase 3b's import-binding tier.
+	if !strings.Contains(ctx.CalleeName, ".") {
+		return candidates, "", false
+	}
+	var matching []string
+	var sawMethodCandidate bool
+	for _, qn := range candidates {
+		label := r.exact[qn]
+		if label != "Method" {
+			// Non-method candidate (e.g. free function) — receiver-type
+			// discrimination is undefined for these. Pass them through
+			// so the existing logic still considers them.
+			matching = append(matching, qn)
+			continue
+		}
+		sawMethodCandidate = true
+		// Parent class QN = everything before the last "." segment.
+		idx := strings.LastIndex(qn, ".")
+		if idx < 0 {
+			continue
+		}
+		parent := qn[:idx]
+		if parent == ctx.ReceiverType {
+			matching = append(matching, qn)
+		}
+	}
+	// If we saw at least one Method candidate but nothing matched the
+	// receiver type, the call is external by inference. Drop the
+	// binding (return empty).
+	if sawMethodCandidate && len(matching) == 0 {
+		return nil, "receiver-type-no-internal-match", true
+	}
+	// If filtering shrank the set, that's a discrimination win. If it
+	// didn't (only non-method candidates present, or no Methods at all),
+	// pass through quietly so legacy behavior decides.
+	if sawMethodCandidate && len(matching) < len(candidates) {
+		return matching, "receiver-type-match", false
+	}
+	return candidates, "", false
 }
 
 // resolveSuffixMatch handles Strategy 4 — suffix-based matching among multiple candidates.
@@ -325,6 +408,16 @@ func (r *FunctionRegistry) FuzzyResolveCtx(ctx CallContext) (ResolutionResult, b
 
 	if len(candidates) == 0 {
 		return ResolutionResult{}, false
+	}
+
+	// Phase 3a Tier 2: receiver-type discrimination. Same semantics as
+	// resolveViaNameLookup. Fuzzy is the most permissive resolver path
+	// and benefits most from receiver-type filtering.
+	if discriminated, applied, dropAll := r.applyReceiverTypeFilter(ctx, candidates); applied != "" {
+		if dropAll {
+			return ResolutionResult{}, false
+		}
+		candidates = discriminated
 	}
 
 	// If there's exactly one candidate, use it

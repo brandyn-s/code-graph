@@ -1,6 +1,6 @@
 {
   "rust-actix-data-negative": {
-    "phantom_count": 2
+    "phantom_count": 0
   },
   "rust-diesel-negative": {
     "phantom_count": 1

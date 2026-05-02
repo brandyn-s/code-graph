@@ -1962,15 +1962,34 @@ func (p *Pipeline) resolveCallWithTypes(
 	}
 
 	// Delegate to the registry's resolution strategy.
-	// Phase 1 of the registry.Resolve consolidation: route through
-	// ResolveCtx with a CallContext. Behavior is unchanged today
-	// (ResolveCtx forwards to legacy Resolve); callerQN is captured
-	// for Phase 2+ consumption (receiver-type discrimination).
+	// Phase 3a of the registry.Resolve consolidation: populate
+	// ctx.ReceiverType from the per-function TypeMap so the registry's
+	// Tier 2 discriminator can filter candidates by receiver-type
+	// match. For a method-call shape `obj.method` (or
+	// `obj.field.method`), the root identifier `obj` is the receiver;
+	// its type comes from typeMap (parameter, self, or let-binding
+	// captured by PR #149's PerFuncTypeMap).
+	//
+	// If chain resolution above succeeded, we returned early; reaching
+	// here means the chain analysis couldn't land on a known method,
+	// so the receiver type at the FINAL segment is unknown. The ROOT
+	// receiver type is still useful as a discrimination signal: if the
+	// receiver's known type is external (no internal methods match),
+	// the registry's Tier 2 will drop the binding entirely instead of
+	// falling through to a phantom-emitting bare-name suffix-match.
+	receiverType := ""
+	if strings.Contains(calleeName, ".") {
+		rootName := strings.SplitN(calleeName, ".", 2)[0]
+		if t, ok := typeMap[rootName]; ok && t != "" {
+			receiverType = t
+		}
+	}
 	return p.registry.ResolveCtx(CallContext{
-		CalleeName: calleeName,
-		CallerQN:   callerQN,
-		ModuleQN:   moduleQN,
-		ImportMap:  importMap,
+		CalleeName:   calleeName,
+		CallerQN:     callerQN,
+		ModuleQN:     moduleQN,
+		ImportMap:    importMap,
+		ReceiverType: receiverType,
 	})
 }
 

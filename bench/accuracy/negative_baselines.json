@@ -4,5 +4,8 @@
   },
   "rust-diesel-negative": {
     "phantom_count": 1
+  },
+  "rust-futures-ready-negative": {
+    "phantom_count": 1
   }
 }

@@ -1,0 +1,13 @@
+[package]
+name = "rust-futures-ready-negative"
+version = "0.0.1"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "rust-futures-ready-negative"
+path = "src/main.rs"
+
+[lib]
+name = "rust_futures_ready_negative"
+path = "src/lib.rs"

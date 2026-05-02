@@ -1,0 +1,25 @@
+{
+  "description": "Negative-benchmark fixture: futures_util free-function bare-name shadow class. `entry()` calls `ready(...)` with `use futures_util::future::ready` in scope. Bare-name resolution must NOT bind to internal state::ready or signal::ready.",
+  "kind": "negative",
+
+  "expected_internal_calls": [
+    {"from_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-futures-ready-negative.src.main.controls", "to_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-futures-ready-negative.src.main.helper"},
+    {"from_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-futures-ready-negative.src.main.main", "to_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-futures-ready-negative.src.main.entry"},
+    {"from_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-futures-ready-negative.src.main.main", "to_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-futures-ready-negative.src.main.controls"}
+  ],
+
+  "forbidden_emitted_calls": [
+    {
+      "from_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-futures-ready-negative.src.main.entry",
+      "to_qn_pattern": ".*\\.state\\.ready$",
+      "reason": "Free-function bare-name shadow. `entry()` has `use futures_util::future::ready` in scope; bare `ready(42)` MUST NOT bind to state::ready via cross-package-heuristic."
+    },
+    {
+      "from_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-futures-ready-negative.src.main.entry",
+      "to_qn_pattern": ".*\\.signal\\.ready$",
+      "reason": "Active phantom (today). Same shadow class as state::ready. The resolver picks signal::ready (one of two same-named internal candidates) for `entry`'s bare-name `ready(...)` calls despite the explicit external import."
+    }
+  ],
+
+  "notes": "Project name: `c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-futures-ready-negative`.\n\nEMPIRICAL FINDINGS (2026-05-02):\n  1. ACTIVE PHANTOM: `entry → signal.ready` via cross-package-heuristic. `entry()` calls `ready(42)` three times with `use futures_util::future::ready` import in scope. The bare-name resolver ignores the import binding and picks `signal::ready` (one of two internal candidates).\n  2. Cross-file free-function calls with module-path qualifiers (`rust_futures_ready_negative::state::ready(5)`) don't emit CALLS edges. Same finding as the Diesel/Actix fixtures — cross-file free-function resolution is unreliable.\n  3. `use X as alias` rename imports don't resolve cross-file either (tested before switching to direct module-path form).\n  4. Bare-name free-function calls DO emit edges (good, this is what surfaces the phantom).\n  5. Three call sites in `entry()` (`ready(42)`, `ready(0)`, `ready(99)`) all bind to the same `signal.ready` and dedup to one edge.\n\nThis fixture catches a third distinct phantom class:\n  - Diesel: cross-FILE bare-name conflation across receiver TYPES (method shadow)\n  - Actix: SAME-FILE bare-name shadow against cross-file receiver-type method (method shadow)\n  - Futures-ready: bare-name FREE-FUNCTION shadow ignoring explicit external import (NOT a method)\n\nAll three implicate `cross-package-heuristic`. Recommendation #2 consolidation must address all three.\n\nSchema reference: bench/accuracy/synthetic/_schema.md. Authored 2026-05-02 per roundtable Recommendation #1."
+}

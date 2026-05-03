@@ -594,7 +594,10 @@ func (p *Pipeline) resolveCallEdge(
 			ImportBindings: p.importBindings[moduleQN],
 		}
 		if strings.Contains(calleeName, ".") {
-			rootName := strings.SplitN(calleeName, ".", 2)[0]
+			// Trim whitespace — multi-line chain callees from cbm_node_text
+			// carry trailing whitespace on the root segment. Mirrors the
+			// trim in pipeline.go's receiver-type lookup site.
+			rootName := strings.TrimSpace(strings.SplitN(calleeName, ".", 2)[0])
 			if t, ok := typeMap[rootName]; ok && t != "" {
 				fuzzyCtx.ReceiverType = t
 			}

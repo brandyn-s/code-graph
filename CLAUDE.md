@@ -90,26 +90,50 @@ go test ./internal/pipeline/ -run TestPipeline -v
 
 > **Pick by query shape**: short symbol names → `rank_by_query` / `code_localize`. Multi-paragraph natural-language issue → `code_localize_agent`. Both primitive tools accept `seed_strategy`: `substring` (legacy), `embedding` (Voyage cosine), or `hybrid` (default; substring + embedding deduped, falls back to substring if no `VOYAGE_API_KEY`).
 
-#### Measured Loc-Bench accuracy (n=16, structured scorer, 2026-04-25)
+#### Measured Loc-Bench accuracy
+
+n=16 sample (structured scorer, 2026-04-25, illustrative only — sampling noise dominates):
 
 | Mode | File | Class | Func |
 |------|------|-------|------|
 | substring-primitives | 38% | 6% | 12% |
 | hybrid-primitives | 44% | 6% | 19% |
-| `code_localize_agent` (default config) | **94%** | **50%** | **88%** |
+| `code_localize_agent` (default config) | 94% | 50% | 88% |
 
-For comparison: LocAgent (ACL 2025, arXiv 2503.09089) reports 92.7% file-level on the full 560-instance Loc-Bench V1. We exceed that on this subset; full-benchmark validation is separate work.
+n=200+ partial run (in-progress at 2026-05-03, 4 workers, hybrid-agent only, scope-aligned):
+
+| Mode | File Acc@10 | Class Acc@10 | Func Acc@10 |
+|------|------|-------|------|
+| `code_localize_agent` (Haiku 4.5) | ~78% | ~47% | ~42% |
+
+The n=16 result was a small-sample lucky draw. **The defended number is the n=200+ measurement.**
+
+#### Comparison vs LocAgent paper (ACL 2025, arXiv 2503.09089)
+
+LocAgent reports two main results — pay attention to which dataset:
+
+| Benchmark | Model | File Acc@5 | File Acc@10 | Notes |
+|---|---|---|---|---|
+| **SWE-Bench-Lite** (n=274) | Qwen2.5-32B(ft) | **92.70%** | — | Their headline number. Different benchmark — SWE-Bench is bug-report-heavy and the 32B model is **fine-tuned** on SWE-Bench training data |
+| **SWE-Bench-Lite** (n=274) | Claude-3.5 | 94.16% | — | Different benchmark |
+| **Loc-Bench** (n=560) | Claude-3.5 | 83.39% | **86.07%** | Apples-to-apples vs us, but uses much more expensive model |
+| **Loc-Bench** (n=560) | Qwen2.5-7B(ft) | 78.57% | **79.64%** | **Our peer comparison** — fine-tuned 7B open model |
+
+We're running on **Loc-Bench with Haiku 4.5** at $0.05/query — at par with their **Qwen2.5-7B(ft) at $0.05/query**. To match their Claude-3.5 result (~86%), we'd need to use Sonnet/Claude 3.5 at ~$0.66/query (13x cost).
+
+The earlier "we exceed 92.7%" claim in this doc was apples-to-oranges (n=16 Loc-Bench vs n=274 SWE-Bench-Lite). Removed.
 
 #### Agent loop env vars (all opt-out — defaults are the measured-best config)
 
 | Env var | Default | Purpose |
 |---------|---------|---------|
-| `LOCAGENT_PROMPT_VARIANT` | `open` | `open` encourages `read_file` for verification; `aggressive` reverts to a tighter 5-turn budget |
+| `LOCAGENT_ITERATIONS` | `2` | Number of agent iterations to run, then aggregate by mean reciprocal rank (MRR). Matches LocAgent paper's self-consistency (Section 3.2). Set to `1` for single-shot (legacy behavior, ~50% cost) |
+| `LOCAGENT_PROMPT_VARIANT` | `open` | `open` uses LocAgent's 4-step CoT (categorize → link → trace → locate); `aggressive` reverts to a tighter 5-turn budget |
 | `LOCAGENT_BFS_DEPTH` | `4` | BFS depth for `code_localize` inside the agent loop |
 | `LOCAGENT_MAX_TURNS` | `20` | Hard cap; `open` prompt soft-targets 8 turns |
 | `LOCAGENT_REWRITE` | unset | Set to `1` to enable a Haiku pre-step that extracts focused search terms. Measured to **regress** results on n=16; available for further experimentation |
 | `EMBEDDING_SEED_MIN_COSINE` | `0.0` | Minimum cosine similarity for embedding seeds. PR #84 set this to 0.65 based on n=1; PR #91 reverted after n=16 showed the threshold filtered useful seeds |
-| `ANTHROPIC_MODEL` | `claude-haiku-4-5-20251001` | Override to opt into Opus 4.7. Head-to-head (PR #90) showed Opus matches Haiku at ~8x cost — opt-in only |
+| `ANTHROPIC_MODEL` | `claude-haiku-4-5-20251001` | Override to opt into Sonnet/Opus. Per LocAgent Loc-Bench results, Claude-3.5 hits ~86% file Acc@10 vs Qwen-7B(ft) ~80% — but at 13x cost ($0.66 vs $0.05/query) |
 
 ### Pipeline Additions
 - OPA policy linker (`POLICY_GATES` edges connecting policy to enforced code)

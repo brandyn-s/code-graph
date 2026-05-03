@@ -363,7 +363,11 @@ def run_mode(
     t0 = time.time()
     try:
         # bytes + UTF-8 decode (see index_repo for context)
-        result = subprocess.run(cmd, capture_output=True, timeout=300)
+        # 2026-05-03: bumped 300s -> 600s after n=560 partial run timed out on
+        # vllm-project__vllm-9390 (huge index). Big repos in the corpus
+        # (vllm, scikit-learn, pandas, matplotlib) need more headroom for the
+        # agent loop's BFS calls.
+        result = subprocess.run(cmd, capture_output=True, timeout=600)
     except subprocess.TimeoutExpired:
         res.note = "eval timed out"
         res.duration_s = time.time() - t0

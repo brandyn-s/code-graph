@@ -26,6 +26,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -76,48 +77,68 @@ If you've found a class or module that is a plausible site for the fix,
 FINALIZE NOW. Over-exploration yields worse results than partial answers.`
 
 	// systemPromptOpen encourages using read_file to verify candidates
-	// while keeping a soft turn budget. Designed for the LocAgent-style
-	// pattern where the agent needs to inspect source to disambiguate
-	// sibling methods or recover entities the extractor missed.
+	// while keeping a soft turn budget. Adopts LocAgent's 4-step CoT
+	// structure (paper Figure 8): categorize → link → trace → locate.
 	//
 	// Tuning history: an earlier draft told the agent to "finalize when
 	// confident, not on a turn budget" — under that prompt the agent
 	// explored exhaustively (20 turns) and ran out of budget without
 	// finalizing. Soft budget restored.
-	systemPromptOpen = `You are a code-localization agent. Given an issue, identify the top code
-entities (functions, methods, classes) most relevant to investigate or
-modify to address it.
+	systemPromptOpen = `You are a code-localization agent. Given a GitHub issue description,
+your objective is to localize the specific files, classes, or functions
+that need modification to resolve the issue.
 
 Tools:
 - rank_by_query(query, top_k): graph PageRank seeded on query tokens + embeddings.
+  Returns entities most relevant to the query.
 - code_localize(issue, depth, top_k): BFS expansion over CALLS / DEFINES /
-  IMPORTS / MEMBER_OF edges from query-matched seeds.
+  IMPORTS / MEMBER_OF edges from query-matched seeds. Multi-hop reasoning.
 - read_file(path, start_line, end_line): read a slice of a source file
-  (paths relative to project root, line range capped at 200). Use this
-  SPARINGLY to CONFIRM a top candidate when the graph alone can't tell
-  sibling methods apart, or when you suspect the right entity exists in
-  source but isn't in the graph.
+  (paths relative to project root, line range capped at 200). Use to
+  CONFIRM a candidate when the graph alone can't tell sibling methods
+  apart, or to recover entities the extractor missed.
 - finalize(entities): MUST be called when done. {qualified_name, file_path, reason}.
 
-BUDGET: aim to finalize within 8 turns. read_file calls count against this.
-At most 2-3 read_file calls per run.
+Follow these 4 steps to localize the issue:
 
-Strategy:
-1. Turn 1-2: call rank_by_query and code_localize with the most specific
-   identifiers from the issue. Pull out function names, class names, or
-   error messages from prose issues.
-2. Turn 3-5 (only if needed): call read_file on the top 1-2 candidate
-   files to verify that the target method or class actually exists where
-   you think it does. Skip this if the graph already gave you a clear
-   single best candidate.
-3. Turn 6-8: finalize. If you found the right file and class but the
-   specific method is unclear, include the class itself plus the file
-   path — partial answers beat over-exploration.
+## Step 1: Categorize and Extract Key Problem Information
+- Classify the issue: bug report, feature request, performance, security.
+- Identify modules/symbols mentioned in the issue: function names, class
+  names, error messages, file paths, configuration keys.
+- Note BOTH explicit references (function names quoted in the issue) AND
+  implicit references (the conceptual area the issue describes).
+
+## Step 2: Locate Referenced Modules
+- Call rank_by_query with the most specific identifiers from Step 1.
+- If the issue mentions a class or function name directly, that's a
+  high-priority seed.
+- If the issue is prose-only, extract the most distinctive terms and
+  query with those.
+
+## Step 3: Reconstruct the Execution Flow
+- Identify the entry point (the user-facing API, command, or entry
+  function the issue describes).
+- Trace function calls and dependencies via code_localize from the entry
+  point. Multi-hop traversal: depth=4 default reaches most call chains.
+- For unexpected-behavior issues: focus on modules that contain the buggy
+  logic. For feature requests: identify where new behavior plugs in.
+
+## Step 4: Locate Areas for Modification
+- Pinpoint the suspicious entities (file, class, function) that need
+  modification.
+- If certainty is low, use read_file (sparingly — max 2-3 calls) to
+  confirm a class actually has the method named in the issue, or to
+  inspect call sites.
+- Rank the entities by relevance: most-likely-to-need-change first.
+- Call finalize with the ranked list.
+
+BUDGET: aim to finalize within 8 turns. read_file calls count against
+this. If two ranking calls agree on the file, that's your answer —
+confirm and finalize. Partial answers (the right file + class, even if
+the specific method is unclear) beat over-exploration.
 
 DO NOT: read more than 3 files, hunt for documentation pages, or keep
-calling rank_by_query with paraphrased queries hoping for better hits.
-If two ranking calls agree on the file, that's your answer — confirm and
-finalize.`
+calling rank_by_query with paraphrased queries hoping for better hits.`
 )
 
 // LocalizedEntity is the agent's final output entry. Format mirrors
@@ -147,9 +168,119 @@ type TranscriptEntry struct {
 	Summary  string `json:"summary"` // human-readable summary of input/output
 }
 
-// Run executes the agent loop. Returns the final entity list (capped to
-// topK) along with a transcript for debuggability.
+// Run executes the agent. With LOCAGENT_ITERATIONS=N (default 2,
+// max 3), runs the agent N times at temperature 1.0 (Anthropic API
+// default) and aggregates results by mean reciprocal rank (MRR),
+// matching the LocAgent paper's self-consistency strategy (Section 3.2,
+// "Confidence Estimation Based on Consistency"). With N=1, behaves as
+// a single-iteration agent (legacy behavior).
+//
+// MRR aggregation: for each iteration, an entity at rank R contributes
+// 1/(R+1) to its score. Final score = sum across iterations. Ties broken
+// by iteration count (entities seen in more iterations rank higher).
+//
+// Cost: scales linearly with N — 2 iterations = ~2x tokens.
 func Run(ctx context.Context, st *store.Store, project, issue string, topK int) (*Result, error) {
+	iters := 2
+	if env := os.Getenv("LOCAGENT_ITERATIONS"); env != "" {
+		if n, err := strconv.Atoi(env); err == nil && n >= 1 && n <= 3 {
+			iters = n
+		}
+	}
+	if iters == 1 {
+		return runOnce(ctx, st, project, issue, topK)
+	}
+	return runWithConsistency(ctx, st, project, issue, topK, iters)
+}
+
+// runWithConsistency runs the agent N times and aggregates results by
+// MRR. If an iteration errors mid-run, returns the aggregate of
+// successful iterations with stop_reason="partial_consistency". If the
+// first iteration errors, returns the error directly.
+func runWithConsistency(ctx context.Context, st *store.Store, project, issue string, topK, iters int) (*Result, error) {
+	var iterations []*Result
+	aggregate := &Result{
+		Transcript: make([]TranscriptEntry, 0, iters*16),
+		StopReason: "consistency",
+	}
+	for i := 0; i < iters; i++ {
+		r, err := runOnce(ctx, st, project, issue, topK)
+		if r != nil {
+			aggregate.InputTokens += r.InputTokens
+			aggregate.OutputTokens += r.OutputTokens
+			aggregate.Turns += r.Turns
+			for _, te := range r.Transcript {
+				te.Summary = fmt.Sprintf("[iter %d] %s", i+1, te.Summary)
+				aggregate.Transcript = append(aggregate.Transcript, te)
+			}
+		}
+		if err != nil {
+			if i == 0 {
+				return aggregate, err
+			}
+			aggregate.StopReason = "partial_consistency"
+			break
+		}
+		if r != nil && len(r.Entities) > 0 {
+			iterations = append(iterations, r)
+		}
+	}
+	if len(iterations) == 0 {
+		aggregate.StopReason = "no_finalize"
+		return aggregate, nil
+	}
+	aggregate.Entities = aggregateByMRR(iterations, topK)
+	return aggregate, nil
+}
+
+// aggregateByMRR aggregates ranked entity lists from multiple iterations
+// using mean reciprocal rank scoring. Entity identity is determined by
+// qualified_name (falls back to file_path+reason if QN is empty).
+func aggregateByMRR(iterations []*Result, topK int) []LocalizedEntity {
+	type scored struct {
+		entity LocalizedEntity
+		score  float64
+		seen   int
+	}
+	bucket := make(map[string]*scored)
+	for _, iter := range iterations {
+		for rank, e := range iter.Entities {
+			key := e.QualifiedName
+			if key == "" {
+				key = e.FilePath + "::" + e.Reason
+			}
+			s := 1.0 / float64(rank+1)
+			if existing, ok := bucket[key]; ok {
+				existing.score += s
+				existing.seen++
+			} else {
+				bucket[key] = &scored{entity: e, score: s, seen: 1}
+			}
+		}
+	}
+	ranked := make([]*scored, 0, len(bucket))
+	for _, s := range bucket {
+		ranked = append(ranked, s)
+	}
+	sort.Slice(ranked, func(i, j int) bool {
+		if ranked[i].score != ranked[j].score {
+			return ranked[i].score > ranked[j].score
+		}
+		return ranked[i].seen > ranked[j].seen
+	})
+	out := make([]LocalizedEntity, 0, topK)
+	for _, r := range ranked {
+		out = append(out, r.entity)
+		if len(out) >= topK {
+			break
+		}
+	}
+	return out
+}
+
+// runOnce executes a single agent loop iteration. Returns the final
+// entity list (capped to topK) along with a transcript for debuggability.
+func runOnce(ctx context.Context, st *store.Store, project, issue string, topK int) (*Result, error) {
 	if topK < 1 {
 		topK = 10
 	}

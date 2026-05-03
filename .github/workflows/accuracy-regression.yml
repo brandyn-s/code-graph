@@ -55,7 +55,7 @@ jobs:
           python-version: '3.13'
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@6aa19aaf1f2319d8a4cf6b2a0d2f25e6ab5c3b29 # stable
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
         with:
           toolchain: stable
 

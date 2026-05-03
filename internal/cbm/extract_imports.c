@@ -31,6 +31,16 @@ static const char* path_last(CBMArena* a, const char* path) {
     if (!path) return NULL;
     const char* last = strrchr(path, '/');
     if (last) return cbm_arena_strdup(a, last + 1);
+    // Rust `::` separator — find the last `::` occurrence.
+    const char* p = path;
+    const char* last_colon_colon = NULL;
+    while ((p = strstr(p, "::")) != NULL) {
+        last_colon_colon = p;
+        p += 2;
+    }
+    if (last_colon_colon) {
+        return cbm_arena_strdup(a, last_colon_colon + 2);
+    }
     last = strrchr(path, '.');
     if (last) return cbm_arena_strdup(a, last + 1);
     return path;
@@ -379,6 +389,20 @@ static void parse_rust_imports(CBMExtractCtx* ctx) {
         if (strncmp(full, "use ", 4) == 0) full += 4;
         size_t len = strlen(full);
         if (len > 0 && full[len-1] == ';') full[len-1] = '\0';
+
+        // ACC-004: detect `use path::item as alias` rename. The alias
+        // becomes the LocalName (what's brought into scope); the target
+        // path is the ModulePath (what the resolver looks up). Without
+        // this split, local_name = "item as alias" (invalid identifier)
+        // and importMap / importBindings never match by alias.
+        char* as_marker = strstr(full, " as ");
+        if (as_marker != NULL) {
+            *as_marker = '\0';
+            char* alias = as_marker + 4;
+            CBMImport imp = {.local_name = alias, .module_path = full};
+            cbm_imports_push(&ctx->result->imports, a, imp);
+            continue;
+        }
 
         CBMImport imp = {.local_name = path_last(a, full), .module_path = full};
         cbm_imports_push(&ctx->result->imports, a, imp);

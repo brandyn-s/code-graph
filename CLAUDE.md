@@ -77,6 +77,9 @@ go test ./internal/pipeline/ -run TestPipeline -v
 | `get_review_context` | `internal/tools/review_context.go` | PR review context: what a change touches and what depends on it |
 | `get_relevant_context` | `internal/tools/relevant_context.go` | Graph-based file context selection for LLM agents (callers, callees, tests, coupled files) |
 | `visualize` | `internal/tools/visualize.go` | HTML graph visualization of node neighborhoods |
+| `diff_graph` | `internal/tools/graph_diff.go` | Symbol-level delta between two arbitrary git revisions |
+| `find_rationale` | `internal/tools/tools.go` | Extract WHY/NOTE/HACK/SAFETY/TODO annotations as graph nodes |
+| `generate_report` | `internal/tools/orientation_report.go` | Write ARCHITECTURE_REPORT.md orientation doc from indexed graph |
 
 ### Code Localization & Ranking Tools
 | Tool | Source File | Purpose |

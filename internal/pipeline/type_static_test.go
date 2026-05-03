@@ -189,6 +189,53 @@ func TestTypeStaticDispatch_PostCratePrefixStrip(t *testing.T) {
 	}
 }
 
+// ACC-004 (2026-05-03): Resolution-side aliasing. `use crate::repo::AssetRepo as Alias;`
+// then `Alias::new()` should chase the import binding to the real class
+// and emit AssetRepo.new. Reachability is implicit (alias binding exists).
+func TestTypeStaticDispatch_AliasChase(t *testing.T) {
+	r := NewFunctionRegistry()
+	r.Register("AssetRepo", "proj.src.repo.AssetRepo", "Struct")
+	r.Register("new", "proj.src.repo.AssetRepo.new", "Method")
+
+	ctx := CallContext{
+		CalleeName: "Alias::new",
+		CallerQN:   "proj.src.main.controls",
+		ModuleQN:   "proj.src.main",
+		ImportBindings: map[string]string{
+			"Alias": "crate::repo::AssetRepo",
+		},
+	}
+	result := r.ResolveCtx(ctx)
+	if result.QualifiedName != "proj.src.repo.AssetRepo.new" {
+		t.Fatalf("expected proj.src.repo.AssetRepo.new, got %q (strategy=%q)", result.QualifiedName, result.Strategy)
+	}
+	if result.Strategy != "type_static_dispatch" {
+		t.Errorf("expected strategy=type_static_dispatch, got %q", result.Strategy)
+	}
+}
+
+// ACC-004: alias to external path should drop. `use external_crate::Foo as Alias;`
+// then `Alias::new()` — no internal class matches, drop.
+func TestTypeStaticDispatch_AliasExternalDropped(t *testing.T) {
+	r := NewFunctionRegistry()
+	// Internal class with same simple name; ensure it doesn't phantom-match
+	r.Register("Foo", "proj.src.unrelated.Foo", "Struct")
+	r.Register("new", "proj.src.unrelated.Foo.new", "Method")
+
+	ctx := CallContext{
+		CalleeName: "Alias::new",
+		CallerQN:   "proj.src.main.run",
+		ModuleQN:   "proj.src.main",
+		ImportBindings: map[string]string{
+			"Alias": "external_crate::different_module::Foo",
+		},
+	}
+	result := r.ResolveCtx(ctx)
+	if result.QualifiedName != "" {
+		t.Fatalf("expected empty (alias points to external Foo, not internal unrelated.Foo), got %q", result.QualifiedName)
+	}
+}
+
 func TestTypeStaticDispatch_ModuleSiblingClassDistinction(t *testing.T) {
 	// Sibling-module reachability fires ONLY for Module label, not Class.
 	// A Struct in a sibling module without `use` should still drop —

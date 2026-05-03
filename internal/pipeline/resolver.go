@@ -355,6 +355,42 @@ func (r *FunctionRegistry) resolveViaTypeStaticDispatch(ctx CallContext) Resolut
 		}
 	}
 
+	// ACC-004 (2026-05-03): Resolution-side aliasing. If typeName isn't a
+	// registered Class-family or Module name BUT ctx.ImportBindings[typeName]
+	// points to an internal Rust path, chase the alias to the real class.
+	// Example: `use crate::repo::AssetRepo as MyAlias;` ->
+	// ImportBindings["MyAlias"] = "crate::repo::AssetRepo". The target's
+	// last segment ("AssetRepo") is looked up in r.byName; the full target
+	// path is matched as a suffix of the candidate's QN to disambiguate
+	// when the simple name collides across packages.
+	//
+	// Reachability is implicit: the existence of the alias binding IS
+	// evidence the caller imported the type. No same-module / sibling
+	// gate needed.
+	if len(r.byName[typeName]) == 0 && len(r.modules[typeName]) == 0 {
+		if importTarget, ok := ctx.ImportBindings[typeName]; ok {
+			targetQN := strings.TrimPrefix(strings.ReplaceAll(importTarget, "::", "."), "crate.")
+			lastSeg := targetQN
+			if idx := strings.LastIndex(targetQN, "."); idx >= 0 {
+				lastSeg = targetQN[idx+1:]
+			}
+			dotTarget := "." + targetQN
+			for _, qn := range r.byName[lastSeg] {
+				label := r.exact[qn]
+				if !classLabels[label] {
+					continue
+				}
+				if qn == targetQN || strings.HasSuffix(qn, dotTarget) {
+					candidate := qn + "." + remainder
+					if _, exists := r.exact[candidate]; exists {
+						emissions = append(emissions, candidate)
+					}
+					break
+				}
+			}
+		}
+	}
+
 	if len(emissions) == 0 && len(r.byName[typeName]) == 0 && len(r.modules[typeName]) == 0 {
 		return ResolutionResult{}
 	}

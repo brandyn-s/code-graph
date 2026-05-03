@@ -2095,6 +2095,10 @@ func (p *Pipeline) buildTraitImplMap() {
 			if !already {
 				p.traitImpls[traitQN] = append(p.traitImpls[traitQN], structQN)
 			}
+			// Register the reverse direction on the FunctionRegistry so
+			// applyReceiverTypeFilter can accept Trait-method candidates
+			// when the receiver is a Struct that implements the Trait.
+			p.registry.RegisterTraitImpl(structQN, traitQN)
 		}
 	}
 	if len(p.traitImpls) > 0 {

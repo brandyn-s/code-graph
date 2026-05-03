@@ -101,6 +101,44 @@ func TestTypeStaticDispatch_ModuleExternalDropped(t *testing.T) {
 	}
 }
 
+// applyReceiverTypeFilter must accept candidates whose parent is a Trait
+// that the receiver Struct implements. Without this, Tier 2 drops
+// legitimate Trait-method calls when the method is defined on the Trait.
+func TestApplyReceiverTypeFilter_TraitImpl(t *testing.T) {
+	r := NewFunctionRegistry()
+	// Struct + impl of trait Display
+	r.Register("Foo", "proj.src.foo.Foo", "Struct")
+	r.Register("Display", "proj.src.display.Display", "Trait")
+	// fmt is a Method on the Trait, NOT directly on Foo
+	r.Register("fmt", "proj.src.display.Display.fmt", "Method")
+	// Register the impl relationship
+	r.RegisterTraitImpl("proj.src.foo.Foo", "proj.src.display.Display")
+
+	candidates := []string{"proj.src.display.Display.fmt"}
+	ctx := CallContext{
+		CalleeName:   "obj.fmt",
+		ReceiverType: "proj.src.foo.Foo",
+	}
+	filtered, applied, dropAll := r.applyReceiverTypeFilter(ctx, candidates)
+	if dropAll {
+		t.Fatal("expected candidates accepted (Trait impl), got dropAll=true")
+	}
+	if applied != "receiver-type-match" && applied != "" {
+		// Either applied is "receiver-type-match" (filter narrowed) or "" (passthrough)
+		// Both are acceptable; the candidates list must include the Trait method.
+	}
+	found := false
+	for _, qn := range filtered {
+		if qn == "proj.src.display.Display.fmt" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected Display.fmt accepted via Trait impl, got %v (applied=%q)", filtered, applied)
+	}
+}
+
 func TestTypeStaticDispatch_ModuleSiblingClassDistinction(t *testing.T) {
 	// Sibling-module reachability fires ONLY for Module label, not Class.
 	// A Struct in a sibling module without `use` should still drop —

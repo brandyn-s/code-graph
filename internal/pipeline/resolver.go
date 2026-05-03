@@ -74,15 +74,36 @@ type FunctionRegistry struct {
 	// ACC-003 (2026-05-02): added so resolveViaTypeStaticDispatch can
 	// route `diagnostics::router(...)` calls to the right module.
 	modules map[string][]string
+	// traitsByStruct: struct_qn -> [trait_qns]. Maps a Rust Struct to the
+	// Traits it implements. Used by applyReceiverTypeFilter to accept
+	// Trait-method candidates when the receiver is a Struct that
+	// implements the Trait — without this, multi-line chain method calls
+	// where the actual method is defined on a Trait (not the Struct
+	// directly) get dropped by Tier 2.
+	traitsByStruct map[string][]string
 }
 
 // NewFunctionRegistry creates an empty registry.
 func NewFunctionRegistry() *FunctionRegistry {
 	return &FunctionRegistry{
-		exact:   make(map[string]string),
-		byName:  make(map[string][]string),
-		modules: make(map[string][]string),
+		exact:          make(map[string]string),
+		byName:         make(map[string][]string),
+		modules:        make(map[string][]string),
+		traitsByStruct: make(map[string][]string),
 	}
+}
+
+// RegisterTraitImpl records that structQN implements traitQN.
+// Populated by Pipeline.buildTraitImplMap from CBM ImplTraits data.
+func (r *FunctionRegistry) RegisterTraitImpl(structQN, traitQN string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, existing := range r.traitsByStruct[structQN] {
+		if existing == traitQN {
+			return
+		}
+	}
+	r.traitsByStruct[structQN] = append(r.traitsByStruct[structQN], traitQN)
 }
 
 // Register adds a node to the registry.
@@ -437,6 +458,18 @@ func (r *FunctionRegistry) applyReceiverTypeFilter(ctx CallContext, candidates [
 	if !strings.Contains(ctx.CalleeName, ".") {
 		return candidates, "", false
 	}
+	// Trait/Impl support: when the receiver is a Struct, accept Methods
+	// whose parent class is a Trait that the Struct implements. Without
+	// this, multi-line chain calls where the actual method definition
+	// lives on a Trait (e.g., `impl Display for Foo { fn fmt() {...} }`)
+	// get dropped by Tier 2. The traitsByStruct index is populated by
+	// Pipeline.buildTraitImplMap from CBM ImplTraits data.
+	implementedTraits := r.traitsByStruct[ctx.ReceiverType]
+	traitSet := make(map[string]bool, len(implementedTraits))
+	for _, t := range implementedTraits {
+		traitSet[t] = true
+	}
+
 	var matching []string
 	var sawMethodCandidate bool
 	for _, qn := range candidates {
@@ -455,7 +488,7 @@ func (r *FunctionRegistry) applyReceiverTypeFilter(ctx CallContext, candidates [
 			continue
 		}
 		parent := qn[:idx]
-		if parent == ctx.ReceiverType {
+		if parent == ctx.ReceiverType || traitSet[parent] {
 			matching = append(matching, qn)
 		}
 	}

@@ -79,28 +79,7 @@ static char* extract_callee_name(CBMArena* a, TSNode node, const char* source, C
             strcmp(fk, "member_access_expression") == 0 ||
             strcmp(fk, "scoped_identifier") == 0 ||
             strcmp(fk, "qualified_identifier") == 0) {
-            char* text = cbm_node_text(a, func_node, source);
-            // Rust ACC-001 / ACC-003: scoped_identifier (`Foo::new`,
-            // `state::ready`) and qualified_identifier are emitted with
-            // `::` separators. The graph QN format and every resolver
-            // strategy use `.`. Normalize in place so the resolver can
-            // splitCalleeName + name-lookup the segments. Scoped only to
-            // these two kinds so we don't touch field_expression chain
-            // text (which has its own dots and no `::`).
-            if (lang == CBM_LANG_RUST && text != NULL &&
-                (strcmp(fk, "scoped_identifier") == 0 ||
-                 strcmp(fk, "qualified_identifier") == 0)) {
-                for (char* p = text; *p; p++) {
-                    if (p[0] == ':' && p[1] == ':') {
-                        p[0] = '.';
-                        // Shift remaining characters left to consume the second ':'
-                        for (char* q = p + 1; *q; q++) {
-                            q[0] = q[1];
-                        }
-                    }
-                }
-            }
-            return text;
+            return cbm_node_text(a, func_node, source);
         }
     }
 

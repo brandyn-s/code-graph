@@ -4,8 +4,6 @@
 
   "expected_internal_calls": [
     {"from_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-futures-ready-negative.src.main.controls", "to_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-futures-ready-negative.src.main.helper"},
-    {"from_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-futures-ready-negative.src.main.controls", "to_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-futures-ready-negative.src.signal.ready"},
-    {"from_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-futures-ready-negative.src.main.controls", "to_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-futures-ready-negative.src.state.pending"},
     {"from_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-futures-ready-negative.src.main.main", "to_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-futures-ready-negative.src.main.entry"},
     {"from_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-futures-ready-negative.src.main.main", "to_qn": "c-Users-user-Documents-GitHub-code-graph-bench-accuracy-synthetic-rust-futures-ready-negative.src.main.controls"}
   ],

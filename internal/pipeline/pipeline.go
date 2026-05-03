@@ -1992,13 +1992,7 @@ func (p *Pipeline) resolveCallWithTypes(
 	// falling through to a phantom-emitting bare-name suffix-match.
 	receiverType := ""
 	if strings.Contains(calleeName, ".") {
-		// Multi-line method chains (`obj\n    .method`) come through with
-		// the receiver root carrying trailing whitespace because
-		// cbm_node_text returns the literal byte range from the source.
-		// Trim so the TypeMap lookup hits — without this, ACC-002's
-		// turbofish chain calls bypass receiver-type discrimination and
-		// fall to bare-name suffix-match (phantom AssetRepo.get_result).
-		rootName := strings.TrimSpace(strings.SplitN(calleeName, ".", 2)[0])
+		rootName := strings.SplitN(calleeName, ".", 2)[0]
 		if t, ok := typeMap[rootName]; ok && t != "" {
 			receiverType = t
 		}

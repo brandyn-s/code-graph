@@ -1930,6 +1930,25 @@ func (p *Pipeline) resolveCallWithTypes(
 	importMap map[string]string,
 	typeMap TypeMap,
 ) ResolutionResult {
+	// ACC-006 (2026-05-03): strip the project's own crate-name prefix from
+	// `::`-form callees so qualified-path calls like
+	// `rust_futures_ready_negative::state::ready(5)` resolve through the
+	// existing type_static_dispatch sibling-module path. Without this strip,
+	// type_static_dispatch sees typeName="rust_futures_ready_negative" which
+	// matches no internal class/module and returns empty (the project root
+	// isn't registered as a Module). After strip, typeName="state" matches
+	// r.modules and dispatch resolves. p.rustCrateMap is keyed by Rust
+	// crate name (with `-` -> `_` normalized) and populated at pass2 by
+	// scanning Cargo.toml.
+	if strings.Contains(calleeName, "::") && len(p.rustCrateMap) > 0 {
+		parts := strings.SplitN(calleeName, "::", 2)
+		if len(parts) == 2 {
+			if _, isOwnCrate := p.rustCrateMap[parts[0]]; isOwnCrate {
+				calleeName = parts[1]
+			}
+		}
+	}
+
 	// Multi-segment chain: a.b.c.method
 	if strings.Contains(calleeName, ".") {
 		parts := strings.Split(calleeName, ".")

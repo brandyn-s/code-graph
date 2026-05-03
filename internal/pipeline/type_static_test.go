@@ -139,6 +139,29 @@ func TestApplyReceiverTypeFilter_TraitImpl(t *testing.T) {
 	}
 }
 
+// ACC-006: crate-prefixed scoped paths (`crate_name::module::fn`) should
+// resolve through the existing module-dispatch path after the crate prefix
+// is stripped. The strip happens in pipeline.go:resolveCallWithTypes, but
+// we can test the post-strip behavior by simulating the rewritten input.
+func TestTypeStaticDispatch_PostCratePrefixStrip(t *testing.T) {
+	r := NewFunctionRegistry()
+	r.Register("state", "proj.src.state", "Module")
+	r.Register("ready", "proj.src.state.ready", "Function")
+
+	// After ACC-006 strip in resolveCallWithTypes, a callee like
+	// `myproj::state::ready` becomes `state::ready` and reaches ResolveCtx.
+	ctx := CallContext{
+		CalleeName:     "state::ready",
+		CallerQN:       "proj.src.main.controls",
+		ModuleQN:       "proj.src.main",
+		ImportBindings: map[string]string{},
+	}
+	result := r.ResolveCtx(ctx)
+	if result.QualifiedName != "proj.src.state.ready" {
+		t.Fatalf("expected proj.src.state.ready, got %q (strategy=%q)", result.QualifiedName, result.Strategy)
+	}
+}
+
 func TestTypeStaticDispatch_ModuleSiblingClassDistinction(t *testing.T) {
 	// Sibling-module reachability fires ONLY for Module label, not Class.
 	// A Struct in a sibling module without `use` should still drop —

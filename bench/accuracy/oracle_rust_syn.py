@@ -150,35 +150,47 @@ def resolve_and_filter(
     raw_edges: list[dict],
     fn_def_map: dict[str, list[str]],
 ) -> tuple[list[Edge], dict[str, int]]:
-    """Resolve bare calls, drop external/unresolvable/ambiguous edges.
+    """Resolve bare and scoped-form calls, drop external/unresolvable/ambiguous.
 
     Rules:
       IMPORTS: drop — code-graph's Rust IMPORTS resolver only emits edges for
         a narrow set of cases (confirmed empirically: 0 edges for a single
-        canstatd index, 8 total across the full 260-crate repo). To avoid
-        false-negative noise from extractor limitations, we drop IMPORTS from
-        the oracle output too. They can be re-enabled when code-graph's
-        Rust IMPORTS resolver is completed.
-      CALLS path-form (`a.b.c`): drop — these are external references
-        (`std.fs.read_to_string`, `Duration.from_secs`) that code-graph
-        can't resolve without type info. Symmetric drop.
+        canstatd index, 8 total across the full 260-crate repo). Symmetric
+        drop until the resolver is completed.
+
       CALLS bare (`foo`):
         - 0 defs: drop (external or test-only).
         - 1 def: emit upgraded to full QN.
-        - 2+ defs: drop (ambiguous). syn has no type info, so any pick among
-          multiple same-named defs is a guess. Mirrors code-graph's
-          discrimination ladder (Phase 3a-3d) which drops the same shape.
-          2026-05-02 plateau-diagnose Step 6 verified 5/5 of these were
-          oracle over-emissions on assetman: e.g., `service.call(req)` was
-          resolving to TailscaleAuthService.call (one of multiple `call`
-          defs) and emerging as a phantom FN against code-graph.
+        - 2+ defs: drop (ambiguous). syn has no type info; any pick among
+          multiple same-named defs is a guess.
+
+      CALLS scoped (`Type.method`, originally `Type::method`) — ACC-007 fix
+      (2026-05-02): mirrors code-graph's resolveViaTypeStaticDispatch
+      symmetrically.
+        - The binary emits scoped-form `to_qn` ONLY from `ExprCall` (path
+          expressions like `Foo::new` or `std::fs::read_to_string`). Method
+          calls always emit bare names. So a `.` in `to_qn` is a strong
+          signal: scoped path.
+        - Split on `.` -> (typeName, remainder).
+        - candidates = fn_def_map[last(remainder)] filtered to those whose
+          parent QN's last segment == typeName (i.e., the class name match).
+        - 0 internal candidates: drop (external — Vec::new, tracing::info).
+        - 1 candidate: emit upgraded to <class_qn>.<remainder>.
+        - 2+ candidates: drop (ambiguous — same class name in multiple
+          modules, can't pick without type info).
+
+      CALLS multi-segment scoped (`a.b.c.method`): same as scoped but with
+      remainder containing nested segments. Match on last suffix segment +
+      class prefix; drop if no match.
     """
     stats = {
         "imports_dropped_always": 0,
         "calls_bare_resolved": 0,
         "calls_bare_unresolved": 0,
         "calls_bare_ambiguous_dropped": 0,
-        "calls_path_dropped": 0,
+        "calls_scoped_resolved": 0,
+        "calls_scoped_external_dropped": 0,
+        "calls_scoped_ambiguous_dropped": 0,
     }
     kept: list[Edge] = []
     for e in raw_edges:
@@ -188,21 +200,59 @@ def resolve_and_filter(
         if e["type"] != "CALLS":
             continue
         to = e["to_qn"]
-        if "." in to:
-            stats["calls_path_dropped"] += 1
+        if "." not in to:
+            # Bare call: try resolve via fn_def_map.
+            candidates = fn_def_map.get(to) or []
+            if not candidates:
+                stats["calls_bare_unresolved"] += 1
+                continue
+            if len(candidates) > 1:
+                stats["calls_bare_ambiguous_dropped"] += 1
+                continue
+            stats["calls_bare_resolved"] += 1
+            kept.append(Edge(
+                from_qn=e["from_qn"],
+                to_qn=candidates[0],
+                type="CALLS",
+                file=e.get("file", ""),
+                line=int(e.get("line", 0) or 0),
+                source="syn",
+            ))
             continue
-        # Bare call: try resolve via fn_def_map.
-        candidates = fn_def_map.get(to) or []
-        if not candidates:
-            stats["calls_bare_unresolved"] += 1
+
+        # Scoped call (`Type.method` or `a.b.c.method` from `Type::method`
+        # or `a::b::c::method`). The binary emits this shape ONLY from
+        # ExprCall path expressions; never from ExprMethodCall.
+        type_name, _, remainder = to.partition(".")
+        method_name = remainder.rsplit(".", 1)[-1]  # last segment
+
+        # Candidates: defs whose simple name matches the method, AND whose
+        # immediate parent's last segment matches typeName.
+        method_candidates = fn_def_map.get(method_name) or []
+        internal_matches = []
+        for cand_qn in method_candidates:
+            # cand_qn shape: <project>...<class>.<method>
+            parts = cand_qn.rsplit(".", 2)
+            if len(parts) < 2:
+                continue
+            parent_last = parts[-2] if len(parts) >= 2 else ""
+            if parent_last == type_name:
+                internal_matches.append(cand_qn)
+
+        if not internal_matches:
+            # External (Vec::new, tracing::info, std::fs::read_to_string)
+            # OR module-routed call we can't resolve (`crate::foo::bar`
+            # where `foo` is a module not a class).
+            stats["calls_scoped_external_dropped"] += 1
             continue
-        if len(candidates) > 1:
-            stats["calls_bare_ambiguous_dropped"] += 1
+        if len(internal_matches) > 1:
+            # Same class name in multiple modules — ambiguous.
+            stats["calls_scoped_ambiguous_dropped"] += 1
             continue
-        stats["calls_bare_resolved"] += 1
+        stats["calls_scoped_resolved"] += 1
         kept.append(Edge(
             from_qn=e["from_qn"],
-            to_qn=candidates[0],
+            to_qn=internal_matches[0],
             type="CALLS",
             file=e.get("file", ""),
             line=int(e.get("line", 0) or 0),
@@ -246,7 +296,8 @@ def build_ground_truth(fixture_id: str, force: bool = False) -> Path:
             f"  raw={len(raw)} kept={len(kept)} "
             f"bare_resolved={stats['calls_bare_resolved']} "
             f"bare_unresolved={stats['calls_bare_unresolved']} "
-            f"path_dropped={stats['calls_path_dropped']}"
+            f"scoped_resolved={stats['calls_scoped_resolved']} "
+            f"scoped_external_dropped={stats['calls_scoped_external_dropped']}"
         )
         all_edges.extend(kept)
 

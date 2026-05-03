@@ -55,6 +55,16 @@ static char* extract_callee_name(CBMArena* a, TSNode node, const char* source, C
 
     // Try "function" field (most languages: call_expression, etc.)
     TSNode func_node = ts_node_child_by_field_name(node, "function", 8);
+    // Rust ACC-002: turbofish wraps the function in `generic_function` —
+    // unwrap to its inner `function` child so kind-matching below sees the
+    // real callee shape (identifier / scoped_identifier / field_expression).
+    if (!ts_node_is_null(func_node) && lang == CBM_LANG_RUST &&
+        strcmp(ts_node_type(func_node), "generic_function") == 0) {
+        TSNode inner = ts_node_child_by_field_name(func_node, "function", 8);
+        if (!ts_node_is_null(inner)) {
+            func_node = inner;
+        }
+    }
     if (!ts_node_is_null(func_node)) {
         const char* fk = ts_node_type(func_node);
         if (strcmp(fk, "identifier") == 0 ||

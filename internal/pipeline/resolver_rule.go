@@ -187,6 +187,10 @@ func resolverRuleFromRegistryStrategy(strategy string) string {
 		return ResolverRuleSamePackageShadow
 	case "import_map", "import_map_suffix", "unique_name", "suffix_match":
 		return ResolverRuleCrossPackageHeuristic
+	case "type_static_dispatch":
+		// Rust `Foo::new` resolved to <class_qn>.new structurally.
+		// Single-target by construction; semantically an exact match.
+		return ResolverRuleExactQN
 	case "fuzzy":
 		return ResolverRuleFuzzyResolve
 	default:

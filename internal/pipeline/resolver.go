@@ -114,6 +114,17 @@ func (r *FunctionRegistry) ResolveCtx(ctx CallContext) ResolutionResult {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
+	// Rust scoped-form `Foo::new` / `Type::method` — try type-static
+	// dispatch FIRST. If it matches a registered Class+method exactly,
+	// emit. Otherwise fall through to existing strategies (some `::`
+	// callees resolve via fuzzy / import-map paths that we shouldn't
+	// short-circuit).
+	if strings.Contains(ctx.CalleeName, "::") {
+		if result := r.resolveViaTypeStaticDispatch(ctx); result.QualifiedName != "" {
+			return result
+		}
+	}
+
 	if result := r.resolveViaImportMap(ctx); result.QualifiedName != "" {
 		return result
 	}
@@ -209,6 +220,84 @@ func (r *FunctionRegistry) resolveViaSameModule(ctx CallContext) ResolutionResul
 			return ResolutionResult{QualifiedName: sameModuleQualified, Strategy: "same_module", Confidence: 0.90, CandidateCount: 1}
 		}
 	}
+	return ResolutionResult{}
+}
+
+// resolveViaTypeStaticDispatch handles Rust scoped-form static method calls
+// (`Foo::new`, `Foo::Bar::method`). Splits on the first `::` to get the
+// type name, treats the remainder (with internal `::` -> `.`) as the method
+// path, then requires the type name to match a registered Class-family
+// label and the resulting `<class_qn>.<method>` to exist in the registry.
+//
+// Drop-on-no-match is intentional: PR #165 regressed by normalizing `::`
+// to `.` at the extractor and letting external paths fall through to
+// project-wide suffix-match. Vec::new and tracing::info phantom-bound
+// to internal `.new` / `.info` defs at scale (-12.6pp F1 on merry-rust).
+// This strategy gates emission on Class-membership and refuses to fall
+// through, eliminating that class.
+//
+// Strategy: "type_static_dispatch"; rule: "exact-qn-match" semantically
+// (single-target, structural).
+func (r *FunctionRegistry) resolveViaTypeStaticDispatch(ctx CallContext) ResolutionResult {
+	if !strings.Contains(ctx.CalleeName, "::") {
+		return ResolutionResult{}
+	}
+	parts := strings.SplitN(ctx.CalleeName, "::", 2)
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return ResolutionResult{}
+	}
+	typeName := parts[0]
+	// `Foo::Bar::new` -> typeName="Foo", remainder="Bar::new" -> "Bar.new".
+	// We only resolve <class_qn>.<remainder> where typeName is the class.
+	// For deeper nesting (Foo::Bar::baz::qux) the rightmost class is the
+	// dispatch target, but resolving that requires walking the registered
+	// hierarchy — defer.
+	remainder := strings.ReplaceAll(parts[1], "::", ".")
+
+	classQNs := r.byName[typeName]
+	if len(classQNs) == 0 {
+		return ResolutionResult{}
+	}
+	classLabels := map[string]bool{
+		"Class": true, "Struct": true, "Type": true,
+		"Enum": true, "Interface": true, "Trait": true,
+	}
+	var emissions []string
+	for _, classQN := range classQNs {
+		label := r.exact[classQN]
+		if !classLabels[label] {
+			continue
+		}
+		candidate := classQN + "." + remainder
+		if _, exists := r.exact[candidate]; !exists {
+			continue
+		}
+		// Reachability gate: only emit if typeName is imported in this
+		// file (via ImportBindings — bareName form, populated for Rust
+		// `use foo::Bar;` as bareName=Bar) OR the class is in the
+		// caller's same module. Without this, common type names (Result,
+		// Default, Error) phantom-match unrelated internal types.
+		// Project-name-vs-crate-name mismatches make full QN prefix
+		// comparisons unsafe; ImportBindings membership is the cleanest
+		// signal that the user explicitly brought this type into scope.
+		// (Note: Rust's ImportMap key is the FULL path, not the bare
+		// name — that's why we check ImportBindings here.)
+		sameModule := ctx.ModuleQN != "" && strings.HasPrefix(classQN, ctx.ModuleQN+".")
+		_, imported := ctx.ImportBindings[typeName]
+		if sameModule || imported {
+			emissions = append(emissions, candidate)
+		}
+	}
+	if len(emissions) == 1 {
+		return ResolutionResult{
+			QualifiedName:  emissions[0],
+			Strategy:       "type_static_dispatch",
+			Confidence:     0.85,
+			CandidateCount: 1,
+		}
+	}
+	// 0 matches (external static call) or >1 (ambiguous across same-named
+	// types) -> drop. Caller (ResolveCtx) does NOT fall through.
 	return ResolutionResult{}
 }
 

@@ -3,7 +3,8 @@
     "phantom_count": 0
   },
   "rust-diesel-negative": {
-    "phantom_count": 0
+    "phantom_count": 2,
+    "note": "Multi-line turbofish chain calls (.get_result::<User>(conn) over 4-line expression) phantom-bind to AssetRepo.get_result/load via cross-package-heuristic. The receiver-type whitespace-trim fix resolved the synthetic phantoms but cost -11pp on real-fixture F1 (assetman) due to a Trait/Impl interaction with Tier 2 discrimination — net negative. Accepting the 2 synthetic phantoms is the better trade until Trait/Impl resolution is improved."
   },
   "rust-futures-ready-negative": {
     "phantom_count": 0

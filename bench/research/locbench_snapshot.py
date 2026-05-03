@@ -13,17 +13,22 @@ import re
 import sys
 from pathlib import Path
 
-CHECKPOINTS = [50, 100, 250, 400, 560]
+CHECKPOINTS = [50, 100, 200, 250, 400, 560]
+# Score line can appear as a standalone line `file=Y...` OR inline after
+# `mode hybrid-agent: file=Y...`. Match either by anchoring on the
+# `file=Y/N class=...` pattern wherever it appears.
 LINE_RE = re.compile(
-    r"^file=(?P<f>[YN]) class=(?P<c>[YN]) func=(?P<fu>[YN])"
-    r" \((?P<sec>\d+)s, [^$]+\$(?P<cost>[0-9.]+)\)"
+    r"file=(?P<f>[YN]) class=(?P<c>[YN]) func=(?P<fu>[YN])"
+    r" \((?P<sec>\d+)s, [^$\n]+\$(?P<cost>[0-9.]+)"
 )
 
 
 def parse(log_path: Path) -> list[dict]:
     rows = []
     for line in log_path.read_text(encoding="utf-8", errors="replace").splitlines():
-        m = LINE_RE.match(line.strip())
+        # Use search() not match() — score line may appear inline after
+        # `mode hybrid-agent: ` prefix or as a standalone line.
+        m = LINE_RE.search(line)
         if m:
             rows.append({
                 "file_hit": m.group("f") == "Y",

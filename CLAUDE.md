@@ -100,13 +100,15 @@ n=16 sample (structured scorer, 2026-04-25, illustrative only — sampling noise
 | hybrid-primitives | 44% | 6% | 19% |
 | `code_localize_agent` (default config) | 94% | 50% | 88% |
 
-n=200+ partial run (in-progress at 2026-05-03, 4 workers, hybrid-agent only, scope-aligned):
+n=200 measurement (2026-05-03, 4 workers, hybrid-agent only, single-iteration, structured scorer):
 
 | Mode | File Acc@10 | Class Acc@10 | Func Acc@10 |
 |------|------|-------|------|
-| `code_localize_agent` (Haiku 4.5) | ~78% | ~47% | ~42% |
+| `code_localize_agent` (Haiku 4.5) | **82.5%** | 46.5% | 61.0% |
 
-The n=16 result was a small-sample lucky draw. **The defended number is the n=200+ measurement.**
+95% CI: file ±5.3%, class ±6.9%, func ±6.8%. Avg cost $0.05/query, avg latency 28.8s.
+
+The n=16 result was a small-sample lucky draw. **The defended number is the n=200 measurement above.**
 
 #### Comparison vs LocAgent paper (ACL 2025, arXiv 2503.09089)
 

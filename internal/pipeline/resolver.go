@@ -68,13 +68,20 @@ type FunctionRegistry struct {
 	exact map[string]string
 	// byName maps simpleName -> []qualifiedName for reverse lookup
 	byName map[string][]string
+	// modules: simpleName -> []qualifiedName for Module nodes only.
+	// Maintained separately so module-dispatch resolution doesn't pollute
+	// byName (which downstream strategies treat as a callable index).
+	// ACC-003 (2026-05-02): added so resolveViaTypeStaticDispatch can
+	// route `diagnostics::router(...)` calls to the right module.
+	modules map[string][]string
 }
 
 // NewFunctionRegistry creates an empty registry.
 func NewFunctionRegistry() *FunctionRegistry {
 	return &FunctionRegistry{
-		exact:  make(map[string]string),
-		byName: make(map[string][]string),
+		exact:   make(map[string]string),
+		byName:  make(map[string][]string),
+		modules: make(map[string][]string),
 	}
 }
 
@@ -84,6 +91,20 @@ func (r *FunctionRegistry) Register(name, qualifiedName, nodeLabel string) {
 	defer r.mu.Unlock()
 
 	r.exact[qualifiedName] = nodeLabel
+
+	// Module nodes go into a separate index so they don't pollute byName
+	// (downstream strategies treat byName as callable-only). Module
+	// dispatch uses r.modules directly.
+	if nodeLabel == "Module" {
+		simple := simpleName(qualifiedName)
+		for _, existing := range r.modules[simple] {
+			if existing == qualifiedName {
+				return
+			}
+		}
+		r.modules[simple] = append(r.modules[simple], qualifiedName)
+		return
+	}
 
 	// Index by simple name (last segment after the final dot)
 	simple := simpleName(qualifiedName)
@@ -254,16 +275,25 @@ func (r *FunctionRegistry) resolveViaTypeStaticDispatch(ctx CallContext) Resolut
 	// hierarchy — defer.
 	remainder := strings.ReplaceAll(parts[1], "::", ".")
 
-	classQNs := r.byName[typeName]
-	if len(classQNs) == 0 {
-		return ResolutionResult{}
+	// Caller's parent-module prefix — used for module-dispatch reachability.
+	// E.g., caller ModuleQN = "<project>.src.v2.telem.health.mod" ->
+	// parent = "<project>.src.v2.telem.health". Sibling/cousin modules
+	// share this prefix and are reachable without explicit `use`.
+	callerParent := ""
+	if ctx.ModuleQN != "" {
+		if idx := strings.LastIndex(ctx.ModuleQN, "."); idx > 0 {
+			callerParent = ctx.ModuleQN[:idx]
+		}
 	}
+
 	classLabels := map[string]bool{
 		"Class": true, "Struct": true, "Type": true,
 		"Enum": true, "Interface": true, "Trait": true,
 	}
 	var emissions []string
-	for _, classQN := range classQNs {
+
+	// Class-family lookup (existing, ACC-001).
+	for _, classQN := range r.byName[typeName] {
 		label := r.exact[classQN]
 		if !classLabels[label] {
 			continue
@@ -272,21 +302,40 @@ func (r *FunctionRegistry) resolveViaTypeStaticDispatch(ctx CallContext) Resolut
 		if _, exists := r.exact[candidate]; !exists {
 			continue
 		}
-		// Reachability gate: only emit if typeName is imported in this
-		// file (via ImportBindings — bareName form, populated for Rust
-		// `use foo::Bar;` as bareName=Bar) OR the class is in the
-		// caller's same module. Without this, common type names (Result,
-		// Default, Error) phantom-match unrelated internal types.
-		// Project-name-vs-crate-name mismatches make full QN prefix
-		// comparisons unsafe; ImportBindings membership is the cleanest
-		// signal that the user explicitly brought this type into scope.
-		// (Note: Rust's ImportMap key is the FULL path, not the bare
-		// name — that's why we check ImportBindings here.)
+		// Class reachability: same-module OR explicit import. Sibling
+		// modules don't qualify here — common type names (Result, Error)
+		// would phantom-match unrelated internal classes. PR #165 lesson.
 		sameModule := ctx.ModuleQN != "" && strings.HasPrefix(classQN, ctx.ModuleQN+".")
 		_, imported := ctx.ImportBindings[typeName]
 		if sameModule || imported {
 			emissions = append(emissions, candidate)
 		}
+	}
+
+	// ACC-003 (2026-05-02): Module dispatch lookup. Routes
+	// `diagnostics::router(...)` to <module_qn>.router. Lookups go through
+	// r.modules — a separate Module-only index — so callable-resolution
+	// paths in resolveViaNameLookup aren't polluted with structural Module
+	// candidates. Module reachability is WIDER than Class: sibling/cousin
+	// modules in the same package are reachable without a `use`. Common
+	// type-name phantom risk doesn't apply because Module names tend to
+	// be unique within a package, and the ambiguous-drop (2+ matches)
+	// catches collisions across packages.
+	for _, modQN := range r.modules[typeName] {
+		candidate := modQN + "." + remainder
+		if _, exists := r.exact[candidate]; !exists {
+			continue
+		}
+		sameModule := ctx.ModuleQN != "" && strings.HasPrefix(modQN, ctx.ModuleQN+".")
+		_, imported := ctx.ImportBindings[typeName]
+		siblingModule := callerParent != "" && strings.HasPrefix(modQN, callerParent+".")
+		if sameModule || imported || siblingModule {
+			emissions = append(emissions, candidate)
+		}
+	}
+
+	if len(emissions) == 0 && len(r.byName[typeName]) == 0 && len(r.modules[typeName]) == 0 {
+		return ResolutionResult{}
 	}
 	if len(emissions) == 1 {
 		return ResolutionResult{

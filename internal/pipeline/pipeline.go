@@ -1522,7 +1522,12 @@ func (p *Pipeline) passDefinitions(files []discover.FileInfo) {
 // buildRegistry populates the FunctionRegistry from all Function, Method,
 // and Class nodes in the store.
 func (p *Pipeline) buildRegistry() {
-	labels := []string{"Function", "Method", "Class", "Type", "Interface", "Enum", "Macro", "Variable"}
+	// ACC-003: Module included so resolveViaTypeStaticDispatch can route
+	// qualified-path module-dispatch calls (`diagnostics::router(...)`).
+	// Modules go into a separate r.modules index inside Register; they
+	// never appear in r.byName, so downstream callable-resolution paths
+	// are unaffected.
+	labels := []string{"Function", "Method", "Class", "Type", "Interface", "Enum", "Macro", "Variable", "Module"}
 	for _, label := range labels {
 		nodes, err := p.findNodesByLabel(p.ProjectName, label)
 		if err != nil {

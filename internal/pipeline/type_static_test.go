@@ -101,6 +101,33 @@ func TestTypeStaticDispatch_ModuleExternalDropped(t *testing.T) {
 	}
 }
 
+// ACC-008: Tier 2 must accept candidates that match the chain-resolved
+// receiver type, not just the root receiver. The chain walker in
+// resolveCallWithTypes computes the final-segment receiver type and
+// passes it as ctx.ReceiverType. This test verifies Tier 2 accepts a
+// Method whose parent equals that chain-resolved type.
+func TestApplyReceiverTypeFilter_ChainResolvedReceiver(t *testing.T) {
+	r := NewFunctionRegistry()
+	r.Register("UpdaterClient", "proj.src.updater.UpdaterClient", "Struct")
+	r.Register("enqueue_asset_update", "proj.src.updater.UpdaterClient.enqueue_asset_update", "Method")
+
+	// resolveCallWithTypes sets ReceiverType to the CHAIN-RESOLVED type
+	// when chain analysis lands on a known intermediate type. Tier 2 then
+	// matches candidates whose parent equals that chain target.
+	candidates := []string{"proj.src.updater.UpdaterClient.enqueue_asset_update"}
+	ctx := CallContext{
+		CalleeName:   "data.updater_client.enqueue_asset_update",
+		ReceiverType: "proj.src.updater.UpdaterClient", // chain-resolved, not root
+	}
+	filtered, _, dropAll := r.applyReceiverTypeFilter(ctx, candidates)
+	if dropAll {
+		t.Fatal("expected accept (receiver matches chain-resolved type), got dropAll=true")
+	}
+	if len(filtered) != 1 || filtered[0] != "proj.src.updater.UpdaterClient.enqueue_asset_update" {
+		t.Fatalf("expected matching candidate accepted, got %v", filtered)
+	}
+}
+
 // applyReceiverTypeFilter must accept candidates whose parent is a Trait
 // that the receiver Struct implements. Without this, Tier 2 drops
 // legitimate Trait-method calls when the method is defined on the Trait.

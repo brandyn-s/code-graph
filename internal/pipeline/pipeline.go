@@ -1949,7 +1949,28 @@ func (p *Pipeline) resolveCallWithTypes(
 		}
 	}
 
-	// Multi-segment chain: a.b.c.method
+	// ACC-008 (2026-05-03): normalize callee_name segment-by-segment.
+	// Multi-line chain callees come through with embedded whitespace
+	// (`obj\n    .method`); split-trim-rejoin gives clean dot-form input
+	// for both the chain walker below AND the receiverType lookup at
+	// line ~2017. Without this, both miss on multi-line chains.
+	if strings.Contains(calleeName, ".") {
+		segs := strings.Split(calleeName, ".")
+		for i := range segs {
+			segs[i] = strings.TrimSpace(segs[i])
+		}
+		calleeName = strings.Join(segs, ".")
+	}
+
+	// Multi-segment chain: a.b.c.method (where each `b`/`c` may be either
+	// a struct field or a method call like `method_name(args)`). Walk via
+	// fieldTypes (for fields) and returnTypes (for method calls).
+	// Determines the FINAL receiver type so Tier 2 discrimination can
+	// match against the chain target, not the root. Without this,
+	// chain-dispatch calls like `data.updater_client.enqueue_asset_update`
+	// drop in Tier 2 because root `data` has the wrong type for the
+	// final method (data: AppContext, but method is on UpdaterClient).
+	chainReceiverType := ""
 	if strings.Contains(calleeName, ".") {
 		parts := strings.Split(calleeName, ".")
 		// Last segment is the method name; everything before is the receiver
@@ -1965,11 +1986,25 @@ func (p *Pipeline) resolveCallWithTypes(
 			if ok && rootType != "" {
 				currentType := rootType
 				resolved := true
-				// Walk the field chain. Each step must succeed via the
-				// global FieldTypeMap; otherwise, the receiver couldn't
-				// be type-dispatched.
-				for _, field := range fieldChain {
-					next, fieldOk := p.fieldTypes[currentType+"."+field]
+				// Walk the field/method chain. Field segments resolve via
+				// fieldTypes; method-style segments (containing parens)
+				// resolve via returnTypes after stripping the args.
+				for _, segment := range fieldChain {
+					// Method-style intermediate: `method_name(args...)`.
+					// Strip the args to get the method name, look up
+					// returnTypes[currentType.method].
+					if idx := strings.IndexByte(segment, '('); idx >= 0 {
+						methodOnly := segment[:idx]
+						next, retOk := p.returnTypes[currentType+"."+methodOnly]
+						if !retOk || next == "" {
+							resolved = false
+							break
+						}
+						currentType = next
+						continue
+					}
+					// Field-style intermediate: lookup via fieldTypes.
+					next, fieldOk := p.fieldTypes[currentType+"."+segment]
 					if !fieldOk || next == "" {
 						resolved = false
 						break
@@ -1977,6 +2012,8 @@ func (p *Pipeline) resolveCallWithTypes(
 					currentType = next
 				}
 				if resolved {
+					// Chain landed on a final receiver type. Try direct
+					// candidate match first (high-confidence early return).
 					candidate := currentType + "." + methodName
 					if p.registry.Exists(candidate) {
 						return ResolutionResult{
@@ -1986,14 +2023,12 @@ func (p *Pipeline) resolveCallWithTypes(
 							CandidateCount: 1,
 						}
 					}
+					// Direct match failed but the chain resolved to a
+					// type. Pass that type to Tier 2 as the discrimination
+					// receiver (overrides the root). Catches Trait-method
+					// dispatches the direct candidate check misses.
+					chainReceiverType = currentType
 				}
-				// Chain resolution didn't land on a known method. Fall
-				// through to registry.Resolve below. (Earlier iteration
-				// returned empty here to avoid suffix-match FPs, but
-				// measurement showed strict-drop sacrificed too much
-				// recall: ~3.8pp on assetman + 2 apid TPs lost. The
-				// fuzzy/registry fallback catches real correct edges
-				// the chain analysis can't validate.)
 			}
 		}
 	}
@@ -2014,8 +2049,13 @@ func (p *Pipeline) resolveCallWithTypes(
 	// receiver's known type is external (no internal methods match),
 	// the registry's Tier 2 will drop the binding entirely instead of
 	// falling through to a phantom-emitting bare-name suffix-match.
-	receiverType := ""
-	if strings.Contains(calleeName, ".") {
+	// Receiver-type for Tier 2 discrimination. Prefer chainReceiverType
+	// (computed by the chain walker above for multi-segment callees) over
+	// the root receiver type. Without this preference, chain-dispatch
+	// calls like `data.updater_client.method` drop in Tier 2 because
+	// `data`'s type doesn't match the method's parent class.
+	receiverType := chainReceiverType
+	if receiverType == "" && strings.Contains(calleeName, ".") {
 		rootName := strings.SplitN(calleeName, ".", 2)[0]
 		if t, ok := typeMap[rootName]; ok && t != "" {
 			receiverType = t

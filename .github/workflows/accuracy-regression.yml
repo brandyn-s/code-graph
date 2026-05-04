@@ -63,6 +63,20 @@ jobs:
         run: |
           CGO_ENABLED=1 go build -o bin/codebase-memory-mcp ./cmd/codebase-memory-mcp/
 
+      - name: Install Python test deps
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest pandas
+
+      - name: Run scorer fixtures (Family A — pure-function tests on score_entities)
+        run: |
+          # Family A leg of the measurement-discipline pay-down. Pure
+          # pytest unit tests on bench/research/eval_locbench_compare.py::
+          # score_entities. Catches ACC-012 (class_hit forced False for
+          # module-level GTs) and ~10 other edge cases at PR time before
+          # any benchmark report can run.
+          python -m pytest bench/research/test_score_entities.py -v
+
       - name: Build Rust oracle
         working-directory: bench/accuracy/tools/oracle-rust-syn
         run: cargo build --release
@@ -70,6 +84,10 @@ jobs:
       - name: Build Go oracle
         working-directory: bench/accuracy/tools/oracle-go-ast
         run: go build -o oracle-go-ast .
+
+      - name: Run Go oracle unit tests (Family A — recv.method, Y.5/Y.6 substitution)
+        working-directory: bench/accuracy/tools/oracle-go-ast
+        run: go test -v ./...
 
       - name: Run Rust synthetic prove-the-instrument
         run: |

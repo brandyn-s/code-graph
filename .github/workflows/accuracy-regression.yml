@@ -88,6 +88,17 @@ jobs:
           # writing layer before any benchmark number escapes.
           python -m pytest bench/research/test_report_invariants.py -v
 
+      - name: Run provenance manifest gate (Family B — generation context tracking)
+        run: |
+          # Family B leg of the measurement-discipline pay-down. Pytest
+          # tests on the provenance manifest computation, render/parse
+          # round-trip, and comparison gate. Catches the bug-class where
+          # two reports are compared across mismatched generation contexts
+          # (different binaries, dataset versions, scorer schemas, agent
+          # iterations) — incidents 1, 5, 6, 7 from the 2026-05-04
+          # back-port. Largest-coverage gate of the three (4/7 incidents).
+          python -m pytest bench/research/test_provenance.py -v
+
       - name: Build Rust oracle
         working-directory: bench/accuracy/tools/oracle-rust-syn
         run: cargo build --release

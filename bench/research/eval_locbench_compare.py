@@ -42,6 +42,7 @@ per query, ~$0.0002).
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import shutil
@@ -60,6 +61,14 @@ PARQUET = REPO_ROOT / "bench/research/locbench.parquet"
 DEFAULT_EVAL_BIN = REPO_ROOT / "bench/research/eval_rank_localize/eval.exe"
 DEFAULT_INDEX_BIN = REPO_ROOT / "bin/codebase-memory-mcp.exe"
 CACHE_DIR = Path.home() / ".cache" / "codebase-memory-mcp"
+
+# SCORER_SCHEMA_VERSION — bump when score_entities changes shape or
+# semantics. Provenance comparison treats this as a hard equality
+# field: two reports with different scorer schemas cannot be compared.
+# History:
+#   1: initial schema (file/class/func tuple)
+#   2: ACC-012 fix — class_hit treats module-level GTs as scope_hit
+SCORER_SCHEMA_VERSION = 2
 
 # Modes the harness supports. Each runs the eval binary with specific flags.
 MODE_FLAGS: dict[str, list[str]] = {
@@ -560,6 +569,171 @@ def evaluate_instance(
     return res
 
 
+def _file_sha256_short(path: Path) -> str:
+    """Return short (12-char) sha256 of a file, or '<missing>' if absent."""
+    if not path.exists():
+        return "<missing>"
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            h.update(chunk)
+    return h.hexdigest()[:12]
+
+
+def _git_sha_short() -> str:
+    """Return the harness repo's HEAD SHA (12 char), or '<no-git>' if not a repo."""
+    try:
+        out = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=str(REPO_ROOT),
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if out.returncode == 0:
+            return out.stdout.strip()[:12]
+    except (subprocess.SubprocessError, FileNotFoundError):
+        pass
+    return "<no-git>"
+
+
+def _compute_provenance_manifest(
+    eval_bin: Path,
+    index_bin: Path,
+    modes: list[str],
+    max_mb: float,
+    n_attempted: int,
+    n_indexed: int,
+) -> dict[str, str]:
+    """Family B leg of the measurement-discipline pay-down. Compute
+    provenance fields for the report manifest. These fields capture
+    the generation context of the published numbers so two reports
+    can be compared meaningfully.
+
+    Catches the bug-class where two reports look comparable on the
+    surface (same metric, same benchmark, similar percentages) but
+    were generated against different binary/index/dataset versions
+    — incident #1 (stale post-hoc baseline) and incidents #5-7
+    (parallel-session stale-cache baseline) all share this shape.
+
+    Per the back-port, Family B catches 4/7 documented incidents —
+    the largest count of any single gate. Cannot be deferred.
+    """
+    return {
+        "harness_sha": _git_sha_short(),
+        "scorer_schema": str(SCORER_SCHEMA_VERSION),
+        "eval_bin_sha": _file_sha256_short(eval_bin),
+        "index_bin_sha": _file_sha256_short(index_bin),
+        "dataset_sha": _file_sha256_short(PARQUET),
+        "agent_iterations": os.environ.get("LOCAGENT_ITERATIONS", "1"),
+        "modes": ",".join(modes),
+        "max_mb": str(int(max_mb)),
+        "n_attempted": str(n_attempted),
+        "n_indexed": str(n_indexed),
+        "timestamp_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    }
+
+
+# Manifest fields that MUST agree between two reports for them to be
+# meaningfully comparable. Other fields (timestamp, n_attempted) can
+# differ legitimately (e.g. two runs at different times on the same
+# instance set).
+PROVENANCE_COMPARE_KEYS = (
+    "harness_sha",
+    "scorer_schema",
+    "eval_bin_sha",
+    "index_bin_sha",
+    "dataset_sha",
+    "agent_iterations",
+    "modes",
+    "max_mb",
+)
+
+
+def _render_provenance_table(manifest: dict[str, str]) -> list[str]:
+    """Render the manifest as a markdown table for embedding in the
+    report header. Order is fixed for stable parsing."""
+    order = [
+        "harness_sha", "scorer_schema", "eval_bin_sha", "index_bin_sha",
+        "dataset_sha", "agent_iterations", "modes", "max_mb",
+        "n_attempted", "n_indexed", "timestamp_utc",
+    ]
+    lines = ["## Provenance manifest", ""]
+    lines.append("| field | value |")
+    lines.append("|---|---|")
+    for k in order:
+        v = manifest.get(k, "")
+        lines.append(f"| {k} | `{v}` |")
+    lines.append("")
+    return lines
+
+
+def _parse_provenance_manifest(report_path: Path) -> dict[str, str] | None:
+    """Parse a Provenance manifest table out of an existing report
+    markdown file. Returns None if the report doesn't have a manifest
+    (e.g. older report from before Family B shipped)."""
+    if not report_path.exists():
+        return None
+    try:
+        text = report_path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    lines = text.splitlines()
+    in_table = False
+    fields: dict[str, str] = {}
+    for line in lines:
+        if line.startswith("## Provenance manifest"):
+            in_table = True
+            continue
+        if in_table:
+            if line.startswith("##"):  # next section
+                break
+            if line.startswith("|") and not line.startswith("|---") and not line.startswith("| field"):
+                parts = [p.strip() for p in line.strip().strip("|").split("|")]
+                if len(parts) >= 2:
+                    key = parts[0]
+                    # Strip backticks from value
+                    val = parts[1].strip("`")
+                    fields[key] = val
+    return fields if fields else None
+
+
+def _check_provenance_match(
+    current_manifest: dict[str, str],
+    baseline_manifest: dict[str, str],
+    accept_provenance_mismatch: str | None = None,
+) -> list[str]:
+    """Family B leg of the measurement-discipline pay-down. Compare
+    current run's provenance to a baseline report's provenance.
+    REFUSE if any compared field differs (per PROVENANCE_COMPARE_KEYS),
+    unless --accept-provenance-mismatch REASON is set.
+
+    Catches the bug-class where two reports' percentages are compared
+    on the assumption they used the same binary/index/dataset/scorer
+    — the most common shape across incidents 1, 5, 6, 7.
+    """
+    out: list[str] = []
+    for key in PROVENANCE_COMPARE_KEYS:
+        cur = current_manifest.get(key, "<absent>")
+        base = baseline_manifest.get(key, "<absent>")
+        if cur != base:
+            msg = (
+                f"provenance mismatch on '{key}': current=`{cur}` baseline=`{base}`. "
+                f"Comparing numbers across this mismatch may compare apples to oranges."
+            )
+            if accept_provenance_mismatch:
+                out.append(
+                    f"[ACCEPTED via --accept-provenance-mismatch] {msg} "
+                    f"(reason: {accept_provenance_mismatch})"
+                )
+            else:
+                out.append(
+                    f"REFUSE: {msg} Pass `--accept-provenance-mismatch \"REASON\"` "
+                    f"to override after verifying the difference is benign."
+                )
+    return out
+
+
 def _check_report_invariants(
     results: list[InstanceResult],
     modes: list[str],
@@ -567,6 +741,9 @@ def _check_report_invariants(
     allow_unexplained_cells: bool = False,
     external_comparator: str | None = None,
     metric_equivalence_note: Path | None = None,
+    current_manifest: dict[str, str] | None = None,
+    baseline_manifest: dict[str, str] | None = None,
+    accept_provenance_mismatch: str | None = None,
 ) -> list[str]:
     """Mechanical refusal gate (Family C of the measurement-discipline
     pay-down). Returns a list of human-readable violation strings.
@@ -684,6 +861,14 @@ def _check_report_invariants(
                             f"`--allow-unexplained-cells` for exploratory runs only."
                         )
 
+    # GATE 4 (Family B): Provenance comparison against baseline report
+    if current_manifest and baseline_manifest:
+        violations.extend(
+            _check_provenance_match(
+                current_manifest, baseline_manifest, accept_provenance_mismatch
+            )
+        )
+
     # GATE 3: External-comparator equivalence pairing
     if external_comparator and not metric_equivalence_note:
         violations.append(
@@ -713,6 +898,10 @@ def write_report(
     allow_unexplained_cells: bool = False,
     external_comparator: str | None = None,
     metric_equivalence_note: Path | None = None,
+    eval_bin: Path | None = None,
+    index_bin: Path | None = None,
+    baseline_report: Path | None = None,
+    accept_provenance_mismatch: str | None = None,
 ) -> None:
     lines: list[str] = []
     lines.append(f"# Loc-Bench multi-mode comparison — {time.strftime('%Y-%m-%d %H:%M')}")
@@ -722,16 +911,38 @@ def write_report(
     lines.append(f"**Repo size cap:** {max_mb:.0f} MB" + (" (no cap)" if max_mb == 0 else ""))
     lines.append("")
 
-    # Mechanical refusal gate (Family C). Violations embed at the top of
-    # the report; the runner prints a stderr warning at end-of-run if
-    # any unaccepted violations remain. The report still writes (so
-    # checkpointing works) but is clearly marked as REFUSED.
+    # Family B: provenance manifest. Embed at the top of every report
+    # so two reports can be compared meaningfully. Cannot be deferred
+    # per the back-port (catches 4/7 documented incidents — most of
+    # any single gate).
+    n_indexed_pre = sum(1 for r in results if r.indexed)
+    current_manifest = _compute_provenance_manifest(
+        eval_bin or DEFAULT_EVAL_BIN,
+        index_bin or DEFAULT_INDEX_BIN,
+        modes,
+        max_mb,
+        n_attempted=len(results),
+        n_indexed=n_indexed_pre,
+    )
+    baseline_manifest = (
+        _parse_provenance_manifest(baseline_report) if baseline_report else None
+    )
+    lines.extend(_render_provenance_table(current_manifest))
+
+    # Mechanical refusal gate (Family C + Family B comparison).
+    # Violations embed at the top of the report; the runner prints a
+    # stderr warning at end-of-run if any unaccepted violations remain.
+    # The report still writes (so checkpointing works) but is clearly
+    # marked as REFUSED.
     violations = _check_report_invariants(
         results, modes,
         accept_non_monotone=accept_non_monotone,
         allow_unexplained_cells=allow_unexplained_cells,
         external_comparator=external_comparator,
         metric_equivalence_note=metric_equivalence_note,
+        current_manifest=current_manifest,
+        baseline_manifest=baseline_manifest,
+        accept_provenance_mismatch=accept_provenance_mismatch,
     )
     unaccepted = [v for v in violations if v.startswith("REFUSE:")]
     if violations:
@@ -880,6 +1091,33 @@ def main() -> int:
         ),
     )
 
+    # Family B — provenance manifest comparison flags
+    ap.add_argument(
+        "--baseline-report",
+        type=Path,
+        default=None,
+        metavar="PATH",
+        help=(
+            "Path to a prior report whose provenance manifest should be "
+            "compared against this run's. If any compared field differs "
+            "(harness SHA, eval/index binary SHA, dataset SHA, scorer "
+            "schema, agent_iterations, modes, max_mb), report is REFUSED "
+            "unless --accept-provenance-mismatch REASON is set. Catches "
+            "the bug-class where two reports' percentages are compared "
+            "across mismatched generation contexts (incidents 1, 5, 6, 7)."
+        ),
+    )
+    ap.add_argument(
+        "--accept-provenance-mismatch",
+        type=str,
+        default=None,
+        metavar="REASON",
+        help=(
+            "Accept provenance mismatch with a documented reason. Required "
+            "override when --baseline-report mismatches the current run."
+        ),
+    )
+
     args = ap.parse_args()
 
     modes = [m.strip() for m in args.modes.split(",") if m.strip()]
@@ -918,6 +1156,10 @@ def main() -> int:
             allow_unexplained_cells=args.allow_unexplained_cells,
             external_comparator=args.external_comparator,
             metric_equivalence_note=args.metric_equivalence_note,
+            eval_bin=args.eval_bin,
+            index_bin=args.index_bin,
+            baseline_report=args.baseline_report,
+            accept_provenance_mismatch=args.accept_provenance_mismatch,
         )
 
     order = {row["instance_id"]: i for i, row in enumerate(rows)}
@@ -989,17 +1231,33 @@ def main() -> int:
         allow_unexplained_cells=args.allow_unexplained_cells,
         external_comparator=args.external_comparator,
         metric_equivalence_note=args.metric_equivalence_note,
+        eval_bin=args.eval_bin,
+        index_bin=args.index_bin,
+        baseline_report=args.baseline_report,
+        accept_provenance_mismatch=args.accept_provenance_mismatch,
     )
 
-    # Family C: print stderr warning at end-of-run if any unaccepted
-    # violations remain. The report itself has the violations embedded
-    # at the top; this is the runtime signal.
+    # Family C + B: print stderr warning at end-of-run if any
+    # unaccepted violations remain. The report itself has the
+    # violations embedded at the top; this is the runtime signal.
+    n_idx = sum(1 for r in results if r.indexed)
+    final_manifest = _compute_provenance_manifest(
+        args.eval_bin, args.index_bin, modes, args.max_mb,
+        n_attempted=len(results), n_indexed=n_idx,
+    )
+    final_baseline = (
+        _parse_provenance_manifest(args.baseline_report)
+        if args.baseline_report else None
+    )
     final_violations = _check_report_invariants(
         results, modes,
         accept_non_monotone=args.accept_non_monotone,
         allow_unexplained_cells=args.allow_unexplained_cells,
         external_comparator=args.external_comparator,
         metric_equivalence_note=args.metric_equivalence_note,
+        current_manifest=final_manifest,
+        baseline_manifest=final_baseline,
+        accept_provenance_mismatch=args.accept_provenance_mismatch,
     )
     unaccepted = [v for v in final_violations if v.startswith("REFUSE:")]
     if unaccepted:

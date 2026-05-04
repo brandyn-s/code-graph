@@ -108,6 +108,16 @@ jobs:
           # back-port. Largest-coverage gate of the three (4/7 incidents).
           python -m pytest bench/research/test_provenance.py -v
 
+      - name: Run negative-fixture gate helpers tests (path-portable QN rewrite)
+        run: |
+          # Unit tests for check_negative_fixtures.py's QN-rewrite logic.
+          # The helper enables ground-truth fixtures to move across
+          # machines (developer ↔ CI runner) without 100% recall loss
+          # — pre-fix, every CI run reported "POSITIVE-CONTROL MISS"
+          # because GT QNs contained the dev machine's path-derived
+          # project prefix verbatim.
+          python -m pytest bench/accuracy/test_check_negative_fixtures.py -v
+
       - name: Build Rust oracle
         working-directory: bench/accuracy/tools/oracle-rust-syn
         run: cargo build --release

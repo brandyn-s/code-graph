@@ -71,6 +71,36 @@ def project_for_path(p: Path) -> str:
     return s or "root"
 
 
+def rewrite_qn_to_current_project(qn: str, current_project: str) -> str:
+    """Strip the leading project-prefix from `qn` and replace with
+    `current_project`.
+
+    Ground-truth files store QNs with the project prefix that existed
+    on the developer's machine at GT-authoring time (e.g.
+    `c-Users-user-Documents-GitHub-code-graph-bench-...`).
+    On a different machine (CI runner, another developer) the project
+    prefix differs because `project_for_path` derives it from the
+    absolute filesystem path. Without rewriting, every positive-
+    control and forbidden-pattern lookup misses with 100% recall loss.
+
+    Rewrite preserves the path-suffix tail (everything after the
+    first dot, which is the project's internal-relative QN like
+    `src.main.entry`) and prepends the runtime project name.
+
+    Examples:
+        old_qn  = "c-Users-Brandyn-...-rust-actix-data-negative.src.main.entry"
+        current = "home-runner-work-...-rust-actix-data-negative"
+        result  = "home-runner-work-...-rust-actix-data-negative.src.main.entry"
+
+        old_qn  = "no_dots_at_all"  (degenerate, shouldn't happen)
+        result  = "no_dots_at_all"  (unchanged; defensive)
+    """
+    if "." not in qn:
+        return qn
+    _, tail = qn.split(".", 1)
+    return current_project + "." + tail
+
+
 def db_path_for(project: str) -> Path:
     return Path.home() / ".cache" / "codebase-memory-mcp" / f"{project}.db"
 
@@ -197,12 +227,16 @@ def evaluate_fixture(fixture_root: Path) -> tuple[int, list[dict], dict]:
     by_caller: dict[str, list[dict]] = {}
 
     # Group forbidden specs by caller QN and fetch each caller's edges once.
-    callers = sorted({entry["from_qn"] for entry in forbidden})
+    # Rewrite stored from_qn to runtime project prefix — fixture GTs were
+    # authored on a developer machine and contain that machine's project
+    # prefix verbatim. Without rewriting, lookups miss 100% on any other
+    # machine (CI runners, other developers).
+    callers = sorted({rewrite_qn_to_current_project(entry["from_qn"], project) for entry in forbidden})
     for caller in callers:
         by_caller[caller] = fetch_calls_from(project, caller)
 
     for entry in forbidden:
-        caller = entry["from_qn"]
+        caller = rewrite_qn_to_current_project(entry["from_qn"], project)
         pattern = entry["to_qn_pattern"]
         reason = entry.get("reason", "")
         compiled = re.compile(pattern)
@@ -219,10 +253,17 @@ def evaluate_fixture(fixture_root: Path) -> tuple[int, list[dict], dict]:
                 })
 
     # Positive controls: confirm fixture indexed at all.
+    # Rewrite stored from_qn / to_qn to runtime project prefix —
+    # see rewrite_qn_to_current_project for rationale.
     positive_recall: dict[str, bool] = {}
     for exp in expected_internal:
+        from_qn = rewrite_qn_to_current_project(exp["from_qn"], project)
+        to_qn = rewrite_qn_to_current_project(exp["to_qn"], project)
+        # Key still uses the original GT-stored QNs so the report is
+        # readable in the original machine's vocabulary (matches what
+        # the developer sees in the fixture file).
         key = f"{exp['from_qn']} -> {exp['to_qn']}"
-        emitted = bool(fetch_edges_matching(project, exp["from_qn"], exp["to_qn"]))
+        emitted = bool(fetch_edges_matching(project, from_qn, to_qn))
         positive_recall[key] = emitted
 
     return len(phantom_edges), phantom_edges, positive_recall

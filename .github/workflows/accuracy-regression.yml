@@ -77,6 +77,17 @@ jobs:
           # any benchmark report can run.
           python -m pytest bench/research/test_score_entities.py -v
 
+      - name: Run report-invariant gate (Family C — mechanical refusal)
+        run: |
+          # Family C leg of the measurement-discipline pay-down. Pytest
+          # tests on _check_report_invariants. Verifies the gate refuses
+          # reports with non-monotone hierarchies (ACC-012 shape),
+          # dominant failure cells without classification (incident #1
+          # shape), or external comparators without metric-equivalence
+          # notes (incident #4 shape). Catches violations at the report-
+          # writing layer before any benchmark number escapes.
+          python -m pytest bench/research/test_report_invariants.py -v
+
       - name: Build Rust oracle
         working-directory: bench/accuracy/tools/oracle-rust-syn
         run: cargo build --release

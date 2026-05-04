@@ -560,12 +560,159 @@ def evaluate_instance(
     return res
 
 
+def _check_report_invariants(
+    results: list[InstanceResult],
+    modes: list[str],
+    accept_non_monotone: str | None = None,
+    allow_unexplained_cells: bool = False,
+    external_comparator: str | None = None,
+    metric_equivalence_note: Path | None = None,
+) -> list[str]:
+    """Mechanical refusal gate (Family C of the measurement-discipline
+    pay-down). Returns a list of human-readable violation strings.
+    Empty list = report is clean to publish.
+
+    Three gates:
+
+    1. **Monotonicity** — for each mode, file_pct >= class_pct >= func_pct
+       within 5pp tolerance. Loc-Bench has a hierarchy: getting the file
+       right is necessary but not sufficient for getting the class right,
+       which is necessary but not sufficient for getting the function
+       right. A non-monotone result indicates either a real semantic gap
+       or — more commonly per the 2026-05-04 backport — a scoring bug
+       (e.g. ACC-012, where class_hit was forced False for module-level
+       GTs). Override with `--accept-non-monotone REASON`.
+
+    2. **Cell-mass** — for each granularity column, if any category
+       holds ≥30% of total misses in that column, the cell is "dominant"
+       and must be classified (instrument bug vs real failure mode) per
+       the verify-instrument-before-fix T1 rule before the report can
+       be published. Override with `--allow-unexplained-cells` (only
+       valid for exploratory runs, not for any published comparison).
+
+    3. **External-comparator equivalence** — if `--external-comparator
+       NAME` is set, `--metric-equivalence-note PATH` must also be set
+       (pointing to a doc that verifies our metric definitions match
+       the external system's). Catches the failure shape of incident
+       #4: comparing our `class` Acc@10 to LocAgent's `module` Acc@10
+       column where the underlying definitions diverge.
+    """
+    violations: list[str] = []
+
+    indexed = [r for r in results if r.indexed]
+    n = len(indexed)
+    if n == 0:
+        # No data to check yet (early checkpoint); skip
+        return violations
+
+    # GATE 1: Monotonicity per mode
+    TOL = 0.05  # 5pp tolerance for ties / very-small samples
+    for mode in modes:
+        f = c = fn = 0
+        att = 0
+        for r in indexed:
+            mr = next((x for x in r.mode_results if x.mode == mode), None)
+            if mr is None:
+                continue
+            att += 1
+            if mr.file_hit:
+                f += 1
+            if mr.class_hit:
+                c += 1
+            if mr.func_hit:
+                fn += 1
+        if att == 0:
+            continue
+        f_pct, c_pct, fn_pct = f / att, c / att, fn / att
+        # file >= class >= func (within tolerance)
+        if c_pct > f_pct + TOL:
+            msg = (
+                f"non-monotone {mode}: class={c_pct:.1%} > file={f_pct:.1%} "
+                f"(violation > 5pp tolerance). Class hit cannot exceed file "
+                f"hit on Loc-Bench; this is the shape that surfaced ACC-012."
+            )
+            if accept_non_monotone:
+                violations.append(f"[ACCEPTED via --accept-non-monotone] {msg} (reason: {accept_non_monotone})")
+            else:
+                violations.append(
+                    f"REFUSE: {msg} Pass `--accept-non-monotone \"REASON\"` "
+                    f"to override after verifying instrument."
+                )
+        if fn_pct > c_pct + TOL:
+            msg = (
+                f"non-monotone {mode}: func={fn_pct:.1%} > class={c_pct:.1%} "
+                f"(violation > 5pp tolerance). Function hit cannot exceed "
+                f"class hit on Loc-Bench; this is exactly the ACC-012 shape."
+            )
+            if accept_non_monotone:
+                violations.append(f"[ACCEPTED via --accept-non-monotone] {msg} (reason: {accept_non_monotone})")
+            else:
+                violations.append(
+                    f"REFUSE: {msg} Pass `--accept-non-monotone \"REASON\"` "
+                    f"to override after verifying instrument."
+                )
+
+    # GATE 2: Cell-mass — any category holding ≥30% of misses per column
+    if not allow_unexplained_cells:
+        for mode in modes:
+            for col, getter in (
+                ("file", lambda mr: mr.file_hit),
+                ("class", lambda mr: mr.class_hit),
+                ("func", lambda mr: mr.func_hit),
+            ):
+                cat_misses: dict[str, int] = {}
+                total_misses = 0
+                for r in indexed:
+                    mr = next((x for x in r.mode_results if x.mode == mode), None)
+                    if mr is None or getter(mr):
+                        continue  # hit, not a miss
+                    cat = r.category or "Unknown"
+                    cat_misses[cat] = cat_misses.get(cat, 0) + 1
+                    total_misses += 1
+                if total_misses < 5:
+                    continue  # too few misses to be meaningful
+                for cat, miss_count in cat_misses.items():
+                    share = miss_count / total_misses
+                    if share >= 0.30:
+                        violations.append(
+                            f"REFUSE: dominant-cell on {mode}.{col}: category "
+                            f"'{cat}' holds {miss_count}/{total_misses} = "
+                            f"{share:.0%} of misses (≥30% threshold). Per the "
+                            f"verify-instrument-before-fix T1 rule, sample 3-5 "
+                            f"misses from this cell and classify INSTRUMENT vs "
+                            f"REAL before publishing. Pass "
+                            f"`--allow-unexplained-cells` for exploratory runs only."
+                        )
+
+    # GATE 3: External-comparator equivalence pairing
+    if external_comparator and not metric_equivalence_note:
+        violations.append(
+            f"REFUSE: --external-comparator '{external_comparator}' set but "
+            f"--metric-equivalence-note PATH not provided. Comparing our "
+            f"metrics to an external system's published numbers requires "
+            f"a documented metric-definition equivalence check (incident "
+            f"#4 shape: our `class` is not LocAgent's `module`). Provide a "
+            f"path to a doc that verifies the metrics measure the same thing."
+        )
+    if metric_equivalence_note and not metric_equivalence_note.exists():
+        violations.append(
+            f"REFUSE: --metric-equivalence-note path {metric_equivalence_note} "
+            f"does not exist."
+        )
+
+    return violations
+
+
 def write_report(
     results: list[InstanceResult],
     modes: list[str],
     output: Path,
     binary_label: str,
     max_mb: float,
+    accept_non_monotone: str | None = None,
+    allow_unexplained_cells: bool = False,
+    external_comparator: str | None = None,
+    metric_equivalence_note: Path | None = None,
 ) -> None:
     lines: list[str] = []
     lines.append(f"# Loc-Bench multi-mode comparison — {time.strftime('%Y-%m-%d %H:%M')}")
@@ -574,6 +721,33 @@ def write_report(
     lines.append(f"**Modes compared:** {', '.join(modes)}")
     lines.append(f"**Repo size cap:** {max_mb:.0f} MB" + (" (no cap)" if max_mb == 0 else ""))
     lines.append("")
+
+    # Mechanical refusal gate (Family C). Violations embed at the top of
+    # the report; the runner prints a stderr warning at end-of-run if
+    # any unaccepted violations remain. The report still writes (so
+    # checkpointing works) but is clearly marked as REFUSED.
+    violations = _check_report_invariants(
+        results, modes,
+        accept_non_monotone=accept_non_monotone,
+        allow_unexplained_cells=allow_unexplained_cells,
+        external_comparator=external_comparator,
+        metric_equivalence_note=metric_equivalence_note,
+    )
+    unaccepted = [v for v in violations if v.startswith("REFUSE:")]
+    if violations:
+        lines.append("## ⚠ Report invariants check")
+        lines.append("")
+        if unaccepted:
+            lines.append(
+                "**This report is REFUSED for publication or external comparison** "
+                "until the violations below are either fixed or explicitly accepted "
+                "with the appropriate override flag. The data below is preserved "
+                "for debugging only — do not cite these numbers."
+            )
+            lines.append("")
+        for v in violations:
+            lines.append(f"- {v}")
+        lines.append("")
 
     # Aggregate per-mode hit counts (only on instances that ran ALL modes)
     mode_aggregate: dict[str, dict[str, float]] = {m: {"attempted": 0, "file": 0, "class": 0, "func": 0, "cost": 0.0} for m in modes}
@@ -662,6 +836,50 @@ def main() -> int:
         default=1,
         help="Parallel worker count (1 = sequential). Each worker gets its own clone subdir.",
     )
+
+    # Family C — mechanical refusal gate flags
+    ap.add_argument(
+        "--accept-non-monotone",
+        type=str,
+        default=None,
+        metavar="REASON",
+        help=(
+            "Accept non-monotone hierarchy (e.g. class > file or func > class) "
+            "with a documented reason. Required override when monotonicity check fires."
+        ),
+    )
+    ap.add_argument(
+        "--allow-unexplained-cells",
+        action="store_true",
+        help=(
+            "Bypass cell-mass dominant-cell check (≥30% of misses in one "
+            "category × column). Only valid for exploratory runs, NOT for "
+            "any published comparison. Per verify-instrument-before-fix, "
+            "dominant cells should be sampled and classified before publication."
+        ),
+    )
+    ap.add_argument(
+        "--external-comparator",
+        type=str,
+        default=None,
+        metavar="NAME",
+        help=(
+            "Name of an external system whose published numbers this report "
+            "compares against (e.g. 'locagent', 'repomem', 'swerank'). "
+            "When set, --metric-equivalence-note PATH must also be provided."
+        ),
+    )
+    ap.add_argument(
+        "--metric-equivalence-note",
+        type=Path,
+        default=None,
+        metavar="PATH",
+        help=(
+            "Path to a doc that verifies our metric definitions match the "
+            "external comparator's. Required pair with --external-comparator."
+        ),
+    )
+
     args = ap.parse_args()
 
     modes = [m.strip() for m in args.modes.split(",") if m.strip()]
@@ -694,7 +912,13 @@ def main() -> int:
     # incrementally so a kill at instance K leaves K rows of data.
     def _checkpoint() -> None:
         ordered = sorted(results, key=lambda r: order.get(r.instance_id, 9999))
-        write_report(ordered, modes, args.output, args.binary_label, args.max_mb)
+        write_report(
+            ordered, modes, args.output, args.binary_label, args.max_mb,
+            accept_non_monotone=args.accept_non_monotone,
+            allow_unexplained_cells=args.allow_unexplained_cells,
+            external_comparator=args.external_comparator,
+            metric_equivalence_note=args.metric_equivalence_note,
+        )
 
     order = {row["instance_id"]: i for i, row in enumerate(rows)}
 
@@ -759,7 +983,34 @@ def main() -> int:
         # Final sort (checkpoint already wrote sorted output)
         results.sort(key=lambda r: order.get(r.instance_id, 9999))
 
-    write_report(results, modes, args.output, args.binary_label, args.max_mb)
+    write_report(
+        results, modes, args.output, args.binary_label, args.max_mb,
+        accept_non_monotone=args.accept_non_monotone,
+        allow_unexplained_cells=args.allow_unexplained_cells,
+        external_comparator=args.external_comparator,
+        metric_equivalence_note=args.metric_equivalence_note,
+    )
+
+    # Family C: print stderr warning at end-of-run if any unaccepted
+    # violations remain. The report itself has the violations embedded
+    # at the top; this is the runtime signal.
+    final_violations = _check_report_invariants(
+        results, modes,
+        accept_non_monotone=args.accept_non_monotone,
+        allow_unexplained_cells=args.allow_unexplained_cells,
+        external_comparator=args.external_comparator,
+        metric_equivalence_note=args.metric_equivalence_note,
+    )
+    unaccepted = [v for v in final_violations if v.startswith("REFUSE:")]
+    if unaccepted:
+        print(
+            f"\n!!! REPORT REFUSED: {len(unaccepted)} unaccepted invariant "
+            f"violation(s). See top of {args.output} for details. Do NOT "
+            f"cite these numbers in any external comparison.",
+            file=sys.stderr,
+        )
+        return 3  # distinct exit code for invariant failure
+
     return 0
 
 

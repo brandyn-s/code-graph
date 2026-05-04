@@ -63,6 +63,15 @@ jobs:
         run: |
           CGO_ENABLED=1 go build -o bin/codebase-memory-mcp ./cmd/codebase-memory-mcp/
 
+      - name: Run CBM↔resolver QN-format contract tests (Family A — incident #2 coverage)
+        run: |
+          # Contract test: CBM's emitted Definition.QualifiedName must
+          # match fqn.Compute's output for the same project/relPath.
+          # Any drift between the two (incident #2 shape) silently
+          # breaks resolveViaSameModule for every same-package callee.
+          # Closes the last gap in Family A coverage from PR #182.
+          go test ./internal/cbm/ -run TestCBMResolverQNContract -v
+
       - name: Install Python test deps
         run: |
           python -m pip install --upgrade pip

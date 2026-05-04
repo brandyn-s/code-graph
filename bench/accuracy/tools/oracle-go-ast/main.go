@@ -355,12 +355,15 @@ func processFile(path, crateRoot, project string, allEdges *[]Edge, allDefs *[]s
 	// separators BUT for Go packages, the "file" segment is just the
 	// filename (without directories). Verified: `internal/store/router.go`
 	// indexed with root = `internal/store/` becomes project+router+fn,
-	// not project+router+go+fn.
-	parts := strings.Split(relNoExt, "/")
-	if len(parts) == 0 || parts[0] == "" {
+	// not project+router+go+fn. ACC-009 fix: previously we joined the full
+	// rel path with `.`, which doubled the package segment for files like
+	// `helpers/helpers.go` (produced `<project>.helpers.helpers`). Use
+	// the basename so `helpers/helpers.go` → `<project>.helpers`.
+	base := filepath.Base(relNoExt)
+	if base == "" || base == "." {
 		return nil
 	}
-	fileQN := project + "." + strings.Join(parts, ".")
+	fileQN := project + "." + base
 
 	v := &visitor{
 		fset:    fset,

@@ -1,14 +1,14 @@
 {
-  "description": "Hand-authored ground truth for go-minimal synthetic fixture. Module path github.com/example/go-minimal, 2 packages (main, helpers), every edge enumerable.",
+  "description": "Hand-authored ground truth for go-minimal synthetic fixture. Module path github.com/example/go-minimal, 2 packages (main, helpers), every edge enumerable. QN form is oracle-emit form: caller is fully-qualified `<project>.<file>.<func>`; callee is the syntactic call expression (`helpers.Greet` for cross-pkg, bare name `leaf` for same-pkg). Realigned 2026-05-03 from Go-import-path form to oracle-emit form as part of ACC-009 fix.",
   "expected_internal_calls": [
-    {"from_qn": "github.com/example/go-minimal.entry",         "to_qn": "github.com/example/go-minimal/helpers.Greet"},
-    {"from_qn": "github.com/example/go-minimal.entry",         "to_qn": "github.com/example/go-minimal.leaf"},
-    {"from_qn": "github.com/example/go-minimal.leaf",          "to_qn": "github.com/example/go-minimal.helper"},
-    {"from_qn": "github.com/example/go-minimal.main",          "to_qn": "github.com/example/go-minimal.entry"},
-    {"from_qn": "github.com/example/go-minimal/helpers.Greet", "to_qn": "github.com/example/go-minimal/helpers.innerGreet"}
+    {"from_qn": "go-minimal.main.entry",       "to_qn": "helpers.Greet"},
+    {"from_qn": "go-minimal.main.entry",       "to_qn": "leaf"},
+    {"from_qn": "go-minimal.main.leaf",        "to_qn": "helper"},
+    {"from_qn": "go-minimal.main.main",        "to_qn": "entry"},
+    {"from_qn": "go-minimal.helpers.Greet",    "to_qn": "innerGreet"}
   ],
   "expected_internal_imports": [
-    {"from_qn": "github.com/example/go-minimal", "to_qn": "github.com/example/go-minimal/helpers"}
+    {"from_qn": "go-minimal.main", "to_qn": "github.com/example/go-minimal/helpers"}
   ],
   "expected_caller_kind_invariants": {
     "every_edge_has_caller_node_kind": true,
@@ -43,5 +43,5 @@
     "fixture_augmented_with_same_named_method": false,
     "rationale": "Every callee in this fixture is uniquely named project-wide (entry, leaf, helper, main, Greet, innerGreet — no duplicates) and every receiver is unambiguous (no methods on multiple struct types). Every CALLS edge therefore carries candidate_set_size=1. method_set_ambiguity_index = 0.0 because no call site has >= 2 candidates. janusian_site_precision_split has only the 'unambiguous' bucket populated; 'ambiguous' bucket support=0. We did NOT augment the fixture with a same-named-method case — the existing 5-edge ground truth would change shape (more expected edges) and risk regressing the resolver_rule and caller_kind gates. The candidate_set_test.go unit tests cover the multi-candidate signal directly (TestResolveCallEdge_SameNamedMethodOnTwoStructs_CandidateSetSizeTwo, TestResolveCallEdge_InterfaceSatisfactionTwoImpls_CandidateSetSizeAtLeastTwo). Step 5 prove-the-instrument gate per verify-effectiveness.md — verifies the property is populated on every edge and the index computes the expected value (0.0) on a known-unambiguous fixture."
   },
-  "notes": "5 internal CALLS, 1 internal IMPORTS. RTA resolves interface methods; we don't have any interfaces so RTA = CHA = static here. External imports (none explicit) excluded. The expected_internal_calls QNs use Go-import-path form for human readability; code-graph emits sanitized-path form (c-Users-...) — equivalent edges, different string representation. Gates assert on caller_node_kind / resolver_rule / candidate_set_size properties, not on the QN form."
+  "notes": "5 internal CALLS, 1 internal IMPORTS. RTA resolves interface methods; we don't have any interfaces so RTA = CHA = static here. External imports (none explicit) excluded. ACC-009 (2026-05-03): GT realigned from Go-import-path form to oracle-emit form; oracle's doubled-package bug for non-main packages also fixed (helpers/helpers.go now emits go-minimal.helpers, not go-minimal.helpers.helpers). The accuracy-regression workflow's strict QN string equality check now passes."
 }

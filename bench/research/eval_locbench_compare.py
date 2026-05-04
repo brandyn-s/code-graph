@@ -331,6 +331,16 @@ def score_entities(
                 if qn_lower.endswith(f".{cls.lower()}.{fn.lower()}"):
                     func_hit = True
             else:
+                # GT has no class component — the enclosing scope IS the
+                # module/file. Treat class_hit as scope_hit: when the agent
+                # identified the right file, it has identified the correct
+                # enclosing scope. Without this fix, ~34% of Loc-Bench
+                # Python instances (those targeting module-level functions)
+                # would force class_hit=False regardless of agent output —
+                # an instrument bug discovered 2026-05-04 (the column was
+                # incorrectly reported as -24pp behind LocAgent's "module"
+                # column when in fact we were measuring different metrics).
+                class_hit = True
                 # Func hit: qn ends with '.fn'
                 if qn_lower.endswith(f".{fn.lower()}"):
                     func_hit = True

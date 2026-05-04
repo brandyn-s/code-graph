@@ -415,17 +415,43 @@ func runOnce(ctx context.Context, st *store.Store, project, issue string, topK i
 		}
 	}
 
+	// Episodic memory retrieval (Phase C3, opt-in via LOCAGENT_EPISODIC_MEMORY=1).
+	// Best-effort: any failure logs and continues without the section.
+	episodicHits, eerr := retrieveEpisodicMemory(ctx, issue)
+	if eerr != nil {
+		// Soft-fail — don't break the agent loop on episodic retrieval issues.
+		// The transcript records the failure for debuggability.
+		result.Transcript = append(result.Transcript, TranscriptEntry{
+			Turn:    0,
+			Kind:    "episodic_error",
+			Summary: truncate("retrieve failed: "+eerr.Error(), 200),
+		})
+	} else if len(episodicHits) > 0 {
+		hitNames := make([]string, len(episodicHits))
+		for i, h := range episodicHits {
+			hitNames[i] = h.QName
+		}
+		result.Transcript = append(result.Transcript, TranscriptEntry{
+			Turn:    0,
+			Kind:    "episodic",
+			Summary: fmt.Sprintf("retrieved %d hits: %s", len(episodicHits), strings.Join(hitNames, ", ")),
+		})
+	}
+	episodicSection := formatEpisodicSection(episodicHits)
+
 	// Initial user message: the issue + topK budget. If rewritten, append
 	// the focused terms so the agent uses them in early rank_by_query
-	// calls but still has the original prose for context.
+	// calls but still has the original prose for context. Episodic memory
+	// section (when enabled) is appended between the issue/terms and the
+	// "return at most N" instruction.
 	var userInitial string
 	if rewrittenQuery != "" {
 		userInitial = fmt.Sprintf(
-			"Issue:\n%s\n\nFocused search terms (extracted from the issue):\n%s\n\nReturn at most %d entities ranked best-first.",
-			issue, rewrittenQuery, topK,
+			"Issue:\n%s\n\nFocused search terms (extracted from the issue):\n%s%s\n\nReturn at most %d entities ranked best-first.",
+			issue, rewrittenQuery, episodicSection, topK,
 		)
 	} else {
-		userInitial = fmt.Sprintf("Issue:\n%s\n\nReturn at most %d entities ranked best-first.", issue, topK)
+		userInitial = fmt.Sprintf("Issue:\n%s%s\n\nReturn at most %d entities ranked best-first.", issue, episodicSection, topK)
 	}
 	messages := []anthropic.Message{
 		{

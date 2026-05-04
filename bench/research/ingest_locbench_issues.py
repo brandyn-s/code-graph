@@ -44,8 +44,8 @@ VOYAGE_MODEL = "voyage-code-3"
 VOYAGE_BATCH_SIZE = 64
 VOYAGE_BATCH_DELAY_S = 1.0
 
-PROJECT_NAME = "episodic-memory-locbench"
-ROOT_PATH = "<synthetic: locbench mined issues>"
+DEFAULT_PROJECT_NAME = "episodic-memory-locbench"
+DEFAULT_ROOT_PATH = "<synthetic: locbench mined issues>"
 LABEL = "IssueMemory"
 
 BODY_TRUNCATE_CHARS = 8000  # Per C2 plan
@@ -160,11 +160,34 @@ def main() -> None:
     parser.add_argument(
         "--db",
         type=Path,
-        default=Path.home() / ".cache" / "codebase-memory-mcp" / f"{PROJECT_NAME}.db",
+        default=None,
+        help="SQLite output path. Defaults to ~/.cache/codebase-memory-mcp/{project}.db",
+    )
+    parser.add_argument(
+        "--project",
+        type=str,
+        default=DEFAULT_PROJECT_NAME,
+        help="code-graph project name (also used in nodes.project column). "
+             "Default 'episodic-memory-locbench'. Use 'episodic-memory-redacted' "
+             "for the redacted-internal corpus, or any other namespaced corpus.",
+    )
+    parser.add_argument(
+        "--root-path",
+        type=str,
+        default=None,
+        help="Root path string for the project row (cosmetic). "
+             "Default depends on --project.",
     )
     parser.add_argument("--limit", type=int, default=None, help="Smoke-test record cap")
     parser.add_argument("--dry-run", action="store_true", help="Embed but don't write to DB")
     args = parser.parse_args()
+    if args.db is None:
+        args.db = Path.home() / ".cache" / "codebase-memory-mcp" / f"{args.project}.db"
+    if args.root_path is None:
+        args.root_path = (
+            DEFAULT_ROOT_PATH if args.project == DEFAULT_PROJECT_NAME
+            else f"<synthetic: {args.project} mined corpus>"
+        )
 
     api_key = os.environ.get("VOYAGE_API_KEY")
     if not api_key:
@@ -212,7 +235,7 @@ def main() -> None:
         conn.execute(
             "INSERT INTO projects(name, indexed_at, root_path) VALUES(?, ?, ?) "
             "ON CONFLICT(name) DO UPDATE SET indexed_at=excluded.indexed_at, root_path=excluded.root_path",
-            (PROJECT_NAME, now_iso, ROOT_PATH),
+            (args.project, now_iso, args.root_path),
         )
 
         for rec, vec in zip(records, all_vecs):
@@ -232,14 +255,14 @@ def main() -> None:
                 "VALUES(?, ?, ?, ?, '', 0, 0, ?) "
                 "ON CONFLICT(project, qualified_name) DO UPDATE SET "
                 "label=excluded.label, name=excluded.name, properties=excluded.properties",
-                (PROJECT_NAME, LABEL, name, qn, json.dumps(props)),
+                (args.project, LABEL, name, qn, json.dumps(props)),
             )
             node_id = cur.lastrowid
             if not node_id:
                 # On conflict, fetch the existing id
                 row = conn.execute(
                     "SELECT id FROM nodes WHERE project=? AND qualified_name=?",
-                    (PROJECT_NAME, qn),
+                    (args.project, qn),
                 ).fetchone()
                 if not row:
                     raise RuntimeError(f"failed to resolve node id for {qn}")

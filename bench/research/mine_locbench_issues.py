@@ -186,19 +186,26 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    if not args.locbench_repos_json.exists():
-        print(
-            f"ERROR: {args.locbench_repos_json} not found. Run enumerate_locbench_repos.py first.",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-    eval_prs_by_repo = parse_eval_prs(args.locbench_repos_json)
-    data = json.loads(args.locbench_repos_json.read_text(encoding="utf-8"))
+    # locbench JSON is required only when we need eval-PR exclusion
+    # (Loc-Bench corpus). For other corpora (e.g. redacted-internal mining),
+    # --repos is passed explicitly and no exclusion is needed.
+    eval_prs_by_repo: dict[str, set[int]] = {}
+    if args.locbench_repos_json.exists():
+        eval_prs_by_repo = parse_eval_prs(args.locbench_repos_json)
+        data = json.loads(args.locbench_repos_json.read_text(encoding="utf-8"))
+    else:
+        data = None
 
     if args.repos:
         repos = args.repos.split(",")
     else:
+        if data is None:
+            print(
+                f"ERROR: --repos not given AND {args.locbench_repos_json} not found. "
+                "Either pass --repos, or run enumerate_locbench_repos.py first.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
         repos = [r["repo"] for r in data["repos_by_instance_count"][: args.top_n]]
 
     args.output.parent.mkdir(parents=True, exist_ok=True)

@@ -66,11 +66,21 @@ def main() -> None:
     parser.add_argument("query", type=str)
     parser.add_argument("--k", type=int, default=3)
     parser.add_argument(
+        "--project",
+        type=str,
+        default=PROJECT_NAME,
+        help="Project name to query against. Default 'episodic-memory-locbench'. "
+             "Use 'episodic-memory-redacted' for the redacted-internal corpus.",
+    )
+    parser.add_argument(
         "--db",
         type=Path,
-        default=Path.home() / ".cache" / "codebase-memory-mcp" / f"{PROJECT_NAME}.db",
+        default=None,
+        help="DB path. Defaults to ~/.cache/codebase-memory-mcp/{project}.db",
     )
     args = parser.parse_args()
+    if args.db is None:
+        args.db = Path.home() / ".cache" / "codebase-memory-mcp" / f"{args.project}.db"
 
     api_key = os.environ.get("VOYAGE_API_KEY")
     if not api_key:
@@ -89,7 +99,7 @@ def main() -> None:
         """SELECT n.id, n.qualified_name, n.properties, e.embedding
            FROM nodes n JOIN node_embeddings e ON n.id = e.node_id
            WHERE n.project=? AND n.label='IssueMemory'""",
-        (PROJECT_NAME,),
+        (args.project,),
     ).fetchall()
     conn.close()
 

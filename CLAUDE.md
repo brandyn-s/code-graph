@@ -100,15 +100,17 @@ n=16 sample (structured scorer, 2026-04-25, illustrative only — sampling noise
 | hybrid-primitives | 44% | 6% | 19% |
 | `code_localize_agent` (default config) | 94% | 50% | 88% |
 
-n=200 measurement (2026-05-03, 4 workers, hybrid-agent only, single-iteration, structured scorer):
+n=200 measurement (2026-05-04, 4 workers, hybrid-agent, **iter=2 / MRR aggregation**, structured scorer):
 
 | Mode | File Acc@10 | Class Acc@10 | Func Acc@10 |
 |------|------|-------|------|
-| `code_localize_agent` (Haiku 4.5) | **82.5%** | 46.5% | 61.0% |
+| `code_localize_agent` (Haiku 4.5, iter=2) | **86.0%** | **84.5%** | **73.5%** |
 
-95% CI: file ±5.3%, class ±6.9%, func ±6.8%. Avg cost $0.05/query, avg latency 28.8s.
+Avg cost $0.048/query, total $9.60. Indexed 200/200. See `bench/accuracy/baselines/2026-05-04-loc-bench-n200-iter2.md`.
 
-The n=16 result was a small-sample lucky draw. **The defended number is the n=200 measurement above.**
+Single-shot (iter=1) baseline (n=200, 2026-05-03): file=82.5%, class=46.5%, func=61.0%. The non-monotone class-gap (`func > class`) at iter=1 was an iteration-count artifact — single-shot picked semantically-near-but-not-canonical classes; MRR aggregation across iter=2 stabilizes on the right one (+38pp class lift). Phase A class-gap diagnosis closed by data, not by sample inspection.
+
+**The defended number is the iter=2 measurement above.** iter=2 is the production default (`LOCAGENT_ITERATIONS=2`).
 
 #### Comparison vs LocAgent paper (ACL 2025, arXiv 2503.09089)
 

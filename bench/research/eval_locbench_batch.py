@@ -428,6 +428,21 @@ def write_report(summary: BatchSummary, output: Path) -> None:
 
 
 def main() -> int:
+    # Force line-buffered stdout. Without this, print() output is
+    # block-buffered when stdout is redirected to a file (background
+    # launches via nohup, `python ... > log &`, etc.) and the operator
+    # can't tell whether the script is making progress or hung. The
+    # buffer flushes only on script exit — so a 30-min run looks like a
+    # 30-min freeze. Diagnosed 2026-05-05 during the code-graph
+    # production-readiness audit: a launched n=10 batch appeared hung
+    # for 20+ minutes with 0 stdout while clones progressed in the
+    # workdir. line_buffering=True flushes per newline regardless of
+    # tty/pipe destination.
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(line_buffering=True)
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(line_buffering=True)
+
     ap = argparse.ArgumentParser()
     ap.add_argument("--n", type=int, default=20, help="Number of instances")
     ap.add_argument("--seed", type=int, default=42, help="Random seed for sampling")

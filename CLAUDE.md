@@ -164,4 +164,4 @@ func TestSearchParamsZeroValue_<field>_Inactive(t *testing.T) {
 
 ## Protected Repo
 
-PR required to merge to main. Use `--repo redacted-org/code-graph` with `gh` CLI.
+PR required to merge to main. Use `--repo redacted-org/code-graph` with `gh` CLI (the repo was transferred from `redacted-org` to `redacted-org` during the 2026-04-26 personal/director-managed-repos split).

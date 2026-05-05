@@ -159,12 +159,104 @@ func buildTraceResponse(st *store.Store, rootNode *store.Node, project string, h
 	if proj != nil {
 		indexedAt = proj.IndexedAt
 	}
+
+	// Sum unresolved_call_count across root + visited nodes. This signals
+	// how many call-sites the extractor saw but could not bind to a concrete
+	// callee (closures, fn-pointers, trait-objects, dynamic dispatch, builtins,
+	// methods on dynamically-typed objects). Surfacing the total lets callers
+	// distinguish "no callees, confidently" from "no callees, extraction
+	// missed dispatch sites".
+	unresolvedTotal := nodeUnresolvedCount(rootNode)
+	for _, nh := range visited {
+		if nh != nil && nh.Node != nil {
+			unresolvedTotal += nodeUnresolvedCount(nh.Node)
+		}
+	}
+
+	// confidence_band classifies the trace by resolved/(resolved+unresolved).
+	// "high" — extractor bound the call sites well; trust the edges
+	// "medium" — partial coverage; trust the edges but expect gaps
+	// "low" — most call sites unresolved; combine with grep before trusting
+	// "speculative" — zero edges and >0 unresolved; trace is silent on real calls
+	resolvedCount := len(edges)
+	band := traceConfidenceBand(resolvedCount, unresolvedTotal)
+
 	return map[string]any{
-		"root":          buildNodeInfo(rootNode),
-		"hops":          hops,
-		"edges":         buildEdgeList(edges),
-		"indexed_at":    indexedAt,
-		"total_results": len(visited),
+		"root":                   buildNodeInfo(rootNode),
+		"hops":                   hops,
+		"edges":                  buildEdgeList(edges),
+		"indexed_at":             indexedAt,
+		"total_results":          len(visited),
+		"unresolved_call_count":  unresolvedTotal,
+		"confidence_band":        band,
+	}
+}
+
+func nodeUnresolvedCount(n *store.Node) int {
+	if n == nil || n.Properties == nil {
+		return 0
+	}
+	v, ok := n.Properties["unresolved_call_count"]
+	if !ok {
+		return 0
+	}
+	switch x := v.(type) {
+	case int:
+		return x
+	case int64:
+		return int(x)
+	case float64:
+		return int(x)
+	}
+	return 0
+}
+
+// traceConfidenceBand classifies a function's call-resolution quality.
+//
+// Thresholds were originally heuristic (0.8/0.5/0.2 — added 2026-05-05 in
+// the initial confidence_band ship). 2026-05-05b: replaced with empirical
+// thresholds from a probe over all 11 indexed projects (n=18,783 functions
+// with both resolved and unresolved calls; bench/research/
+// confidence_band_distribution.py). The distribution is sharply bimodal:
+//   - 72% of nodes cluster at ratio >= 0.95 (perfect/near-perfect resolution)
+//   - ~10% cluster at ratio < 0.10 (essentially all calls unresolved)
+//   - Middle bands (0.10-0.95) are sparse and overrepresent partial-extraction
+//     cases (e.g., Python with some method calls resolved, others on
+//     dynamically-typed Path objects unresolved).
+// Heuristic 0.8/0.5 thresholds put 72% of nodes in "high" — too generous
+// to be informative. Empirical 0.95/0.10 thresholds match the natural
+// breakpoints in the data and produce calibrated output.
+//
+// Per-language follow-up: psm (Rust/TS) shows P10=1.00
+// across the board (well-typed languages resolve cleanly). Python projects
+// (.claude, mcp-servers, rmf-corsair, mcp-infra) skew low. Future work could
+// emit a band-per-language threshold; for now, global thresholds give
+// honest signal to callers.
+func traceConfidenceBand(resolved, unresolved int) string {
+	total := resolved + unresolved
+	if total == 0 {
+		// No calls reported at all — likely a leaf or a function the extractor
+		// considers fully resolved-as-empty. Distinct from "speculative".
+		return "high"
+	}
+	if resolved == 0 && unresolved > 0 {
+		return "speculative"
+	}
+	ratio := float64(resolved) / float64(total)
+	switch {
+	case ratio >= 0.95:
+		// Empirically the dominant cluster — 72% of nodes hit this in the
+		// 2026-05-05 probe across 11 projects.
+		return "high"
+	case ratio >= 0.10:
+		// The sparse middle. Partial extraction; trust the edges that ARE
+		// there but expect gaps. ~18% of nodes land here.
+		return "medium"
+	default:
+		// Below 10% resolved — essentially "the extractor saw N call sites
+		// and bound 0 or 1 of them." ~10% of nodes hit this. Distinct from
+		// "speculative" only by having at least one resolved edge.
+		return "low"
 	}
 }
 

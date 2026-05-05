@@ -89,7 +89,19 @@ func OpenInDir(dir, project string) (*Store, error) {
 }
 
 // OpenPath opens a SQLite database at the given path.
+//
+// If the main .db file is missing but sidecar files (-wal or -shm) exist, this
+// returns a structured error instead of silently re-creating an empty DB.
+// The orphan-sidecar condition usually means the operator deleted the .db
+// accidentally; silent re-create would be data loss with no signal.
+// Recovery: call DeleteProject (or remove the sidecars manually) and re-index.
+//
+// If neither main DB nor sidecars exist, this is a normal fresh-create.
 func OpenPath(dbPath string) (*Store, error) {
+	if err := checkOrphanSidecars(dbPath); err != nil {
+		return nil, err
+	}
+
 	// Recover from stale SHM left by SIGKILL: if WAL is empty/missing but SHM exists,
 	// the SHM has stale lock state that can deadlock new connections. Safe to remove.
 	recoverStaleSHM(dbPath)
@@ -125,6 +137,41 @@ func OpenPath(dbPath string) (*Store, error) {
 	}
 	slog.Debug("store.open", "path", dbPath, "cache_mb", cacheMB)
 	return s, nil
+}
+
+// checkOrphanSidecars returns a structured error if the main .db file is
+// missing but sidecar files (.db-wal or .db-shm) exist.
+//
+// This guards against the silent-data-loss scenario where an operator deletes
+// the main DB file (intentionally or not) and leaves sidecars behind. Without
+// this check, the next OpenPath call would silently create a fresh empty DB
+// with no signal that prior data was lost.
+//
+// If neither main DB nor sidecars exist, returns nil — that's a normal
+// fresh-create case and OpenPath should proceed.
+//
+// See RECOVERY_TAXONOMY.md Mode 5.
+func checkOrphanSidecars(dbPath string) error {
+	if _, err := os.Stat(dbPath); err == nil {
+		return nil // main DB exists, no orphan check needed
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("stat db: %w", err)
+	}
+
+	walPath := dbPath + "-wal"
+	shmPath := dbPath + "-shm"
+	walExists := false
+	shmExists := false
+	if _, err := os.Stat(walPath); err == nil {
+		walExists = true
+	}
+	if _, err := os.Stat(shmPath); err == nil {
+		shmExists = true
+	}
+	if walExists || shmExists {
+		return fmt.Errorf("main DB missing but sidecar files present (wal=%t shm=%t) — likely accidental delete; run delete_project to clean up or restore from backup", walExists, shmExists)
+	}
+	return nil
 }
 
 // recoverStaleSHM removes stale SHM files left by unclean shutdowns (SIGKILL).

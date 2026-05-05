@@ -162,6 +162,33 @@ func TestSearchParamsZeroValue_<field>_Inactive(t *testing.T) {
 }
 ```
 
+## Recovery procedures
+
+When `~/.claude/scripts/verify-indexes.py` reports a code-graph DB has issues
+(or `PRAGMA integrity_check` returns non-`ok`), use this table to map the
+failure shape to the right action. Each row references the test that pins
+the procedure's correctness — run the test if you're modifying recovery code
+and want to confirm the procedure still works.
+
+Full taxonomy: `internal/store/RECOVERY_TAXONOMY.md` (7 modes + 1 config-DB mode + Out-of-scope).
+
+| Failure shape | Detection signal | Operator action | Test |
+|---|---|---|---|
+| WAL truncated (power loss) | None — silent and correct | None | `TestRecoverFromTruncatedWAL` |
+| Indexer killed mid-pass (WAL mode) | Missing data; `integrity_check` passes | Re-run `index_repository` (incremental) | `TestRecoverFromUnflushedTransaction` |
+| `.db-shm` deleted | None — SQLite re-creates | None | `TestRecoverFromMissingShm` |
+| Corrupt header (`file is not a database`) | `OpenPath` returns wrapped error | `delete_project` + `index_repository(force=true)` | `TestCorruptHeaderReturnsActionableError` |
+| Main `.db` deleted with orphan `-wal`/`-shm` | `OpenPath` returns "main DB missing but sidecar files present" | If unintentional: restore from backup before next open. Otherwise: `delete_project` + `index_repository` | `TestMissingDBWithOrphanSidecarReturnsError` |
+| Concurrent writers contention | None at N≤3; `database is locked` may escape at N≥10 | Retry the operation; serialization is automatic | `TestConcurrentWritersSerialize` (N=2/3/10) |
+| BulkWrite crash (MEMORY journal) | `PRAGMA integrity_check` returns non-`ok` | `delete_project` + `index_repository(force=true)` | `TestBulkWriteCrashSurfacesViaIntegrityCheck` |
+
+End-to-end procedure (Mode 4 corruption → fresh re-index) is pinned by `TestEndToEndCorruptionRecovery`.
+
+```bash
+# Run the full recovery test suite
+go test ./internal/store/ -run "TestRecover|TestBulkWrite|TestCorruptHeader|TestMissingDB|TestConcurrent|TestEndToEnd" -v -count=1
+```
+
 ## Protected Repo
 
 PR required to merge to main. Use `--repo redacted-org/code-graph` with `gh` CLI (the repo was transferred from `redacted-org` to `redacted-org` during the 2026-04-26 personal/director-managed-repos split).

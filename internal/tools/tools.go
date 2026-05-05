@@ -317,9 +317,44 @@ func (s *Server) resolveStore(project string) (*store.Store, error) {
 }
 
 // resolveProjectName returns the effective project name for routing.
+//
+// Resolution order:
+//  1. Empty input → session project (existing behavior).
+//  2. Exact match against registered canonical (path-mangled) name → return as-is.
+//  3. Friendly-name match: input equals filepath.Base of a registered project's
+//     RootPath (e.g. "claude-config" → "c-Users-user-.claude"). Returns
+//     the canonical form when exactly one project matches.
+//  4. Otherwise, return input unchanged so existing error paths surface.
 func (s *Server) resolveProjectName(project string) string {
 	if project == "" {
 		return s.sessionProject
+	}
+	if s.router == nil || s.router.HasProject(project) {
+		return project
+	}
+	infos, err := s.router.ListProjects()
+	if err != nil {
+		return project
+	}
+	matches := []string{}
+	for _, info := range infos {
+		if strings.HasPrefix(info.Name, "_") {
+			continue
+		}
+		st, err := s.router.ForProject(info.Name)
+		if err != nil {
+			continue
+		}
+		proj, _ := st.GetProject(info.Name)
+		if proj == nil {
+			continue
+		}
+		if filepath.Base(proj.RootPath) == project {
+			matches = append(matches, info.Name)
+		}
+	}
+	if len(matches) == 1 {
+		return matches[0]
 	}
 	return project
 }

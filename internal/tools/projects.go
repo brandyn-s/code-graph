@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"math"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/DeusData/codebase-memory-mcp/internal/pipeline"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
+
 
 func (s *Server) handleListProjects(_ context.Context, _ *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	projectInfos, err := s.router.ListProjects()
@@ -30,6 +32,10 @@ func (s *Server) handleListProjects(_ context.Context, _ *mcp.CallToolRequest) (
 
 	result := make([]projectEntry, 0, len(projectInfos))
 	for _, info := range projectInfos {
+		// Skip internal config DBs (e.g. _config.db stores session state, not user code).
+		if strings.HasPrefix(info.Name, "_") {
+			continue
+		}
 		st, err := s.router.ForProject(info.Name)
 		if err != nil {
 			continue
@@ -109,6 +115,9 @@ func (s *Server) handleIndexStatus(_ context.Context, req *mcp.CallToolRequest) 
 			"message": "No session project detected. Pass 'project' parameter or ensure the MCP client provides roots.",
 		}), nil
 	}
+
+	// Allow friendly names (e.g. "claude-config" → "c-Users-user-.claude")
+	projectName = s.resolveProjectName(projectName)
 
 	// Check if DB file exists
 	if !s.router.HasProject(projectName) {

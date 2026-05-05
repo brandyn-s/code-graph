@@ -165,6 +165,13 @@ var fastIgnorePatterns = []string{
 
 // shouldSkipDir returns true if the directory should be skipped during discovery.
 func shouldSkipDir(name, rel string, extraIgnore []string, mode IndexMode) bool {
+	// Never skip the root — the user explicitly chose this path. Without this
+	// short-circuit, indexing a dot-prefixed root (e.g. ~/.claude) under
+	// ModeFast aborts the walk on the first iteration via the dot-prefix
+	// filter below, producing files_indexed=0.
+	if rel == "." {
+		return false
+	}
 	if IGNORE_PATTERNS[name] {
 		return true
 	}

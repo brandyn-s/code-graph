@@ -108,6 +108,32 @@ func TestDiscoverSkipsWorktrees(t *testing.T) {
 	}
 }
 
+func TestDiscoverDotPrefixedRootInFastMode(t *testing.T) {
+	// Regression: indexing a dot-prefixed root (e.g. ~/.claude) under
+	// ModeFast used to abort the walk on the first iteration, producing
+	// files_indexed=0. shouldSkipDir now short-circuits when rel == ".".
+	parent := t.TempDir()
+	dotRoot := filepath.Join(parent, ".myroot")
+	if err := os.MkdirAll(dotRoot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dotRoot, "main.go"), []byte("package main\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dotRoot, "app.py"), []byte("def main(): pass\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	files, err := Discover(context.Background(), dotRoot, &Options{Mode: ModeFast})
+	if err != nil {
+		t.Fatalf("Discover: %v", err)
+	}
+
+	if len(files) != 2 {
+		t.Fatalf("expected 2 files in dot-prefixed root under ModeFast, got %d", len(files))
+	}
+}
+
 func TestDiscoverCancellation(t *testing.T) {
 	dir := t.TempDir()
 

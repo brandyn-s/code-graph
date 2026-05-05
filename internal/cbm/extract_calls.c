@@ -306,6 +306,48 @@ static void walk_calls(CBMExtractCtx* ctx, TSNode node, const CBMLangSpec* spec)
                 }
             }
         }
+
+        // Python: getattr(obj, "method")(...) — INDIRECT_CALLS v0.2.
+        // Symmetric to handle_calls() path; see comment there.
+        if (ctx->language == CBM_LANG_PYTHON) {
+            TSNode outer_func = ts_node_child_by_field_name(node, "function", 8);
+            if (!ts_node_is_null(outer_func) &&
+                strcmp(ts_node_type(outer_func), "call") == 0) {
+                TSNode inner_func = ts_node_child_by_field_name(outer_func, "function", 8);
+                if (!ts_node_is_null(inner_func) &&
+                    strcmp(ts_node_type(inner_func), "identifier") == 0) {
+                    char* inner_name = cbm_node_text(ctx->arena, inner_func, ctx->source);
+                    if (inner_name && strcmp(inner_name, "getattr") == 0) {
+                        TSNode inner_args = ts_node_child_by_field_name(outer_func, "arguments", 9);
+                        if (!ts_node_is_null(inner_args)) {
+                            uint32_t inner_count = ts_node_named_child_count(inner_args);
+                            if (inner_count >= 2) {
+                                TSNode method_arg = ts_node_named_child(inner_args, 1);
+                                if (!ts_node_is_null(method_arg) &&
+                                    strcmp(ts_node_type(method_arg), "string") == 0) {
+                                    uint32_t scount = ts_node_named_child_count(method_arg);
+                                    for (uint32_t si = 0; si < scount; si++) {
+                                        TSNode sc = ts_node_named_child(method_arg, si);
+                                        if (strcmp(ts_node_type(sc), "string_content") == 0) {
+                                            char* method_name = cbm_node_text(ctx->arena, sc, ctx->source);
+                                            if (method_name && method_name[0] &&
+                                                !cbm_is_keyword(method_name, ctx->language)) {
+                                                CBMCall ga_call;
+                                                ga_call.callee_name = method_name;
+                                                ga_call.enclosing_func_qn =
+                                                    cbm_enclosing_func_qn_cached(ctx, node);
+                                                cbm_calls_push(&ctx->result->calls, ctx->arena, ga_call);
+                                            }
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
         // Don't recurse into call arguments for nested calls — the walk handles that
     }
 
@@ -406,6 +448,62 @@ void handle_calls(CBMExtractCtx* ctx, TSNode node, const CBMLangSpec* spec, Walk
                                     sub_call.callee_name = sub_name;
                                     sub_call.enclosing_func_qn = state->enclosing_func_qn;
                                     cbm_calls_push(&ctx->result->calls, ctx->arena, sub_call);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Python: getattr(obj, "method")(...) — emit "method" as a call
+        // target. INDIRECT_CALLS v0.2.
+        //
+        // This case fires even when callee is empty (the outer call's
+        // function is a `call` node — extract_callee_name returns NULL
+        // for nested-call shapes — so we don't get into the callee-
+        // emission branch above). Detection is independent of callee
+        // extraction.
+        //
+        // Variable name (`getattr(obj, name_var)`) is not handled — only
+        // string-literal method names. Skipping the variable case is the
+        // conservative choice; better to under-emit than emit phantom
+        // edges to wrong targets.
+        if (ctx->language == CBM_LANG_PYTHON) {
+            TSNode outer_func = ts_node_child_by_field_name(node, "function", 8);
+            if (!ts_node_is_null(outer_func) &&
+                strcmp(ts_node_type(outer_func), "call") == 0) {
+                // outer_func is itself a call — could be getattr(...)
+                TSNode inner_func = ts_node_child_by_field_name(outer_func, "function", 8);
+                if (!ts_node_is_null(inner_func) &&
+                    strcmp(ts_node_type(inner_func), "identifier") == 0) {
+                    char* inner_name = cbm_node_text(ctx->arena, inner_func, ctx->source);
+                    if (inner_name && strcmp(inner_name, "getattr") == 0) {
+                        TSNode inner_args = ts_node_child_by_field_name(outer_func, "arguments", 9);
+                        if (!ts_node_is_null(inner_args)) {
+                            uint32_t inner_count = ts_node_named_child_count(inner_args);
+                            if (inner_count >= 2) {
+                                TSNode method_arg = ts_node_named_child(inner_args, 1);
+                                if (!ts_node_is_null(method_arg) &&
+                                    strcmp(ts_node_type(method_arg), "string") == 0) {
+                                    // string node has children: string_start,
+                                    // string_content, string_end. Get the
+                                    // string_content.
+                                    uint32_t scount = ts_node_named_child_count(method_arg);
+                                    for (uint32_t si = 0; si < scount; si++) {
+                                        TSNode sc = ts_node_named_child(method_arg, si);
+                                        if (strcmp(ts_node_type(sc), "string_content") == 0) {
+                                            char* method_name = cbm_node_text(ctx->arena, sc, ctx->source);
+                                            if (method_name && method_name[0] &&
+                                                !cbm_is_keyword(method_name, ctx->language)) {
+                                                CBMCall ga_call;
+                                                ga_call.callee_name = method_name;
+                                                ga_call.enclosing_func_qn = state->enclosing_func_qn;
+                                                cbm_calls_push(&ctx->result->calls, ctx->arena, ga_call);
+                                            }
+                                            break;
+                                        }
+                                    }
                                 }
                             }
                         }

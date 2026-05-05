@@ -168,6 +168,47 @@ def run():
 	}
 }
 
+// TestPythonGetattrDispatchTracked pins INDIRECT_CALLS v0.2: when a
+// caller invokes getattr(obj, "method")(...), the Python extractor
+// emits "method" as a call target. Common in plugin/registry dispatch.
+// Variable-name dispatch (getattr(obj, name_var)) is NOT handled —
+// extracting the variable name would emit phantom edges. v0.2 only
+// handles string-literal method names (precise extraction).
+func TestPythonGetattrDispatchTracked(t *testing.T) {
+	source := []byte(`
+class Plugin:
+    def handler_a(self):
+        return "a"
+    def handler_b(self):
+        return "b"
+
+def dispatch(plugin, action):
+    return getattr(plugin, "handler_a")()
+
+def variable_dispatch(plugin, name):
+    return getattr(plugin, name)()
+`)
+	result, err := ExtractFile(source, lang.Python, "test", "app/dispatch.py")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	gotHandlerA := false
+	for _, c := range result.Calls {
+		t.Logf("Call: callee=%q enclosing=%q", c.CalleeName, c.EnclosingFuncQN)
+		if c.CalleeName == "handler_a" && c.EnclosingFuncQN == "test.app.dispatch.dispatch" {
+			gotHandlerA = true
+		}
+		// Negative: variable "name" should NOT be emitted as a call.
+		if c.CalleeName == "name" && c.EnclosingFuncQN == "test.app.dispatch.variable_dispatch" {
+			t.Errorf("variable 'name' should not be emitted as a call target. All calls: %v", result.Calls)
+		}
+	}
+	if !gotHandlerA {
+		t.Errorf("handler_a not found via getattr() dispatch. All calls: %v", result.Calls)
+	}
+}
+
 func TestJSArrowFunction(t *testing.T) {
 	source := []byte(`const greet = (name) => {
   return "Hello " + name;

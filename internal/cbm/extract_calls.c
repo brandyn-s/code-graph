@@ -264,6 +264,46 @@ static void walk_calls(CBMExtractCtx* ctx, TSNode node, const CBMLangSpec* spec)
                         }
                     }
                 }
+
+                // Python: <pool>.submit(fn, ...) — emit fn as a call target.
+                // INDIRECT_CALLS v0.1 (executor.submit only). The most
+                // common indirect-dispatch pattern in Python production
+                // code (concurrent.futures ThreadPoolExecutor /
+                // ProcessPoolExecutor). Without this, every submit(fn)
+                // dispatch site is unbound and contributes to the
+                // "speculative" confidence_band.
+                //
+                // Detection: callee_name ends in ".submit" AND the first
+                // arg is a bare identifier. Mirrors the existing
+                // Depends() pattern. The resolver still drops the edge
+                // if fn doesn't resolve to a Function/Method node, so
+                // false positives on non-callable args are bounded.
+                //
+                // See INDIRECT_CALLS_DESIGN.md for v0.2-v0.5 (getattr,
+                // decorator, fn-pointer, **kwargs).
+                if (ctx->language == CBM_LANG_PYTHON) {
+                    size_t cn_len = strlen(callee);
+                    if (cn_len >= 7 &&
+                        strcmp(callee + cn_len - 7, ".submit") == 0) {
+                        TSNode args = ts_node_child_by_field_name(node, "arguments", 9);
+                        if (!ts_node_is_null(args)) {
+                            uint32_t ncount = ts_node_named_child_count(args);
+                            if (ncount > 0) {
+                                TSNode first_arg = ts_node_named_child(args, 0);
+                                if (!ts_node_is_null(first_arg) &&
+                                    strcmp(ts_node_type(first_arg), "identifier") == 0) {
+                                    char* sub_name = cbm_node_text(ctx->arena, first_arg, ctx->source);
+                                    if (sub_name && sub_name[0] && !cbm_is_keyword(sub_name, ctx->language)) {
+                                        CBMCall sub_call;
+                                        sub_call.callee_name = sub_name;
+                                        sub_call.enclosing_func_qn = call.enclosing_func_qn;
+                                        cbm_calls_push(&ctx->result->calls, ctx->arena, sub_call);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
         // Don't recurse into call arguments for nested calls — the walk handles that
@@ -338,6 +378,35 @@ void handle_calls(CBMExtractCtx* ctx, TSNode node, const CBMLangSpec* spec, Walk
                                 dep_call.callee_name = dep_name;
                                 dep_call.enclosing_func_qn = state->enclosing_func_qn;
                                 cbm_calls_push(&ctx->result->calls, ctx->arena, dep_call);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Python: <pool>.submit(fn, ...) — emit fn as a call target.
+            // INDIRECT_CALLS v0.1 (executor.submit only). Mirrors the
+            // walk_calls() path above; the unified walker is the
+            // production code path that handle_calls() services.
+            // See INDIRECT_CALLS_DESIGN.md for v0.2-v0.5.
+            if (ctx->language == CBM_LANG_PYTHON) {
+                size_t cn_len = strlen(callee);
+                if (cn_len >= 7 &&
+                    strcmp(callee + cn_len - 7, ".submit") == 0) {
+                    TSNode args = ts_node_child_by_field_name(node, "arguments", 9);
+                    if (!ts_node_is_null(args)) {
+                        uint32_t ncount = ts_node_named_child_count(args);
+                        if (ncount > 0) {
+                            TSNode first_arg = ts_node_named_child(args, 0);
+                            if (!ts_node_is_null(first_arg) &&
+                                strcmp(ts_node_type(first_arg), "identifier") == 0) {
+                                char* sub_name = cbm_node_text(ctx->arena, first_arg, ctx->source);
+                                if (sub_name && sub_name[0] && !cbm_is_keyword(sub_name, ctx->language)) {
+                                    CBMCall sub_call;
+                                    sub_call.callee_name = sub_name;
+                                    sub_call.enclosing_func_qn = state->enclosing_func_qn;
+                                    cbm_calls_push(&ctx->result->calls, ctx->arena, sub_call);
+                                }
                             }
                         }
                     }

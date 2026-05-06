@@ -52,7 +52,7 @@ type WhereClause struct {
 type Condition struct {
 	Variable string // "f"
 	Property string // "name"
-	Operator string // "=", "=~", "CONTAINS", "STARTS WITH", ">", "<", ">=", "<="
+	Operator string // "=", "=~", "CONTAINS", "STARTS WITH", "ENDS WITH", "IS NULL", "IS NOT NULL", ">", "<", ">=", "<="
 	Value    string // the comparison value
 }
 

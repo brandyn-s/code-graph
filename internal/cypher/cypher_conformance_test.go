@@ -63,15 +63,11 @@ var positiveCypherFixtures = []struct {
 		`MATCH (f:Function) WHERE f.name STARTS WITH 'handle' RETURN f`,
 		"WHERE with STARTS WITH",
 	},
-	// ENDS WITH: documented but parser failure observed 2026-05-05.
-	// Investigation deferred — likely the parser handles STARTS WITH
-	// but not ENDS WITH. Either fix the parser or remove from the
-	// claimed feature list in tools.go.
-	// {
-	// 	"ends_with",
-	// 	`MATCH (f:Function) WHERE f.file_path ENDS WITH '.go' RETURN f`,
-	// 	"WHERE with ENDS WITH",
-	// },
+	{
+		"ends_with",
+		`MATCH (f:Function) WHERE f.file_path ENDS WITH '.go' RETURN f`,
+		"WHERE with ENDS WITH (Plan 3 Phase A: parser extended 2026-05-06)",
+	},
 	{
 		"contains",
 		`MATCH (f:Function) WHERE f.name CONTAINS 'Test' RETURN f`,
@@ -107,16 +103,16 @@ var positiveCypherFixtures = []struct {
 		"MATCH (a)-[:CALLS*1..3]->(b) RETURN a.name, b.name",
 		"variable-length path 1..3",
 	},
-	// COUNT(*): documented but parser failure observed 2026-05-05.
-	// Investigation deferred. The TestParseReturnWithCount unit test
-	// passes — likely the conformance fixture's exact syntax differs
-	// from what the parser accepts. Investigate before claiming
-	// "supported" externally.
-	// {
-	// 	"count_star",
-	// 	"MATCH (f:Function) RETURN COUNT(*)",
-	// 	"COUNT(*) aggregation",
-	// },
+	{
+		"count_star",
+		"MATCH (f:Function) RETURN COUNT(*)",
+		"COUNT(*) aggregation (Plan 3 Phase A: parser extended 2026-05-06 to accept '*' as the COUNT argument; openCypher standard form)",
+	},
+	{
+		"count_variable",
+		"MATCH (f:Function) RETURN COUNT(f)",
+		"COUNT(variable) aggregation (existing form, retained)",
+	},
 	{
 		"distinct",
 		"MATCH (f:Function) RETURN DISTINCT f.name",
@@ -132,23 +128,16 @@ var positiveCypherFixtures = []struct {
 		"MATCH (f:Function) RETURN f LIMIT 10",
 		"LIMIT only",
 	},
-	// IS NULL / IS NOT NULL: documented in tools.go but parser does
-	// NOT support them as of 2026-05-05. The parser expects a
-	// comparison operator after the property reference. Either:
-	//   (a) extend the parser to accept IS NULL / IS NOT NULL
-	//   (b) remove the feature claim from internal/tools/tools.go
-	// First reading: feature claim was aspirational; remove from
-	// docs. (Documented in CONFORMANCE.md "Discrepancies".)
-	// {
-	// 	"is_null_filter",
-	// 	`MATCH (f:Function) WHERE f.docstring IS NULL RETURN f.name`,
-	// 	"IS NULL",
-	// },
-	// {
-	// 	"is_not_null_filter",
-	// 	`MATCH (f:Function) WHERE f.docstring IS NOT NULL RETURN f.name`,
-	// 	"IS NOT NULL",
-	// },
+	{
+		"is_null_filter",
+		`MATCH (f:Function) WHERE f.docstring IS NULL RETURN f.name`,
+		"IS NULL (Plan 3 Phase A: parser extended 2026-05-06)",
+	},
+	{
+		"is_not_null_filter",
+		`MATCH (f:Function) WHERE f.docstring IS NOT NULL RETURN f.name`,
+		"IS NOT NULL (Plan 3 Phase A: parser extended 2026-05-06)",
+	},
 	{
 		"edge_confidence_filter",
 		`MATCH (a)-[r:CALLS]->(b) WHERE r.confidence >= 0.7 RETURN a.name, b.name`,
@@ -168,31 +157,33 @@ var negativeCypherFixtures = []struct {
 	{
 		"create_rejected",
 		"CREATE (n:Function {name: 'X'})",
-		// CREATE may lex as TokIdent (we don't reserve it). Either
-		// the lexer fails or the parser does — accept either error
-		// shape by matching a permissive substring.
-		"",
-		"CREATE is not in the read-only subset",
+		"CREATE not supported in read-only Cypher subset",
+		"CREATE is rejected at parse-time (Plan 3 Phase A: 2026-05-06)",
 	},
-	// DELETE / SET / MERGE: discovered 2026-05-05 to currently PARSE
-	// successfully — the parser doesn't reject write keywords. Read-
-	// only-ness is enforced at the EXECUTOR level (planner refuses
-	// to plan write operations) not at parse. This is acceptable for
-	// security (writes never reach the store), but the documented
-	// claim "Read-only subset" should ideally reject at parse for
-	// clarity. Tracked as a known gap in CONFORMANCE.md.
-	// {
-	// 	"delete_rejected",
-	// 	"MATCH (n) DELETE n",
-	// 	"",
-	// 	"DELETE is not in the read-only subset",
-	// },
-	// {
-	// 	"set_rejected",
-	// 	"MATCH (n) SET n.name = 'X'",
-	// 	"",
-	// 	"SET is not in the read-only subset",
-	// },
+	{
+		"delete_rejected",
+		"MATCH (n) DELETE n",
+		"DELETE not supported in read-only Cypher subset",
+		"DELETE is rejected at parse-time (Plan 3 Phase A: 2026-05-06)",
+	},
+	{
+		"set_rejected",
+		"MATCH (n) SET n.name = 'X'",
+		"SET not supported in read-only Cypher subset",
+		"SET is rejected at parse-time (Plan 3 Phase A: 2026-05-06)",
+	},
+	{
+		"merge_rejected",
+		"MERGE (n:Function {name: 'X'})",
+		"MERGE not supported in read-only Cypher subset",
+		"MERGE is rejected at parse-time (Plan 3 Phase A: 2026-05-06)",
+	},
+	{
+		"remove_rejected",
+		"MATCH (n) REMOVE n.name",
+		"REMOVE not supported in read-only Cypher subset",
+		"REMOVE is rejected at parse-time (Plan 3 Phase A: 2026-05-06)",
+	},
 	{
 		"unclosed_paren",
 		"MATCH (f:Function RETURN f",

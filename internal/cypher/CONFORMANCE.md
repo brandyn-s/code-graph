@@ -85,51 +85,54 @@ This is a multi-week workstream not in scope for Phase D2. The
 hand-curated corpus in `internal/cypher/conformance/` covers the
 features we actually use; expanding to filtered-TCK is a follow-up.
 
-## Discrepancies discovered by initial corpus run (2026-05-05)
+## Discrepancy resolution history
 
-The first run of the conformance corpus revealed **6 discrepancies**
-between what `internal/tools/tools.go` claims is supported and what
-the parser actually accepts. These are documented in fixture
-comments (commented-out blocks) and listed here for visibility:
+### Initial corpus run (2026-05-05)
 
-### Documented features that don't parse
+The first run revealed 6 discrepancies between what
+`internal/tools/tools.go` claimed and what the parser accepted:
 
-1. **`IS NULL` / `IS NOT NULL`** — `tools.go` claims support; parser
-   rejects with "expected comparison operator, got IS". Either:
-   - (a) extend parser to accept `IS NULL` / `IS NOT NULL`, OR
-   - (b) remove from claimed feature list in `tools.go`.
-   First reading: aspirational claim. Recommended action: remove
-   from docs OR ship parser support.
+- 3 documented features that didn't parse: `IS NULL` / `IS NOT NULL`,
+  `ENDS WITH`, `COUNT(*)`.
+- 3 write keywords that parsed when they shouldn't (read-only-ness
+  was only enforced at planner level): `DELETE`, `SET`, `MERGE`.
 
-2. **`ENDS WITH`** — `tools.go` claims support; parser fails. Likely
-   parallel to STARTS WITH coverage; investigate parser to see if
-   it's a one-line addition or a deeper gap.
+### Resolved 2026-05-06 (Plan 3 Phase A)
 
-3. **`COUNT(*)`** — claimed in `tools.go`, fails the conformance
-   syntax. The unit test `TestParseReturnWithCount` passes, so the
-   parser DOES handle some COUNT shape; the conformance fixture's
-   exact syntax may differ. Investigate before claiming "supported"
-   externally.
+All 6 discrepancies resolved.
 
-### Write keywords that PARSE but shouldn't
+**Documented features now parse + execute:**
 
-4-6. **`DELETE`, `SET`, `MERGE`**: parser accepts these without
-error. Read-only-ness is enforced at the EXECUTOR / planner level
-(no executor exists for write operations), so the security property
-holds. But "Read-only subset" is documented at parse-time, which
-isn't quite accurate. Either:
-- (a) extend parser to reject write keywords (defense in depth), OR
-- (b) update docs to "Read-only enforced at planner level".
+- `IS NULL` / `IS NOT NULL` — lexer reserves `IS` and `NULL` keywords;
+  parser handles both forms after a property reference; executor
+  evaluates true when the property is absent (nil) or empty string
+  (the on-disk representation of absent optional string properties).
+- `ENDS WITH` — parallel implementation to `STARTS WITH`. Lexer
+  reserves `ENDS`; parser handles `ENDS WITH`; executor uses
+  `strings.HasSuffix`; SQL pushdown emits `LIKE '%val'`.
+- `COUNT(*)` — `parseCountItem` extended to accept `*` as the COUNT
+  argument (openCypher standard form). The previous `COUNT(variable)`
+  form is retained.
 
-These are NOT security issues — writes never reach the store. They
-ARE documentation accuracy issues that the conformance corpus is
-designed to catch.
+**Write keywords now rejected at parse-time:**
 
-### What this proves
+- `CREATE`, `DELETE`, `SET`, `MERGE`, `REMOVE` — lexer reserves these
+  keywords; parser explicitly rejects with the message
+  `"<keyword> not supported in read-only Cypher subset (pos N)"`.
+- Defense in depth: planner-level rejection still in place (writes
+  never reach the store). This is purely a documentation-accuracy +
+  clearer-error-message change.
+- Trailing-token tolerance also fixed: previously `MATCH (n) DELETE n`
+  silently parsed (the trailing `DELETE n` was dropped). Now
+  `parseQuery` rejects any non-EOF token after the RETURN clause.
 
-The conformance corpus's first run already justified its existence.
-17 features verified working; 6 discrepancies surfaced. Without the
-corpus, the documented feature list would have continued to drift.
+### What this proved
+
+The conformance corpus's first run surfaced 6 discrepancies that
+would have continued to drift undetected. The second run (after
+Plan 3 Phase A) verifies parser + executor + tool description are
+now in sync, with 22 positive fixtures + 7 negative fixtures
+passing.
 
 ## Adding a fixture
 

@@ -271,7 +271,7 @@ func validatePushability(scan *ScanNodes, expand *ExpandRelationship, filter *Fi
 				return false
 			}
 			switch c.Operator {
-			case "=", "CONTAINS", "STARTS WITH":
+			case "=", "CONTAINS", "STARTS WITH", "ENDS WITH":
 				// OK
 			default:
 				return false
@@ -434,6 +434,9 @@ func appendFilterConditions(sb *strings.Builder, args *[]any, filter *FilterWher
 		case "STARTS WITH":
 			fmt.Fprintf(sb, " AND %s.%s LIKE ?", alias, col)
 			*args = append(*args, c.Value+"%")
+		case "ENDS WITH":
+			fmt.Fprintf(sb, " AND %s.%s LIKE ?", alias, col)
+			*args = append(*args, "%"+c.Value)
 		}
 	}
 }
@@ -677,8 +680,11 @@ func (e *Executor) execScan(project string, s *ScanNodes, pushDown *FilterWhere)
 			case "STARTS WITH":
 				query += " AND " + col + " LIKE ?"
 				args = append(args, c.Value+"%")
+			case "ENDS WITH":
+				query += " AND " + col + " LIKE ?"
+				args = append(args, "%"+c.Value)
 			default:
-				// =~, numeric comparisons: can't push to SQL easily
+				// =~, numeric comparisons, IS NULL: can't push to SQL easily
 				unpushedConditions = append(unpushedConditions, c)
 			}
 		}
@@ -1067,6 +1073,32 @@ func (e *Executor) evaluateCondition(b binding, c Condition) (bool, error) {
 			return false, nil
 		}
 		return strings.HasPrefix(s, c.Value), nil
+	case "ENDS WITH":
+		s, ok := actual.(string)
+		if !ok {
+			return false, nil
+		}
+		return strings.HasSuffix(s, c.Value), nil
+	case "IS NULL":
+		// A property is "NULL" if it doesn't exist on the node/edge
+		// (getNodeProperty / getEdgeProperty return nil) or if it is
+		// the empty string (the on-disk representation of an absent
+		// optional string property).
+		if actual == nil {
+			return true, nil
+		}
+		if s, ok := actual.(string); ok && s == "" {
+			return true, nil
+		}
+		return false, nil
+	case "IS NOT NULL":
+		if actual == nil {
+			return false, nil
+		}
+		if s, ok := actual.(string); ok && s == "" {
+			return false, nil
+		}
+		return true, nil
 	case ">", "<", ">=", "<=":
 		return compareNumeric(actual, c.Value, c.Operator)
 	default:

@@ -24,10 +24,24 @@ const (
 	TokCount                     // COUNT
 	TokContains                  // CONTAINS
 	TokStarts                    // STARTS
+	TokEnds                      // ENDS
 	TokWith                      // WITH
+	TokIs                        // IS
+	TokNull                      // NULL
 	TokNot                       // NOT
 	TokAsc                       // ASC
 	TokDesc                      // DESC
+
+	// Write keywords — reserved for parser-level rejection.
+	// code-graph implements a read-only Cypher subset; these are
+	// recognized so the parser can produce a clear "not supported in
+	// read-only subset" error rather than a confusing "unexpected token"
+	// or silent acceptance via trailing-token tolerance.
+	TokCreate // CREATE
+	TokDelete // DELETE
+	TokSet    // SET
+	TokMerge  // MERGE
+	TokRemove // REMOVE
 
 	// Symbols
 	TokLParen   // (
@@ -84,10 +98,18 @@ var keywords = map[string]TokenType{
 	"COUNT":    TokCount,
 	"CONTAINS": TokContains,
 	"STARTS":   TokStarts,
+	"ENDS":     TokEnds,
 	"WITH":     TokWith,
+	"IS":       TokIs,
+	"NULL":     TokNull,
 	"NOT":      TokNot,
 	"ASC":      TokAsc,
 	"DESC":     TokDesc,
+	"CREATE":   TokCreate,
+	"DELETE":   TokDelete,
+	"SET":      TokSet,
+	"MERGE":    TokMerge,
+	"REMOVE":   TokRemove,
 }
 
 // singleCharTokens maps single-character symbols to their token type.

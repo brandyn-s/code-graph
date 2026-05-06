@@ -45,6 +45,13 @@ func (p *Parser) expect(typ TokenType) error {
 func (p *Parser) parseQuery() (*Query, error) {
 	q := &Query{}
 
+	// Reject write keywords at parse-time. code-graph implements a
+	// read-only Cypher subset; CREATE/DELETE/SET/MERGE/REMOVE are
+	// recognized for the sole purpose of producing a clear error.
+	if err := p.rejectWriteKeyword(p.peek()); err != nil {
+		return nil, err
+	}
+
 	// MATCH clause (required)
 	if p.peek().Type != TokMatch {
 		return nil, fmt.Errorf("expected MATCH at pos %d, got %q", p.peek().Pos, p.peek().Value)
@@ -55,6 +62,11 @@ func (p *Parser) parseQuery() (*Query, error) {
 	}
 	q.Match = m
 
+	// Reject write keyword between MATCH and WHERE/RETURN.
+	if err := p.rejectWriteKeyword(p.peek()); err != nil {
+		return nil, err
+	}
+
 	// WHERE clause (optional)
 	if p.peek().Type == TokWhere {
 		w, err := p.parseWhere()
@@ -62,6 +74,11 @@ func (p *Parser) parseQuery() (*Query, error) {
 			return nil, err
 		}
 		q.Where = w
+	}
+
+	// Reject write keyword between WHERE and RETURN.
+	if err := p.rejectWriteKeyword(p.peek()); err != nil {
+		return nil, err
 	}
 
 	// RETURN clause (optional but common)
@@ -73,7 +90,37 @@ func (p *Parser) parseQuery() (*Query, error) {
 		q.Return = r
 	}
 
+	// Reject trailing tokens. Without this, queries like
+	// `MATCH (n) DELETE n` silently parse (the trailing DELETE n is
+	// dropped). Trailing-token rejection makes the read-only-subset
+	// claim accurate at parse time.
+	if p.peek().Type != TokEOF {
+		if err := p.rejectWriteKeyword(p.peek()); err != nil {
+			return nil, err
+		}
+		return nil, fmt.Errorf("unexpected trailing token %q at pos %d", p.peek().Value, p.peek().Pos)
+	}
+
 	return q, nil
+}
+
+// rejectWriteKeyword returns a clear error if the token is a write
+// keyword (CREATE / DELETE / SET / MERGE / REMOVE). code-graph's
+// Cypher subset is read-only by design.
+func (p *Parser) rejectWriteKeyword(t Token) error {
+	switch t.Type {
+	case TokCreate:
+		return fmt.Errorf("CREATE not supported in read-only Cypher subset (pos %d)", t.Pos)
+	case TokDelete:
+		return fmt.Errorf("DELETE not supported in read-only Cypher subset (pos %d)", t.Pos)
+	case TokSet:
+		return fmt.Errorf("SET not supported in read-only Cypher subset (pos %d)", t.Pos)
+	case TokMerge:
+		return fmt.Errorf("MERGE not supported in read-only Cypher subset (pos %d)", t.Pos)
+	case TokRemove:
+		return fmt.Errorf("REMOVE not supported in read-only Cypher subset (pos %d)", t.Pos)
+	}
+	return nil
 }
 
 func (p *Parser) parseMatch() (*MatchClause, error) {
@@ -423,6 +470,33 @@ func (p *Parser) parseCondition() (Condition, error) {
 		}
 		p.advance() // consume WITH
 		c.Operator = "STARTS WITH"
+	case TokEnds:
+		// ENDS WITH (parallel to STARTS WITH)
+		p.advance() // consume ENDS
+		if p.peek().Type != TokWith {
+			return c, fmt.Errorf("expected WITH after ENDS at pos %d", p.peek().Pos)
+		}
+		p.advance() // consume WITH
+		c.Operator = "ENDS WITH"
+	case TokIs:
+		// IS NULL or IS NOT NULL — these conditions take no value.
+		p.advance() // consume IS
+		if p.peek().Type == TokNot {
+			p.advance() // consume NOT
+			if p.peek().Type != TokNull {
+				return c, fmt.Errorf("expected NULL after IS NOT at pos %d, got %q", p.peek().Pos, p.peek().Value)
+			}
+			p.advance() // consume NULL
+			c.Operator = "IS NOT NULL"
+		} else {
+			if p.peek().Type != TokNull {
+				return c, fmt.Errorf("expected NULL or NOT NULL after IS at pos %d, got %q", p.peek().Pos, p.peek().Value)
+			}
+			p.advance() // consume NULL
+			c.Operator = "IS NULL"
+		}
+		// IS NULL / IS NOT NULL take no value; return early.
+		return c, nil
 	default:
 		return c, fmt.Errorf("expected comparison operator, got %q at pos %d", op.Value, op.Pos)
 	}
@@ -528,7 +602,10 @@ func (p *Parser) parseReturnItem() (ReturnItem, error) {
 	return item, nil
 }
 
-// parseCountItem parses a COUNT(variable) [AS alias] expression.
+// parseCountItem parses a COUNT(variable | *) [AS alias] expression.
+// COUNT(*) is the openCypher standard form for counting all rows;
+// COUNT(var) counts non-null bindings of a specific variable. The
+// executor treats both as a row-count aggregation.
 func (p *Parser) parseCountItem() (ReturnItem, error) {
 	item := ReturnItem{}
 	p.advance() // consume COUNT
@@ -537,12 +614,19 @@ func (p *Parser) parseCountItem() (ReturnItem, error) {
 		return item, fmt.Errorf("expected '(' after COUNT: %w", err)
 	}
 	varTok := p.advance()
-	if varTok.Type != TokIdent {
-		return item, fmt.Errorf("expected variable in COUNT(), got %q", varTok.Value)
+	switch varTok.Type {
+	case TokIdent:
+		item.Variable = varTok.Value
+	case TokStar:
+		// COUNT(*) — represented internally with Variable="*".
+		// Executor short-circuits to the binding count without
+		// requiring a specific variable to be non-null.
+		item.Variable = "*"
+	default:
+		return item, fmt.Errorf("expected variable or '*' in COUNT(), got %q at pos %d", varTok.Value, varTok.Pos)
 	}
-	item.Variable = varTok.Value
 	if err := p.expect(TokRParen); err != nil {
-		return item, fmt.Errorf("expected ')' after COUNT variable: %w", err)
+		return item, fmt.Errorf("expected ')' after COUNT argument: %w", err)
 	}
 
 	// Optional AS alias

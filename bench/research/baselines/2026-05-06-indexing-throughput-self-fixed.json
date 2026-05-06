@@ -1,0 +1,511 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-05-06T15:40:52Z",
+  "target": "C:\\Users\\BrandynSchult\\Documents\\GitHub\\code-graph",
+  "mode": "full",
+  "go_version": "go1.26.2",
+  "num_cpu": 8,
+  "goos": "windows",
+  "goarch": "amd64",
+  "cold_start_ns": 1222532300,
+  "total_wall_ns": 270400372200,
+  "peak_heap_inuse_bytes": 1207599104,
+  "peak_sys_bytes": 1426985216,
+  "phases": [
+    {
+      "phase": "discover",
+      "pct": 5,
+      "detail": "1055 files discovered",
+      "wall_ns": 1178575900,
+      "heap_inuse_bytes": 4997120,
+      "sys_bytes": 12750848
+    },
+    {
+      "phase": "structure",
+      "pct": 10,
+      "detail": "1055 files structured",
+      "wall_ns": 172778700,
+      "heap_inuse_bytes": 6815744,
+      "sys_bytes": 16969728
+    },
+    {
+      "phase": "definitions:parse",
+      "pct": 11,
+      "detail": "106/1055 files parsed",
+      "wall_ns": 667851800,
+      "heap_inuse_bytes": 11182080,
+      "sys_bytes": 21704704
+    },
+    {
+      "phase": "definitions:parse",
+      "pct": 12,
+      "detail": "211/1055 files parsed",
+      "wall_ns": 155372400,
+      "heap_inuse_bytes": 16343040,
+      "sys_bytes": 26423296
+    },
+    {
+      "phase": "definitions:parse",
+      "pct": 13,
+      "detail": "317/1055 files parsed",
+      "wall_ns": 229737400,
+      "heap_inuse_bytes": 21635072,
+      "sys_bytes": 31150080
+    },
+    {
+      "phase": "definitions:parse",
+      "pct": 14,
+      "detail": "422/1055 files parsed",
+      "wall_ns": 2530225000,
+      "heap_inuse_bytes": 163389440,
+      "sys_bytes": 178606080
+    },
+    {
+      "phase": "definitions:parse",
+      "pct": 15,
+      "detail": "528/1055 files parsed",
+      "wall_ns": 10064221500,
+      "heap_inuse_bytes": 546480128,
+      "sys_bytes": 657436672
+    },
+    {
+      "phase": "definitions:parse",
+      "pct": 16,
+      "detail": "633/1055 files parsed",
+      "wall_ns": 14288314800,
+      "heap_inuse_bytes": 873234432,
+      "sys_bytes": 898457600
+    },
+    {
+      "phase": "definitions:parse",
+      "pct": 17,
+      "detail": "739/1055 files parsed",
+      "wall_ns": 9164490500,
+      "heap_inuse_bytes": 1004396544,
+      "sys_bytes": 1027104768
+    },
+    {
+      "phase": "definitions:parse",
+      "pct": 18,
+      "detail": "844/1055 files parsed",
+      "wall_ns": 8032957100,
+      "heap_inuse_bytes": 1009197056,
+      "sys_bytes": 1031364608
+    },
+    {
+      "phase": "definitions:parse",
+      "pct": 19,
+      "detail": "950/1055 files parsed",
+      "wall_ns": 5431201700,
+      "heap_inuse_bytes": 1017036800,
+      "sys_bytes": 1039753216
+    },
+    {
+      "phase": "definitions:parse",
+      "pct": 20,
+      "detail": "1055/1055 files parsed",
+      "wall_ns": 35385006900,
+      "heap_inuse_bytes": 638664704,
+      "sys_bytes": 1111820288
+    },
+    {
+      "phase": "definitions:parse",
+      "pct": 20,
+      "detail": "1055 files parsed",
+      "wall_ns": 0,
+      "heap_inuse_bytes": 638664704,
+      "sys_bytes": 1111820288
+    },
+    {
+      "phase": "definitions:collect",
+      "pct": 23,
+      "detail": "18227 nodes, 17199 edges collected",
+      "wall_ns": 9401500,
+      "heap_inuse_bytes": 644472832,
+      "sys_bytes": 1111820288
+    },
+    {
+      "phase": "definitions:upsert",
+      "pct": 26,
+      "detail": "18227 nodes upserted",
+      "wall_ns": 151545200,
+      "heap_inuse_bytes": 666804224,
+      "sys_bytes": 1112724480
+    },
+    {
+      "phase": "definitions",
+      "pct": 30,
+      "detail": "1055 files parsed",
+      "wall_ns": 11883400,
+      "heap_inuse_bytes": 670384128,
+      "sys_bytes": 1112986624
+    },
+    {
+      "phase": "decorator_tags",
+      "pct": 32,
+      "detail": "discovering decorator tags",
+      "wall_ns": 2018700,
+      "heap_inuse_bytes": 670384128,
+      "sys_bytes": 1112986624
+    },
+    {
+      "phase": "registry",
+      "pct": 34,
+      "detail": "building symbol registry",
+      "wall_ns": 4215000,
+      "heap_inuse_bytes": 670400512,
+      "sys_bytes": 1112986624
+    },
+    {
+      "phase": "inherits",
+      "pct": 36,
+      "detail": "resolving inheritance edges",
+      "wall_ns": 10678400,
+      "heap_inuse_bytes": 672718848,
+      "sys_bytes": 1112986624
+    },
+    {
+      "phase": "decorates",
+      "pct": 38,
+      "detail": "resolving decorator edges",
+      "wall_ns": 1027200,
+      "heap_inuse_bytes": 672718848,
+      "sys_bytes": 1112986624
+    },
+    {
+      "phase": "dataflow",
+      "pct": 39,
+      "detail": "creating parameter nodes",
+      "wall_ns": 0,
+      "heap_inuse_bytes": 672727040,
+      "sys_bytes": 1112986624
+    },
+    {
+      "phase": "imports",
+      "pct": 40,
+      "detail": "building import maps",
+      "wall_ns": 30077700,
+      "heap_inuse_bytes": 681451520,
+      "sys_bytes": 1113052160
+    },
+    {
+      "phase": "imports",
+      "pct": 42,
+      "detail": "import maps built",
+      "wall_ns": 15298610800,
+      "heap_inuse_bytes": 684908544,
+      "sys_bytes": 1113052160
+    },
+    {
+      "phase": "calls:resolve",
+      "pct": 46,
+      "detail": "103/1028 files resolved",
+      "wall_ns": 2966233700,
+      "heap_inuse_bytes": 840540160,
+      "sys_bytes": 1116984320
+    },
+    {
+      "phase": "calls:resolve",
+      "pct": 47,
+      "detail": "206/1028 files resolved",
+      "wall_ns": 358500500,
+      "heap_inuse_bytes": 948674560,
+      "sys_bytes": 1118884864
+    },
+    {
+      "phase": "calls:resolve",
+      "pct": 48,
+      "detail": "309/1028 files resolved",
+      "wall_ns": 543734100,
+      "heap_inuse_bytes": 870703104,
+      "sys_bytes": 1121420800
+    },
+    {
+      "phase": "calls:resolve",
+      "pct": 49,
+      "detail": "412/1028 files resolved",
+      "wall_ns": 247703100,
+      "heap_inuse_bytes": 836485120,
+      "sys_bytes": 1121945088
+    },
+    {
+      "phase": "calls:resolve",
+      "pct": 50,
+      "detail": "514/1028 files resolved",
+      "wall_ns": 218224600,
+      "heap_inuse_bytes": 910893056,
+      "sys_bytes": 1122403840
+    },
+    {
+      "phase": "calls:resolve",
+      "pct": 51,
+      "detail": "617/1028 files resolved",
+      "wall_ns": 239383000,
+      "heap_inuse_bytes": 998957056,
+      "sys_bytes": 1124107776
+    },
+    {
+      "phase": "calls:resolve",
+      "pct": 52,
+      "detail": "720/1028 files resolved",
+      "wall_ns": 260723000,
+      "heap_inuse_bytes": 1053286400,
+      "sys_bytes": 1125549568
+    },
+    {
+      "phase": "calls:resolve",
+      "pct": 53,
+      "detail": "823/1028 files resolved",
+      "wall_ns": 235095400,
+      "heap_inuse_bytes": 1106821120,
+      "sys_bytes": 1147307520
+    },
+    {
+      "phase": "calls:resolve",
+      "pct": 54,
+      "detail": "926/1028 files resolved",
+      "wall_ns": 324064800,
+      "heap_inuse_bytes": 1140785152,
+      "sys_bytes": 1186301440
+    },
+    {
+      "phase": "calls:resolve",
+      "pct": 55,
+      "detail": "1028/1028 files resolved",
+      "wall_ns": 326876100,
+      "heap_inuse_bytes": 1202257920,
+      "sys_bytes": 1246266880
+    },
+    {
+      "phase": "calls:resolve",
+      "pct": 55,
+      "detail": "1028 files resolved",
+      "wall_ns": 0,
+      "heap_inuse_bytes": 1202257920,
+      "sys_bytes": 1246266880
+    },
+    {
+      "phase": "calls:flush",
+      "pct": 57,
+      "detail": "flushing call edges to graph",
+      "wall_ns": 318300,
+      "heap_inuse_bytes": 1202257920,
+      "sys_bytes": 1246266880
+    },
+    {
+      "phase": "calls",
+      "pct": 60,
+      "detail": "call targets resolved",
+      "wall_ns": 52489800,
+      "heap_inuse_bytes": 1207599104,
+      "sys_bytes": 1250723328
+    },
+    {
+      "phase": "usages",
+      "pct": 60,
+      "detail": "resolving usage edges",
+      "wall_ns": 0,
+      "heap_inuse_bytes": 1207599104,
+      "sys_bytes": 1250723328
+    },
+    {
+      "phase": "usages",
+      "pct": 62,
+      "detail": "usage edges resolved",
+      "wall_ns": 1472932500,
+      "heap_inuse_bytes": 887914496,
+      "sys_bytes": 1426985216
+    },
+    {
+      "phase": "semantic:uses_type",
+      "pct": 62,
+      "detail": "resolving type references",
+      "wall_ns": 0,
+      "heap_inuse_bytes": 887914496,
+      "sys_bytes": 1426985216
+    },
+    {
+      "phase": "semantic:throws",
+      "pct": 65,
+      "detail": "resolving throw/raise edges",
+      "wall_ns": 1682734700,
+      "heap_inuse_bytes": 143851520,
+      "sys_bytes": 1426985216
+    },
+    {
+      "phase": "semantic:readwrite",
+      "pct": 67,
+      "detail": "resolving read/write edges",
+      "wall_ns": 2102200,
+      "heap_inuse_bytes": 143851520,
+      "sys_bytes": 1426985216
+    },
+    {
+      "phase": "semantic:configures",
+      "pct": 69,
+      "detail": "resolving config edges",
+      "wall_ns": 13693900,
+      "heap_inuse_bytes": 144629760,
+      "sys_bytes": 1426985216
+    },
+    {
+      "phase": "semantic:env_readers",
+      "pct": 71,
+      "detail": "building env reader snapshot",
+      "wall_ns": 5629100,
+      "heap_inuse_bytes": 144629760,
+      "sys_bytes": 1426985216
+    },
+    {
+      "phase": "implements",
+      "pct": 72,
+      "detail": "resolving interface implementations",
+      "wall_ns": 1895600,
+      "heap_inuse_bytes": 144629760,
+      "sys_bytes": 1426985216
+    },
+    {
+      "phase": "flush",
+      "pct": 72,
+      "detail": "writing graph to SQLite",
+      "wall_ns": 610755500,
+      "heap_inuse_bytes": 66150400,
+      "sys_bytes": 1426985216
+    },
+    {
+      "phase": "tests",
+      "pct": 75,
+      "detail": "resolving test edges",
+      "wall_ns": 2327486400,
+      "heap_inuse_bytes": 70533120,
+      "sys_bytes": 1426985216
+    },
+    {
+      "phase": "communities",
+      "pct": 78,
+      "detail": "detecting communities",
+      "wall_ns": 549481400,
+      "heap_inuse_bytes": 49061888,
+      "sys_bytes": 1426985216
+    },
+    {
+      "phase": "http_links",
+      "pct": 82,
+      "detail": "linking HTTP routes",
+      "wall_ns": 873221600,
+      "heap_inuse_bytes": 33800192,
+      "sys_bytes": 1426985216
+    },
+    {
+      "phase": "config_linker",
+      "pct": 86,
+      "detail": "linking config to code",
+      "wall_ns": 45115035800,
+      "heap_inuse_bytes": 38305792,
+      "sys_bytes": 1426985216
+    },
+    {
+      "phase": "envvar_nodes",
+      "pct": 87,
+      "detail": "creating env var nodes",
+      "wall_ns": 7621664100,
+      "heap_inuse_bytes": 30515200,
+      "sys_bytes": 1426985216
+    },
+    {
+      "phase": "git_history",
+      "pct": 89,
+      "detail": "analyzing git history",
+      "wall_ns": 2830500,
+      "heap_inuse_bytes": 30572544,
+      "sys_bytes": 1426985216
+    },
+    {
+      "phase": "security_tags",
+      "pct": 92,
+      "detail": "assigning security roles",
+      "wall_ns": 7475809200,
+      "heap_inuse_bytes": 31653888,
+      "sys_bytes": 1426985216
+    },
+    {
+      "phase": "opa_linker",
+      "pct": 94,
+      "detail": "linking OPA policies",
+      "wall_ns": 292955500,
+      "heap_inuse_bytes": 30187520,
+      "sys_bytes": 1426985216
+    },
+    {
+      "phase": "zenoh",
+      "pct": 95,
+      "detail": "extracting Zenoh pub/sub edges",
+      "wall_ns": 52873100,
+      "heap_inuse_bytes": 30318592,
+      "sys_bytes": 1426985216
+    },
+    {
+      "phase": "nix_services",
+      "pct": 95,
+      "detail": "extracting Nix service topic bindings",
+      "wall_ns": 55903500,
+      "heap_inuse_bytes": 30736384,
+      "sys_bytes": 1426985216
+    },
+    {
+      "phase": "lockfile_deps",
+      "pct": 96,
+      "detail": "parsing lockfile deps",
+      "wall_ns": 226588800,
+      "heap_inuse_bytes": 29925376,
+      "sys_bytes": 1426985216
+    },
+    {
+      "phase": "rationale",
+      "pct": 96,
+      "detail": "extracting WHY/NOTE/HACK/SAFETY comments",
+      "wall_ns": 10707600,
+      "heap_inuse_bytes": 30138368,
+      "sys_bytes": 1426985216
+    },
+    {
+      "phase": "embeddings",
+      "pct": 97,
+      "detail": "generating embeddings",
+      "wall_ns": 9707299700,
+      "heap_inuse_bytes": 33423360,
+      "sys_bytes": 1426985216
+    },
+    {
+      "phase": "similarity",
+      "pct": 97,
+      "detail": "emitting similarity edges",
+      "wall_ns": 82780800800,
+      "heap_inuse_bytes": 36995072,
+      "sys_bytes": 1426985216
+    },
+    {
+      "phase": "file_hashes",
+      "pct": 98,
+      "detail": "updating file hashes",
+      "wall_ns": 0,
+      "heap_inuse_bytes": 36995072,
+      "sys_bytes": 1426985216
+    },
+    {
+      "phase": "complete",
+      "pct": 100,
+      "detail": "indexing complete",
+      "wall_ns": 590013200,
+      "heap_inuse_bytes": 34529280,
+      "sys_bytes": 1426985216
+    }
+  ],
+  "node_count": 15430,
+  "edge_count": 41960,
+  "nodes_per_sec": 57.0635309206871,
+  "edges_per_sec": 155.17730119455805,
+  "p50_phase_ns": 235095400,
+  "p95_phase_ns": 15298610800,
+  "p99_phase_ns": 45115035800
+}

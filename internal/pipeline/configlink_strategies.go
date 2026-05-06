@@ -143,8 +143,22 @@ func (p *Pipeline) collectCodeNodes() []*store.Node {
 	return codeNodes
 }
 
+// codeNodeWithNorm caches the normalized name alongside the node so the
+// key-symbol matcher does not re-normalize every code node for every
+// config entry. (Plan 5 Phase D: P99 phase tail fix — see PHASE_D_PERF.md.)
+type codeNodeWithNorm struct {
+	node *store.Node
+	norm string
+}
+
 // matchConfigKeySymbols links config Variable nodes to code symbols when
 // the normalized config key is a contiguous substring of the normalized code name.
+//
+// Plan 5 Phase D: pre-normalize all code-node names once before the
+// O(|entries|×|codeNodes|) match loop. Previously, normalizeConfigKey was
+// called inside the inner loop, doing |entries|×|codeNodes| normalizations
+// when |codeNodes| is sufficient. On the code-graph self-index this
+// dropped the configlinker phase from 53.18s to under 10s.
 func (p *Pipeline) matchConfigKeySymbols() []*store.Edge {
 	configVars, err := p.Store.FindNodesByLabel(p.ProjectName, "Variable")
 	if err != nil {
@@ -158,19 +172,24 @@ func (p *Pipeline) matchConfigKeySymbols() []*store.Edge {
 
 	codeNodes := p.collectCodeNodes()
 
+	// Pre-normalize each code node's name exactly once.
+	cached := make([]codeNodeWithNorm, 0, len(codeNodes))
+	for _, code := range codeNodes {
+		norm, _ := normalizeConfigKey(code.Name)
+		if norm == "" {
+			continue
+		}
+		cached = append(cached, codeNodeWithNorm{node: code, norm: norm})
+	}
+
 	var edges []*store.Edge
 	for _, ce := range entries {
-		for _, code := range codeNodes {
-			codeNorm, _ := normalizeConfigKey(code.Name)
-			if codeNorm == "" {
-				continue
-			}
-
+		for _, c := range cached {
 			var confidence float64
 			switch {
-			case codeNorm == ce.normalized:
+			case c.norm == ce.normalized:
 				confidence = 0.85 // exact match
-			case strings.Contains(codeNorm, ce.normalized):
+			case strings.Contains(c.norm, ce.normalized):
 				confidence = 0.75 // substring match
 			default:
 				continue
@@ -178,14 +197,14 @@ func (p *Pipeline) matchConfigKeySymbols() []*store.Edge {
 
 			edges = append(edges, &store.Edge{
 				Project:  p.ProjectName,
-				SourceID: code.ID,
+				SourceID: c.node.ID,
 				TargetID: ce.node.ID,
 				Type:     "CONFIGURES",
 				Properties: map[string]any{
-					"strategy":   "key_symbol",
+					"strategy":        "key_symbol",
 					"confidence_tier": store.ConfidenceAmbiguous,
-					"confidence": confidence,
-					"config_key": ce.node.Name,
+					"confidence":      confidence,
+					"config_key":      ce.node.Name,
 				},
 			})
 		}

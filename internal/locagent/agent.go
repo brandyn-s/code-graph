@@ -151,13 +151,30 @@ type LocalizedEntity struct {
 
 // Result is the full agent run result, including a transcript of tool
 // calls for auditability.
+//
+// Iterations holds per-iteration entity lists when the agent runs in
+// multi-iteration mode (LOCAGENT_ITERATIONS>=2). Iterations[i] is the
+// finalized entity list of the i-th independent agent run BEFORE MRR
+// aggregation. Empty for single-shot runs (iter=1) and for legacy
+// callers that don't need per-iteration data. Surfaced for the Plan 4
+// Loc-Bench failure-audit pipeline so the audit can distinguish:
+//   - "rescued by iter 2" (entity appears only in Iterations[1])
+//   - "iter 1 was sufficient" (entity appears in Iterations[0] at high rank)
+//   - "iter 2 inconsistent with iter 1" (top-1 differs across iterations
+//     — signal that the case is on the boundary of agent capability).
+//
+// The protocol is independent-sampling-with-MRR-aggregation: each
+// iteration calls runOnce() with identical args (no conditioning on
+// prior iteration results); aggregateByMRR(Iterations, topK) produces
+// Entities. See runWithConsistency for the implementation.
 type Result struct {
-	Entities    []LocalizedEntity `json:"entities"`
-	Turns       int               `json:"turns"`
-	StopReason  string            `json:"stop_reason"` // "finalized", "max_turns", "no_finalize", "error"
-	Transcript  []TranscriptEntry `json:"transcript,omitempty"`
-	InputTokens int               `json:"input_tokens"`
-	OutputTokens int              `json:"output_tokens"`
+	Entities     []LocalizedEntity   `json:"entities"`
+	Iterations   [][]LocalizedEntity `json:"iterations,omitempty"`
+	Turns        int                 `json:"turns"`
+	StopReason   string              `json:"stop_reason"` // "finalized", "max_turns", "no_finalize", "error"
+	Transcript   []TranscriptEntry   `json:"transcript,omitempty"`
+	InputTokens  int                 `json:"input_tokens"`
+	OutputTokens int                 `json:"output_tokens"`
 }
 
 // TranscriptEntry is one step of the agent's execution.
@@ -188,7 +205,14 @@ func Run(ctx context.Context, st *store.Store, project, issue string, topK int) 
 		}
 	}
 	if iters == 1 {
-		return runOnce(ctx, st, project, issue, topK)
+		r, err := runOnce(ctx, st, project, issue, topK)
+		// Plan 4 T1: even at iter=1, expose Iterations[0] for symmetry
+		// with multi-iter runs. Downstream audit code can then assume
+		// Iterations is always present and non-empty on success.
+		if r != nil && err == nil && len(r.Entities) > 0 {
+			r.Iterations = [][]LocalizedEntity{append([]LocalizedEntity(nil), r.Entities...)}
+		}
+		return r, err
 	}
 	return runWithConsistency(ctx, st, project, issue, topK, iters)
 }
@@ -230,6 +254,15 @@ func runWithConsistency(ctx context.Context, st *store.Store, project, issue str
 		return aggregate, nil
 	}
 	aggregate.Entities = aggregateByMRR(iterations, topK)
+	// Plan 4 T1: surface per-iteration entity lists for failure-audit
+	// pipeline. Each Iterations[i] is the entity list of the i-th
+	// independent runOnce() call BEFORE MRR aggregation. Allows
+	// downstream tooling to distinguish "rescued-by-iter-2" cases from
+	// "iter-1-was-sufficient" cases without re-running the agent.
+	aggregate.Iterations = make([][]LocalizedEntity, 0, len(iterations))
+	for _, iter := range iterations {
+		aggregate.Iterations = append(aggregate.Iterations, iter.Entities)
+	}
 	return aggregate, nil
 }
 

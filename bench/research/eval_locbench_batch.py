@@ -83,6 +83,11 @@ class InstanceResult:
     cost_estimate_usd: float = 0.0
     note: str = ""
     duration_s: float = 0.0
+    # Plan 4 T1: full structured JSON envelope from eval_rank_localize -json,
+    # including per-iteration entity lists when LOCAGENT_ITERATIONS>=2.
+    # Populated only when --per-case-json is passed. Discarded otherwise
+    # to keep the markdown report path unaffected.
+    agent_json: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -248,16 +253,26 @@ def db_path_for(repo_path: Path) -> Path:
     return CACHE_DIR / f"{name}.db"
 
 
-def run_agent(db: Path, query: str, top_k: int = 10) -> dict[str, Any]:
-    """Run eval_rank_localize binary with -agent. Returns parsed result dict."""
+def run_agent(db: Path, query: str, top_k: int = 10, json_mode: bool = False) -> dict[str, Any]:
+    """Run eval_rank_localize binary with -agent. Returns parsed result dict.
+
+    When json_mode=True, passes -json to the binary to capture the
+    structured locagent.Result (including the per-iteration Iterations
+    field added in Plan 4 T1) instead of the human-readable text. The
+    full JSON is returned under the "agent_json" key for the per-case
+    JSON dump.
+    """
     cmd = [
         str(EVAL_BIN),
         "-top-k", str(top_k),
         "-agent",
         "-seed-strategy", "hybrid",
-        to_windows_path(db),
-        query,
     ]
+    if json_mode:
+        cmd.append("-json")
+    cmd.append(to_windows_path(db))
+    cmd.append(query)
+
     # Capture as bytes + UTF-8 decode (text=True uses cp1252 on Windows
     # and crashes on non-cp1252 bytes — PR #97 fix).
     result = subprocess.run(cmd, capture_output=True, timeout=300)
@@ -271,8 +286,25 @@ def run_agent(db: Path, query: str, top_k: int = 10) -> dict[str, Any]:
             "output_tokens": 0,
             "turns": 0,
         }
-    # Parse the line: "turns=N, stop_reason=foo, input_tokens=X, output_tokens=Y"
-    parsed = {"stdout": out, "input_tokens": 0, "output_tokens": 0, "turns": 0}
+
+    parsed: dict[str, Any] = {"stdout": out, "input_tokens": 0, "output_tokens": 0, "turns": 0}
+
+    if json_mode:
+        # Structured output. Parse the JSON envelope and pull token /
+        # turn counts from the embedded code_localize_agent block.
+        try:
+            envelope = json.loads(out)
+        except json.JSONDecodeError as e:
+            parsed["error"] = f"json decode failed: {e}"
+            return parsed
+        agent = envelope.get("code_localize_agent") or {}
+        parsed["agent_json"] = envelope
+        parsed["turns"] = int(agent.get("turns", 0))
+        parsed["input_tokens"] = int(agent.get("input_tokens", 0))
+        parsed["output_tokens"] = int(agent.get("output_tokens", 0))
+        return parsed
+
+    # Text mode: parse the line "turns=N, stop_reason=foo, input_tokens=X, output_tokens=Y"
     for line in out.splitlines():
         if "input_tokens=" in line and "output_tokens=" in line:
             for part in line.split(","):
@@ -311,7 +343,7 @@ def score_against_ground_truth(agent_output: str, ground_truth: list[str]) -> tu
     return file_hit, class_hit, func_hit
 
 
-def evaluate_instance(row: dict[str, Any], workdir: Path) -> InstanceResult:
+def evaluate_instance(row: dict[str, Any], workdir: Path, json_mode: bool = False) -> InstanceResult:
     iid = row["instance_id"]
     repo = row["repo"]
     res = InstanceResult(
@@ -354,17 +386,35 @@ def evaluate_instance(row: dict[str, Any], workdir: Path) -> InstanceResult:
         res.duration_s = time.time() - t0
         return res
 
-    parsed = run_agent(db, short_query, top_k=10)
+    parsed = run_agent(db, short_query, top_k=10, json_mode=json_mode)
     res.agent_ran = "error" not in parsed
     res.input_tokens = parsed.get("input_tokens", 0)
     res.output_tokens = parsed.get("output_tokens", 0)
     res.turns = parsed.get("turns", 0)
     res.cost_estimate_usd = COST_PER_QUERY_USD_ESTIMATE if res.agent_ran else 0.0
 
+    if json_mode and "agent_json" in parsed:
+        res.agent_json = parsed["agent_json"]
+
     if res.agent_ran:
-        res.file_hit, res.class_hit, res.func_hit = score_against_ground_truth(
-            parsed["stdout"], res.ground_truth
-        )
+        # In json_mode, the agent's text "stdout" is a JSON envelope.
+        # Score against the structured entities directly when present
+        # rather than against the JSON string (which would mis-attribute
+        # substring hits to keys/property names instead of file paths).
+        if json_mode and "agent_json" in parsed:
+            agent_block = parsed["agent_json"].get("code_localize_agent") or {}
+            entities = agent_block.get("entities") or []
+            ent_blob = "\n".join(
+                f"{e.get('qualified_name','')} {e.get('file_path','')}"
+                for e in entities if isinstance(e, dict)
+            )
+            res.file_hit, res.class_hit, res.func_hit = score_against_ground_truth(
+                ent_blob, res.ground_truth
+            )
+        else:
+            res.file_hit, res.class_hit, res.func_hit = score_against_ground_truth(
+                parsed["stdout"], res.ground_truth
+            )
 
     # Cleanup repo to save disk
     shutil.rmtree(repo_dir, ignore_errors=True)
@@ -453,6 +503,17 @@ def main() -> int:
         type=Path,
         default=REPO_ROOT / "bench/research" / f"locbench-n20-results-{time.strftime('%Y-%m-%d')}.md",
     )
+    ap.add_argument(
+        "--per-case-json",
+        type=Path,
+        default=None,
+        help=(
+            "If set, write a JSON file with the full per-case agent envelopes "
+            "(including the per-iteration Iterations field surfaced in Plan 4 T1). "
+            "Consumed by bench/research/locbench_failure_audit.py for the "
+            "7-bucket classification pipeline."
+        ),
+    )
     args = ap.parse_args()
 
     if not os.environ.get("ANTHROPIC_API_KEY"):
@@ -483,7 +544,7 @@ def main() -> int:
             print(f"\n!!! {summary.aborted_reason}")
             break
         try:
-            res = evaluate_instance(row.to_dict(), args.workdir)
+            res = evaluate_instance(row.to_dict(), args.workdir, json_mode=bool(args.per_case_json))
         except KeyboardInterrupt:
             summary.aborted_reason = "user interrupted (Ctrl+C)"
             break
@@ -506,6 +567,56 @@ def main() -> int:
         summary.total_cost_usd += res.cost_estimate_usd
 
     write_report(summary, args.output)
+
+    # Plan 4 T1: per-case JSON dump for the failure-audit pipeline.
+    # Captures the full structured agent envelope per instance,
+    # including the per-iteration Iterations field (when LOCAGENT_ITERATIONS>=2).
+    if args.per_case_json:
+        per_case = {
+            "schema_version": 1,
+            "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "n_total": summary.n_total,
+            "n_indexed": summary.n_indexed,
+            "n_agent_ran": summary.n_agent_ran,
+            "n_file_hit": summary.n_file_hit,
+            "n_class_hit": summary.n_class_hit,
+            "n_func_hit": summary.n_func_hit,
+            "aborted_reason": summary.aborted_reason,
+            "cases": [
+                {
+                    "instance_id": r.instance_id,
+                    "repo": r.repo,
+                    "category": r.category,
+                    "ground_truth": r.ground_truth,
+                    "indexed": r.indexed,
+                    "agent_ran": r.agent_ran,
+                    "file_hit": r.file_hit,
+                    "class_hit": r.class_hit,
+                    "func_hit": r.func_hit,
+                    # Inverted hit fields used by the failure-audit
+                    # is_miss() heuristic (which expects a "predicted_correct"-
+                    # shaped key per case). Surface "file_correct" so the
+                    # audit's heuristic finds the score directly.
+                    "file_correct": r.file_hit,
+                    "class_correct": r.class_hit,
+                    "func_correct": r.func_hit,
+                    "turns": r.turns,
+                    "input_tokens": r.input_tokens,
+                    "output_tokens": r.output_tokens,
+                    "cost_estimate_usd": r.cost_estimate_usd,
+                    "duration_s": r.duration_s,
+                    "note": r.note,
+                    "agent_envelope": r.agent_json,
+                }
+                for r in summary.instances
+            ],
+        }
+        args.per_case_json.parent.mkdir(parents=True, exist_ok=True)
+        args.per_case_json.write_text(
+            json.dumps(per_case, indent=2), encoding="utf-8"
+        )
+        print(f"\nPer-case JSON written: {args.per_case_json}")
+
     return 0
 
 

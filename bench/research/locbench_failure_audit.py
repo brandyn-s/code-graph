@@ -1,43 +1,70 @@
-"""Phase C1b: Loc-Bench failure-audit harness.
+"""Plan 4 T1: Loc-Bench failure-audit harness with 7-bucket taxonomy.
 
-Loads the latest Loc-Bench eval results, identifies misses (cases where
-predicted didn't match expected_paths), and produces a per-case
-classification scaffold for human review.
+Roundtable-converged successor to the Plan 1 C1 4-bucket harness. Loads
+Loc-Bench eval results (with per-iteration data when available from the
+Iterations field added to locagent.Result in this PR), identifies
+misses, auto-proposes a bucket via heuristics, and emits a per-case
+YAML scaffold for human confirmation.
 
-The harness handles the mechanical part — loading + diffing + producing
-a YAML scaffold. The classification step (assigning each case to bucket
-a/b/c) is human work. The harness's job is to make the human work
-maximally efficient: present each miss with enough context to classify
-in <30 seconds.
+7-bucket taxonomy (META_SYNTHESIS.md F1, 2026-05-06 roundtable):
 
-Bucket definitions (from Plan 1 Phase C1):
-  (a) wrong-function-despite-correct-graph — predicted file is right,
-      function within is wrong. Indicator that the agent picked the
-      wrong sibling, not that the graph is missing data.
-  (b) missing-dynamic-dispatch-edge — predicted is wrong AND the
-      relevant correct entity is reachable only via an unresolved
-      dispatch edge in the graph. The graph IS the bottleneck.
-  (c) scorer-artifact — case where the iter=1 vs iter=2 difference
-      explains the miss (canonical-class-vs-semantically-near, or
-      class-name-format mismatch).
-  (d) other — flag for analysis but doesn't fit a/b/c.
+  indirect_call_required: predicted wrong AND the correct entity is
+    reachable only via dynamic dispatch (closure, fn pointer, trait
+    object, interface method, **kwargs). code-graph's CALLS extractor
+    does not emit edges for these. Graph IS the bottleneck.
 
-Decision rule:
-  >60% in (a) → Func Acc@10 work is #1 priority
-  >60% in (b) → cross-language indirect-call coverage is #1
-  >60% in (c) → scorer/protocol ablation is #1
+  import_resolution_miss: agent never found the correct file because
+    IMPORTS resolution missed the cross-module link. Common in nested
+    src/ Python and Rust use-crate paths.
+
+  scope_collision: agent picked wrong entity because two entities
+    share a short name (e.g. time.Now vs store.Now). Suffix-match
+    collision in resolveViaNameLookup. Graph would resolve with
+    import context.
+
+  embedding_recall_miss: hybrid seeds didn't surface the correct
+    file. Voyage cosine too low; file content didn't match issue
+    vocabulary.
+
+  agent_loop_failure: agent terminated on max_turns or no_finalize.
+    LLM-side failure, not graph-side.
+
+  oracle_gap: case appears as a miss but the ground-truth path is
+    incorrect or missing in Loc-Bench. System was right; oracle wrong.
+
+  node_absent: correct entity isn't in the indexed graph at all
+    (generated file, vendored dep, indexer-skipped file).
+
+Roundtable decision rule (>=60% threshold):
+  indirect_call_required → INDIRECT_CALLS v0.4/v0.5 + cross-language
+  import_resolution_miss → resolver fix
+  scope_collision → Go oracle gap fix + suffix-match import-context gating
+  embedding_recall_miss → Voyage model upgrade or hybrid retune
+  agent_loop_failure → prompt revision OR Sonnet upgrade
+  oracle_gap → Loc-Bench fixture update upstream
+  node_absent → indexer file-coverage audit
+
+Auto-proposal heuristics (see propose_bucket):
+  - StopReason in {max_turns, no_finalize} → agent_loop_failure
+  - expected file in predicted but expected function not → scope_collision
+  - expected file NOT in any predicted, no iteration found it →
+    import_resolution_miss / embedding_recall_miss / node_absent
+  - per-iteration data present and Iterations[1] rescued the expected
+    entity → emit "rescued_by_iter_N: True" tag (bucket reflects the
+    underlying class, not the rescue)
 
 Usage:
     python bench/research/locbench_failure_audit.py
-        Loads latest results, produces locbench_failure_audit_TODO.yaml
-        with cases ready for classification.
+        Loads latest results, emits locbench_failure_audit_TODO.yaml
+        with auto-proposed buckets for human confirmation.
 
     python bench/research/locbench_failure_audit.py --analyze
-        Reads locbench_failure_audit_TODO.yaml back, computes the
-        bucket distribution, prints the decision-rule outcome.
+        Reads back the confirmed YAML, computes bucket distribution,
+        prints decision-rule outcome.
 
-    python bench/research/locbench_failure_audit.py --baseline 2026-05-04-loc-bench-n200-iter2
-        Use a specific Loc-Bench run as the source.
+    python bench/research/locbench_failure_audit.py --baseline NAME
+        Use a specific baseline filename (without .json suffix) instead
+        of the latest.
 """
 from __future__ import annotations
 
@@ -53,6 +80,62 @@ BASELINES_DIR = REPO_ROOT / "bench" / "accuracy" / "baselines"
 OUTPUT_DIR = REPO_ROOT / "bench" / "research"
 
 DEFAULT_BASELINE = "2026-05-04-loc-bench-n200-iter2"
+
+# 7-bucket taxonomy from the 2026-05-06 roundtable. Keep the names
+# stable: changing them invalidates accumulated audit history.
+BUCKETS = [
+    "indirect_call_required",
+    "import_resolution_miss",
+    "scope_collision",
+    "embedding_recall_miss",
+    "agent_loop_failure",
+    "oracle_gap",
+    "node_absent",
+]
+
+BUCKET_DESCRIPTIONS = {
+    "indirect_call_required":
+        "Correct entity reachable only via dynamic dispatch (closure, fn pointer, "
+        "trait object, interface method, **kwargs); CALLS extractor doesn't emit.",
+    "import_resolution_miss":
+        "IMPORTS resolution missed the cross-module link.",
+    "scope_collision":
+        "Two entities share a short name; suffix-match resolved to wrong one.",
+    "embedding_recall_miss":
+        "Voyage cosine too low; correct file's content didn't match issue vocabulary.",
+    "agent_loop_failure":
+        "LLM agent terminated on max_turns or no_finalize without confident answer.",
+    "oracle_gap":
+        "Loc-Bench ground-truth is incorrect or incomplete; system was right.",
+    "node_absent":
+        "Correct entity isn't in the indexed graph (generated file, vendored, skipped).",
+}
+
+# Decision-rule actions per dominant bucket. Roundtable convergence,
+# 2026-05-06 META_SYNTHESIS F1.
+BUCKET_ACTIONS = {
+    "indirect_call_required":
+        "INDIRECT_CALLS v0.4/v0.5 (fn-pointer-as-arg, **kwargs) + cross-language "
+        "coverage (Go interface dispatch, Rust trait-object dispatch).",
+    "import_resolution_miss":
+        "Resolver fix: extend cross-module import resolution. Python nested-src/ "
+        "layouts and Rust `use crate::...` paths are the common gap surfaces.",
+    "scope_collision":
+        "Go oracle gap fix (extend go-ast oracle for CGO + pointer/value "
+        "receivers) + suffix-match import-context gating in resolveViaNameLookup.",
+    "embedding_recall_miss":
+        "Voyage embedding model upgrade or hybrid weight retune. Increase "
+        "embedding seed top-K, or push Voyage cosine threshold lower.",
+    "agent_loop_failure":
+        "Prompt revision (LOCAGENT_PROMPT_VARIANT) or model upgrade (Sonnet/3.5). "
+        "Investigate per-language max-turn distribution.",
+    "oracle_gap":
+        "Loc-Bench fixture update upstream. Curate a per-fixture allowlist of "
+        "known-incorrect ground truths to subtract from accuracy denominator.",
+    "node_absent":
+        "Indexer file-coverage audit. Compare on-disk file inventory vs indexed "
+        "node count; identify and patch the skip rules causing the gap.",
+}
 
 
 def latest_baseline() -> pathlib.Path | None:
@@ -92,33 +175,171 @@ def is_miss(case: dict[str, Any]) -> bool:
     return False
 
 
+def expected_files(case: dict[str, Any]) -> list[str]:
+    """Extract expected file paths from the case in a tolerant way."""
+    for key in ("expected_paths", "expected", "ground_truth", "edit_functions"):
+        v = case.get(key)
+        if isinstance(v, list):
+            return [str(x) for x in v]
+        if isinstance(v, str):
+            return [v]
+    return []
+
+
+def predicted_files(case: dict[str, Any]) -> list[str]:
+    """Extract predicted file paths from the case in a tolerant way."""
+    for key in ("predicted_paths", "predicted", "output"):
+        v = case.get(key)
+        if isinstance(v, list):
+            # If list of dicts (entities), pull file_path
+            if v and isinstance(v[0], dict):
+                return [str(e.get("file_path", "")) for e in v if e.get("file_path")]
+            return [str(x) for x in v]
+        if isinstance(v, str):
+            return [v]
+    # Fall back to the locagent.Result-shaped agent.entities array
+    agent = case.get("code_localize_agent") or case.get("agent")
+    if isinstance(agent, dict):
+        ents = agent.get("entities", [])
+        if isinstance(ents, list):
+            return [str(e.get("file_path", "")) for e in ents if isinstance(e, dict) and e.get("file_path")]
+    return []
+
+
+def iter_entity_lists(case: dict[str, Any]) -> list[list[dict[str, Any]]]:
+    """Extract per-iteration entity lists, when surfaced. Matches the
+    Iterations field added to locagent.Result in this PR."""
+    agent = case.get("code_localize_agent") or case.get("agent") or case
+    iters = agent.get("iterations") if isinstance(agent, dict) else None
+    if not isinstance(iters, list):
+        return []
+    out: list[list[dict[str, Any]]] = []
+    for iter_list in iters:
+        if isinstance(iter_list, list):
+            out.append([e for e in iter_list if isinstance(e, dict)])
+    return out
+
+
+def stop_reason(case: dict[str, Any]) -> str:
+    """Extract the agent's stop_reason."""
+    agent = case.get("code_localize_agent") or case.get("agent") or case
+    if isinstance(agent, dict):
+        sr = agent.get("stop_reason")
+        if isinstance(sr, str):
+            return sr
+    return ""
+
+
+def rescue_check(expected: list[str], iters: list[list[dict[str, Any]]]) -> tuple[bool, int]:
+    """Did a later iteration surface an expected file that an earlier
+    one missed? Returns (rescued, rescuer_iter_index_0_based)."""
+    if len(iters) < 2:
+        return False, -1
+    seen_in_earlier: set[str] = set()
+    for fp in expected:
+        for idx, iter_list in enumerate(iters):
+            iter_files = {str(e.get("file_path", "")) for e in iter_list}
+            present = any(fp in f or f in fp for f in iter_files if f)
+            if present:
+                if seen_in_earlier and idx > 0:
+                    return True, idx
+                if idx == 0:
+                    seen_in_earlier.add(fp)
+                else:
+                    return True, idx
+    return False, -1
+
+
+def propose_bucket(case: dict[str, Any]) -> tuple[str, str]:
+    """Auto-propose a bucket for a case based on heuristics. Returns
+    (bucket_name, rationale_string). Bucket name is one of the 7
+    canonical names; if the heuristics don't fire confidently, returns
+    ("TODO", reason).
+    """
+    sr = stop_reason(case)
+    if sr in {"max_turns", "no_finalize", "error", "partial_consistency"}:
+        return "agent_loop_failure", f"stop_reason={sr!r}"
+
+    expected = expected_files(case)
+    predicted = predicted_files(case)
+    if not expected or not predicted:
+        return "TODO", "missing expected/predicted; manually classify"
+
+    # Normalize: strip path prefixes for cross-platform compare.
+    def _norm(p: str) -> str:
+        return p.replace("\\", "/").lstrip("./").lower()
+
+    exp_n = [_norm(e) for e in expected]
+    pred_n = [_norm(p) for p in predicted]
+
+    # Heuristic 1: expected file IS in predicted top-K → file-correct,
+    # function-wrong → likely scope_collision (or oracle).
+    file_hit = any(any(en in pn or pn in en for pn in pred_n) for en in exp_n)
+    if file_hit:
+        # Could be scope_collision (sibling miss) or oracle_gap (the
+        # function we predicted is the right one but Loc-Bench's
+        # ground-truth function is mis-labeled). Default to
+        # scope_collision; human confirms.
+        return "scope_collision", "expected_file_in_predicted; likely sibling miss"
+
+    # Heuristic 2: expected file NOT in any predicted across iters.
+    iters = iter_entity_lists(case)
+    found_in_any_iter = False
+    for iter_list in iters:
+        iter_files = {_norm(str(e.get("file_path", ""))) for e in iter_list}
+        if any(any(en in f or f in en for f in iter_files if f) for en in exp_n):
+            found_in_any_iter = True
+            break
+    if not found_in_any_iter:
+        # Either node_absent, embedding_recall_miss, or
+        # import_resolution_miss. Without graph state we can't
+        # distinguish; flag for human review with the most-common
+        # default in roundtable findings (embedding_recall_miss).
+        return "embedding_recall_miss", "expected file absent from all iterations; could be node_absent or import_resolution_miss"
+
+    # Heuristic 3: file appeared in some iteration but not in final
+    # aggregate — fell out during MRR re-rank. Likely embedding miss
+    # or hybrid weight issue.
+    return "embedding_recall_miss", "file in some iteration but dropped from aggregate"
+
+
 def case_summary(case: dict[str, Any]) -> dict[str, Any]:
-    """Extract the human-relevant fields for classification."""
+    """Extract the human-relevant fields plus auto-proposed bucket and
+    per-iteration rescue tag."""
     issue = case.get("issue", case.get("query", case.get("problem_statement", "")))
-    expected = case.get("expected_paths", case.get("expected", case.get("ground_truth", [])))
-    predicted = case.get("predicted_paths", case.get("predicted", case.get("output", [])))
+    expected = expected_files(case)
+    predicted = predicted_files(case)
+    iters = iter_entity_lists(case)
+    rescued, rescuer_idx = rescue_check(expected, iters)
+    proposed, rationale = propose_bucket(case)
     return {
-        "id": case.get("id", case.get("case_id", "?")),
+        "id": case.get("id", case.get("case_id", case.get("instance_id", "?"))),
         "issue_excerpt": str(issue)[:200] + ("..." if len(str(issue)) > 200 else ""),
-        "expected": expected if isinstance(expected, list) else [expected],
-        "predicted": predicted if isinstance(predicted, list) else [predicted],
-        "bucket": "TODO",  # human fills in: a, b, c, d
-        "rationale": "TODO",
+        "expected": expected,
+        "predicted": predicted[:5],  # cap at 5 to keep YAML scannable
+        "stop_reason": stop_reason(case),
+        "iterations_count": len(iters),
+        "rescued_by_iter": (rescuer_idx + 1) if rescued else 0,
+        "proposed_bucket": proposed,
+        "proposal_rationale": rationale,
+        "bucket": proposed,  # human can edit
+        "human_rationale": "TODO",
     }
 
 
 def emit_todo_yaml(misses: list[dict[str, Any]], output_path: pathlib.Path, sample_size: int) -> None:
     """Write a human-classifiable YAML scaffold."""
     sampled = misses[:sample_size]
+    bucket_options = ", ".join(BUCKETS)
     lines = [
-        "# Loc-Bench failure-audit classification scaffold.",
-        "# Phase C1b of Plan 1 (post-roundtable recommendations).",
+        "# Loc-Bench failure-audit classification scaffold (Plan 4 T1).",
+        "# 7-bucket taxonomy from the 2026-05-06 roundtable.",
         "#",
-        "# For each case, set `bucket` to one of: a, b, c, d.",
-        "#   a — wrong-function-despite-correct-graph",
-        "#   b — missing-dynamic-dispatch-edge",
-        "#   c — scorer-artifact (iter=1 vs iter=2, canonical-class issue)",
-        "#   d — other / unclear",
+        "# For each case, set `bucket` to one of:",
+        f"#   {bucket_options}",
+        "#",
+        "# The harness auto-proposes a bucket; confirm or override.",
+        "# Edit `human_rationale` from TODO to your one-line reasoning.",
         "#",
         f"# Sample size: {len(sampled)} of {len(misses)} total misses",
         "",
@@ -129,8 +350,13 @@ def emit_todo_yaml(misses: list[dict[str, Any]], output_path: pathlib.Path, samp
         lines.append(f"    issue_excerpt: {json.dumps(c['issue_excerpt'])}")
         lines.append(f"    expected: {json.dumps(c['expected'])}")
         lines.append(f"    predicted: {json.dumps(c['predicted'])}")
-        lines.append(f"    bucket: {c['bucket']}")
-        lines.append(f"    rationale: {json.dumps(c['rationale'])}")
+        lines.append(f"    stop_reason: {json.dumps(c['stop_reason'])}")
+        lines.append(f"    iterations_count: {c['iterations_count']}")
+        lines.append(f"    rescued_by_iter: {c['rescued_by_iter']}")
+        lines.append(f"    proposed_bucket: {json.dumps(c['proposed_bucket'])}")
+        lines.append(f"    proposal_rationale: {json.dumps(c['proposal_rationale'])}")
+        lines.append(f"    bucket: {json.dumps(c['bucket'])}")
+        lines.append(f"    human_rationale: {json.dumps(c['human_rationale'])}")
         lines.append("")
     output_path.write_text("\n".join(lines), encoding="utf-8")
 
@@ -145,57 +371,69 @@ def analyze_classified(yaml_path: pathlib.Path) -> int:
     text = yaml_path.read_text(encoding="utf-8")
     # Lightweight YAML parse — we only care about the bucket field per case.
     buckets: Counter = Counter()
+    rescue_counts: Counter = Counter()
     classified = 0
     for line in text.splitlines():
-        line = line.strip()
-        if line.startswith("bucket:"):
-            val = line.split(":", 1)[1].strip()
-            if val in ("a", "b", "c", "d"):
+        s = line.strip()
+        if s.startswith("bucket:"):
+            val = s.split(":", 1)[1].strip().strip('"').strip("'")
+            if val in BUCKETS:
                 buckets[val] += 1
                 classified += 1
-            elif val != "TODO":
-                buckets["unknown"] += 1
+            elif val and val != "TODO":
+                buckets["unknown:" + val] += 1
+        elif s.startswith("rescued_by_iter:"):
+            val = s.split(":", 1)[1].strip()
+            try:
+                if int(val) > 0:
+                    rescue_counts["rescued"] += 1
+                else:
+                    rescue_counts["not_rescued"] += 1
+            except ValueError:
+                pass
 
     if classified == 0:
         print(f"No cases classified yet in {yaml_path}", file=sys.stderr)
-        print("Edit the file and set `bucket: a/b/c/d` per case, then re-run.", file=sys.stderr)
+        print(
+            f"Edit the file: confirm `bucket` per case (auto-proposed values are pre-filled).",
+            file=sys.stderr,
+        )
         return 1
 
-    print(f"=== Phase C1b: Loc-Bench failure-audit results ===\n")
-    print(f"Classified cases: {classified}\n")
+    print(f"=== Loc-Bench failure-audit (Plan 4 T1) ===\n")
+    print(f"Classified cases: {classified}")
+    if rescue_counts:
+        rescued = rescue_counts.get("rescued", 0)
+        total = rescued + rescue_counts.get("not_rescued", 0)
+        if total:
+            print(f"Rescued by iter>=2: {rescued}/{total} ({100*rescued/total:.1f}%)")
+    print()
 
-    bucket_descriptions = {
-        "a": "wrong-function-despite-correct-graph",
-        "b": "missing-dynamic-dispatch-edge",
-        "c": "scorer-artifact",
-        "d": "other / unclear",
-    }
-    for bucket in ["a", "b", "c", "d"]:
+    max_count = max((buckets.get(b, 0) for b in BUCKETS), default=0)
+    for bucket in BUCKETS:
         count = buckets.get(bucket, 0)
         pct = 100.0 * count / classified
-        bar = "#" * int(40 * count / max(1, max(buckets.values())))
-        desc = bucket_descriptions[bucket]
-        print(f"  ({bucket}) {desc:50s} {count:>4} ({pct:>5.1f}%) {bar}")
+        bar = "#" * int(40 * count / max(1, max_count))
+        desc = BUCKET_DESCRIPTIONS[bucket]
+        print(f"  {bucket:24s} {count:>4} ({pct:>5.1f}%) {bar}")
+        print(f"    {desc}")
 
     # Decision rule
     print("\n=== Decision rule outcome ===")
     threshold = 0.60
-    for bucket, desc in bucket_descriptions.items():
+    for bucket in BUCKETS:
         if buckets.get(bucket, 0) / classified >= threshold:
-            actions = {
-                "a": "Func Acc@10 work is #1 priority — investigate why the agent picks wrong functions despite correct file-level localization.",
-                "b": "Cross-language indirect-call coverage is #1 — INDIRECT_CALLS v0.4/v0.5 + Go interface dispatch + Rust trait-object work.",
-                "c": "Scorer/protocol ablation is #1 — investigate iter=1 vs iter=2 + canonical-class-name handling.",
-                "d": "Mixed signal — extend audit to a larger sample before committing to direction.",
-            }
-            print(f"  Bucket ({bucket}) at {100*buckets.get(bucket,0)/classified:.1f}% (>= {100*threshold:.0f}% threshold)")
-            print(f"  → {actions[bucket]}")
+            print(
+                f"  Bucket {bucket} at "
+                f"{100*buckets.get(bucket,0)/classified:.1f}% (>= {100*threshold:.0f}% threshold)"
+            )
+            print(f"  -> {BUCKET_ACTIONS[bucket]}")
             return 0
 
-    print("  No bucket dominates (none >=60%). Findings are mixed.")
-    print("  Recommendation: extend audit sample to 100+ cases AND surface")
-    print("  per-language breakdown to see if a single language drives the")
-    print("  miss profile.")
+    print("  No single bucket dominates (none >=60%).")
+    print("  Recommendation: extend audit sample, OR investigate the top-2 buckets")
+    print("  in parallel — they're likely connected (e.g. import_resolution_miss")
+    print("  and embedding_recall_miss often co-occur).")
     return 0
 
 
@@ -240,9 +478,22 @@ def main() -> int:
         print("if needed.", file=sys.stderr)
         return 1
 
+    # Per-bucket auto-proposal preview
+    proposals: Counter = Counter()
+    rescued = 0
+    for m in misses:
+        proposals[m["proposed_bucket"]] += 1
+        if m["rescued_by_iter"] > 0:
+            rescued += 1
+    print("  Auto-proposed bucket distribution (pre-confirmation):", file=sys.stderr)
+    for b, n in proposals.most_common():
+        print(f"    {b:30s} {n:>4}", file=sys.stderr)
+    if rescued:
+        print(f"  Rescued-by-iter>=2: {rescued}/{len(misses)} ({100*rescued/len(misses):.1f}%)", file=sys.stderr)
+
     emit_todo_yaml(misses, yaml_path, args.sample_size)
     print(f"\nWrote {yaml_path}", file=sys.stderr)
-    print(f"Edit the file: set `bucket: a/b/c/d` per case (~{args.sample_size} cases, ~30s each).")
+    print(f"Confirm proposals or override: {yaml_path}")
     print(f"Then run: python {pathlib.Path(__file__).name} --analyze")
 
     return 0

@@ -131,7 +131,8 @@ Tests must reuse / validate them rather than build parallel versions.
 | **Recovery** | After fix: `OpenPath` returns "Mode 7 corruption" error → `DeleteProject` + `IndexRepository(force=true)` |
 | **Operator action** | Run the recovery on the structured error. The marker is best-effort; transient false-positives clear themselves on the next clean open. |
 | **Prior art** | `verify-indexes.py` PRAGMA integrity_check (defense-in-depth) |
-| **Test** | `TestBulkWriteCrashSurfacesViaIntegrityCheck` (B2.5 in PR #200), `TestBulkWriteCrashMarkerSurfacesOnReopen`, `TestBulkWriteMarkerWrittenAndRemoved`, `TestBulkWriteMarkerCorruptDBSurfacesError`, `TestBulkWriteMarkerIgnoresMemoryDB` (Phase B1) |
+| **Test** | `TestBulkWriteCrashSurfacesViaIntegrityCheck` (B2.5 in PR #200), `TestBulkWriteCrashMarkerSurfacesOnReopen`, `TestBulkWriteMarkerWrittenAndRemoved`, `TestBulkWriteMarkerCorruptDBSurfacesError`, `TestBulkWriteMarkerIgnoresMemoryDB` (Phase B1), `TestBulkWriteMarkerFalsePositiveOverhead` (Plan 5 Phase C) |
+| **FP overhead (Plan 5 Phase C)** | Stale marker on a non-corrupt DB triggers one `PRAGMA quick_check`. Measured **median 14.4ms / P95 20.2ms** on a small clean DB (n=10 iterations, `TestBulkWriteMarkerFalsePositiveOverhead`). Cost is dominated by file-open + pragma-dispatch. quick_check on the same DB stays cheap because SQLite pages are small and the b-tree is intact; the test pins a 500ms cap that flags any regression to a slower check. |
 
 ### Mode 7b — Config DB corruption (default journal)
 

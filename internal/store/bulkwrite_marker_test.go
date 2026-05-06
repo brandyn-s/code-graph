@@ -9,8 +9,10 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestBulkWriteCrashMarkerSurfacesOnReopen pins the desired Mode 7 behavior:
@@ -133,6 +135,93 @@ func TestBulkWriteMarkerCorruptDBSurfacesError(t *testing.T) {
 	// in t.TempDir() reuse (defensive — TempDir is per-test, but cheap).
 	_ = os.Remove(markerPath)
 	_ = os.Remove(filepath.Join(filepath.Dir(dbPath), filepath.Base(dbPath)))
+}
+
+// TestBulkWriteMarkerFalsePositiveOverhead measures the wall-time cost
+// of the Mode 7 false-positive case — a stale crash-marker on a non-
+// corrupt DB. This is the cost the operator pays when an indexer was
+// killed mid-bulk-write but no real corruption resulted (the typical
+// "Ctrl-C during incremental reindex" scenario).
+//
+// Plan 5 Phase C: the FP overhead is one PRAGMA quick_check on a clean
+// DB. quick_check on a small clean DB is dominated by file-open and
+// pragma-dispatch cost; the bound is ~10s of milliseconds, NOT the
+// seconds-or-minutes that PRAGMA integrity_check would consume on a
+// real corruption. This test pins that bound.
+//
+// What this MEASURES (not just asserts):
+//   - Median wall time for OpenPath on a clean DB w/ stale marker
+//   - The implicit cost the FP path adds on top of normal OpenPath
+//
+// What this does NOT measure:
+//   - The FP RATE (how often Mode 7 fires on non-corrupt DBs in
+//     production). That requires production telemetry we don't have.
+//   - quick_check cost on large DBs. Test DB is empty/seed-sized, so
+//     bound is loose for production-sized indices.
+//
+// The hard assertion is: <500ms total per reopen. Anything materially
+// over that suggests quick_check is re-running the entire DB rather
+// than the cheap header-only check it should do on a clean file.
+func TestBulkWriteMarkerFalsePositiveOverhead(t *testing.T) {
+	const (
+		iterations  = 10
+		maxWallMs   = 500
+	)
+
+	// Build the corpus once, then run the open/close+marker cycle
+	// repeatedly to get a stable median.
+	s, dbPath := newTestStore(t)
+	seedNode(t, s, "test.fp.Foo")
+	seedNode(t, s, "test.fp.Bar")
+	seedNode(t, s, "test.fp.Baz")
+	if err := s.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	markerPath := bulkWriteMarkerPath(dbPath)
+
+	walls := make([]time.Duration, 0, iterations)
+	for i := 0; i < iterations; i++ {
+		// Plant the marker — simulates BeginBulkWrite without paired
+		// EndBulkWrite. The DB itself is clean (we Close()ed cleanly
+		// above and don't touch it between iterations).
+		if err := os.WriteFile(markerPath, []byte{}, 0o644); err != nil {
+			t.Fatalf("plant marker iter %d: %v", i, err)
+		}
+
+		// MEASURE: full OpenPath wall time, including the Mode 7
+		// quick_check that fires because of the marker.
+		start := time.Now()
+		s2, err := OpenPath(dbPath)
+		elapsed := time.Since(start)
+		if err != nil {
+			t.Fatalf("iter %d: OpenPath should succeed on clean DB despite marker, got: %v", i, err)
+		}
+		walls = append(walls, elapsed)
+
+		// Sanity: marker was cleared (the FP path's whole point is to
+		// not leave the marker around for the next clean run).
+		if _, err := os.Stat(markerPath); !os.IsNotExist(err) {
+			t.Errorf("iter %d: expected marker cleared after FP detection, got stat err: %v", i, err)
+		}
+
+		_ = s2.Close()
+	}
+
+	// Compute median (avoids skew from any single hot-path or
+	// cold-cache outlier). Sort copy.
+	sorted := append([]time.Duration{}, walls...)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i] < sorted[j] })
+	median := sorted[len(sorted)/2]
+	p95 := sorted[(len(sorted)*95)/100]
+
+	t.Logf("Mode 7 FP overhead (n=%d): median=%v, p95=%v (raw=%v)",
+		iterations, median, p95, walls)
+
+	if median > time.Duration(maxWallMs)*time.Millisecond {
+		t.Errorf("FP overhead median %v exceeds %dms cap — quick_check may be doing more than header check",
+			median, maxWallMs)
+	}
 }
 
 // TestBulkWriteMarkerIgnoresMemoryDB pins that BeginBulkWrite on a

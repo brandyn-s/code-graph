@@ -932,13 +932,24 @@ def compute_modality_metrics(
         rule = resolver_rules.get(k, "unknown")
         by_rule_fp[rule] += 1
 
+    # Support threshold for emitting a per-rule cell. Default 50 keeps the
+    # headline reports terse on the strong fixtures (mcp-servers, cobra,
+    # code-graph, PSM-rust). For small-N adversarial fixtures (flask=86,
+    # requests=76 scope-aligned edges) the default filters every cell.
+    # Override via MODALITY_MIN_SUPPORT env var.
+    import os as _os_modality
+    try:
+        modality_min_support = int(_os_modality.environ.get("MODALITY_MIN_SUPPORT", "50"))
+    except ValueError:
+        modality_min_support = 50
+
     per_rule: dict[str, dict] = {}
     rule_alarms: list[str] = []
     for rule in sorted(set(by_rule_tp) | set(by_rule_fp)):
         tp = by_rule_tp[rule]
         fp = by_rule_fp[rule]
         support = tp + fp
-        if support < 50:
+        if support < modality_min_support:
             continue
         precision = tp / support if support else 0.0
         cell = {

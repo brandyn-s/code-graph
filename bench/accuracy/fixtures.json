@@ -41,6 +41,34 @@
       "subset": ["."],
       "notes": "Non-self-hosting Go fixture (added 2026-05-02 per claude-knowledge-base PR #368 plateau-fix improvements). spf13/cobra at f2878ba — CLI-building library, ~10K LOC, 36 .go files, type-clean (no CGO, no generated code). Heavy receiver-method usage on the Command struct exercises Y.5 oracle resolver-method resolution. Self-hosting fixtures hit a ceiling where remaining residuals are oracle-specific limitations against the harness's own static analysis depth — adding a 2nd Go repo proves whether F1 generalizes outside the self-hosting case.",
       "edge_types_in_scope": ["CALLS", "IMPORTS"]
+    },
+    {
+      "id": "flask-adversarial",
+      "path": "C:/Users/user/Documents/bench-fixtures/flask",
+      "sha": "2ac89889f4cc330eabd50f295dcef02828522c69",
+      "short_sha": "2ac8988",
+      "languages": ["python"],
+      "notes": "Re-added 2026-05-06 to populate modality_precision per-rule data on a documented weak Python fixture (2026-04-24 baseline F1=0.54 pre-instrumentation). pallets/flask at 2ac8988. PyCG oracle cached at bench/accuracy/cache/pycg-flask-adversarial-2ac8988.json. The 2026-04-24 measurement predates the resolver_rule taxonomy (PR #129); this entry lets compare.py emit a current baseline so the per-rule cells on weak fixtures are no longer empty.",
+      "edge_types_in_scope": ["CALLS", "IMPORTS"]
+    },
+    {
+      "id": "requests-adversarial",
+      "path": "C:/Users/user/Documents/bench-fixtures/requests",
+      "sha": "f43f750ee10addbaa13901c1017631b4d70fd6e3",
+      "short_sha": "f43f750",
+      "languages": ["python"],
+      "notes": "Re-added 2026-05-06 to populate modality_precision (2026-04-24 baseline F1=0.57 pre-instrumentation). psf/requests at f43f750. PyCG oracle cached.",
+      "edge_types_in_scope": ["CALLS", "IMPORTS"]
+    },
+    {
+      "id": "gin-adversarial",
+      "path": "C:/Users/user/Documents/bench-fixtures/gin",
+      "sha": "d3ffc9985281dcf4d3bef604cce4e662b1a327a6",
+      "short_sha": "d3ffc99",
+      "languages": ["go"],
+      "subset": ["."],
+      "notes": "Re-added 2026-05-06 to populate modality_precision (2026-04-24 baseline F1=0.54 pre-instrumentation). gin-gonic/gin at d3ffc99. Go-AST oracle cache absent for this SHA — compare.py will generate one.",
+      "edge_types_in_scope": ["CALLS", "IMPORTS"]
     }
   ],
   "negative_fixtures": [

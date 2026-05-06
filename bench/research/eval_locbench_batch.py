@@ -63,7 +63,26 @@ COST_PER_QUERY_USD_ESTIMATE = 0.05
 
 # Repo size cap: above this, indexing wall time > 30min — skip to keep
 # the batch tractable.
-MAX_REPO_MB = 200
+# Plan 5 Phase A: raised from 200 MB to 1000 MB to allow more Loc-Bench
+# instances (ray, vllm, scikit-learn) to run; 1 GB hard cap still excludes
+# truly enormous repos like the linux kernel.
+MAX_REPO_MB = 1000
+
+# Plan 5 Phase A: bias the n=50 sample toward smaller repos to maximize
+# indexed yield. Repos here are known-small from manual inspection of the
+# Loc-Bench parquet; the harness prefers these when sampling.
+SMALL_REPO_PREFERENCE = (
+    "kornia/kornia",
+    "aio-libs/aiohttp",
+    "huggingface/accelerate",
+    "ranaroussi/yfinance",
+    "tobymao/sqlglot",
+    "langchain-ai/langgraph",
+    "microsoft/playwright-python",
+    "encode/httpx",
+    "pydantic/pydantic",
+    "psf/requests",
+)
 
 
 @dataclass
@@ -110,22 +129,45 @@ def select_instances(df: pd.DataFrame, n: int, seed: int) -> pd.DataFrame:
 
     Default strategy: 5 each of Bug, Feature, Performance, Security if
     available; fall back to uniform random if categories under-supply.
+
+    Plan 5 Phase A: within each category, prefer instances from the
+    SMALL_REPO_PREFERENCE list when available — this maximizes the
+    indexed-yield ratio at the n=50 sample size by biasing away from
+    1+ GB monorepos that hit the MAX_REPO_MB cap. Falls back to the
+    full category pool if the preferred-repo subset is exhausted.
     """
     random.seed(seed)
     target_per_cat = n // 4
-    picked: list[pd.Series] = []
-    for cat in ["Bug", "Feature", "Performance", "Security"]:
+    picked: list[dict] = []
+    pref_set = set(SMALL_REPO_PREFERENCE)
+    # Plan 5 Phase A: parquet category names are full forms
+    # ("Bug Report", "Feature Request", "Performance Issue",
+    # "Security Vulnerability"), not the short forms used here previously
+    # — the per-category loop was a no-op before this fix.
+    for cat in ["Bug Report", "Feature Request", "Performance Issue", "Security Vulnerability"]:
         sub = df[df["category"] == cat]
         if len(sub) == 0:
             continue
         take = min(target_per_cat, len(sub))
-        picked.extend(sub.sample(n=take, random_state=seed).to_dict("records"))
+        # Bias-by-preference: split the category pool into preferred / other,
+        # draw from preferred first, top up from other.
+        sub_pref = sub[sub["repo"].isin(pref_set)]
+        sub_other = sub[~sub["repo"].isin(pref_set)]
+        from_pref = min(take, len(sub_pref))
+        from_other = take - from_pref
+        if from_pref > 0:
+            picked.extend(sub_pref.sample(n=from_pref, random_state=seed).to_dict("records"))
+        if from_other > 0:
+            picked.extend(sub_other.sample(n=from_other, random_state=seed).to_dict("records"))
     # Top up if we under-filled.
     while len(picked) < n:
         remaining = df.drop(index=[df[df["instance_id"] == r["instance_id"]].index[0] for r in picked])
         if len(remaining) == 0:
             break
-        picked.append(remaining.sample(n=1, random_state=seed + len(picked)).iloc[0].to_dict())
+        # Prefer small repos in top-up too.
+        rem_pref = remaining[remaining["repo"].isin(pref_set)]
+        pool = rem_pref if len(rem_pref) > 0 else remaining
+        picked.append(pool.sample(n=1, random_state=seed + len(picked)).iloc[0].to_dict())
     return pd.DataFrame(picked[:n])
 
 
@@ -144,7 +186,22 @@ def repo_size_mb(path: Path) -> float:
 def clone_repo(repo: str, base_commit: str, dest: Path) -> bool:
     """Shallow-clone {repo} at {base_commit} into {dest}. Returns True on success."""
     if dest.exists():
-        shutil.rmtree(dest, ignore_errors=True)
+        # Plan 5 Phase A: git pack files / docs assets / .png on Windows
+        # often have read-only bits set after checkout. shutil.rmtree
+        # silently fails on those, leaving a partial dir that breaks the
+        # next `git clone`. Force-clear read-only bits before rmtree.
+        def _force_writable(_func, path, _exc):
+            import stat as _stat
+            try:
+                os.chmod(path, _stat.S_IWRITE)
+                _func(path)
+            except Exception:
+                pass
+        shutil.rmtree(dest, onerror=_force_writable)
+        if dest.exists():
+            # Last-resort fallback if rmtree still failed: skip this instance.
+            print(f"  clone target dir not removable: {dest}; skipping")
+            return False
     dest.parent.mkdir(parents=True, exist_ok=True)
     url = f"https://github.com/{repo}.git"
     # Full clone needed because shallow + base_commit isn't reliable across

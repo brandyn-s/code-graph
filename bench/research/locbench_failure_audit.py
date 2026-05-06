@@ -197,8 +197,15 @@ def predicted_files(case: dict[str, Any]) -> list[str]:
             return [str(x) for x in v]
         if isinstance(v, str):
             return [v]
-    # Fall back to the locagent.Result-shaped agent.entities array
-    agent = case.get("code_localize_agent") or case.get("agent")
+    # Fall back to the locagent.Result-shaped agent.entities array.
+    # Plan 5 Phase A: also look inside agent_envelope.code_localize_agent
+    # since that's the shape eval_locbench_batch.py writes via --per-case-json.
+    agent = (
+        case.get("code_localize_agent")
+        or case.get("agent")
+        or (case.get("agent_envelope") or {}).get("code_localize_agent")
+        or (case.get("agent_envelope") or {}).get("agent")
+    )
     if isinstance(agent, dict):
         ents = agent.get("entities", [])
         if isinstance(ents, list):
@@ -209,7 +216,13 @@ def predicted_files(case: dict[str, Any]) -> list[str]:
 def iter_entity_lists(case: dict[str, Any]) -> list[list[dict[str, Any]]]:
     """Extract per-iteration entity lists, when surfaced. Matches the
     Iterations field added to locagent.Result in this PR."""
-    agent = case.get("code_localize_agent") or case.get("agent") or case
+    agent = (
+        case.get("code_localize_agent")
+        or case.get("agent")
+        or (case.get("agent_envelope") or {}).get("code_localize_agent")
+        or (case.get("agent_envelope") or {}).get("agent")
+        or case
+    )
     iters = agent.get("iterations") if isinstance(agent, dict) else None
     if not isinstance(iters, list):
         return []
@@ -222,7 +235,13 @@ def iter_entity_lists(case: dict[str, Any]) -> list[list[dict[str, Any]]]:
 
 def stop_reason(case: dict[str, Any]) -> str:
     """Extract the agent's stop_reason."""
-    agent = case.get("code_localize_agent") or case.get("agent") or case
+    agent = (
+        case.get("code_localize_agent")
+        or case.get("agent")
+        or (case.get("agent_envelope") or {}).get("code_localize_agent")
+        or (case.get("agent_envelope") or {}).get("agent")
+        or case
+    )
     if isinstance(agent, dict):
         sr = agent.get("stop_reason")
         if isinstance(sr, str):

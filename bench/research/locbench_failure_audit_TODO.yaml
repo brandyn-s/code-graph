@@ -7,80 +7,20 @@
 # The harness auto-proposes a bucket; confirm or override.
 # Edit `human_rationale` from TODO to your one-line reasoning.
 #
-# Sample size: 14 of 14 total misses
+# Sample size: 19 of 19 total misses
 
 cases:
-  - id: "ray-project__ray-48793"
+  - id: "tobymao__sqlglot-4480"
     issue_excerpt: ""
-    expected: ["python/ray/setup-dev.py:do_link"]
+    expected: ["sqlglot/generator.py:Generator.ordered_sql"]
     predicted: []
     stop_reason: ""
     iterations_count: 0
     rescued_by_iter: 0
-    proposed_bucket: "TODO"
+    proposed_bucket: "oracle_gap"
     proposal_rationale: "missing expected/predicted; manually classify"
-    bucket: "TODO"
-    human_rationale: "TODO"
-
-  - id: "scikit-learn__scikit-learn-14012"
-    issue_excerpt: ""
-    expected: ["sklearn/ensemble/_hist_gradient_boosting/gradient_boosting.py:BaseHistGradientBoosting.__init__", "sklearn/ensemble/_hist_gradient_boosting/gradient_boosting.py:BaseHistGradientBoosting.fit", "sklearn/ensemble/_hist_gradient_boosting/gradient_boosting.py:HistGradientBoostingRegressor.__init__", "sklearn/ensemble/_hist_gradient_boosting/gradient_boosting.py:HistGradientBoostingClassifier.__init__"]
-    predicted: []
-    stop_reason: ""
-    iterations_count: 0
-    rescued_by_iter: 0
-    proposed_bucket: "TODO"
-    proposal_rationale: "missing expected/predicted; manually classify"
-    bucket: "TODO"
-    human_rationale: "TODO"
-
-  - id: "langchain-ai__langgraph-2724"
-    issue_excerpt: ""
-    expected: ["libs/langgraph/langgraph/prebuilt/tool_node.py:ToolNode._run_one", "libs/langgraph/langgraph/prebuilt/tool_node.py:ToolNode._arun_one"]
-    predicted: []
-    stop_reason: ""
-    iterations_count: 0
-    rescued_by_iter: 0
-    proposed_bucket: "TODO"
-    proposal_rationale: "missing expected/predicted; manually classify"
-    bucket: "TODO"
-    human_rationale: "TODO"
-
-  - id: "vllm-project__vllm-10076"
-    issue_excerpt: ""
-    expected: ["vllm/entrypoints/openai/serving_engine.py:OpenAIServing._preprocess_chat"]
-    predicted: []
-    stop_reason: ""
-    iterations_count: 0
-    rescued_by_iter: 0
-    proposed_bucket: "TODO"
-    proposal_rationale: "missing expected/predicted; manually classify"
-    bucket: "TODO"
-    human_rationale: "TODO"
-
-  - id: "ray-project__ray-48907"
-    issue_excerpt: ""
-    expected: ["python/ray/data/grouped_data.py:GroupedData.map_groups"]
-    predicted: []
-    stop_reason: ""
-    iterations_count: 0
-    rescued_by_iter: 0
-    proposed_bucket: "TODO"
-    proposal_rationale: "missing expected/predicted; manually classify"
-    bucket: "TODO"
-    human_rationale: "TODO"
-
-  - id: "ray-project__ray-48782"
-    issue_excerpt: ""
-    expected: ["python/ray/dag/compiled_dag_node.py:do_profile_tasks"]
-    predicted: []
-    stop_reason: ""
-    iterations_count: 0
-    rescued_by_iter: 0
-    proposed_bucket: "TODO"
-    proposal_rationale: "missing expected/predicted; manually classify"
-    bucket: "TODO"
-    human_rationale: "TODO"
+    bucket: "oracle_gap"
+    human_rationale: "benchmark instance: clone/checkout failed (Loc-Bench parquet references commit no longer in upstream); not a localization failure"
 
   - id: "tobymao__sqlglot-4524"
     issue_excerpt: ""
@@ -89,10 +29,94 @@ cases:
     stop_reason: ""
     iterations_count: 0
     rescued_by_iter: 0
-    proposed_bucket: "TODO"
+    proposed_bucket: "oracle_gap"
     proposal_rationale: "missing expected/predicted; manually classify"
-    bucket: "TODO"
-    human_rationale: "TODO"
+    bucket: "oracle_gap"
+    human_rationale: "benchmark instance: clone/checkout failed (Loc-Bench parquet references commit no longer in upstream); not a localization failure"
+
+  - id: "tobymao__sqlglot-4366"
+    issue_excerpt: ""
+    expected: ["sqlglot/dialects/duckdb.py:_struct_sql"]
+    predicted: []
+    stop_reason: ""
+    iterations_count: 0
+    rescued_by_iter: 0
+    proposed_bucket: "oracle_gap"
+    proposal_rationale: "missing expected/predicted; manually classify"
+    bucket: "oracle_gap"
+    human_rationale: "benchmark instance: clone/checkout failed (Loc-Bench parquet references commit no longer in upstream); not a localization failure"
+
+  - id: "tobymao__sqlglot-4519"
+    issue_excerpt: ""
+    expected: ["sqlglot/parser.py:Parser._parse_interval"]
+    predicted: []
+    stop_reason: ""
+    iterations_count: 0
+    rescued_by_iter: 0
+    proposed_bucket: "oracle_gap"
+    proposal_rationale: "missing expected/predicted; manually classify"
+    bucket: "oracle_gap"
+    human_rationale: "benchmark instance: clone/checkout failed (Loc-Bench parquet references commit no longer in upstream); not a localization failure"
+
+  - id: "tobymao__sqlglot-4526"
+    issue_excerpt: ""
+    expected: ["sqlglot/planner.py:Step.from_expression"]
+    predicted: []
+    stop_reason: ""
+    iterations_count: 0
+    rescued_by_iter: 0
+    proposed_bucket: "oracle_gap"
+    proposal_rationale: "missing expected/predicted; manually classify"
+    bucket: "oracle_gap"
+    human_rationale: "benchmark instance: clone/checkout failed (Loc-Bench parquet references commit no longer in upstream); not a localization failure"
+
+  - id: "tobymao__sqlglot-4523"
+    issue_excerpt: ""
+    expected: ["sqlglot/dialects/tsql.py:_build_date_delta"]
+    predicted: []
+    stop_reason: ""
+    iterations_count: 0
+    rescued_by_iter: 0
+    proposed_bucket: "oracle_gap"
+    proposal_rationale: "missing expected/predicted; manually classify"
+    bucket: "oracle_gap"
+    human_rationale: "benchmark instance: clone/checkout failed (Loc-Bench parquet references commit no longer in upstream); not a localization failure"
+
+  - id: "ranaroussi__yfinance-2139"
+    issue_excerpt: ""
+    expected: ["yfinance/scrapers/history.py:PriceHistory._fix_bad_div_adjust"]
+    predicted: ["tests/test_price_repair.py", "yfinance/cache.py", "yfinance/cache.py", "yfinance/cache.py", "yfinance/cache.py"]
+    stop_reason: "consistency"
+    iterations_count: 2
+    rescued_by_iter: 0
+    proposed_bucket: "embedding_recall_miss"
+    proposal_rationale: "expected file absent from all iterations; could be node_absent or import_resolution_miss"
+    bucket: "embedding_recall_miss"
+    human_rationale: "agent ran iter=2 but returned 0 entities; expected file in indexed graph but not surfaced — embedding/recall failure"
+
+  - id: "tobymao__sqlglot-3167"
+    issue_excerpt: ""
+    expected: ["sqlglot/dialects/snowflake.py:_build_datetime"]
+    predicted: []
+    stop_reason: ""
+    iterations_count: 0
+    rescued_by_iter: 0
+    proposed_bucket: "oracle_gap"
+    proposal_rationale: "missing expected/predicted; manually classify"
+    bucket: "oracle_gap"
+    human_rationale: "benchmark instance: clone/checkout failed (Loc-Bench parquet references commit no longer in upstream); not a localization failure"
+
+  - id: "pydantic__pydantic-10374"
+    issue_excerpt: ""
+    expected: ["pydantic/validate_call_decorator.py:validate_call"]
+    predicted: []
+    stop_reason: ""
+    iterations_count: 0
+    rescued_by_iter: 0
+    proposed_bucket: "oracle_gap"
+    proposal_rationale: "missing expected/predicted; manually classify"
+    bucket: "oracle_gap"
+    human_rationale: "benchmark instance: clone/checkout failed (Loc-Bench parquet references commit no longer in upstream); not a localization failure"
 
   - id: "tobymao__sqlglot-4434"
     issue_excerpt: ""
@@ -101,58 +125,34 @@ cases:
     stop_reason: ""
     iterations_count: 0
     rescued_by_iter: 0
-    proposed_bucket: "TODO"
+    proposed_bucket: "oracle_gap"
     proposal_rationale: "missing expected/predicted; manually classify"
-    bucket: "TODO"
-    human_rationale: "TODO"
+    bucket: "oracle_gap"
+    human_rationale: "benchmark instance: clone/checkout failed (Loc-Bench parquet references commit no longer in upstream); not a localization failure"
 
-  - id: "vllm-project__vllm-7874"
+  - id: "tobymao__sqlglot-3417"
     issue_excerpt: ""
-    expected: ["vllm/core/scheduler.py:Scheduler._schedule_chunked_prefill"]
+    expected: ["sqlglot/parser.py:Parser._parse_set_item_assignment"]
     predicted: []
     stop_reason: ""
     iterations_count: 0
     rescued_by_iter: 0
-    proposed_bucket: "TODO"
+    proposed_bucket: "oracle_gap"
     proposal_rationale: "missing expected/predicted; manually classify"
-    bucket: "TODO"
-    human_rationale: "TODO"
+    bucket: "oracle_gap"
+    human_rationale: "benchmark instance: clone/checkout failed (Loc-Bench parquet references commit no longer in upstream); not a localization failure"
 
-  - id: "pandas-dev__pandas-19074"
+  - id: "tobymao__sqlglot-3436"
     issue_excerpt: ""
-    expected: ["pandas/core/indexes/multi.py:MultiIndex._engine", "pandas/core/indexes/multi.py:MultiIndex.get_indexer", "pandas/core/indexes/multi.py:MultiIndex.get_loc", "pandas/core/indexes/multi.py:MultiIndex.get_loc_level"]
+    expected: ["sqlglot/parser.py:Parser._parse_sequence_properties"]
     predicted: []
     stop_reason: ""
     iterations_count: 0
     rescued_by_iter: 0
-    proposed_bucket: "TODO"
+    proposed_bucket: "oracle_gap"
     proposal_rationale: "missing expected/predicted; manually classify"
-    bucket: "TODO"
-    human_rationale: "TODO"
-
-  - id: "vllm-project__vllm-10398"
-    issue_excerpt: ""
-    expected: ["vllm/entrypoints/openai/tool_parsers/hermes_tool_parser.py:Hermes2ProToolParser.extract_tool_calls_streaming"]
-    predicted: []
-    stop_reason: ""
-    iterations_count: 0
-    rescued_by_iter: 0
-    proposed_bucket: "TODO"
-    proposal_rationale: "missing expected/predicted; manually classify"
-    bucket: "TODO"
-    human_rationale: "TODO"
-
-  - id: "ray-project__ray-48957"
-    issue_excerpt: ""
-    expected: ["python/ray/experimental/channel/serialization_context.py:_SerializationContext.serialize_to_numpy", "python/ray/experimental/channel/serialization_context.py:_SerializationContext.deserialize_from_numpy"]
-    predicted: []
-    stop_reason: ""
-    iterations_count: 0
-    rescued_by_iter: 0
-    proposed_bucket: "TODO"
-    proposal_rationale: "missing expected/predicted; manually classify"
-    bucket: "TODO"
-    human_rationale: "TODO"
+    bucket: "oracle_gap"
+    human_rationale: "benchmark instance: clone/checkout failed (Loc-Bench parquet references commit no longer in upstream); not a localization failure"
 
   - id: "tobymao__sqlglot-3901"
     issue_excerpt: ""
@@ -161,19 +161,79 @@ cases:
     stop_reason: ""
     iterations_count: 0
     rescued_by_iter: 0
-    proposed_bucket: "TODO"
+    proposed_bucket: "oracle_gap"
     proposal_rationale: "missing expected/predicted; manually classify"
-    bucket: "TODO"
-    human_rationale: "TODO"
+    bucket: "oracle_gap"
+    human_rationale: "benchmark instance: clone/checkout failed (Loc-Bench parquet references commit no longer in upstream); not a localization failure"
 
-  - id: "prowler-cloud__prowler-5933"
+  - id: "zulip__zulip-14091"
     issue_excerpt: ""
-    expected: ["prowler/lib/check/checks_loader.py:load_checks_to_execute"]
+    expected: ["zerver/lib/rate_limiter.py:RateLimitedObject.rate_limit", "zerver/lib/rate_limiter.py:RateLimitedObject.__init__", "zerver/lib/rate_limiter.py:RateLimitedObject.max_api_calls", "zerver/lib/rate_limiter.py:RateLimitedObject.max_api_window", "zerver/lib/rate_limiter.py:RateLimiterBackend.block_access", "zerver/lib/rate_limiter.py:RedisRateLimiterBackend.is_ratelimited", "zerver/lib/rate_limiter.py:RedisRateLimiterBackend.incr_ratelimit", "zerver/lib/rate_limiter.py:RedisRateLimiterBackend.rate_limit_entity"]
     predicted: []
     stop_reason: ""
     iterations_count: 0
     rescued_by_iter: 0
-    proposed_bucket: "TODO"
+    proposed_bucket: "oracle_gap"
     proposal_rationale: "missing expected/predicted; manually classify"
-    bucket: "TODO"
-    human_rationale: "TODO"
+    bucket: "oracle_gap"
+    human_rationale: "benchmark instance: clone/checkout failed (Loc-Bench parquet references commit no longer in upstream); not a localization failure"
+
+  - id: "streamlit__streamlit-9754"
+    issue_excerpt: ""
+    expected: ["lib/streamlit/web/server/server.py:Server._create_app"]
+    predicted: []
+    stop_reason: ""
+    iterations_count: 0
+    rescued_by_iter: 0
+    proposed_bucket: "oracle_gap"
+    proposal_rationale: "missing expected/predicted; manually classify"
+    bucket: "oracle_gap"
+    human_rationale: "benchmark instance: clone/checkout failed (Loc-Bench parquet references commit no longer in upstream); not a localization failure"
+
+  - id: "sancus-tee__sancus-compiler-36"
+    issue_excerpt: ""
+    expected: ["src/drivers/linker.py:add_sym", "src/drivers/linker.py:get_io_sym_map", "src/drivers/linker.py:get_io_sect_map", "src/drivers/linker.py:sort_entries", "src/drivers/sancus/sancus_config.py:SmConfig.__init__", "src/drivers/sancus/sancus_config.py:SmConfig.__str__"]
+    predicted: ["src/sancus_support/sm_support.h", "src/sancus_support/sm_support.h", "src/sancus_support/sm_support.h", "src/sancus_support/sm_support.h"]
+    stop_reason: "consistency"
+    iterations_count: 2
+    rescued_by_iter: 0
+    proposed_bucket: "embedding_recall_miss"
+    proposal_rationale: "expected file absent from all iterations; could be node_absent or import_resolution_miss"
+    bucket: "embedding_recall_miss"
+    human_rationale: "agent ran iter=2 but returned 0 entities; expected file in indexed graph but not surfaced — embedding/recall failure"
+
+  - id: "jobatabs__textec-53"
+    issue_excerpt: ""
+    expected: ["src/repositories/reference_repository.py:create_reference"]
+    predicted: ["src/db_helper.py", "src/db_helper.py", "src/db_helper.py", "src/db_helper.py"]
+    stop_reason: "consistency"
+    iterations_count: 2
+    rescued_by_iter: 0
+    proposed_bucket: "embedding_recall_miss"
+    proposal_rationale: "expected file absent from all iterations; could be node_absent or import_resolution_miss"
+    bucket: "embedding_recall_miss"
+    human_rationale: "agent ran iter=2 but returned 0 entities; expected file in indexed graph but not surfaced — embedding/recall failure"
+
+  - id: "tobymao__sqlglot-4415"
+    issue_excerpt: ""
+    expected: ["sqlglot/parser.py:Parser._parse_column_ops"]
+    predicted: []
+    stop_reason: ""
+    iterations_count: 0
+    rescued_by_iter: 0
+    proposed_bucket: "oracle_gap"
+    proposal_rationale: "missing expected/predicted; manually classify"
+    bucket: "oracle_gap"
+    human_rationale: "benchmark instance: clone/checkout failed (Loc-Bench parquet references commit no longer in upstream); not a localization failure"
+
+  - id: "huggingface__accelerate-3261"
+    issue_excerpt: ""
+    expected: ["examples/by_feature/megatron_lm_gpt_pretraining.py:main"]
+    predicted: ["src/accelerate/accelerator.py", "src/accelerate/utils/dataclasses.py", "src/accelerate/accelerator.py"]
+    stop_reason: "consistency"
+    iterations_count: 2
+    rescued_by_iter: 0
+    proposed_bucket: "embedding_recall_miss"
+    proposal_rationale: "expected file absent from all iterations; could be node_absent or import_resolution_miss"
+    bucket: "embedding_recall_miss"
+    human_rationale: "agent ran iter=2 but returned 0 entities; expected file in indexed graph but not surfaced — embedding/recall failure"

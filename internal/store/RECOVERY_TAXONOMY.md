@@ -152,7 +152,7 @@ workstream. Listed so the taxonomy doesn't silently exclude them.
 
 | Mode | Why deferred |
 |---|---|
-| Disk full (ENOSPC) mid-write | Surface area is OS-wide. SQLite returns `SQLITE_FULL` which propagates as a normal error; `verify-indexes.py` catches the leftover state. No store-layer logic needed. |
+| Disk full (ENOSPC) mid-write | SQLite returns `SQLITE_FULL` via `mattn/go-sqlite3`'s `Code == ErrFull`. Wrapped as a normal error through every store-layer mutation. `verify-indexes.py` catches leftover state. **Audited 2026-05-05 ([ENOSPC_AUDIT.md](ENOSPC_AUDIT.md))**; no store-layer fix needed unless deployment model changes. |
 | Read-only filesystem | Operator-induced; out of normal operating envelope. SQLite will return errors on first write. |
 | Schema drift across MCP versions | Migration story is separate (`migrate.go`). Recovery is independent of migration. |
 | FK violation from external `sqlite3` CLI mutation | User-induced; `DeleteProject` already covers as a recovery path. The `_foreign_keys=1` PRAGMA is enforced at write time, not read time. |

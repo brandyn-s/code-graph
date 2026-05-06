@@ -5,6 +5,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"html"
 	"os"
 	"path/filepath"
 	"sort"
@@ -198,13 +199,14 @@ func (s *Server) handleVisualize(_ context.Context, req *mcp.CallToolRequest) (*
 	edgeTypesJSON, _ := json.Marshal(edgeTypeList)
 
 	// Inject data into HTML template
-	html := visualizeTemplate
-	html = strings.Replace(html, "/*NODES_DATA*/", string(nodesJSON), 1)
-	html = strings.Replace(html, "/*EDGES_DATA*/", string(edgesJSON), 1)
-	html = strings.Replace(html, "/*EDGE_TYPES*/", string(edgeTypesJSON), 1)
-	html = strings.ReplaceAll(html, "/*PROJECT_NAME*/", projName)
-	html = strings.Replace(html, "/*NODE_COUNT*/", fmt.Sprintf("%d", len(vizNodes)), 1)
-	html = strings.Replace(html, "/*EDGE_COUNT*/", fmt.Sprintf("%d", len(vizEdges)), 1)
+	safeProjName := html.EscapeString(projName)
+	page := visualizeTemplate
+	page = strings.Replace(page, "/*NODES_DATA*/", string(nodesJSON), 1)
+	page = strings.Replace(page, "/*EDGES_DATA*/", string(edgesJSON), 1)
+	page = strings.Replace(page, "/*EDGE_TYPES*/", string(edgeTypesJSON), 1)
+	page = strings.ReplaceAll(page, "/*PROJECT_NAME*/", safeProjName)
+	page = strings.Replace(page, "/*NODE_COUNT*/", fmt.Sprintf("%d", len(vizNodes)), 1)
+	page = strings.Replace(page, "/*EDGE_COUNT*/", fmt.Sprintf("%d", len(vizEdges)), 1)
 
 	// Determine output path
 	outputPath := getStringArg(args, "output_path")
@@ -216,7 +218,7 @@ func (s *Server) handleVisualize(_ context.Context, req *mcp.CallToolRequest) (*
 		}
 	}
 
-	if writeErr := os.WriteFile(outputPath, []byte(html), 0o644); writeErr != nil { //nolint:gosec // output path from trusted tool input
+	if writeErr := os.WriteFile(outputPath, []byte(page), 0o644); writeErr != nil { //nolint:gosec // output path from trusted tool input
 		return errResult(fmt.Sprintf("write file: %v", writeErr)), nil
 	}
 

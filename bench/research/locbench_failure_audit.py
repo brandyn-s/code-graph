@@ -75,6 +75,13 @@ import sys
 from collections import Counter
 from typing import Any
 
+# Get-well plan Phase 1: shared schema lookup. Audit no longer maintains
+# its own chain-of-.get() fallbacks against the per-case JSON; both
+# eval (writer) and audit (reader) construct/parse via schema.py, so
+# writer/reader drift becomes a parse-time error.
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import schema  # noqa: E402
+
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 BASELINES_DIR = REPO_ROOT / "bench" / "accuracy" / "baselines"
 OUTPUT_DIR = REPO_ROOT / "bench" / "research"
@@ -186,20 +193,62 @@ def expected_files(case: dict[str, Any]) -> list[str]:
     return []
 
 
+def _to_record(case: dict[str, Any]) -> "schema.PerCaseRecord | None":
+    """Parse a case dict into a schema-validated PerCaseRecord.
+
+    Get-well plan Phase 1: replaces the previous chain-of-.get() fallback
+    pattern across predicted_files / iter_entity_lists / stop_reason
+    with a single schema parse. If parsing fails, log + return None
+    (the chain-of-fallback would have silently returned []/[]/"" — we
+    now log the parse error explicitly so silent-failure becomes
+    visible-failure).
+
+    Returns None when:
+      - The case dict isn't shaped like a PerCaseRecord (legacy runs,
+        manual fixtures). Audit falls back to liberal-parse below to
+        preserve compatibility with non-schema input.
+      - The case is missing required fields. We surface a stderr
+        warning so the operator knows the input is non-conforming.
+    """
+    try:
+        return schema.PerCaseRecord.from_dict(case)
+    except (KeyError, TypeError, ValueError) as exc:
+        # Liberal-parse fallback for legacy / hand-crafted cases:
+        # construct a minimal record with whatever we can find. This
+        # exists ONLY to keep the audit tooling working against older
+        # JSON shapes (pre-schema). New writes go through the schema.
+        sys.stderr.write(
+            f"  [audit] case schema parse failed ({exc!r}); "
+            f"falling back to liberal lookup for instance_id="
+            f"{case.get('instance_id', '<unknown>')}\n"
+        )
+        return None
+
+
 def predicted_files(case: dict[str, Any]) -> list[str]:
-    """Extract predicted file paths from the case in a tolerant way."""
+    """Extract predicted file paths. Schema-first; liberal fallback for
+    legacy fixture shapes."""
+    rec = _to_record(case)
+    if rec is not None:
+        # Honor the legacy override keys when an audit fixture explicitly
+        # sets them (e.g., manual classification scripts) — schema-shaped
+        # records won't have them so this branch is dormant in production.
+        for key in ("predicted_paths", "predicted", "output"):
+            v = case.get(key)
+            if isinstance(v, list):
+                if v and isinstance(v[0], dict):
+                    return [str(e.get("file_path", "")) for e in v if e.get("file_path")]
+                return [str(x) for x in v]
+        return rec.predicted_files
+    # Liberal-parse fallback (only fires on legacy non-schema input).
     for key in ("predicted_paths", "predicted", "output"):
         v = case.get(key)
         if isinstance(v, list):
-            # If list of dicts (entities), pull file_path
             if v and isinstance(v[0], dict):
                 return [str(e.get("file_path", "")) for e in v if e.get("file_path")]
             return [str(x) for x in v]
         if isinstance(v, str):
             return [v]
-    # Fall back to the locagent.Result-shaped agent.entities array.
-    # Plan 5 Phase A: also look inside agent_envelope.code_localize_agent
-    # since that's the shape eval_locbench_batch.py writes via --per-case-json.
     agent = (
         case.get("code_localize_agent")
         or case.get("agent")
@@ -214,8 +263,28 @@ def predicted_files(case: dict[str, Any]) -> list[str]:
 
 
 def iter_entity_lists(case: dict[str, Any]) -> list[list[dict[str, Any]]]:
-    """Extract per-iteration entity lists, when surfaced. Matches the
-    Iterations field added to locagent.Result in this PR."""
+    """Per-iteration entity lists. Schema-first; liberal fallback for legacy."""
+    rec = _to_record(case)
+    if rec is not None:
+        # Convert the schema's typed iterations back to dict-list form
+        # so propose_bucket / rescue_check (which still expect dict-list
+        # shape) keep working without ripple changes.
+        return [
+            [
+                {
+                    "file_path": e.file_path,
+                    "qualified_name": e.qualified_name,
+                    "label": e.label,
+                }
+                for e in iter_list
+            ]
+            for iter_list in (
+                rec.agent_envelope.code_localize_agent.iterations
+                if rec.agent_envelope.code_localize_agent is not None
+                else []
+            )
+        ]
+    # Legacy fallback.
     agent = (
         case.get("code_localize_agent")
         or case.get("agent")
@@ -234,7 +303,10 @@ def iter_entity_lists(case: dict[str, Any]) -> list[list[dict[str, Any]]]:
 
 
 def stop_reason(case: dict[str, Any]) -> str:
-    """Extract the agent's stop_reason."""
+    """Agent's stop_reason. Schema-first; liberal fallback for legacy."""
+    rec = _to_record(case)
+    if rec is not None:
+        return rec.stop_reason
     agent = (
         case.get("code_localize_agent")
         or case.get("agent")
@@ -274,6 +346,14 @@ def propose_bucket(case: dict[str, Any]) -> tuple[str, str]:
     (bucket_name, rationale_string). Bucket name is one of the 7
     canonical names; if the heuristics don't fire confidently, returns
     ("TODO", reason).
+
+    Get-well plan Phase 1.5 (2026-05-06): when a case has
+    agent_ran=True but predicted is empty, that's the silent-failure
+    pattern — the agent ran successfully but produced no entities,
+    which the pre-Phase-1 chain-of-fallback would have masked as
+    "missing predicted; classify manually." That combination is now
+    surfaced as a stderr warning so the operator sees how many cases
+    the harness is silently giving up on.
     """
     sr = stop_reason(case)
     if sr in {"max_turns", "no_finalize", "error", "partial_consistency"}:
@@ -282,6 +362,23 @@ def propose_bucket(case: dict[str, Any]) -> tuple[str, str]:
     expected = expected_files(case)
     predicted = predicted_files(case)
     if not expected or not predicted:
+        # Loud-failure guard: agent_ran=True + indexed=True + zero
+        # predictions is the Phase A pattern (4 cases). Pre-Phase-1
+        # this fell through to "TODO; classify manually" and the
+        # operator never saw it. Now we warn at stderr.
+        agent_ran = bool(case.get("agent_ran"))
+        indexed = bool(case.get("indexed"))
+        if agent_ran and indexed and not predicted:
+            sys.stderr.write(
+                f"  [audit-warn] case {case.get('instance_id', '<unknown>')!r}: "
+                f"agent_ran=True, indexed=True, but predicted_files=[]. "
+                f"Suspicious — agent ran but produced no entities. "
+                f"Auto-classified as embedding_recall_miss (not TODO).\n"
+            )
+            return (
+                "embedding_recall_miss",
+                "agent_ran with zero entities; vocabulary/recall failure",
+            )
         return "TODO", "missing expected/predicted; manually classify"
 
     # Normalize: strip path prefixes for cross-platform compare.

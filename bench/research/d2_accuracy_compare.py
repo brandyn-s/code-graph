@@ -18,25 +18,32 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
+# Get-well plan Phase 1: shared schema. Both eval (writer) and this
+# script (reader) construct/parse via schema.py — drift is a parse-time
+# error, not a silent fallback.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import schema  # noqa: E402
 
-def load_per_case(path: Path) -> dict[str, dict]:
-    """Load per-case JSON; key by instance_id for cross-mode alignment.
 
-    Roundtable T2 fix (2026-05-06): the eval script writes the per-case
-    payload under the `cases` key (see _build_per_case_dict in
-    eval_locbench_batch.py). Pre-T2 this function looked for `instances`
-    and silently returned empty on every input — same writer/reader
-    key-name mismatch class as the audit harness's `agent_envelope` bug.
-    The first real run (parallel n=10 vs serial n=50) surfaced it.
+def load_per_case(path: Path) -> dict[str, "schema.PerCaseRecord"]:
+    """Load per-case JSON via the shared schema, keyed by instance_id.
+
+    Get-well plan Phase 1 (2026-05-06): replaces the previous
+    `raw.get("cases") or raw.get("instances")` fallback with a direct
+    schema parse. If the on-disk JSON drifts from the schema (e.g.,
+    eval renames a field), this raises a KeyError at parse time
+    instead of silently producing an empty dict — which was the
+    behavior pre-T2 that hid the bug for 6 hours after I shipped it.
     """
     raw = json.loads(path.read_text(encoding="utf-8"))
-    cases = raw.get("cases") or raw.get("instances", [])
-    indexed = {}
-    for c in cases:
-        if c.get("indexed") and c.get("agent_ran"):
-            indexed[c["instance_id"]] = c
+    summary = schema.BatchSummaryRecord.from_dict(raw)
+    indexed: dict[str, schema.PerCaseRecord] = {}
+    for case in summary.cases:
+        if case.indexed and case.agent_ran:
+            indexed[case.instance_id] = case
     return indexed
 
 
@@ -56,16 +63,29 @@ def main() -> int:
     print(f"Common:        {len(common)}")
 
     if not common:
-        print("ERROR: no common indexed instances — comparison impossible")
-        return 2
+        # Get-well plan Phase 1.5: no-common-cases is now a hard error
+        # (raise, not "return 2 + print"). Pre-T2 the script silently
+        # printed "comparison impossible" and exited 2; users could
+        # miss it in the output. Raising forces the operator to fix
+        # the input rather than scroll past the message.
+        raise RuntimeError(
+            f"no common indexed instances between {args.serial} and "
+            f"{args.parallel}; comparison impossible. "
+            f"Serial has {len(serial)} indexed+agent_ran cases; "
+            f"parallel has {len(parallel)}. "
+            f"Either the seeds differ or one of the runs hit zero indexes."
+        )
 
-    # Compute per-mode counts on the common subset.
-    s_file = sum(1 for cid in common if serial[cid].get("file_hit"))
-    s_class = sum(1 for cid in common if serial[cid].get("class_hit"))
-    s_func = sum(1 for cid in common if serial[cid].get("func_hit"))
-    p_file = sum(1 for cid in common if parallel[cid].get("file_hit"))
-    p_class = sum(1 for cid in common if parallel[cid].get("class_hit"))
-    p_func = sum(1 for cid in common if parallel[cid].get("func_hit"))
+    # Compute per-mode counts on the common subset. Schema-typed
+    # PerCaseRecord exposes file_hit / class_hit / func_hit as
+    # attributes; pyright catches mistyped field names at edit time
+    # (the bug class this whole get-well plan addresses).
+    s_file = sum(1 for cid in common if serial[cid].file_hit)
+    s_class = sum(1 for cid in common if serial[cid].class_hit)
+    s_func = sum(1 for cid in common if serial[cid].func_hit)
+    p_file = sum(1 for cid in common if parallel[cid].file_hit)
+    p_class = sum(1 for cid in common if parallel[cid].class_hit)
+    p_func = sum(1 for cid in common if parallel[cid].func_hit)
 
     n = len(common)
     print()

@@ -49,6 +49,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+# Get-well plan Phase 1: shared schema for the per-case JSON contract.
+# eval (here) constructs records via this module; audit + compare scripts
+# parse via the same module. Writer/reader drift becomes an import-time
+# error instead of a silent runtime fallback. See bench/research/schema.py.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import schema  # noqa: E402  (after sys.path tweak)
+
 import pandas as pd
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -496,50 +503,67 @@ def evaluate_instance(row: dict[str, Any], workdir: Path, json_mode: bool = Fals
 def _build_per_case_dict(summary: BatchSummary) -> dict:
     """Build the per-case JSON payload from the in-progress summary.
 
-    Roundtable T2 (2026-05-06): factored out so checkpoint-after-each-
-    instance and final-write-after-loop share the same shape. Previously
-    the dict was inlined in a single end-of-loop block; killing the
-    batch dropped all evidence (the Plan 5 A.4 incident).
+    Get-well plan Phase 1 (2026-05-06): now constructs via the shared
+    schema module (bench/research/schema.py) so writer/reader contracts
+    are checked at type-load time. Previously the dict was inlined here;
+    audit + compare scripts had to mirror the field names by hand and
+    silently fell back when keys drifted.
     """
-    return {
-        "schema_version": 1,
-        "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "n_total": summary.n_total,
-        "n_indexed": summary.n_indexed,
-        "n_agent_ran": summary.n_agent_ran,
-        "n_file_hit": summary.n_file_hit,
-        "n_class_hit": summary.n_class_hit,
-        "n_func_hit": summary.n_func_hit,
-        "aborted_reason": summary.aborted_reason,
-        "cases": [
-            {
-                "instance_id": r.instance_id,
-                "repo": r.repo,
-                "category": r.category,
-                "ground_truth": r.ground_truth,
-                "indexed": r.indexed,
-                "agent_ran": r.agent_ran,
-                "file_hit": r.file_hit,
-                "class_hit": r.class_hit,
-                "func_hit": r.func_hit,
-                # Inverted hit fields used by the failure-audit
-                # is_miss() heuristic (which expects a "predicted_correct"-
-                # shaped key per case). Surface "file_correct" so the
-                # audit's heuristic finds the score directly.
-                "file_correct": r.file_hit,
-                "class_correct": r.class_hit,
-                "func_correct": r.func_hit,
-                "turns": r.turns,
-                "input_tokens": r.input_tokens,
-                "output_tokens": r.output_tokens,
-                "cost_estimate_usd": r.cost_estimate_usd,
-                "duration_s": r.duration_s,
-                "note": r.note,
-                "agent_envelope": r.agent_json,
-            }
-            for r in summary.instances
-        ],
-    }
+    record = schema.BatchSummaryRecord(
+        schema_version=schema.SCHEMA_VERSION,
+        generated_at=schema.now_iso_utc(),
+        n_total=summary.n_total,
+        n_indexed=summary.n_indexed,
+        n_agent_ran=summary.n_agent_ran,
+        n_file_hit=summary.n_file_hit,
+        n_class_hit=summary.n_class_hit,
+        n_func_hit=summary.n_func_hit,
+        aborted_reason=summary.aborted_reason,
+        cases=[_per_case_record_from_instance(r) for r in summary.instances],
+    )
+    return record.to_dict()
+
+
+def _per_case_record_from_instance(r: InstanceResult) -> "schema.PerCaseRecord":
+    """Adapt an in-memory InstanceResult into the shared schema record.
+
+    The inversion lives at the eval-script boundary: the rest of the
+    eval code uses the legacy InstanceResult dataclass; only this
+    adapter pushes data into the schema-validated shape that gets
+    written to disk and read back by audit/compare.
+    """
+    env_dict = r.agent_json if isinstance(r.agent_json, dict) else {}
+    cla_raw = env_dict.get("code_localize_agent")
+    if isinstance(cla_raw, dict):
+        envelope = schema.AgentEnvelope(
+            code_localize_agent=schema.CodeLocalizeAgentResult.from_dict(cla_raw)
+        )
+    else:
+        envelope = schema.AgentEnvelope(code_localize_agent=None)
+    return schema.PerCaseRecord(
+        instance_id=r.instance_id,
+        repo=r.repo,
+        category=r.category,
+        ground_truth=list(r.ground_truth),
+        indexed=r.indexed,
+        agent_ran=r.agent_ran,
+        file_hit=r.file_hit,
+        class_hit=r.class_hit,
+        func_hit=r.func_hit,
+        # Inverted hit fields used by the failure-audit is_miss()
+        # heuristic. The schema preserves them as separate fields so
+        # the audit script's lookups don't have to guess.
+        file_correct=r.file_hit,
+        class_correct=r.class_hit,
+        func_correct=r.func_hit,
+        turns=r.turns,
+        input_tokens=r.input_tokens,
+        output_tokens=r.output_tokens,
+        cost_estimate_usd=r.cost_estimate_usd,
+        duration_s=r.duration_s,
+        note=r.note,
+        agent_envelope=envelope,
+    )
 
 
 def write_report(summary: BatchSummary, output: Path) -> None:

@@ -144,6 +144,7 @@ The earlier "we exceed 92.7%" claim in this doc was apples-to-oranges (n=16 Loc-
 | Env var | Default | Purpose |
 |---------|---------|---------|
 | `LOCAGENT_ITERATIONS` | `2` | Number of agent iterations to run, then aggregate by mean reciprocal rank (MRR). Matches LocAgent paper's self-consistency (Section 3.2). Set to `1` for single-shot (legacy behavior, ~50% cost) |
+| `LOCAGENT_PARALLEL` | unset | Set to `1` to dispatch the N independent iterations concurrently instead of serially. iter=2 is independent-sampling-with-MRR (no conditioning between iterations), so parallel is semantically safe. Tradeoff: ~50% wall-time reduction at iter=2 vs serial; rate-limit risk on tier-0/1 Anthropic accounts (the anthropic package's retry logic handles 429s). Plan 4 D2 falsifier (2026-05-06): synthetic test shows 3.1x speedup at N=3 with stub runOnce; real Loc-Bench wall-time delta TBD pending eval. |
 | `LOCAGENT_PROMPT_VARIANT` | `open` | `open` uses LocAgent's 4-step CoT (categorize → link → trace → locate); `aggressive` reverts to a tighter 5-turn budget |
 | `LOCAGENT_BFS_DEPTH` | `4` | BFS depth for `code_localize` inside the agent loop |
 | `LOCAGENT_MAX_TURNS` | `20` | Hard cap; `open` prompt soft-targets 8 turns |

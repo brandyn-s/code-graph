@@ -29,6 +29,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/DeusData/codebase-memory-mcp/internal/anthropic"
 	"github.com/DeusData/codebase-memory-mcp/internal/localize"
@@ -205,7 +206,7 @@ func Run(ctx context.Context, st *store.Store, project, issue string, topK int) 
 		}
 	}
 	if iters == 1 {
-		r, err := runOnce(ctx, st, project, issue, topK)
+		r, err := runOnceFn(ctx, st, project, issue, topK)
 		// Plan 4 T1: even at iter=1, expose Iterations[0] for symmetry
 		// with multi-iter runs. Downstream audit code can then assume
 		// Iterations is always present and non-empty on success.
@@ -220,15 +221,45 @@ func Run(ctx context.Context, st *store.Store, project, issue string, topK int) 
 // runWithConsistency runs the agent N times and aggregates results by
 // MRR. If an iteration errors mid-run, returns the aggregate of
 // successful iterations with stop_reason="partial_consistency". If the
-// first iteration errors, returns the error directly.
+// first iteration errors (when running serially) OR all iterations
+// error (when running in parallel), returns the error directly.
+//
+// Parallel mode (LOCAGENT_PARALLEL=1, default OFF): the iter=2
+// protocol is independent-sampling-with-MRR-aggregation (each runOnce
+// call uses identical args with no conditioning on prior results, see
+// Run() doc). Independent samples are safe to dispatch concurrently.
+// At iter=2 this halves wall time; at iter=3 it cuts to ~33%.
+//
+// Risk to be aware of: concurrent calls to the Anthropic API can hit
+// rate limits faster, especially on tier-0/1 accounts. The anthropic
+// package's retry logic already handles 429s; if the rate limit is
+// hard, parallel mode degrades to ~serial wall time without affecting
+// correctness.
+//
+// Plan 4 D2 falsifier: roundtable disagreement was whether parallel
+// iter=2 deserves top-3 priority. Falsifier: ≥30% P95 wall-time
+// reduction with ≤1pp Acc@10 regression on Loc-Bench n>=20.
 func runWithConsistency(ctx context.Context, st *store.Store, project, issue string, topK, iters int) (*Result, error) {
+	if os.Getenv("LOCAGENT_PARALLEL") == "1" {
+		return runWithConsistencyParallel(ctx, st, project, issue, topK, iters)
+	}
+	return runWithConsistencySerial(ctx, st, project, issue, topK, iters)
+}
+
+// runOnceFn is the function used by runWithConsistency* paths to
+// execute one independent agent iteration. Defaults to runOnce.
+// Tests inject a stub via runOnceFnTest to verify parallel dispatch
+// timing without making real Anthropic API calls.
+var runOnceFn = runOnce
+
+func runWithConsistencySerial(ctx context.Context, st *store.Store, project, issue string, topK, iters int) (*Result, error) {
 	var iterations []*Result
 	aggregate := &Result{
 		Transcript: make([]TranscriptEntry, 0, iters*16),
 		StopReason: "consistency",
 	}
 	for i := 0; i < iters; i++ {
-		r, err := runOnce(ctx, st, project, issue, topK)
+		r, err := runOnceFn(ctx, st, project, issue, topK)
 		if r != nil {
 			aggregate.InputTokens += r.InputTokens
 			aggregate.OutputTokens += r.OutputTokens
@@ -249,9 +280,83 @@ func runWithConsistency(ctx context.Context, st *store.Store, project, issue str
 			iterations = append(iterations, r)
 		}
 	}
+	return finalizeConsistency(aggregate, iterations, topK), nil
+}
+
+// runWithConsistencyParallel dispatches the N independent runOnce()
+// calls concurrently. Iteration ordering is preserved (slot i in
+// Iterations is from runOnce call i) so MRR aggregation is
+// deterministic across serial vs parallel modes.
+//
+// Failure handling:
+//   - All iterations error → return aggregate + first error.
+//   - Some iterations error → return aggregate of successful ones,
+//     stop_reason="partial_consistency".
+func runWithConsistencyParallel(ctx context.Context, st *store.Store, project, issue string, topK, iters int) (*Result, error) {
+	type slot struct {
+		r   *Result
+		err error
+	}
+	slots := make([]slot, iters)
+	var wg sync.WaitGroup
+	for i := 0; i < iters; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			r, err := runOnceFn(ctx, st, project, issue, topK)
+			slots[idx] = slot{r: r, err: err}
+		}(i)
+	}
+	wg.Wait()
+
+	aggregate := &Result{
+		Transcript: make([]TranscriptEntry, 0, iters*16),
+		StopReason: "consistency",
+	}
+	var iterations []*Result
+	var firstErr error
+	for i, s := range slots {
+		if s.r != nil {
+			aggregate.InputTokens += s.r.InputTokens
+			aggregate.OutputTokens += s.r.OutputTokens
+			aggregate.Turns += s.r.Turns
+			for _, te := range s.r.Transcript {
+				te.Summary = fmt.Sprintf("[iter %d] %s", i+1, te.Summary)
+				aggregate.Transcript = append(aggregate.Transcript, te)
+			}
+		}
+		if s.err != nil {
+			if firstErr == nil {
+				firstErr = s.err
+			}
+			continue
+		}
+		if s.r != nil && len(s.r.Entities) > 0 {
+			iterations = append(iterations, s.r)
+		}
+	}
+	if len(iterations) == 0 && firstErr != nil {
+		// Total failure: no successful iteration. Return aggregate +
+		// the first error encountered. Matches serial-mode behavior
+		// when the first iteration errors.
+		return aggregate, firstErr
+	}
+	if firstErr != nil {
+		// At least one iteration succeeded but at least one errored:
+		// signal partial success, do not propagate the error.
+		aggregate.StopReason = "partial_consistency"
+	}
+	return finalizeConsistency(aggregate, iterations, topK), nil
+}
+
+// finalizeConsistency runs MRR aggregation over the successful
+// iterations and populates aggregate.Iterations + aggregate.Entities.
+// Shared between serial and parallel paths so the post-aggregation
+// shape is identical.
+func finalizeConsistency(aggregate *Result, iterations []*Result, topK int) *Result {
 	if len(iterations) == 0 {
 		aggregate.StopReason = "no_finalize"
-		return aggregate, nil
+		return aggregate
 	}
 	aggregate.Entities = aggregateByMRR(iterations, topK)
 	// Plan 4 T1: surface per-iteration entity lists for failure-audit
@@ -263,7 +368,7 @@ func runWithConsistency(ctx context.Context, st *store.Store, project, issue str
 	for _, iter := range iterations {
 		aggregate.Iterations = append(aggregate.Iterations, iter.Entities)
 	}
-	return aggregate, nil
+	return aggregate
 }
 
 // aggregateByMRR aggregates ranked entity lists from multiple iterations

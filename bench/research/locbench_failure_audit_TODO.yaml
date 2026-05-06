@@ -1,0 +1,179 @@
+# Loc-Bench failure-audit classification scaffold (Plan 4 T1).
+# 7-bucket taxonomy from the 2026-05-06 roundtable.
+#
+# For each case, set `bucket` to one of:
+#   indirect_call_required, import_resolution_miss, scope_collision, embedding_recall_miss, agent_loop_failure, oracle_gap, node_absent
+#
+# The harness auto-proposes a bucket; confirm or override.
+# Edit `human_rationale` from TODO to your one-line reasoning.
+#
+# Sample size: 14 of 14 total misses
+
+cases:
+  - id: "ray-project__ray-48793"
+    issue_excerpt: ""
+    expected: ["python/ray/setup-dev.py:do_link"]
+    predicted: []
+    stop_reason: ""
+    iterations_count: 0
+    rescued_by_iter: 0
+    proposed_bucket: "TODO"
+    proposal_rationale: "missing expected/predicted; manually classify"
+    bucket: "TODO"
+    human_rationale: "TODO"
+
+  - id: "scikit-learn__scikit-learn-14012"
+    issue_excerpt: ""
+    expected: ["sklearn/ensemble/_hist_gradient_boosting/gradient_boosting.py:BaseHistGradientBoosting.__init__", "sklearn/ensemble/_hist_gradient_boosting/gradient_boosting.py:BaseHistGradientBoosting.fit", "sklearn/ensemble/_hist_gradient_boosting/gradient_boosting.py:HistGradientBoostingRegressor.__init__", "sklearn/ensemble/_hist_gradient_boosting/gradient_boosting.py:HistGradientBoostingClassifier.__init__"]
+    predicted: []
+    stop_reason: ""
+    iterations_count: 0
+    rescued_by_iter: 0
+    proposed_bucket: "TODO"
+    proposal_rationale: "missing expected/predicted; manually classify"
+    bucket: "TODO"
+    human_rationale: "TODO"
+
+  - id: "langchain-ai__langgraph-2724"
+    issue_excerpt: ""
+    expected: ["libs/langgraph/langgraph/prebuilt/tool_node.py:ToolNode._run_one", "libs/langgraph/langgraph/prebuilt/tool_node.py:ToolNode._arun_one"]
+    predicted: []
+    stop_reason: ""
+    iterations_count: 0
+    rescued_by_iter: 0
+    proposed_bucket: "TODO"
+    proposal_rationale: "missing expected/predicted; manually classify"
+    bucket: "TODO"
+    human_rationale: "TODO"
+
+  - id: "vllm-project__vllm-10076"
+    issue_excerpt: ""
+    expected: ["vllm/entrypoints/openai/serving_engine.py:OpenAIServing._preprocess_chat"]
+    predicted: []
+    stop_reason: ""
+    iterations_count: 0
+    rescued_by_iter: 0
+    proposed_bucket: "TODO"
+    proposal_rationale: "missing expected/predicted; manually classify"
+    bucket: "TODO"
+    human_rationale: "TODO"
+
+  - id: "ray-project__ray-48907"
+    issue_excerpt: ""
+    expected: ["python/ray/data/grouped_data.py:GroupedData.map_groups"]
+    predicted: []
+    stop_reason: ""
+    iterations_count: 0
+    rescued_by_iter: 0
+    proposed_bucket: "TODO"
+    proposal_rationale: "missing expected/predicted; manually classify"
+    bucket: "TODO"
+    human_rationale: "TODO"
+
+  - id: "ray-project__ray-48782"
+    issue_excerpt: ""
+    expected: ["python/ray/dag/compiled_dag_node.py:do_profile_tasks"]
+    predicted: []
+    stop_reason: ""
+    iterations_count: 0
+    rescued_by_iter: 0
+    proposed_bucket: "TODO"
+    proposal_rationale: "missing expected/predicted; manually classify"
+    bucket: "TODO"
+    human_rationale: "TODO"
+
+  - id: "tobymao__sqlglot-4524"
+    issue_excerpt: ""
+    expected: ["sqlglot/optimizer/qualify_columns.py:Resolver.get_source_columns"]
+    predicted: []
+    stop_reason: ""
+    iterations_count: 0
+    rescued_by_iter: 0
+    proposed_bucket: "TODO"
+    proposal_rationale: "missing expected/predicted; manually classify"
+    bucket: "TODO"
+    human_rationale: "TODO"
+
+  - id: "tobymao__sqlglot-4434"
+    issue_excerpt: ""
+    expected: ["sqlglot/generator.py:Generator.dictproperty_sql", "sqlglot/generator.py:Generator.dictsubproperty_sql", "sqlglot/parser.py:Parser._parse_dict_property"]
+    predicted: []
+    stop_reason: ""
+    iterations_count: 0
+    rescued_by_iter: 0
+    proposed_bucket: "TODO"
+    proposal_rationale: "missing expected/predicted; manually classify"
+    bucket: "TODO"
+    human_rationale: "TODO"
+
+  - id: "vllm-project__vllm-7874"
+    issue_excerpt: ""
+    expected: ["vllm/core/scheduler.py:Scheduler._schedule_chunked_prefill"]
+    predicted: []
+    stop_reason: ""
+    iterations_count: 0
+    rescued_by_iter: 0
+    proposed_bucket: "TODO"
+    proposal_rationale: "missing expected/predicted; manually classify"
+    bucket: "TODO"
+    human_rationale: "TODO"
+
+  - id: "pandas-dev__pandas-19074"
+    issue_excerpt: ""
+    expected: ["pandas/core/indexes/multi.py:MultiIndex._engine", "pandas/core/indexes/multi.py:MultiIndex.get_indexer", "pandas/core/indexes/multi.py:MultiIndex.get_loc", "pandas/core/indexes/multi.py:MultiIndex.get_loc_level"]
+    predicted: []
+    stop_reason: ""
+    iterations_count: 0
+    rescued_by_iter: 0
+    proposed_bucket: "TODO"
+    proposal_rationale: "missing expected/predicted; manually classify"
+    bucket: "TODO"
+    human_rationale: "TODO"
+
+  - id: "vllm-project__vllm-10398"
+    issue_excerpt: ""
+    expected: ["vllm/entrypoints/openai/tool_parsers/hermes_tool_parser.py:Hermes2ProToolParser.extract_tool_calls_streaming"]
+    predicted: []
+    stop_reason: ""
+    iterations_count: 0
+    rescued_by_iter: 0
+    proposed_bucket: "TODO"
+    proposal_rationale: "missing expected/predicted; manually classify"
+    bucket: "TODO"
+    human_rationale: "TODO"
+
+  - id: "ray-project__ray-48957"
+    issue_excerpt: ""
+    expected: ["python/ray/experimental/channel/serialization_context.py:_SerializationContext.serialize_to_numpy", "python/ray/experimental/channel/serialization_context.py:_SerializationContext.deserialize_from_numpy"]
+    predicted: []
+    stop_reason: ""
+    iterations_count: 0
+    rescued_by_iter: 0
+    proposed_bucket: "TODO"
+    proposal_rationale: "missing expected/predicted; manually classify"
+    bucket: "TODO"
+    human_rationale: "TODO"
+
+  - id: "tobymao__sqlglot-3901"
+    issue_excerpt: ""
+    expected: ["sqlglot/parser.py:Parser._parse_join"]
+    predicted: []
+    stop_reason: ""
+    iterations_count: 0
+    rescued_by_iter: 0
+    proposed_bucket: "TODO"
+    proposal_rationale: "missing expected/predicted; manually classify"
+    bucket: "TODO"
+    human_rationale: "TODO"
+
+  - id: "prowler-cloud__prowler-5933"
+    issue_excerpt: ""
+    expected: ["prowler/lib/check/checks_loader.py:load_checks_to_execute"]
+    predicted: []
+    stop_reason: ""
+    iterations_count: 0
+    rescued_by_iter: 0
+    proposed_bucket: "TODO"
+    proposal_rationale: "missing expected/predicted; manually classify"
+    bucket: "TODO"
+    human_rationale: "TODO"

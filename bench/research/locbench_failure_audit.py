@@ -88,6 +88,20 @@ OUTPUT_DIR = REPO_ROOT / "bench" / "research"
 
 DEFAULT_BASELINE = "2026-05-04-loc-bench-n200-iter2"
 
+
+# Roundtable rec (2026-05-06): the legacy liberal-parse fallback in
+# _to_record was flagged as load-bearing silent-fallback (the very
+# pattern the schema was supposed to eliminate). Default behavior is
+# now fail-loud: schema parse failures raise, audit aborts with a
+# non-zero exit. The legacy fallback path is opt-in via the
+# --allow-legacy-fallback CLI flag for genuinely-old fixture data;
+# new writes always go through the schema and never need it.
+#
+# Module-level toggle so callers (e.g. tests) can flip it without
+# round-tripping through the CLI parser. Default False keeps the
+# script fail-loud out of the box.
+ALLOW_LEGACY_FALLBACK = False
+
 # 7-bucket taxonomy from the 2026-05-06 roundtable. Keep the names
 # stable: changing them invalidates accumulated audit history.
 BUCKETS = [
@@ -193,32 +207,48 @@ def expected_files(case: dict[str, Any]) -> list[str]:
     return []
 
 
+class SchemaParseError(Exception):
+    """Raised when schema parsing fails AND --allow-legacy-fallback is
+    not set. Fail-loud replacement for the previous silent-fallback
+    pattern (roundtable rec, 2026-05-06)."""
+
+
 def _to_record(case: dict[str, Any]) -> "schema.PerCaseRecord | None":
     """Parse a case dict into a schema-validated PerCaseRecord.
 
-    Get-well plan Phase 1: replaces the previous chain-of-.get() fallback
-    pattern across predicted_files / iter_entity_lists / stop_reason
-    with a single schema parse. If parsing fails, log + return None
-    (the chain-of-fallback would have silently returned []/[]/"" — we
-    now log the parse error explicitly so silent-failure becomes
-    visible-failure).
+    Default behavior (fail-loud): schema parse failures raise
+    SchemaParseError. The previous silent-fallback path is gated
+    behind ALLOW_LEGACY_FALLBACK (CLI flag --allow-legacy-fallback).
 
-    Returns None when:
-      - The case dict isn't shaped like a PerCaseRecord (legacy runs,
-        manual fixtures). Audit falls back to liberal-parse below to
-        preserve compatibility with non-schema input.
-      - The case is missing required fields. We surface a stderr
-        warning so the operator knows the input is non-conforming.
+    Roundtable convergent finding #2 (2026-05-06): the previous
+    liberal-parse fallback was load-bearing silent-fallback — the
+    exact pattern the schema work was supposed to eliminate. The
+    `except (KeyError, TypeError, ValueError)` clause swallowed any
+    future from_dict bug into a stderr warning that CI does not see.
+    The fallback now fires only when explicitly opted into.
+
+    Returns None ONLY in legacy-fallback mode when parsing fails;
+    in default mode raises SchemaParseError.
     """
     try:
         return schema.PerCaseRecord.from_dict(case)
     except (KeyError, TypeError, ValueError) as exc:
-        # Liberal-parse fallback for legacy / hand-crafted cases:
-        # construct a minimal record with whatever we can find. This
-        # exists ONLY to keep the audit tooling working against older
-        # JSON shapes (pre-schema). New writes go through the schema.
+        if not ALLOW_LEGACY_FALLBACK:
+            raise SchemaParseError(
+                f"case schema parse failed for instance_id="
+                f"{case.get('instance_id', '<unknown>')!r}: {exc!r}\n"
+                f"  This is a writer/reader contract drift signal — the "
+                f"on-disk JSON does not match the per-case schema. To "
+                f"continue auditing legacy/hand-crafted fixtures, re-run "
+                f"with --allow-legacy-fallback (NOT recommended for "
+                f"fresh eval runs)."
+            ) from exc
+        # Legacy-fallback path (opt-in only): the original silent-
+        # fallback behavior. Logs the error but continues with liberal
+        # parse. Use ONLY for truly-legacy input where the schema isn't
+        # appropriate.
         sys.stderr.write(
-            f"  [audit] case schema parse failed ({exc!r}); "
+            f"  [audit-legacy-fallback] case schema parse failed ({exc!r}); "
             f"falling back to liberal lookup for instance_id="
             f"{case.get('instance_id', '<unknown>')}\n"
         )
@@ -669,6 +699,8 @@ BUCKETS_LIST_ORACLE = ", ".join(sorted(ORACLE_BUCKETS))
 
 
 def main() -> int:
+    global ALLOW_LEGACY_FALLBACK
+
     ap = argparse.ArgumentParser(description=(__doc__ or "").split("\n\n")[0])
     ap.add_argument("--analyze", action="store_true",
                     help="Read back the classified YAML and produce decision-rule outcome")
@@ -676,7 +708,24 @@ def main() -> int:
                     help="Specific baseline filename (without .json suffix)")
     ap.add_argument("--sample-size", type=int, default=50,
                     help="Number of misses to include in the TODO scaffold")
+    ap.add_argument(
+        "--allow-legacy-fallback",
+        action="store_true",
+        help=(
+            "Opt into the pre-roundtable silent-fallback behavior for "
+            "schema parse failures. ONLY use for genuinely-old fixtures "
+            "predating the schema (PR #229). Default: fail-loud on "
+            "writer/reader contract drift."
+        ),
+    )
     args = ap.parse_args()
+    ALLOW_LEGACY_FALLBACK = bool(args.allow_legacy_fallback)
+    if ALLOW_LEGACY_FALLBACK:
+        sys.stderr.write(
+            "  [audit] WARNING: --allow-legacy-fallback set; schema parse "
+            "failures will be silently degraded to liberal-lookup. This is "
+            "the pre-roundtable behavior the get-well plan tried to eliminate.\n"
+        )
 
     yaml_path = OUTPUT_DIR / "locbench_failure_audit_TODO.yaml"
 

@@ -22,9 +22,17 @@ from pathlib import Path
 
 
 def load_per_case(path: Path) -> dict[str, dict]:
-    """Load per-case JSON; key by instance_id for cross-mode alignment."""
+    """Load per-case JSON; key by instance_id for cross-mode alignment.
+
+    Roundtable T2 fix (2026-05-06): the eval script writes the per-case
+    payload under the `cases` key (see _build_per_case_dict in
+    eval_locbench_batch.py). Pre-T2 this function looked for `instances`
+    and silently returned empty on every input — same writer/reader
+    key-name mismatch class as the audit harness's `agent_envelope` bug.
+    The first real run (parallel n=10 vs serial n=50) surfaced it.
+    """
     raw = json.loads(path.read_text(encoding="utf-8"))
-    cases = raw.get("instances", [])
+    cases = raw.get("cases") or raw.get("instances", [])
     indexed = {}
     for c in cases:
         if c.get("indexed") and c.get("agent_ran"):
@@ -77,8 +85,29 @@ def main() -> int:
     ]
     max_delta = max(deltas_pp)
     print(f"Max |delta| across modes: {max_delta:.2f}pp")
+
+    # Roundtable T3 (2026-05-06): apply a sample-size adequacy gate
+    # parallel to the audit-harness gate. A 0pp delta at n=6 is consistent
+    # with parity but not statistically conclusive — at n<10 a single
+    # mis-classified case shifts the headline by >=10pp. The flip-default
+    # recommendation requires both small delta AND adequate n.
+    MIN_COMMON_FOR_DEFAULT_FLIP = 10
+    if n < MIN_COMMON_FOR_DEFAULT_FLIP:
+        print(f"INSUFFICIENT_SAMPLE: only n={n} common indexed instances.")
+        print(f"Threshold for default-flip recommendation: n>={MIN_COMMON_FOR_DEFAULT_FLIP}.")
+        if max_delta <= 1.0:
+            print(
+                f"Observation: max |delta|={max_delta:.2f}pp at n={n} is "
+                "consistent with accuracy parity but not statistically "
+                "conclusive. Do NOT flip default on this evidence alone; "
+                "expand the matched subset before acting."
+            )
+            return 0
+        print(f"And max |delta|={max_delta:.2f}pp exceeds 1pp threshold; "
+              "divergence at small-n is suggestive of real signal.")
+        return 1
     if max_delta <= 1.0:
-        print("PASS: |delta| <= 1pp threshold across all modes.")
+        print(f"PASS: |delta| <= 1pp threshold across all modes (n={n} >= {MIN_COMMON_FOR_DEFAULT_FLIP}).")
         print("Recommendation: flip LOCAGENT_PARALLEL default from unset to 1.")
         return 0
     if max_delta <= 3.0:

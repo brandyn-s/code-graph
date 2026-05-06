@@ -380,8 +380,92 @@ def emit_todo_yaml(misses: list[dict[str, Any]], output_path: pathlib.Path, samp
     output_path.write_text("\n".join(lines), encoding="utf-8")
 
 
+# Roundtable T3 (2026-05-06): minimum-effective-signal gate. The Plan 5
+# Phase A run had 19 total misses but only 4 non-oracle agent-executed
+# misses; the harness emitted an investment-relevant recommendation
+# anyway, which the human author had to override in the outcomes doc.
+# This constant is the bar for the "signal" half of the gate.
+#
+# Rationale for 10:
+#   - At n<10 non-oracle misses, a single mis-bucket changes the
+#     dominant percentage by >=10pp — too brittle for investment input.
+#   - The roundtable's range was 10-15. We pick the lower end so the
+#     gate fires AS SOON AS the data is adequate, not later.
+#   - Bootstrap CIs on Bernoulli proportions tighten visibly past n=10
+#     and dramatically past n=20; 10 is the inflection point.
+#
+# Buckets considered "oracle-attributed" (subtracted from the signal
+# denominator) — these are benchmark-data issues, not capability signals.
+ORACLE_BUCKETS = frozenset({"oracle_gap"})
+
+# Buckets considered "agent didn't execute" — also subtracted because
+# they reflect either a benchmark issue or a complete agent terminate
+# that doesn't tell us where capability gaps live in the graph.
+# (Empty by default; agent_loop_failure stays in the signal because it
+# IS an actionable LLM-side signal.)
+NON_AGENT_EXECUTED_BUCKETS: frozenset[str] = frozenset()
+
+# Below this many actionable (non-oracle, agent-executed) misses, the
+# harness emits a "INSUFFICIENT_SIGNAL" verdict instead of a decision
+# rule, so the operator doesn't get a confidently-shaped recommendation
+# from a sample size that can't support it.
+MIN_ACTIONABLE_MISSES = 10
+
+
+def _verdict_under_signal_gate(
+    buckets: Counter,
+    actionable_total: int,
+    classified_total: int,
+) -> tuple[str, str | None, str]:
+    """Return (verdict, dominant_bucket_or_None, rationale).
+
+    verdict is one of:
+      INSUFFICIENT_SIGNAL — actionable_total < MIN_ACTIONABLE_MISSES.
+      DOMINANT — one bucket >=60% of the actionable subset.
+      NO_DOMINANT — no bucket dominates the actionable subset.
+    """
+    if actionable_total < MIN_ACTIONABLE_MISSES:
+        return (
+            "INSUFFICIENT_SIGNAL",
+            None,
+            (
+                f"Only {actionable_total} actionable miss(es) "
+                f"(non-oracle, agent-executed) of {classified_total} total. "
+                f"Threshold for an investment-relevant recommendation is "
+                f"{MIN_ACTIONABLE_MISSES}. Expand the audit corpus before "
+                f"acting on bucket distribution."
+            ),
+        )
+    threshold = 0.60
+    for bucket in BUCKETS:
+        if bucket in ORACLE_BUCKETS or bucket in NON_AGENT_EXECUTED_BUCKETS:
+            continue
+        # Per-bucket fraction is computed against the actionable
+        # denominator, not the classified total. This is the key fix:
+        # 78.9% oracle_gap dominance was a measurement artifact of
+        # using the wrong denominator.
+        frac = buckets.get(bucket, 0) / actionable_total
+        if frac >= threshold:
+            return (
+                "DOMINANT",
+                bucket,
+                f"{bucket} is {100*frac:.1f}% of {actionable_total} actionable misses (>= {100*threshold:.0f}% threshold)",
+            )
+    return (
+        "NO_DOMINANT",
+        None,
+        f"No single non-oracle bucket dominates {actionable_total} actionable misses. Investigate top-2 in parallel.",
+    )
+
+
 def analyze_classified(yaml_path: pathlib.Path) -> int:
-    """Read back the classified YAML and produce the decision-rule outcome."""
+    """Read back the classified YAML and produce the decision-rule outcome.
+
+    Roundtable T3 (2026-05-06): the verdict is now signal-gated. The
+    decision rule fires only when there are >=MIN_ACTIONABLE_MISSES
+    non-oracle, agent-executed misses. Below that, the harness emits
+    an INSUFFICIENT_SIGNAL verdict — see _verdict_under_signal_gate.
+    """
     if not yaml_path.exists():
         print(f"No classification file at {yaml_path}", file=sys.stderr)
         print("Run the harness first to generate the TODO scaffold.", file=sys.stderr)
@@ -419,41 +503,72 @@ def analyze_classified(yaml_path: pathlib.Path) -> int:
         )
         return 1
 
-    print(f"=== Loc-Bench failure-audit (Plan 4 T1) ===\n")
+    # Roundtable T3: actionable subset = total minus oracle-attributed
+    # and non-agent-executed buckets. This is what the decision rule
+    # should reason over.
+    oracle_total = sum(buckets.get(b, 0) for b in ORACLE_BUCKETS)
+    non_agent_total = sum(buckets.get(b, 0) for b in NON_AGENT_EXECUTED_BUCKETS)
+    actionable_total = classified - oracle_total - non_agent_total
+
+    print(f"=== Loc-Bench failure-audit (Plan 4 T1 + T3 signal-gate) ===\n")
     print(f"Classified cases: {classified}")
+    print(f"  Oracle-attributed (subtracted): {oracle_total} ({BUCKETS_LIST_ORACLE})")
+    print(f"  Non-agent-executed (subtracted): {non_agent_total}")
+    print(f"  Actionable (non-oracle, agent-executed): {actionable_total}")
+    print(f"  Minimum-actionable threshold: {MIN_ACTIONABLE_MISSES}")
     if rescue_counts:
         rescued = rescue_counts.get("rescued", 0)
         total = rescued + rescue_counts.get("not_rescued", 0)
         if total:
-            print(f"Rescued by iter>=2: {rescued}/{total} ({100*rescued/total:.1f}%)")
+            print(f"  Rescued by iter>=2: {rescued}/{total} ({100*rescued/total:.1f}%)")
     print()
 
+    # Per-bucket distribution. Show fractions against TWO denominators:
+    # classified (what the old harness reported) and actionable (what
+    # the decision rule reasons over). The split makes it explicit how
+    # much of the classified count is benchmark-data vs capability.
     max_count = max((buckets.get(b, 0) for b in BUCKETS), default=0)
     for bucket in BUCKETS:
         count = buckets.get(bucket, 0)
-        pct = 100.0 * count / classified
+        pct_classified = 100.0 * count / classified if classified else 0.0
+        pct_actionable = (
+            100.0 * count / actionable_total
+            if actionable_total and bucket not in ORACLE_BUCKETS and bucket not in NON_AGENT_EXECUTED_BUCKETS
+            else None
+        )
         bar = "#" * int(40 * count / max(1, max_count))
         desc = BUCKET_DESCRIPTIONS[bucket]
-        print(f"  {bucket:24s} {count:>4} ({pct:>5.1f}%) {bar}")
+        if pct_actionable is not None:
+            print(f"  {bucket:24s} {count:>4} ({pct_classified:>5.1f}% / {pct_actionable:>5.1f}% of actionable) {bar}")
+        else:
+            # Oracle / non-agent-executed buckets contribute to the
+            # classified denominator but NOT the actionable one. Use a
+            # plain ASCII "n/a" so terminals without UTF-8 don't render
+            # a replacement char (Windows console default cp1252 issue).
+            print(f"  {bucket:24s} {count:>4} ({pct_classified:>5.1f}% / n/a actionable) {bar}")
         print(f"    {desc}")
 
-    # Decision rule
-    print("\n=== Decision rule outcome ===")
-    threshold = 0.60
-    for bucket in BUCKETS:
-        if buckets.get(bucket, 0) / classified >= threshold:
-            print(
-                f"  Bucket {bucket} at "
-                f"{100*buckets.get(bucket,0)/classified:.1f}% (>= {100*threshold:.0f}% threshold)"
-            )
-            print(f"  -> {BUCKET_ACTIONS[bucket]}")
-            return 0
-
-    print("  No single bucket dominates (none >=60%).")
-    print("  Recommendation: extend audit sample, OR investigate the top-2 buckets")
-    print("  in parallel — they're likely connected (e.g. import_resolution_miss")
-    print("  and embedding_recall_miss often co-occur).")
+    print("\n=== Decision rule outcome (signal-gated) ===")
+    verdict, bucket, rationale = _verdict_under_signal_gate(
+        buckets, actionable_total, classified
+    )
+    print(f"  Verdict: {verdict}")
+    print(f"  {rationale}")
+    if verdict == "DOMINANT" and bucket:
+        print(f"  -> {BUCKET_ACTIONS[bucket]}")
+    elif verdict == "INSUFFICIENT_SIGNAL":
+        print("  -> Do NOT emit investment-relevant recommendations. Expand corpus.")
+        print("     - Pre-filter Loc-Bench parquet to drop instances whose base_commit")
+        print("       isn't in upstream (cuts oracle_gap clone failures upfront).")
+        print("     - Run at n>=200 against the filtered corpus.")
+    elif verdict == "NO_DOMINANT":
+        print("  -> Investigate top-2 actionable buckets in parallel — likely connected")
+        print("     (e.g. import_resolution_miss and embedding_recall_miss co-occur).")
     return 0
+
+
+# Display helper for the verdict header.
+BUCKETS_LIST_ORACLE = ", ".join(sorted(ORACLE_BUCKETS))
 
 
 def main() -> int:

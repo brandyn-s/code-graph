@@ -493,6 +493,55 @@ def evaluate_instance(row: dict[str, Any], workdir: Path, json_mode: bool = Fals
     return res
 
 
+def _build_per_case_dict(summary: BatchSummary) -> dict:
+    """Build the per-case JSON payload from the in-progress summary.
+
+    Roundtable T2 (2026-05-06): factored out so checkpoint-after-each-
+    instance and final-write-after-loop share the same shape. Previously
+    the dict was inlined in a single end-of-loop block; killing the
+    batch dropped all evidence (the Plan 5 A.4 incident).
+    """
+    return {
+        "schema_version": 1,
+        "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "n_total": summary.n_total,
+        "n_indexed": summary.n_indexed,
+        "n_agent_ran": summary.n_agent_ran,
+        "n_file_hit": summary.n_file_hit,
+        "n_class_hit": summary.n_class_hit,
+        "n_func_hit": summary.n_func_hit,
+        "aborted_reason": summary.aborted_reason,
+        "cases": [
+            {
+                "instance_id": r.instance_id,
+                "repo": r.repo,
+                "category": r.category,
+                "ground_truth": r.ground_truth,
+                "indexed": r.indexed,
+                "agent_ran": r.agent_ran,
+                "file_hit": r.file_hit,
+                "class_hit": r.class_hit,
+                "func_hit": r.func_hit,
+                # Inverted hit fields used by the failure-audit
+                # is_miss() heuristic (which expects a "predicted_correct"-
+                # shaped key per case). Surface "file_correct" so the
+                # audit's heuristic finds the score directly.
+                "file_correct": r.file_hit,
+                "class_correct": r.class_hit,
+                "func_correct": r.func_hit,
+                "turns": r.turns,
+                "input_tokens": r.input_tokens,
+                "output_tokens": r.output_tokens,
+                "cost_estimate_usd": r.cost_estimate_usd,
+                "duration_s": r.duration_s,
+                "note": r.note,
+                "agent_envelope": r.agent_json,
+            }
+            for r in summary.instances
+        ],
+    }
+
+
 def write_report(summary: BatchSummary, output: Path) -> None:
     lines = [
         f"# Loc-Bench N={summary.n_total} batch results — {time.strftime('%Y-%m-%d %H:%M')}",
@@ -592,6 +641,24 @@ def main() -> int:
     args.workdir.mkdir(parents=True, exist_ok=True)
     summary = BatchSummary(n_total=len(selected))
 
+    # Roundtable T2 fix (2026-05-06): persist per-case JSON checkpoint
+    # after EVERY instance, not only at end. Previously, killing the
+    # batch at 6/50 dropped all 6 cases of evidence. The 5-agent
+    # roundtable's T2 ("mine the partial parallel data") assumed the
+    # evidence was shipped; it wasn't. This fix makes the assumption
+    # true going forward.
+    def _checkpoint_per_case() -> None:
+        if not args.per_case_json:
+            return
+        try:
+            args.per_case_json.parent.mkdir(parents=True, exist_ok=True)
+            args.per_case_json.write_text(
+                json.dumps(_build_per_case_dict(summary), indent=2),
+                encoding="utf-8",
+            )
+        except Exception as exc:
+            print(f"  [checkpoint failed: {exc!r}]")
+
     for _, row in selected.iterrows():
         if summary.total_cost_usd >= args.budget_usd:
             summary.aborted_reason = (
@@ -604,6 +671,7 @@ def main() -> int:
             res = evaluate_instance(row.to_dict(), args.workdir, json_mode=bool(args.per_case_json))
         except KeyboardInterrupt:
             summary.aborted_reason = "user interrupted (Ctrl+C)"
+            _checkpoint_per_case()
             break
         except Exception as e:
             res = InstanceResult(
@@ -622,55 +690,20 @@ def main() -> int:
         summary.total_input_tokens += res.input_tokens
         summary.total_output_tokens += res.output_tokens
         summary.total_cost_usd += res.cost_estimate_usd
+        _checkpoint_per_case()
 
     write_report(summary, args.output)
 
     # Plan 4 T1: per-case JSON dump for the failure-audit pipeline.
     # Captures the full structured agent envelope per instance,
     # including the per-iteration Iterations field (when LOCAGENT_ITERATIONS>=2).
+    # Roundtable T2 (2026-05-06): also written as a checkpoint after every
+    # instance via _checkpoint_per_case() above — see _build_per_case_dict.
     if args.per_case_json:
-        per_case = {
-            "schema_version": 1,
-            "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-            "n_total": summary.n_total,
-            "n_indexed": summary.n_indexed,
-            "n_agent_ran": summary.n_agent_ran,
-            "n_file_hit": summary.n_file_hit,
-            "n_class_hit": summary.n_class_hit,
-            "n_func_hit": summary.n_func_hit,
-            "aborted_reason": summary.aborted_reason,
-            "cases": [
-                {
-                    "instance_id": r.instance_id,
-                    "repo": r.repo,
-                    "category": r.category,
-                    "ground_truth": r.ground_truth,
-                    "indexed": r.indexed,
-                    "agent_ran": r.agent_ran,
-                    "file_hit": r.file_hit,
-                    "class_hit": r.class_hit,
-                    "func_hit": r.func_hit,
-                    # Inverted hit fields used by the failure-audit
-                    # is_miss() heuristic (which expects a "predicted_correct"-
-                    # shaped key per case). Surface "file_correct" so the
-                    # audit's heuristic finds the score directly.
-                    "file_correct": r.file_hit,
-                    "class_correct": r.class_hit,
-                    "func_correct": r.func_hit,
-                    "turns": r.turns,
-                    "input_tokens": r.input_tokens,
-                    "output_tokens": r.output_tokens,
-                    "cost_estimate_usd": r.cost_estimate_usd,
-                    "duration_s": r.duration_s,
-                    "note": r.note,
-                    "agent_envelope": r.agent_json,
-                }
-                for r in summary.instances
-            ],
-        }
         args.per_case_json.parent.mkdir(parents=True, exist_ok=True)
         args.per_case_json.write_text(
-            json.dumps(per_case, indent=2), encoding="utf-8"
+            json.dumps(_build_per_case_dict(summary), indent=2),
+            encoding="utf-8",
         )
         print(f"\nPer-case JSON written: {args.per_case_json}")
 

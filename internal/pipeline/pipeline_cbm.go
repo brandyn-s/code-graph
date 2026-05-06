@@ -653,7 +653,11 @@ func (p *Pipeline) resolveCallEdge(
 	// The harness now reports both `scope_aligned` (all bands, includes
 	// these speculative emissions) and `scope_aligned_high_confidence`
 	// (excludes speculative-janusian) so the precision tier is preserved.
-	janusianAmbiguous := rule == ResolverRuleCrossPackageHeuristic && candSize >= 2
+	// Janusian penalty fires on the cross-package family (any of the three
+	// sub-buckets that the lumped legacy bucket was split into 2026-05-06).
+	// Use the helper rather than enumerating sub-buckets here so future
+	// additions to the family flow through automatically.
+	janusianAmbiguous := isCrossPackageRule(rule) && candSize >= 2
 	confBand := confidenceBand(result.Confidence)
 	if janusianAmbiguous {
 		confBand = "speculative-janusian"

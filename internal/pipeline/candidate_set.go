@@ -12,8 +12,8 @@
 // Step 2's LLM-Judge taxonomy (knowledge-base PR #360) found that 60% of
 // judged FPs are `same_named_method_disambiguation` — the resolver picked
 // the wrong receiver type when the method name resolved to >=2 candidates.
-// Step 4's `resolver_rule` exposes WHICH rule fired (cross-package-heuristic,
-// receiver-qualified, etc.) but cannot say HOW AMBIGUOUS each individual
+// Step 4's `resolver_rule` exposes WHICH rule fired (cross-package-import-map,
+// cross-package-suffix, receiver-qualified, etc.) but cannot say HOW AMBIGUOUS each individual
 // call site was — a rule can be "right" 95% of the time when the call
 // site has one candidate and "right" 40% of the time when it has six.
 //

@@ -78,16 +78,56 @@ func TestResolverRuleFromRegistryStrategy_SameModule(t *testing.T) {
 	}
 }
 
-// TestResolverRuleFromRegistryStrategy_CrossPackageHeuristics — the
-// four cross-package heuristic strategies (import_map,
-// import_map_suffix, unique_name, suffix_match) all bucket as
-// cross-package-heuristic.
-func TestResolverRuleFromRegistryStrategy_CrossPackageHeuristics(t *testing.T) {
-	cases := []string{"import_map", "import_map_suffix", "unique_name", "suffix_match"}
-	for _, s := range cases {
-		got := resolverRuleFromRegistryStrategy(s)
-		if got != ResolverRuleCrossPackageHeuristic {
-			t.Errorf("%q must be cross-package-heuristic, got %q", s, got)
+// TestResolverRuleFromRegistryStrategy_CrossPackageSubBuckets — the
+// four cross-package strategies split into three sub-buckets per the
+// 2026-05-06 split:
+//   - import_map        → cross-package-import-map (precise)
+//   - unique_name       → cross-package-unique-name (project-wide name)
+//   - import_map_suffix } → cross-package-suffix (dangerous fall-through)
+//   - suffix_match      }
+//
+// All three sub-buckets are still members of the cross-package FAMILY
+// per `isCrossPackageRule`. See `TestIsCrossPackageRule` below.
+func TestResolverRuleFromRegistryStrategy_CrossPackageSubBuckets(t *testing.T) {
+	cases := map[string]string{
+		"import_map":        ResolverRuleCrossPackageImportMap,
+		"unique_name":       ResolverRuleCrossPackageUniqueName,
+		"import_map_suffix": ResolverRuleCrossPackageSuffix,
+		"suffix_match":      ResolverRuleCrossPackageSuffix,
+	}
+	for strategy, expected := range cases {
+		got := resolverRuleFromRegistryStrategy(strategy)
+		if got != expected {
+			t.Errorf("strategy %q must map to %q, got %q", strategy, expected, got)
+		}
+	}
+}
+
+// TestIsCrossPackageRule — the helper covers all three sub-buckets and
+// the legacy lumped name (so old-index rows still classify as family).
+func TestIsCrossPackageRule(t *testing.T) {
+	in := []string{
+		ResolverRuleCrossPackageImportMap,
+		ResolverRuleCrossPackageUniqueName,
+		ResolverRuleCrossPackageSuffix,
+		ResolverRuleCrossPackageHeuristic, // legacy
+	}
+	for _, r := range in {
+		if !isCrossPackageRule(r) {
+			t.Errorf("isCrossPackageRule(%q) = false, want true", r)
+		}
+	}
+	out := []string{
+		ResolverRuleSamePackageShadow,
+		ResolverRuleExactQN,
+		ResolverRuleInterfaceDispatch,
+		ResolverRuleFuzzyResolve,
+		ResolverRuleUnknown,
+		"",
+	}
+	for _, r := range out {
+		if isCrossPackageRule(r) {
+			t.Errorf("isCrossPackageRule(%q) = true, want false", r)
 		}
 	}
 }
@@ -177,7 +217,7 @@ func TestResolveCallEdge_SamePackageFreeFunction(t *testing.T) {
 
 // TestResolveCallEdge_CrossPackageImportMap — import_map strategy
 // (callee qualified by imported package alias) routes to
-// cross-package-heuristic.
+// cross-package-import-map (the precise sub-bucket per 2026-05-06 split).
 func TestResolveCallEdge_CrossPackageImportMap(t *testing.T) {
 	p := &Pipeline{
 		ProjectName: "proj",
@@ -200,8 +240,8 @@ func TestResolveCallEdge_CrossPackageImportMap(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected resolveCallEdge to emit on import_map resolution")
 	}
-	if got := edge.Properties["resolver_rule"]; got != ResolverRuleCrossPackageHeuristic {
-		t.Errorf("import_map resolution must be cross-package-heuristic, got %v", got)
+	if got := edge.Properties["resolver_rule"]; got != ResolverRuleCrossPackageImportMap {
+		t.Errorf("import_map resolution must be cross-package-import-map, got %v", got)
 	}
 }
 

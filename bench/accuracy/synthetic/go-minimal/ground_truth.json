@@ -20,6 +20,9 @@
     "every_edge_has_resolver_rule": true,
     "expected_rules_subset": [
       "same-package-shadow",
+      "cross-package-import-map",
+      "cross-package-unique-name",
+      "cross-package-suffix",
       "cross-package-heuristic",
       "exact-qn-match",
       "receiver-qualified",

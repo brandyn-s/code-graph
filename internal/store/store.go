@@ -566,13 +566,15 @@ func (s *Store) initSchema() error {
 	// taxonomy and emit-site mapping). NULL on pre-migration rows; new
 	// rows always populate when the edge is a CALLS-family emission.
 	// Lets bench/accuracy/compare.py stratify precision by resolver
-	// pathway (cross-package-heuristic, fuzzy-resolve, etc.) without
-	// scanning the JSON blob.
+	// pathway (cross-package-import-map, cross-package-suffix,
+	// fuzzy-resolve, etc.) without scanning the JSON blob.
 	//
 	// Index on (project, resolver_rule_gen) keeps per-rule precision
 	// queries cheap — typical access pattern is "how many CALLS edges
-	// in project X have resolver_rule = 'cross-package-heuristic'?".
-	// Step 4 of the 2026-05-02 plateau-2 plan.
+	// in project X have resolver_rule = 'cross-package-suffix'?".
+	// Step 4 of the 2026-05-02 plateau-2 plan; sub-bucket split landed
+	// 2026-05-06 (precision varied 10x across fixtures within the
+	// originally lumped cross-package-heuristic bucket).
 	var rrCol int
 	_ = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM pragma_table_xinfo('edges') WHERE name='resolver_rule_gen'`).Scan(&rrCol)
 	if rrCol == 0 {

@@ -1119,11 +1119,17 @@
         "population_total": 217
       },
       "modality_precision": {
-        "cross-package-heuristic": {
-          "tp": 7,
-          "fp": 23,
-          "precision": 0.2333,
-          "support": 30
+        "cross-package-suffix": {
+          "tp": 1,
+          "fp": 12,
+          "precision": 0.0769,
+          "support": 13
+        },
+        "cross-package-unique-name": {
+          "tp": 6,
+          "fp": 11,
+          "precision": 0.3529,
+          "support": 17
         },
         "same-package-shadow": {
           "tp": 11,
@@ -1139,7 +1145,7 @@
         }
       },
       "modality_mix_gini": {
-        "__all__": 0.3684
+        "__all__": 0.3579
       },
       "caller_context_tuple_precision": {
         "method-body|cross-package-imported": {

@@ -17,7 +17,7 @@ Two operating points are reported because the resolver emits Janusian-ambiguous 
 
 | Edge type | Oracle | Oracle / Measured | Exact P/R/F1 | Scope-aligned P/R/F1 (all) | Scope-aligned P/R/F1 (high-conf) | Impl-normalized P/R/F1 |
 |---|---|---|---|---|---|---|
-| CALLS | go-ast | 1437 / 2866 | 0.342 / 0.683 / 0.456 | 0.923 / 0.683 / 0.785 | 0.923 / 0.683 / 0.785 | 0.923 / 0.683 / 0.785 |
+| CALLS | go-ast | 1591 / 2866 | 0.328 / 0.590 / 0.421 | 0.908 / 0.590 / 0.715 | 0.908 / 0.590 / 0.715 | 0.908 / 0.590 / 0.715 |
 | IMPORTS | go-ast (dropped) | 0 / 25 | — (Go oracle drops IMPORTS until import-path -> internal-file-Q) | — | — |
 
 ## Per-project scope-aligned F1
@@ -28,9 +28,9 @@ Aggregate F1 can hide variance across subsets. If the headline scope-aligned F1 
 
 | Project | Oracle / Measured | TP | FP | FN | P | R | F1 |
 |---|---|---:|---:|---:|---:|---:|---:|
-| gin | 1437 / 2866 | 981 | 1144 | 456 | 0.462 | 0.683 | **0.551** |
+| gin | 1591 / 2866 | 939 | 1382 | 652 | 0.405 | 0.590 | **0.480** |
 
-**Spread**: min F1 = 0.551, max F1 = 0.551, range = 0.000
+**Spread**: min F1 = 0.480, max F1 = 0.480, range = 0.000
 
 
 ## Caller-kind stratified precision
@@ -41,13 +41,12 @@ Each CALLS edge is tagged with the AST scope of its caller (`function-body`, `me
 
 | Kind | TP | FP | Precision | Support |
 |---|---:|---:|---:|---:|
-| `function-body` | 93 | 32 | 0.744 | 125 |
-| `method-body` | 211 | 50 | 0.808 | 261 |
-| `test-body` | 669 | 0 | 1.000 | 669 |
+| `function-body` | 150 | 85 | 0.638 | 235 |
+| `test-body` | 779 | 0 | 1.000 | 779 |
 
-**Package-block caller FP rate**: 0.0000 (0 of 82 FPs)
+**Package-block caller FP rate**: 0.1053 (10 of 95 FPs) ALARM
 
-**Caller-kind complement legitimacy** (function/method-body share of all scope-aligned edges): 0.2541 (386 of 1519)
+**Caller-kind complement legitimacy** (function/method-body share of all scope-aligned edges): 0.1394 (235 of 1686)
 
 
 ## Janusian ambiguity stratified precision
@@ -60,23 +59,23 @@ Each CALLS edge carries the resolver's pre-tie-break candidate cardinality (`can
 
 | Project | Ambiguous sites | Total sites | Index |
 |---|---:|---:|---:|
-| gin | 60 | 596 | 0.1007 |
+| gin | 76 | 682 | 0.1114 |
 
 **janusian_site_precision_split** — precision conditional on call-site ambiguity:
 
 | Bucket | TP | FP | Precision | Support |
 |---|---:|---:|---:|---:|
-| `ambiguous` | 37 | 55 | 0.4022 | 92 |
-| `unambiguous` | 944 | 27 | 0.9722 | 971 |
+| `ambiguous` | 45 | 48 | 0.4839 | 93 |
+| `unambiguous` | 894 | 47 | 0.9501 | 941 |
 
-**janusian_precision_gap** (unambiguous − ambiguous precision): +0.5700. Positive = unambiguous sites resolve more accurately, consistent with Step 2's prediction. Negative or near-zero = ambiguity is not the dominant FP driver.
+**janusian_precision_gap** (unambiguous − ambiguous precision): +0.4662. Positive = unambiguous sites resolve more accurately, consistent with Step 2's prediction. Negative or near-zero = ambiguity is not the dominant FP driver.
 
 
 ## Samples (first 10 per edge type)
 
 ### CALLS
 
-Oracle analyzed callers: 917
+Oracle analyzed callers: 880
 
 **Scope-aligned false positives** (code-graph edge from a PyCG-analyzed caller to a callee PyCG did not record):
 ```
@@ -94,16 +93,16 @@ Oracle analyzed callers: 917
 
 **Scope-aligned false negatives** (oracle recorded, code-graph did NOT):
 ```
-  c-Users-user-Documents-bench-fixtures-gin.auth.authPairs.searchCredential --> c-Users-user-Documents-bench-fixtures-gin.bytesconv.StringToBytes
-  c-Users-user-Documents-bench-fixtures-gin.auth.authorizationHeader --> c-Users-user-Documents-bench-fixtures-gin.bytesconv.StringToBytes
-  c-Users-user-Documents-bench-fixtures-gin.binding_msgpack_test.TestBindingMsgPack --> c-Users-user-Documents-bench-fixtures-gin.binding_msgpack_test.testMsgPackBodyBinding
-  c-Users-user-Documents-bench-fixtures-gin.binding_msgpack_test.testMsgPackBodyBinding --> c-Users-user-Documents-bench-fixtures-gin.binding_test.requestWithBody
-  c-Users-user-Documents-bench-fixtures-gin.binding_test.TestBindingBSON --> c-Users-user-Documents-bench-fixtures-gin.binding_test.testBodyBinding
-  c-Users-user-Documents-bench-fixtures-gin.binding_test.TestBindingDefaultValueFormPost --> c-Users-user-Documents-bench-fixtures-gin.binding_test.createDefaultFormPostRequest
-  c-Users-user-Documents-bench-fixtures-gin.binding_test.TestBindingForm --> c-Users-user-Documents-bench-fixtures-gin.binding_test.testFormBinding
-  c-Users-user-Documents-bench-fixtures-gin.binding_test.TestBindingForm2 --> c-Users-user-Documents-bench-fixtures-gin.binding_test.testFormBinding
-  c-Users-user-Documents-bench-fixtures-gin.binding_test.TestBindingFormDefaultValue --> c-Users-user-Documents-bench-fixtures-gin.binding_test.testFormBindingDefaultValue
-  c-Users-user-Documents-bench-fixtures-gin.binding_test.TestBindingFormDefaultValue2 --> c-Users-user-Documents-bench-fixtures-gin.binding_test.testFormBindingDefaultValue
+  c-Users-user-Documents-bench-fixtures-gin.auth_test.TestBasicAuth401 --> c-Users-user-Documents-bench-fixtures-gin.context.Get
+  c-Users-user-Documents-bench-fixtures-gin.auth_test.TestBasicAuth401 --> c-Users-user-Documents-bench-fixtures-gin.context.Set
+  c-Users-user-Documents-bench-fixtures-gin.auth_test.TestBasicAuth401WithCustomRealm --> c-Users-user-Documents-bench-fixtures-gin.context.Get
+  c-Users-user-Documents-bench-fixtures-gin.auth_test.TestBasicAuth401WithCustomRealm --> c-Users-user-Documents-bench-fixtures-gin.context.Set
+  c-Users-user-Documents-bench-fixtures-gin.auth_test.TestBasicAuthForProxy407 --> c-Users-user-Documents-bench-fixtures-gin.context.Get
+  c-Users-user-Documents-bench-fixtures-gin.auth_test.TestBasicAuthForProxy407 --> c-Users-user-Documents-bench-fixtures-gin.context.Set
+  c-Users-user-Documents-bench-fixtures-gin.auth_test.TestBasicAuthForProxySucceed --> c-Users-user-Documents-bench-fixtures-gin.context.Set
+  c-Users-user-Documents-bench-fixtures-gin.auth_test.TestBasicAuthForProxySucceed --> c-Users-user-Documents-bench-fixtures-gin.context.String
+  c-Users-user-Documents-bench-fixtures-gin.auth_test.TestBasicAuthSucceed --> c-Users-user-Documents-bench-fixtures-gin.context.Set
+  c-Users-user-Documents-bench-fixtures-gin.auth_test.TestBasicAuthSucceed --> c-Users-user-Documents-bench-fixtures-gin.context.String
 ```
 
 **Raw-exact false positives (may include out-of-scope callers)**:
@@ -122,16 +121,16 @@ Oracle analyzed callers: 917
 
 **Raw-exact false negatives**:
 ```
-  c-Users-user-Documents-bench-fixtures-gin.auth.authPairs.searchCredential --> c-Users-user-Documents-bench-fixtures-gin.bytesconv.StringToBytes
-  c-Users-user-Documents-bench-fixtures-gin.auth.authorizationHeader --> c-Users-user-Documents-bench-fixtures-gin.bytesconv.StringToBytes
-  c-Users-user-Documents-bench-fixtures-gin.binding_msgpack_test.TestBindingMsgPack --> c-Users-user-Documents-bench-fixtures-gin.binding_msgpack_test.testMsgPackBodyBinding
-  c-Users-user-Documents-bench-fixtures-gin.binding_msgpack_test.testMsgPackBodyBinding --> c-Users-user-Documents-bench-fixtures-gin.binding_test.requestWithBody
-  c-Users-user-Documents-bench-fixtures-gin.binding_test.TestBindingBSON --> c-Users-user-Documents-bench-fixtures-gin.binding_test.testBodyBinding
-  c-Users-user-Documents-bench-fixtures-gin.binding_test.TestBindingDefaultValueFormPost --> c-Users-user-Documents-bench-fixtures-gin.binding_test.createDefaultFormPostRequest
-  c-Users-user-Documents-bench-fixtures-gin.binding_test.TestBindingForm --> c-Users-user-Documents-bench-fixtures-gin.binding_test.testFormBinding
-  c-Users-user-Documents-bench-fixtures-gin.binding_test.TestBindingForm2 --> c-Users-user-Documents-bench-fixtures-gin.binding_test.testFormBinding
-  c-Users-user-Documents-bench-fixtures-gin.binding_test.TestBindingFormDefaultValue --> c-Users-user-Documents-bench-fixtures-gin.binding_test.testFormBindingDefaultValue
-  c-Users-user-Documents-bench-fixtures-gin.binding_test.TestBindingFormDefaultValue2 --> c-Users-user-Documents-bench-fixtures-gin.binding_test.testFormBindingDefaultValue
+  c-Users-user-Documents-bench-fixtures-gin.auth_test.TestBasicAuth401 --> c-Users-user-Documents-bench-fixtures-gin.context.Get
+  c-Users-user-Documents-bench-fixtures-gin.auth_test.TestBasicAuth401 --> c-Users-user-Documents-bench-fixtures-gin.context.Set
+  c-Users-user-Documents-bench-fixtures-gin.auth_test.TestBasicAuth401WithCustomRealm --> c-Users-user-Documents-bench-fixtures-gin.context.Get
+  c-Users-user-Documents-bench-fixtures-gin.auth_test.TestBasicAuth401WithCustomRealm --> c-Users-user-Documents-bench-fixtures-gin.context.Set
+  c-Users-user-Documents-bench-fixtures-gin.auth_test.TestBasicAuthForProxy407 --> c-Users-user-Documents-bench-fixtures-gin.context.Get
+  c-Users-user-Documents-bench-fixtures-gin.auth_test.TestBasicAuthForProxy407 --> c-Users-user-Documents-bench-fixtures-gin.context.Set
+  c-Users-user-Documents-bench-fixtures-gin.auth_test.TestBasicAuthForProxySucceed --> c-Users-user-Documents-bench-fixtures-gin.context.Set
+  c-Users-user-Documents-bench-fixtures-gin.auth_test.TestBasicAuthForProxySucceed --> c-Users-user-Documents-bench-fixtures-gin.context.String
+  c-Users-user-Documents-bench-fixtures-gin.auth_test.TestBasicAuthSucceed --> c-Users-user-Documents-bench-fixtures-gin.context.Set
+  c-Users-user-Documents-bench-fixtures-gin.auth_test.TestBasicAuthSucceed --> c-Users-user-Documents-bench-fixtures-gin.context.String
 ```
 
 ## Targets

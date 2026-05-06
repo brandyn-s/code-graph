@@ -73,13 +73,43 @@ const (
 	// "." + name (the caller's own module).
 	ResolverRuleSamePackageShadow = "same-package-shadow"
 
-	// ResolverRuleCrossPackageHeuristic — imported-package call where
-	// the resolver matches on heuristics rather than exact-resolved
-	// types. Covers registry strategies "import_map", "import_map_suffix",
-	// "unique_name", and "suffix_match" — all three rely on the prefix
-	// (or suffix) being import-reachable plus a name match in the
-	// project-wide registry. This is the rule that produces the
-	// dominant Step 2 FN class (`cross_package_heuristic_overreach`).
+	// ResolverRuleCrossPackageImportMap — registry "import_map" strategy.
+	// Resolved through an EXPLICIT import: the imported alias was looked
+	// up in the per-file import-map and the alias' definition was found.
+	// This is the precise sub-bucket of the cross-package family;
+	// 2026-05-06 baselines show 0.88-0.95 precision on Go fixtures.
+	ResolverRuleCrossPackageImportMap = "cross-package-import-map"
+
+	// ResolverRuleCrossPackageUniqueName — registry "unique_name" strategy.
+	// Resolved by project-wide unique-name lookup (callee's simple name
+	// has exactly one definition project-wide). Distinct from
+	// import-map because it doesn't require the call site to import the
+	// definition's module — the uniqueness of the name is the only
+	// resolution signal.
+	ResolverRuleCrossPackageUniqueName = "cross-package-unique-name"
+
+	// ResolverRuleCrossPackageSuffix — registry "suffix_match" or
+	// "import_map_suffix" strategies. The DANGEROUS sub-bucket: the
+	// resolver matched the callee's simple name against the suffix of a
+	// project-wide qualified name. This is the fall-through path that
+	// produced the PR #165 phantom regression class (155+ phantom edges
+	// from normalized Rust `Foo::new` matching against unrelated `.new`
+	// methods). Drop-on-no-match is the targeted Rec 1 fix for this
+	// sub-bucket. 2026-05-06 baselines show this bucket has 0.07-0.23
+	// precision on Python adversarial fixtures (essentially noise).
+	ResolverRuleCrossPackageSuffix = "cross-package-suffix"
+
+	// ResolverRuleCrossPackageHeuristic — DEPRECATED 2026-05-06. The
+	// original lumped bucket was split into ImportMap / UniqueName /
+	// Suffix because per-fixture precision varied by an order of
+	// magnitude (0.07 on flask vs 0.95 on code-graph), which the lumped
+	// bucket couldn't surface. New code should NOT emit this string;
+	// existing code paths that historically referenced it have been
+	// updated to use the appropriate sub-bucket. Constant retained as
+	// a compile-time anchor for legacy baselines (which carry the old
+	// string in their JSON dumps) and as the canonical name for the
+	// FAMILY across all three sub-buckets in helper predicates like
+	// `isCrossPackageRule`.
 	ResolverRuleCrossPackageHeuristic = "cross-package-heuristic"
 
 	// ResolverRulePackageBlockFallback — emission where the caller is a
@@ -166,16 +196,31 @@ func resolverRuleFromLSPStrategy(strategy string) string {
 //     receiver-on-known-type dispatch.)
 //   - "same_module"          → same-package-shadow
 //     (callee found in caller's own module — same-package resolution.)
-//   - "import_map" / "import_map_suffix" / "unique_name" / "suffix_match"
-//                            → cross-package-heuristic
-//     (resolved via cross-package import-map plus heuristic suffix or
-//     project-wide name lookup. This is the rule emitting the dominant
-//     FN class per Step 2's LLM-Judge taxonomy.)
+//   - "import_map"           → cross-package-import-map
+//     (precise: imported-alias lookup + alias-definition resolved via
+//     per-file import map.)
+//   - "unique_name"          → cross-package-unique-name
+//     (project-wide unique-name lookup — callee's simple name has
+//     exactly one definition project-wide.)
+//   - "import_map_suffix" / "suffix_match"
+//                            → cross-package-suffix
+//     (fall-through path: callee's simple name matched against suffix
+//     of a project-wide QN. The dangerous sub-bucket — produced the
+//     PR #165 phantom regression class. Drop-on-no-match target.)
 //   - "fuzzy"                → fuzzy-resolve
 //     (last-resort name-only match via FuzzyResolve.)
 //   - any other              → unknown
 //     (defensive — should never fire on healthy input; non-zero counts
 //     indicate a resolver path we haven't covered.)
+//
+// 2026-05-06 split: previously all four cross-package strategies
+// returned the lumped ResolverRuleCrossPackageHeuristic. Per-fixture
+// precision varied by an order of magnitude (0.07 on flask-adversarial
+// vs 0.95 on code-graph-go), which the lumped bucket couldn't surface.
+// The split lets harness queries distinguish which sub-strategy is
+// emitting the phantoms and lets the resolver apply drop-on-no-match
+// selectively to the suffix-match variants without cratering recall on
+// the precise `import_map` path.
 //
 // Confidence: VERIFIED for all four named registry strategies; new
 // strategies fall through to ResolverRuleUnknown as a tripwire.
@@ -185,8 +230,12 @@ func resolverRuleFromRegistryStrategy(strategy string) string {
 		return ResolverRuleInterfaceDispatch
 	case "same_module":
 		return ResolverRuleSamePackageShadow
-	case "import_map", "import_map_suffix", "unique_name", "suffix_match":
-		return ResolverRuleCrossPackageHeuristic
+	case "import_map":
+		return ResolverRuleCrossPackageImportMap
+	case "unique_name":
+		return ResolverRuleCrossPackageUniqueName
+	case "import_map_suffix", "suffix_match":
+		return ResolverRuleCrossPackageSuffix
 	case "type_static_dispatch":
 		// Rust `Foo::new` resolved to <class_qn>.new structurally.
 		// Single-target by construction; semantically an exact match.
@@ -196,4 +245,20 @@ func resolverRuleFromRegistryStrategy(strategy string) string {
 	default:
 		return ResolverRuleUnknown
 	}
+}
+
+// isCrossPackageRule returns true if `rule` is any of the three
+// cross-package sub-buckets (or the legacy lumped name, for safety on
+// rows from older indexes). Used by emit-side checks (e.g. the Janusian
+// candidate-set ambiguity penalty in pipeline_cbm.go) that need to fire
+// on the FAMILY, not a specific sub-bucket.
+func isCrossPackageRule(rule string) bool {
+	switch rule {
+	case ResolverRuleCrossPackageImportMap,
+		ResolverRuleCrossPackageUniqueName,
+		ResolverRuleCrossPackageSuffix,
+		ResolverRuleCrossPackageHeuristic:
+		return true
+	}
+	return false
 }

@@ -158,7 +158,8 @@ func (c *Client) CreateMessage(ctx context.Context, req MessagesRequest) (*Messa
 				}
 				continue
 			}
-			return nil, err
+			// Retries exhausted on a connection/network error.
+			return nil, fmt.Errorf("%w: %v", ErrTimeoutExhausted, err)
 		}
 
 		body, _ := io.ReadAll(resp.Body)
@@ -178,7 +179,19 @@ func (c *Client) CreateMessage(ctx context.Context, req MessagesRequest) (*Messa
 				}
 				continue
 			}
-			return nil, fmt.Errorf("anthropic API error %d: %s", resp.StatusCode, string(body))
+			// Retries exhausted — wrap with typed sentinel so callers can
+			// distinguish rate-limit vs server-error programmatically.
+			sentinel := ErrServerError
+			if resp.StatusCode == 429 {
+				sentinel = ErrRateLimitExhausted
+			}
+			return nil, fmt.Errorf("%w (status %d): %s", sentinel, resp.StatusCode, string(body))
+		}
+		if resp.StatusCode == 401 || resp.StatusCode == 403 {
+			// Auth failures are deterministic — don't retry. Wrap with
+			// typed sentinel so callers can distinguish auth failure from
+			// other 4xx errors without parsing error text.
+			return nil, fmt.Errorf("%w (status %d): %s", ErrAuthFailed, resp.StatusCode, string(body))
 		}
 		if resp.StatusCode != 200 {
 			return nil, fmt.Errorf("anthropic API error %d: %s", resp.StatusCode, string(body))

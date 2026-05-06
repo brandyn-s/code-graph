@@ -96,6 +96,19 @@ def main():
             print(f"FAIL: probe machinery broken: {e}", file=sys.stderr)
             return 1
 
+    # --check-drift is the real drift-detection mode (Phase B3). Compares
+    # the current high-band cluster percentage against the baseline saved
+    # at confidence_band_baseline.json; exits 1 if drift exceeds the
+    # threshold.
+    #
+    # Run after a known-intentional change (INDIRECT_CALLS extractor
+    # update, new resolver strategy) with `--update-drift-baseline` to
+    # rebaseline.
+    if "--check-drift" in sys.argv or "--update-drift-baseline" in sys.argv:
+        return _check_drift_main(
+            update_baseline="--update-drift-baseline" in sys.argv
+        )
+
     if not CACHE_DIR.exists():
         print(f"No cache dir at {CACHE_DIR}")
         return 1
@@ -188,6 +201,99 @@ def main():
         print(f"  consistent with the meaning of 'high'. P25 separates the bottom")
         print(f"  quartile (low) from the middle.")
 
+    return 0
+
+
+def _check_drift_main(update_baseline: bool = False) -> int:
+    """Phase B3: confidence_band drift detection vs saved baseline.
+
+    Computes the current high-band percentage (ratio >= 0.95) across all
+    indexed projects, compares against the baseline at
+    confidence_band_baseline.json, and exits 1 if the deviation exceeds
+    the configured threshold (default 5pp).
+
+    Returns 0 on success (drift within tolerance OR baseline updated).
+    Returns 1 on (a) drift exceeds threshold, or (b) no DBs to probe.
+    """
+    if not CACHE_DIR.exists():
+        print(f"No cache dir at {CACHE_DIR} — drift check requires indexed DBs")
+        return 1
+
+    dbs = sorted(CACHE_DIR.glob("*.db"))
+    dbs = [d for d in dbs if not d.name.endswith("-shm.db") and not d.name.endswith("-wal.db")]
+    if not dbs:
+        print(f"No DBs in {CACHE_DIR} — drift check requires indexed DBs")
+        return 1
+
+    all_ratios: list[float] = []
+    for db in dbs:
+        try:
+            triples = per_function_resolved_ratios(db)
+        except Exception as e:
+            print(f"  {db.name}: ERROR {e}")
+            continue
+        valid = [t[0] for t in triples if not (t[0] != t[0])]
+        all_ratios.extend(valid)
+
+    if not all_ratios:
+        print("No ratio data found — drift check requires populated DBs")
+        return 1
+
+    high_band_count = sum(1 for r in all_ratios if r >= 0.95)
+    high_band_pct = 100.0 * high_band_count / len(all_ratios)
+
+    baseline_path = pathlib.Path(__file__).parent / "confidence_band_baseline.json"
+    if update_baseline:
+        baseline_path.write_text(
+            json.dumps(
+                {
+                    "_comment": (
+                        "Baseline distribution for confidence_band drift detection. "
+                        "Rebaseline by running confidence_band_distribution.py "
+                        "--update-drift-baseline after intentional extractor changes."
+                    ),
+                    "baseline_date": "auto",
+                    "n_functions_with_both_resolved_and_unresolved": len(all_ratios),
+                    "n_projects": len(dbs),
+                    "high_band_pct": round(high_band_pct, 2),
+                    "low_band_pct": round(
+                        100.0 * sum(1 for r in all_ratios if r < 0.10) / len(all_ratios), 2
+                    ),
+                    "drift_threshold_pp": 5.0,
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        print(f"Baseline updated: high_band_pct={high_band_pct:.1f}%")
+        return 0
+
+    if not baseline_path.exists():
+        print(f"No baseline at {baseline_path} — run with --update-drift-baseline first")
+        return 1
+
+    baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
+    baseline_high = float(baseline.get("high_band_pct", 72.0))
+    threshold_pp = float(baseline.get("drift_threshold_pp", 5.0))
+    drift_pp = high_band_pct - baseline_high
+
+    print(f"=== confidence_band drift check ===")
+    print(f"  baseline high_band_pct: {baseline_high:.1f}%")
+    print(f"  current  high_band_pct: {high_band_pct:.1f}%")
+    print(f"  drift:                  {drift_pp:+.2f}pp")
+    print(f"  threshold:              ±{threshold_pp:.1f}pp")
+    print(f"  n_functions:            {len(all_ratios)} across {len(dbs)} DBs")
+
+    if abs(drift_pp) > threshold_pp:
+        print(f"\nFAIL: drift {drift_pp:+.2f}pp exceeds ±{threshold_pp:.1f}pp threshold.")
+        print("If the drift is from a known intentional change (e.g., new INDIRECT_CALLS")
+        print("extractor edges), rebaseline with:")
+        print(f"  python {pathlib.Path(__file__).name} --update-drift-baseline")
+        print("If the drift is unexpected, investigate the recent changes to")
+        print("internal/cbm/extract_calls.c and the resolver pipeline.")
+        return 1
+
+    print(f"\nOK: within ±{threshold_pp:.1f}pp tolerance")
     return 0
 
 

@@ -106,6 +106,16 @@ func OpenPath(dbPath string) (*Store, error) {
 	// the SHM has stale lock state that can deadlock new connections. Safe to remove.
 	recoverStaleSHM(dbPath)
 
+	// Mode 7 detection (BulkWrite/MEMORY-journal crash, see RECOVERY_TAXONOMY.md):
+	// if a stale crash-marker file is present, the previous BeginBulkWrite was
+	// not paired with a clean EndBulkWrite. The DB may have inconsistent pages
+	// because MEMORY journal mode means there's no on-disk journal to replay.
+	// Run PRAGMA quick_check before serving; clear marker on success, surface
+	// structured error pointing to delete_project on failure.
+	if err := checkAndClearBulkWriteMarker(dbPath); err != nil {
+		return nil, err
+	}
+
 	dsn := dbPath + "?_journal_mode=WAL" +
 		"&_busy_timeout=10000" +
 		"&_foreign_keys=1" +
@@ -171,6 +181,82 @@ func checkOrphanSidecars(dbPath string) error {
 	if walExists || shmExists {
 		return fmt.Errorf("main DB missing but sidecar files present (wal=%t shm=%t) — likely accidental delete; run delete_project to clean up or restore from backup", walExists, shmExists)
 	}
+	return nil
+}
+
+// bulkWriteMarkerPath returns the marker filename for the given DB path.
+// The marker exists only during a BeginBulkWrite ... EndBulkWrite window.
+// Its persistence past the window indicates an unclean shutdown during
+// MEMORY-journal-mode writes (Mode 7 in RECOVERY_TAXONOMY.md).
+func bulkWriteMarkerPath(dbPath string) string {
+	return dbPath + ".bulkwrite-crash-marker"
+}
+
+// writeBulkWriteMarker creates the marker file. Called by BeginBulkWrite.
+//
+// Best-effort: marker creation failure is logged but does not block the
+// bulk-write operation. The cost of a missed marker is "operator runs
+// PRAGMA integrity_check manually if anything looks off"; the cost of
+// blocking the write is "indexer fails entirely on a transient FS hiccup."
+// Trade-off favors continuing.
+func writeBulkWriteMarker(dbPath string) {
+	markerPath := bulkWriteMarkerPath(dbPath)
+	f, err := os.OpenFile(markerPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
+	if err != nil {
+		slog.Warn("store.bulkwrite_marker_create_failed", "path", markerPath, "err", err)
+		return
+	}
+	_ = f.Close()
+}
+
+// removeBulkWriteMarker deletes the marker. Called by EndBulkWrite.
+// Best-effort: removal failure means a stale marker will fire on next
+// open and force a quick_check. That's safe — false-positive cost is
+// one extra PRAGMA quick_check vs the false-negative cost of missing
+// real corruption.
+func removeBulkWriteMarker(dbPath string) {
+	_ = os.Remove(bulkWriteMarkerPath(dbPath))
+}
+
+// checkAndClearBulkWriteMarker is called from OpenPath. If the marker is
+// present, run PRAGMA quick_check; if quick_check passes, clear the
+// marker and proceed. If quick_check fails, return a structured error
+// directing the operator to delete_project + re-index.
+//
+// Conservative-by-design: any error from quick_check OR any unexpected
+// quick_check output other than "ok" is treated as failure. False positives
+// (quick_check fails on a clean DB) cost one re-index; false negatives
+// (real corruption goes undetected) cost silent-wrong-state — much worse.
+func checkAndClearBulkWriteMarker(dbPath string) error {
+	markerPath := bulkWriteMarkerPath(dbPath)
+	if _, err := os.Stat(markerPath); err != nil {
+		return nil // no marker = no crash window in flight
+	}
+
+	slog.Warn("store.bulkwrite_marker_present", "path", markerPath,
+		"action", "running PRAGMA quick_check")
+
+	// Open the DB without our usual setup just to run quick_check.
+	dsn := dbPath + "?_journal_mode=WAL&_busy_timeout=5000"
+	db, err := sql.Open("sqlite3", dsn)
+	if err != nil {
+		return fmt.Errorf("bulkwrite-crash check: open db: %w", err)
+	}
+	defer db.Close()
+
+	row := db.QueryRowContext(context.Background(), "PRAGMA quick_check")
+	var result string
+	if err := row.Scan(&result); err != nil {
+		return fmt.Errorf("bulkwrite-crash check: quick_check failed (%w) — likely Mode 7 corruption; run delete_project + index_repository(force=true) to recover", err)
+	}
+	if result != "ok" {
+		return fmt.Errorf("bulkwrite-crash check: quick_check returned %q (expected \"ok\") — Mode 7 corruption confirmed; run delete_project + index_repository(force=true) to recover", result)
+	}
+
+	// quick_check passed — DB is consistent despite the crash. Clear marker.
+	removeBulkWriteMarker(dbPath)
+	slog.Info("store.bulkwrite_marker_cleared", "path", markerPath,
+		"reason", "quick_check passed — DB consistent")
 	return nil
 }
 
@@ -276,17 +362,33 @@ func (s *Store) WALSize() int64 {
 // BeginBulkWrite switches to MEMORY journal mode for faster bulk writes.
 // Also boosts cache to 64 MB for write throughput.
 // Call EndBulkWrite when done to restore WAL mode and adaptive cache.
+//
+// Writes a Mode 7 crash-marker (RECOVERY_TAXONOMY.md) before switching
+// journal mode. EndBulkWrite removes the marker. If the process is killed
+// inside this window, the marker survives and the next OpenPath will
+// run PRAGMA quick_check to detect MEMORY-journal-corruption that the
+// missing on-disk journal can't recover.
 func (s *Store) BeginBulkWrite(ctx context.Context) {
+	if s.dbPath != "" && s.dbPath != ":memory:" {
+		writeBulkWriteMarker(s.dbPath)
+	}
 	_, _ = s.db.ExecContext(ctx, "PRAGMA journal_mode = MEMORY")
 	_, _ = s.db.ExecContext(ctx, "PRAGMA synchronous = OFF")
 	_, _ = s.db.ExecContext(ctx, "PRAGMA cache_size = -65536") // 64 MB
 }
 
 // EndBulkWrite restores WAL journal mode, NORMAL synchronous, and adaptive cache.
+//
+// Removes the Mode 7 crash-marker. Order matters: switch back to WAL
+// (which forces a checkpoint) BEFORE removing the marker, so a crash
+// between mode-switch and marker-removal still leaves a valid signal.
 func (s *Store) EndBulkWrite(ctx context.Context) {
 	_, _ = s.db.ExecContext(ctx, "PRAGMA synchronous = NORMAL")
 	_, _ = s.db.ExecContext(ctx, "PRAGMA journal_mode = WAL")
 	s.restoreDefaultCache(ctx)
+	if s.dbPath != "" && s.dbPath != ":memory:" {
+		removeBulkWriteMarker(s.dbPath)
+	}
 }
 
 // WithLargeCache temporarily boosts the page cache to 64 MB for heavy read operations

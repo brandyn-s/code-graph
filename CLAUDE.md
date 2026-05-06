@@ -112,6 +112,18 @@ Single-shot (iter=1) baseline (n=200, 2026-05-03): file=82.5%, class=46.5%, func
 
 **The defended number is the iter=2 measurement above.** iter=2 is the production default (`LOCAGENT_ITERATIONS=2`).
 
+#### Methodology caveats — read before citing the numbers above externally
+
+The 86.0% / 84.5% / 73.5% numbers are not directly comparable to the LocAgent paper's Loc-Bench numbers without three caveats:
+
+1. **Sample size**: our n=200 is a sub-sample of Loc-Bench's published n=560. Bootstrap CI on n=200 is wide enough that ±2pp shifts are within sampling noise. Do NOT cite these as "matches paper Claude-3.5" without re-running on the full n=560 corpus.
+
+2. **Scorer**: we use a structured scorer (`bench/research/eval_locbench_*.py`) that judges file/class/function match by expected_paths YAML. The paper's scorer is not directly reproduced in our harness; differences in canonicalization (e.g., `Class.method` vs `module.Class.method`) can shift class accuracy by several percentage points without any underlying capability change.
+
+3. **iter=2 / MRR aggregation produced a +38pp class lift over iter=1** (2026-05-04 baseline). This is too large to be ordinary sampling noise — it's a protocol-level effect from how multi-shot results aggregate. The single-shot iter=1 number (class=46.5%) is a better lower bound for raw localization capability; iter=2 (class=84.5%) reflects the production protocol's choice to run multiple agents and rank by MRR. Both are honest measurements of different things.
+
+When the next plan ships the joint-experiment failure audit (Plan 1 Phase C1 — `bench/research/unresolved_call_shapes.py` + 50-100 case classification), the iter=1 vs iter=2 ablation will surface the scorer/protocol component vs the capability component separately. Until then, treat the iter=2 numbers as production-protocol-effective and the iter=1 numbers as capability-lower-bound.
+
 #### Comparison vs LocAgent paper (ACL 2025, arXiv 2503.09089)
 
 LocAgent reports two main results — pay attention to which dataset:
@@ -180,7 +192,7 @@ Full taxonomy: `internal/store/RECOVERY_TAXONOMY.md` (7 modes + 1 config-DB mode
 | Corrupt header (`file is not a database`) | `OpenPath` returns wrapped error | `delete_project` + `index_repository(force=true)` | `TestCorruptHeaderReturnsActionableError` |
 | Main `.db` deleted with orphan `-wal`/`-shm` | `OpenPath` returns "main DB missing but sidecar files present" | If unintentional: restore from backup before next open. Otherwise: `delete_project` + `index_repository` | `TestMissingDBWithOrphanSidecarReturnsError` |
 | Concurrent writers contention | None at N≤3; `database is locked` may escape at N≥10 | Retry the operation; serialization is automatic | `TestConcurrentWritersSerialize` (N=2/3/10) |
-| BulkWrite crash (MEMORY journal) | `PRAGMA integrity_check` returns non-`ok` | `delete_project` + `index_repository(force=true)` | `TestBulkWriteCrashSurfacesViaIntegrityCheck` |
+| BulkWrite crash (MEMORY journal) | **`OpenPath` returns "Mode 7 corruption" via crash-marker + `PRAGMA quick_check`** | `delete_project` + `index_repository(force=true)` | `TestBulkWriteCrashMarkerSurfacesOnReopen`, `TestBulkWriteMarkerCorruptDBSurfacesError` |
 
 End-to-end procedure (Mode 4 corruption → fresh re-index) is pinned by `TestEndToEndCorruptionRecovery`.
 

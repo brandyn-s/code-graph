@@ -1,0 +1,9 @@
+{
+  "_comment": "Baseline distribution for confidence_band drift detection. Rebaseline by running confidence_band_distribution.py --update-drift-baseline after intentional extractor changes.",
+  "baseline_date": "auto",
+  "n_functions_with_both_resolved_and_unresolved": 27463,
+  "n_projects": 13,
+  "high_band_pct": 55.62,
+  "low_band_pct": 12.69,
+  "drift_threshold_pp": 5.0
+}

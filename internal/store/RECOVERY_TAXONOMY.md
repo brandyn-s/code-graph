@@ -126,12 +126,12 @@ Tests must reuse / validate them rather than build parallel versions.
 | | |
 |---|---|
 | **Trigger** | Indexer killed during the `BeginBulkWrite` window (between `BeginBulkWrite` and `EndBulkWrite`) |
-| **Symptom** | Re-open succeeds (SQLite is permissive); but main DB may have inconsistent pages because the journal is in-memory and was lost |
-| **Detection** | `PRAGMA integrity_check` — already run by `verify-indexes.py` |
-| **Recovery** | None automatic. Operator: `DeleteProject` + `IndexRepository(force=true)` |
-| **Operator action** | If `verify-indexes.py` reports non-"ok", re-index the affected project |
-| **Prior art** | `verify-indexes.py` PRAGMA integrity_check |
-| **Test** | `TestBulkWriteCrashSurfacesViaIntegrityCheck` (B2.5) |
+| **Symptom** | Re-open may succeed (SQLite is permissive); but main DB may have inconsistent pages because the journal is in-memory and was lost |
+| **Detection** | **AUTOMATIC** as of Phase B1: `BeginBulkWrite` writes `<dbPath>.bulkwrite-crash-marker`; `EndBulkWrite` removes it. Stale marker on next `OpenPath` triggers `PRAGMA quick_check`. Marker cleared on success; structured error returned on failure. `PRAGMA integrity_check` (`verify-indexes.py`) remains as periodic backstop. |
+| **Recovery** | After fix: `OpenPath` returns "Mode 7 corruption" error → `DeleteProject` + `IndexRepository(force=true)` |
+| **Operator action** | Run the recovery on the structured error. The marker is best-effort; transient false-positives clear themselves on the next clean open. |
+| **Prior art** | `verify-indexes.py` PRAGMA integrity_check (defense-in-depth) |
+| **Test** | `TestBulkWriteCrashSurfacesViaIntegrityCheck` (B2.5 in PR #200), `TestBulkWriteCrashMarkerSurfacesOnReopen`, `TestBulkWriteMarkerWrittenAndRemoved`, `TestBulkWriteMarkerCorruptDBSurfacesError`, `TestBulkWriteMarkerIgnoresMemoryDB` (Phase B1) |
 
 ### Mode 7b — Config DB corruption (default journal)
 

@@ -108,6 +108,13 @@ func (s *Server) handleIndexHealth(ctx context.Context, req *mcp.CallToolRequest
 	// Build response
 	enrichmentStale := proj.EnrichmentVersion != pipeline.EnrichmentVersion
 
+	// B4 (post-roundtable Phase B): grammar-version data + parse-error
+	// rate from the canary corpus. The data is hand-recorded in
+	// bench/research/grammar_canaries/baselines.json (see GRAMMARS.md);
+	// surface it here so MCP consumers can call index_health and get
+	// drift visibility without running the script themselves.
+	grammarVersions, grammarVersionsAge, _ := loadGrammarVersionsAge()
+
 	responseData := map[string]any{
 		"project":            effectiveProject,
 		"files_on_disk":      len(diskFiles),
@@ -121,6 +128,12 @@ func (s *Server) handleIndexHealth(ctx context.Context, req *mcp.CallToolRequest
 		"enrichment_stale":   enrichmentStale,
 		"indexed_at":         proj.IndexedAt,
 	}
+	if len(grammarVersions) > 0 {
+		responseData["grammar_versions"] = grammarVersions
+	}
+	if grammarVersionsAge >= 0 {
+		responseData["grammar_versions_age_days"] = grammarVersionsAge
+	}
 
 	// Include file lists if small enough to be useful
 	const maxListSize = 20
@@ -130,6 +143,15 @@ func (s *Server) handleIndexHealth(ctx context.Context, req *mcp.CallToolRequest
 	if len(orphanedFiles) > 0 && len(orphanedFiles) <= maxListSize {
 		responseData["orphaned_files"] = orphanedFiles
 	}
+
+	// Structured _metadata block per METADATA_SCHEMA.md.
+	// index_health is a self-reporting tool; freshness is its own subject.
+	metadata := NewMetadataBuilder().
+		WithFreshness(freshnessStateFromIndexedAt(proj.IndexedAt), proj.IndexedAt).
+		WithProvenance("", "index").
+		WithGrammarVersions(grammarVersions).
+		Build()
+	responseData["_metadata"] = metadata
 
 	s.addIndexStatus(responseData)
 

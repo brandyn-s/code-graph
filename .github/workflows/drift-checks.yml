@@ -36,10 +36,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: '3.13'
 
@@ -55,37 +55,41 @@ jobs:
     timeout-minutes: 10
     needs: []
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: '3.13'
 
-      - name: Confidence-band distribution probe — compare against baseline
-        env:
-          # The baseline was captured at PR #194's calibration run.
-          # 72% of n=18,783 functions clustered at ratio>=0.95.
-          # Drift threshold: alert if the >=0.95 cluster shifts by >5pp.
-          BASELINE_HIGH_PCT: '72'
-          DRIFT_THRESHOLD_PP: '5'
+      - name: Confidence-band probe smoke check (CI-runnable)
         run: |
-          # The probe currently reads from ~/.cache/codebase-memory-mcp/*.db,
-          # which doesn't exist in CI. CI runs against a small synthetic
-          # fixture that produces a known distribution; alerting fires when
-          # the synthetic distribution shifts beyond the threshold.
-          # See bench/research/confidence_band_distribution.py for the
-          # production probe; this CI step is a smoke check that the probe
-          # itself runs without errors and that the threshold logic is alive.
-          python bench/research/confidence_band_distribution.py --ci-smoke || {
-            echo "::warning::confidence_band probe smoke check failed."
-            echo "If this is a real drift (not a probe bug), the next steps are:"
-            echo "  1. Run the probe locally against ~/.cache/codebase-memory-mcp/*.db"
-            echo "  2. If the distribution truly shifted, rebaseline by editing"
-            echo "     internal/tools/trace.go thresholds + this workflow's"
-            echo "     BASELINE_HIGH_PCT env var."
-            echo "  3. If the shift was caused by a known intentional change"
-            echo "     (PR #198/#199 INDIRECT_CALLS, or v0.4/v0.5 follow-ups),"
-            echo "     document the rebaseline in CLAUDE.md or topic file."
+          python bench/research/confidence_band_distribution.py --ci-smoke
+
+      - name: Drift-detection contract validation
+        run: |
+          # CI doesn't have ~/.cache/codebase-memory-mcp/*.db. The real
+          # drift detection (--check-drift, B3) runs on developer
+          # machines or in a cron job with access to indexed projects.
+          # This CI step validates the contract: --check-drift must
+          # fail-loud (exit 1) when no DBs are present, never silently
+          # pass. The fail-loud-on-no-data behavior is the safety
+          # property we want preserved across refactors.
+          set +e
+          out=$(python bench/research/confidence_band_distribution.py --check-drift 2>&1)
+          rc=$?
+          set -e
+          if [ "$rc" -eq 0 ]; then
+            echo "::error::--check-drift exited 0 with no DBs — drift detection silently passing!"
+            echo "$out"
             exit 1
-          }
+          fi
+          echo "OK: --check-drift correctly fails-loud when no DBs present"
+          echo "$out" | head -5
+          echo ""
+          echo "Run on developer machines (where ~/.cache/codebase-memory-mcp/*.db exists):"
+          echo "  python bench/research/confidence_band_distribution.py --check-drift"
+          echo ""
+          echo "If drift detected and the cause is a known extractor change,"
+          echo "rebaseline with:"
+          echo "  python bench/research/confidence_band_distribution.py --update-drift-baseline"

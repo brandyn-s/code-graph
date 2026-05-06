@@ -196,6 +196,69 @@ var negativeCypherFixtures = []struct {
 		"",
 		"WHERE without MATCH",
 	},
+	// Get-well plan Phase 3.3 (2026-05-06): expand the negative corpus
+	// to cover every documented rejection path in parser.go. The
+	// pre-existing 7 cases left ~15 reject paths un-tested.
+	{
+		"trailing_token_after_return",
+		"MATCH (f:Function) RETURN f LIMIT 5 EXTRA",
+		"unexpected trailing token",
+		"trailing tokens past LIMIT must not silently parse (parser.go:101)",
+	},
+	{
+		"missing_label_after_colon",
+		"MATCH (f:) RETURN f",
+		"",
+		"missing label after ':' in node pattern (parser.go:340)",
+	},
+	{
+		"unclosed_relationship_bracket",
+		"MATCH (a)-[r:CALLS RETURN a",
+		"",
+		"missing ']' to close relationship (parser.go:252)",
+	},
+	{
+		"missing_relationship_type",
+		"MATCH (a)-[r:]-(b) RETURN a",
+		"",
+		"missing relationship type name after ':' (parser.go:262)",
+	},
+	{
+		"missing_dot_after_variable_in_where",
+		"MATCH (f) WHERE f = 'X' RETURN f",
+		"",
+		"WHERE condition needs property access; f= is not a valid LHS (parser.go:432)",
+	},
+	{
+		"unknown_comparison_operator",
+		"MATCH (f) WHERE f.name LIKE 'X' RETURN f",
+		"comparison operator",
+		"LIKE not in supported operator set (parser.go:501)",
+	},
+	{
+		"is_not_without_null",
+		"MATCH (f) WHERE f.name IS NOT 'something' RETURN f",
+		"NULL",
+		"IS NOT must be followed by NULL (parser.go:487)",
+	},
+	{
+		"is_without_null_or_not_null",
+		"MATCH (f) WHERE f.name IS 'something' RETURN f",
+		"NULL",
+		"IS must be followed by NULL or NOT NULL (parser.go:493)",
+	},
+	{
+		"starts_without_with",
+		"MATCH (f) WHERE f.name STARTS 'X' RETURN f",
+		"WITH after STARTS",
+		"STARTS must be followed by WITH (parser.go:469)",
+	},
+	{
+		"ends_without_with",
+		"MATCH (f) WHERE f.name ENDS 'X' RETURN f",
+		"WITH after ENDS",
+		"ENDS must be followed by WITH (parser.go:477)",
+	},
 }
 
 func TestCypherConformance_Positive(t *testing.T) {

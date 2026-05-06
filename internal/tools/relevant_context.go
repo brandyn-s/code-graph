@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 
@@ -236,7 +235,11 @@ func (s *Server) handleRelevantContext(_ context.Context, req *mcp.CallToolReque
 	// Read file contents if requested
 	if includeContent && repoRoot != "" {
 		for _, cf := range selected {
-			content, readErr := readWholeFile(filepath.Join(repoRoot, cf.File))
+			absPath, pathErr := safePath(repoRoot, cf.File)
+			if pathErr != nil {
+				continue
+			}
+			content, readErr := readWholeFile(absPath)
 			if readErr == nil {
 				cf.Content = content
 			}

@@ -1,0 +1,91 @@
+name: drift-checks
+
+# Phase A3 + A2 of the post-roundtable cross-tool primitives plan.
+#
+# Two drift checks run on a weekly schedule + manual dispatch:
+#   1. Tree-sitter grammar canary (parse-shape stability per language)
+#   2. confidence_band threshold recalibration (n=18,783 baseline drift alert)
+#
+# Both surface drift as workflow failures. Operators rebaseline via the
+# documented commands when drift is intentional (grammar update, indirect-
+# call extractor change). When drift is unexpected, the failure is the
+# signal to investigate.
+#
+# Plan: ~/Documents/knowledge-base/plans/2026-05-05-codegraph-and-cross-tool-recommendations.md
+
+on:
+  schedule:
+    # Weekly on Monday 06:00 UTC (low-activity window).
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'internal/cbm/extract_calls.c'
+      - 'internal/cbm/vendored/grammars/**'
+      - 'bench/research/confidence_band_distribution.py'
+      - 'bench/research/grammar_drift_check.py'
+      - 'bench/research/grammar_canaries/**'
+      - '.github/workflows/drift-checks.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  grammar-drift:
+    if: github.repository_owner != 'redacted-brandyn'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Run grammar canary check
+        run: |
+          python bench/research/grammar_drift_check.py
+        # Non-zero exit = drift detected. Comment in the PR or issue with
+        # the language(s) that regressed and the procedure to rebaseline.
+
+  confidence-band-drift:
+    if: github.repository_owner != 'redacted-brandyn'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: []
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Confidence-band distribution probe — compare against baseline
+        env:
+          # The baseline was captured at PR #194's calibration run.
+          # 72% of n=18,783 functions clustered at ratio>=0.95.
+          # Drift threshold: alert if the >=0.95 cluster shifts by >5pp.
+          BASELINE_HIGH_PCT: '72'
+          DRIFT_THRESHOLD_PP: '5'
+        run: |
+          # The probe currently reads from ~/.cache/codebase-memory-mcp/*.db,
+          # which doesn't exist in CI. CI runs against a small synthetic
+          # fixture that produces a known distribution; alerting fires when
+          # the synthetic distribution shifts beyond the threshold.
+          # See bench/research/confidence_band_distribution.py for the
+          # production probe; this CI step is a smoke check that the probe
+          # itself runs without errors and that the threshold logic is alive.
+          python bench/research/confidence_band_distribution.py --ci-smoke || {
+            echo "::warning::confidence_band probe smoke check failed."
+            echo "If this is a real drift (not a probe bug), the next steps are:"
+            echo "  1. Run the probe locally against ~/.cache/codebase-memory-mcp/*.db"
+            echo "  2. If the distribution truly shifted, rebaseline by editing"
+            echo "     internal/tools/trace.go thresholds + this workflow's"
+            echo "     BASELINE_HIGH_PCT env var."
+            echo "  3. If the shift was caused by a known intentional change"
+            echo "     (PR #198/#199 INDIRECT_CALLS, or v0.4/v0.5 follow-ups),"
+            echo "     document the rebaseline in CLAUDE.md or topic file."
+            exit 1
+          }

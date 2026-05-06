@@ -1,0 +1,37 @@
+{
+  "go": {
+    "content_sha256_first_4k": "d074fc74003662b1",
+    "fingerprint_kind": "placeholder_v0",
+    "lang": "go",
+    "note": "Real AST-shape fingerprint pending CLI subcommand in B4. Current implementation only detects canary file changes.",
+    "size_bytes": 890
+  },
+  "javascript": {
+    "content_sha256_first_4k": "254dfb4ae28f8f3c",
+    "fingerprint_kind": "placeholder_v0",
+    "lang": "javascript",
+    "note": "Real AST-shape fingerprint pending CLI subcommand in B4. Current implementation only detects canary file changes.",
+    "size_bytes": 737
+  },
+  "python": {
+    "content_sha256_first_4k": "4d3a61f429e02b83",
+    "fingerprint_kind": "placeholder_v0",
+    "lang": "python",
+    "note": "Real AST-shape fingerprint pending CLI subcommand in B4. Current implementation only detects canary file changes.",
+    "size_bytes": 958
+  },
+  "rust": {
+    "content_sha256_first_4k": "177bb2430a5ad8b5",
+    "fingerprint_kind": "placeholder_v0",
+    "lang": "rust",
+    "note": "Real AST-shape fingerprint pending CLI subcommand in B4. Current implementation only detects canary file changes.",
+    "size_bytes": 917
+  },
+  "typescript": {
+    "content_sha256_first_4k": "e6164431c06d9b73",
+    "fingerprint_kind": "placeholder_v0",
+    "lang": "typescript",
+    "note": "Real AST-shape fingerprint pending CLI subcommand in B4. Current implementation only detects canary file changes.",
+    "size_bytes": 897
+  }
+}

@@ -140,12 +140,26 @@ func (s *Server) handleSearchGraph(_ context.Context, req *mcp.CallToolRequest) 
 		results = append(results, entry)
 	}
 
+	// Per METADATA_SCHEMA.md: surface freshness + provenance so consumers
+	// can distinguish results served from a fresh index vs a stale one.
+	// search_graph has no native confidence band (results are filter-and-rank,
+	// not confidence-scored), so we omit the confidence block.
+	indexedAt := ""
+	if proj, _ := st.GetProject(projName); proj != nil {
+		indexedAt = proj.IndexedAt
+	}
+	metadata := NewMetadataBuilder().
+		WithFreshness(freshnessStateFromIndexedAt(indexedAt), indexedAt).
+		WithProvenance("", "index").
+		Build()
+
 	responseData := map[string]any{
-		"total":    output.Total,
-		"limit":    params.Limit,
-		"offset":   params.Offset,
-		"has_more": params.Offset+params.Limit < output.Total,
-		"results":  results,
+		"total":     output.Total,
+		"limit":     params.Limit,
+		"offset":    params.Offset,
+		"has_more":  params.Offset+params.Limit < output.Total,
+		"results":   results,
+		"_metadata": metadata,
 	}
 	s.addIndexStatus(responseData)
 

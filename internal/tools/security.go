@@ -137,6 +137,25 @@ func (s *Server) handleSurfacesQuery(st *store.Store, projName string, args map[
 		}
 	}
 
+	// Per METADATA_SCHEMA.md: surface freshness + provenance.
+	// Confidence band: rule-based detection (not probabilistic), so report
+	// "high" if results were found, "unknown" if no surfaces matched.
+	indexedAt := ""
+	if proj, _ := st.GetProject(projName); proj != nil {
+		indexedAt = proj.IndexedAt
+	}
+	confBand := "unknown"
+	confRationale := ""
+	if totalCount > 0 {
+		confBand = "high"
+		confRationale = "rule-based extractor; results match deterministic security_role tags"
+	}
+	metadata := NewMetadataBuilder().
+		WithFreshness(freshnessStateFromIndexedAt(indexedAt), indexedAt).
+		WithProvenance("", "index").
+		WithConfidence(confBand, confRationale).
+		Build()
+
 	responseData := map[string]any{
 		"surfaces":    results,
 		"total_count": totalCount,
@@ -148,6 +167,7 @@ func (s *Server) handleSurfacesQuery(st *store.Store, projName string, args map[
 			"SC-23": "Confirm session_management nodes enforce session authenticity and proper lifecycle (create/destroy/timeout)",
 			"AU-2":  "Verify audit_logging nodes capture required auditable events per organization-defined list",
 		},
+		"_metadata": metadata,
 	}
 
 	return jsonResult(responseData), nil

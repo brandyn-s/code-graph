@@ -181,15 +181,68 @@ func buildTraceResponse(st *store.Store, rootNode *store.Node, project string, h
 	resolvedCount := len(edges)
 	band := traceConfidenceBand(resolvedCount, unresolvedTotal)
 
-	return map[string]any{
-		"root":                   buildNodeInfo(rootNode),
-		"hops":                   hops,
-		"edges":                  buildEdgeList(edges),
-		"indexed_at":             indexedAt,
-		"total_results":          len(visited),
-		"unresolved_call_count":  unresolvedTotal,
-		"confidence_band":        band,
+	// Structured metadata block per METADATA_SCHEMA.md.
+	// Generalizes confidence_band/unresolved_call_count under _metadata.
+	// Top-level fields preserved for backwards compatibility.
+	metaRationale := ""
+	totalCalls := resolvedCount + unresolvedTotal
+	if totalCalls > 0 {
+		pct := (resolvedCount * 100) / totalCalls
+		metaRationale = formatRatioRationale(resolvedCount, totalCalls, pct)
 	}
+	metadata := NewMetadataBuilder().
+		WithFreshness(freshnessStateFromIndexedAt(indexedAt), indexedAt).
+		WithProvenance("", "index").
+		WithConfidence(band, metaRationale).
+		Build()
+
+	return map[string]any{
+		"root":                  buildNodeInfo(rootNode),
+		"hops":                  hops,
+		"edges":                 buildEdgeList(edges),
+		"indexed_at":            indexedAt,
+		"total_results":         len(visited),
+		"unresolved_call_count": unresolvedTotal,
+		"confidence_band":       band,
+		"_metadata":             metadata,
+	}
+}
+
+// formatRatioRationale produces a short string like "432 of 480 calls resolved (90%)".
+func formatRatioRationale(resolved, total, pct int) string {
+	return itoaTools(resolved) + " of " + itoaTools(total) + " calls resolved (" + itoaTools(pct) + "%)"
+}
+
+func itoaTools(n int) string {
+	if n == 0 {
+		return "0"
+	}
+	neg := n < 0
+	if neg {
+		n = -n
+	}
+	var buf [12]byte
+	i := len(buf)
+	for n > 0 {
+		i--
+		buf[i] = byte('0' + n%10)
+		n /= 10
+	}
+	if neg {
+		i--
+		buf[i] = '-'
+	}
+	return string(buf[i:])
+}
+
+// freshnessStateFromIndexedAt returns "current" when indexedAt is non-empty,
+// "unknown" otherwise. Tools needing finer-grained staleness should call
+// WithStaleness directly.
+func freshnessStateFromIndexedAt(indexedAt string) string {
+	if indexedAt == "" {
+		return "unknown"
+	}
+	return "current"
 }
 
 func nodeUnresolvedCount(n *store.Node) int {

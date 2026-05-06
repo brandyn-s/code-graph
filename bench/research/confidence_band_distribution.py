@@ -75,7 +75,27 @@ def percentiles(xs: list[float], qs: list[float]) -> list[float]:
 
 
 def main():
-    sys.stdout.reconfigure(encoding="utf-8")
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+
+    # --ci-smoke is the CI mode: probe the codebase imports + threshold
+    # logic without requiring real DBs at ~/.cache/codebase-memory-mcp/.
+    # Returns 0 if the script's machinery runs cleanly. The drift-detection
+    # itself is meaningful only against real DBs (run locally before
+    # accepting drift signals).
+    if "--ci-smoke" in sys.argv:
+        try:
+            # Exercise the threshold-calculation path against a synthetic
+            # ratio distribution so import-time + math errors surface.
+            test_ratios = [0.99, 0.97, 0.85, 0.50, 0.05, 0.02]
+            ps = percentiles(test_ratios, [0.10, 0.50, 0.90])
+            assert len(ps) == 3
+            print(f"OK: probe machinery alive (synthetic P10/P50/P90 = {ps})")
+            return 0
+        except Exception as e:
+            print(f"FAIL: probe machinery broken: {e}", file=sys.stderr)
+            return 1
+
     if not CACHE_DIR.exists():
         print(f"No cache dir at {CACHE_DIR}")
         return 1

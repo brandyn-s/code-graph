@@ -6,11 +6,28 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 )
+
+var validProjectName = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.\-]*$`)
+
+// validateProjectName rejects names that could escape the cache directory.
+func validateProjectName(name string) error {
+	if name == "" {
+		return fmt.Errorf("invalid project name: empty")
+	}
+	if strings.Contains(name, "..") || strings.ContainsAny(name, `/\`) {
+		return fmt.Errorf("invalid project name: %q contains path traversal", name)
+	}
+	if !validProjectName.MatchString(name) {
+		return fmt.Errorf("invalid project name: %q does not match allowed pattern", name)
+	}
+	return nil
+}
 
 // ProjectInfo holds metadata about a discovered project database.
 type ProjectInfo struct {
@@ -89,6 +106,9 @@ func (r *StoreRouter) ForProject(name string) (*Store, error) {
 	if name == "*" || name == "all" {
 		return nil, fmt.Errorf("invalid project name: %q", name)
 	}
+	if err := validateProjectName(name); err != nil {
+		return nil, err
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -128,6 +148,9 @@ func (r *StoreRouter) UseStore(project string, fn func(*Store) error) error {
 func (r *StoreRouter) AcquireStore(project string) (*Store, ReleaseFunc, error) {
 	if project == "*" || project == "all" {
 		return nil, nil, fmt.Errorf("invalid project name: %q", project)
+	}
+	if err := validateProjectName(project); err != nil {
+		return nil, nil, err
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -234,6 +257,9 @@ func (r *StoreRouter) ListProjects() ([]*ProjectInfo, error) {
 
 // DeleteProject closes the Store connection and removes the .db + WAL/SHM files.
 func (r *StoreRouter) DeleteProject(name string) error {
+	if err := validateProjectName(name); err != nil {
+		return err
+	}
 	r.mu.Lock()
 	if e, ok := r.entries[name]; ok {
 		e.store.Close()
@@ -258,6 +284,9 @@ func (r *StoreRouter) DeleteProject(name string) error {
 
 // HasProject checks if a .db file exists for the given project (without opening it).
 func (r *StoreRouter) HasProject(name string) bool {
+	if validateProjectName(name) != nil {
+		return false
+	}
 	dbPath := filepath.Join(r.dir, name+".db")
 	_, err := os.Stat(dbPath)
 	return err == nil

@@ -113,6 +113,22 @@ func (v *visitor) Visit(node ast.Node) ast.Visitor {
 
 	case *ast.CallExpr:
 		callee := extractCallee(n.Fun)
+		// Plan 4 T3a (Go oracle gap fix #1, 2026-05-06 roundtable):
+		// CGO callees look like `C.foo` — they're not Go-side calls and
+		// have no Go def the wrapper can resolve. Code-graph's CALLS
+		// extractor doesn't emit these as graph edges either. Without
+		// this skip, the oracle emits "C.foo" callees that the wrapper
+		// drops as unresolvable, but they still inflate the
+		// "calls_path_dropped" count. Skipping at oracle-emit time
+		// keeps the F1 denominator honest.
+		//
+		// Detection: SelectorExpr with X = Ident{Name: "C"}. The Go
+		// language reserves "C" as the cgo package import; any
+		// selector with this prefix is a CGO call, including
+		// type names (C.int) and unsafe pointer ops.
+		if isCGOCallee(n.Fun) {
+			callee = ""
+		}
 		// Follow-up #5 (2026-05-02 plateau plan): resolve self-receiver
 		// method calls. When inside `func (p *Pipeline) X() { ... p.Y() ... }`,
 		// extractCallee returned "p.Y". The Python wrapper has no resolution
@@ -202,6 +218,37 @@ func (v *visitor) Visit(node ast.Node) ast.Visitor {
 		return nil
 	}
 	return v
+}
+
+// isCGOCallee reports whether the call expression's function is a
+// CGO-side reference (`C.foo`, `C.int`, `(*C.struct_foo)(...)` etc.).
+// CGO selectors are recognized by an outer SelectorExpr whose X is an
+// Ident named "C". In Go, the package alias "C" is reserved for the
+// cgo import directive (`import "C"`); user code cannot shadow it.
+//
+// Plan 4 T3a (2026-05-06): introduced to drop CGO callees before they
+// enter the edge stream. Match on the call's function expression
+// rather than on `extractCallee`'s string output because the latter
+// loses the X-Ident name once nested calls or type assertions wrap it.
+func isCGOCallee(fun ast.Expr) bool {
+	switch f := fun.(type) {
+	case *ast.SelectorExpr:
+		if id, ok := f.X.(*ast.Ident); ok && id.Name == "C" {
+			return true
+		}
+	case *ast.ParenExpr:
+		return isCGOCallee(f.X)
+	case *ast.StarExpr:
+		// `(*C.struct_foo)(unsafe.Pointer(p))` — a type-conversion
+		// call. The function expression is *(*C.struct_foo); descend
+		// through StarExpr to recognize it as CGO.
+		return isCGOCallee(f.X)
+	case *ast.IndexExpr:
+		return isCGOCallee(f.X)
+	case *ast.IndexListExpr:
+		return isCGOCallee(f.X)
+	}
+	return false
 }
 
 // receiverTypeName extracts the type name from a Go method receiver expression.

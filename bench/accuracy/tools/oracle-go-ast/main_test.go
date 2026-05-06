@@ -303,3 +303,66 @@ func deep(cmd *Command) {
 		t.Errorf("Y.6 must not fire on deep selector cmd.Inner.Name")
 	}
 }
+
+
+// TestT3a_CGOCalleesSkipped — Plan 4 T3a (2026-05-06 roundtable):
+// CGO selector calls must not emit edges. Code-graph's CALLS extractor
+// doesn't emit them; the oracle previously did, producing inflated
+// caller-side FPs that the Python wrapper dropped as
+// calls_path_dropped. Skipping at oracle-emit keeps the F1 denominator
+// honest.
+func TestT3a_CGOCalleesSkipped(t *testing.T) {
+	src := `package main
+
+/*
+#include <stdlib.h>
+*/
+import "C"
+import "unsafe"
+
+func Allocate() {
+	p := C.malloc(C.size_t(16))
+	C.free(unsafe.Pointer(p))
+}
+
+func Convert() {
+	var n C.int = 42
+	_ = C.int(n)
+}
+`
+	v := parseToVisitor(t, src)
+	// CGO callees must NOT appear.
+	for _, forbidden := range []string{"C.malloc", "C.free", "C.size_t", "C.int"} {
+		if got := findEdge(v.edges, forbidden); got.ToQN != "" {
+			t.Errorf("CGO callee %q must be skipped, got edge %+v", forbidden, got)
+		}
+	}
+	// Non-CGO callees in the same source should still appear.
+	if got := findEdge(v.edges, "unsafe.Pointer"); got.ToQN == "" {
+		t.Errorf("non-CGO selector unsafe.Pointer should not be skipped")
+	}
+}
+
+// TestT3a_IsCGOCallee_DirectIdentifierExclusions — the CGO detection
+// must NOT fire on bare identifiers literally named C in user code
+// (e.g. a local variable named C). Bare-ident calls are filtered by
+// the SelectorExpr requirement.
+func TestT3a_IsCGOCallee_DirectIdentifierExclusions(t *testing.T) {
+	src := `package main
+
+func Foo() {}
+
+func bar() {
+	C := func() {}
+	C()
+}
+`
+	v := parseToVisitor(t, src)
+	// The local C() call IS a closure invocation — extractCallee
+	// returns "C" (bare ident). isCGOCallee returns false for bare
+	// idents. Edge should appear.
+	if got := findEdge(v.edges, "C"); got.ToQN == "" {
+		t.Errorf("bare-ident C() (local variable) must NOT be filtered as CGO")
+	}
+}
+

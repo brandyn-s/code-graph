@@ -44,6 +44,7 @@ func (s *Server) handleQueryGraph(_ context.Context, req *mcp.CallToolRequest) (
 		"rows":          result.Rows,
 		"total":         len(result.Rows),
 		"effective_cap": result.EffectiveCap,
+		"_metadata":     s.stdReadGraphMetadata(getStringArg(args, "project")),
 	}
 	// Surface truncation explicitly so clients can detect when the returned rows
 	// are a sample rather than the full matching set. The bench-accuracy harness

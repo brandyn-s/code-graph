@@ -171,7 +171,7 @@ tool can build the block consistently.
 
 ## Reference implementations
 
-Three tools are migrated to this schema in the initial PR:
+The schema's reference implementations:
 
 - `trace_call_path` — generalizes the existing `confidence_band` /
   `unresolved_call_count` fields into the `_metadata` block while
@@ -181,9 +181,51 @@ Three tools are migrated to this schema in the initial PR:
 - `query_security_surfaces` — adds freshness + provenance + per-result
   confidence signals (rule-based hits get `high`, taxonomy-classified
   hits get `medium`).
+- `index_health` — freshness + provenance.
 
-Other tools may opt in incrementally. The schema is designed for
-gradual rollout, not a single bang-bang migration.
+## Per-tool field selection (Plan 3 Phase C, 2026-05-06)
+
+Not every tool needs every field. Tools are categorized by what
+metadata makes sense for their semantic:
+
+| Category | Required fields | Tools |
+|---|---|---|
+| **Read-graph** | freshness + provenance | `search_code`, `search_code_semantic`, `query_graph`, `trace_data_flow`, `get_code_snippet`, `get_architecture`, `get_change_coupling`, `get_relevant_context`, `get_review_context`, `get_affected_tests`, `get_graph_schema`, `find_rationale`, `find_similar_functions`, `rank_by_query`, `code_localize`, `detect_changes`, `detect_cycles`, `diff_graph`, `diff_services`, `explain_symbol`, `explain_service`, `service_map`, `query_stig_evidence`, `visualize`, `generate_report` |
+| **LLM-using** | freshness + provenance + model + confidence | `code_localize_agent` |
+| **Pure-status** | provenance only | `index_status`, `list_projects`, `manage_adr` (read modes) |
+| **Write tools** | provenance + action_outcome | `delete_project`, `index_repository`, `manage_adr` (write modes), `ingest_traces` |
+
+### Helpers
+
+The `tools` package exposes three convenience helpers that emit the
+correct metadata shape per category:
+
+- `(s *Server) stdReadGraphMetadata(projName string) map[string]any`
+- `(s *Server) stdStatusToolMetadata() map[string]any`
+- `(s *Server) stdWriteToolMetadata(outcome string) map[string]any`
+
+LLM-using tools should call `NewMetadataBuilder` directly to chain in
+`WithModel` + `WithConfidence`.
+
+### Action outcome values (write tools)
+
+`ActionOutcomeCreated`, `ActionOutcomeUpdated`, `ActionOutcomeDeleted`,
+`ActionOutcomeNoOp`, `ActionOutcomeFailed` — exported constants in
+`metadata.go`. Use these instead of string literals to prevent typos.
+
+## Rollout status (Plan 3 Phase C, 2026-05-06)
+
+Reference implementations (4 tools) shipped in Plan 1 A1:
+`trace_call_path`, `search_graph`, `query_security_surfaces`,
+`index_health`.
+
+Phase C extends to a high-priority subset (~10 additional tools);
+remaining tools are categorized above and can be incrementally
+instrumented using the helpers. The pattern is small (1-2 lines per
+tool), and the integration test in `metadata_coverage_test.go`
+documents which tools currently emit `_metadata` versus which are
+pending — failing the latter only when explicitly added to the
+required-list.
 
 ## What this schema does NOT cover
 

@@ -179,6 +179,7 @@ func (s *Server) handleChangeCoupling(_ context.Context, req *mcp.CallToolReques
 		"logical_count":    logical,
 		"cross_crate_only": crossCrateOnly,
 		"min_score":        minScore,
+		"_metadata":        s.stdReadGraphMetadata(projName),
 	}
 
 	if len(pairSummary) > 0 {

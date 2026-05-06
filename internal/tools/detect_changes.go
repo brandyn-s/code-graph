@@ -102,6 +102,7 @@ func (s *Server) handleDetectChanges(_ context.Context, req *mcp.CallToolRequest
 		"changed_symbols":  buildSymbolList(changedSymbols),
 		"impacted_symbols": buildImpactList(impactedSymbols),
 		"summary":          summary,
+		"_metadata":        s.stdReadGraphMetadata(projName),
 	}
 	s.addIndexStatus(responseData)
 

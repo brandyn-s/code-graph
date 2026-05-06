@@ -159,5 +159,6 @@ func (s *Server) handleSTIGEvidence(_ context.Context, req *mcp.CallToolRequest)
 		"roles_searched": rolesSearched,
 		"evidence_count": len(evidence),
 		"evidence":       evidence,
+		"_metadata":      s.stdReadGraphMetadata(projName),
 	}), nil
 }

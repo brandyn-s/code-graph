@@ -229,6 +229,7 @@ func (s *Server) handleVisualize(_ context.Context, req *mcp.CallToolRequest) (*
 		"edges":       len(vizEdges),
 		"edge_types":  edgeTypeList,
 		"hint":        fmt.Sprintf("Open %s in a browser to explore the graph.", outputPath),
+		"_metadata":   s.stdReadGraphMetadata(projName),
 	}
 
 	return jsonResult(responseData), nil

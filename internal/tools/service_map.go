@@ -244,6 +244,7 @@ func (s *Server) handleServiceMap(_ context.Context, req *mcp.CallToolRequest) (
 		"domains":        grouped,
 		"total_services": len(services),
 		"total_domains":  len(grouped),
+		"_metadata":      s.stdReadGraphMetadata(projName),
 	}
 
 	return jsonResult(responseData), nil

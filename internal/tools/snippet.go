@@ -293,6 +293,8 @@ func (s *Server) buildSnippetResponse(match *snippetMatch, includeNeighbors bool
 		responseData["alternatives"] = alternatives
 	}
 
+	responseData["_metadata"] = s.stdReadGraphMetadata(foundProject)
+
 	return jsonResult(responseData), nil
 }
 

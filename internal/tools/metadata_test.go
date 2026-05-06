@@ -107,3 +107,43 @@ func TestFreshnessFromProject_Nil(t *testing.T) {
 		t.Errorf("nil project should return ('unknown', ''), got (%q, %q)", state, indexedAt)
 	}
 }
+
+func TestMetadataBuilder_ActionOutcome(t *testing.T) {
+	out := NewMetadataBuilder().
+		WithActionOutcome(ActionOutcomeDeleted).
+		Build()
+
+	if got := out["action_outcome"]; got != ActionOutcomeDeleted {
+		t.Errorf("expected action_outcome=%q, got %v", ActionOutcomeDeleted, got)
+	}
+	// Other categories should be omitted when only outcome is set.
+	if _, present := out["freshness"]; present {
+		t.Errorf("freshness should be omitted when only action_outcome is set")
+	}
+	if _, present := out["provenance"]; present {
+		t.Errorf("provenance should be omitted when only action_outcome is set")
+	}
+}
+
+func TestMetadataBuilder_ActionOutcome_AllConstants(t *testing.T) {
+	cases := []string{
+		ActionOutcomeCreated,
+		ActionOutcomeUpdated,
+		ActionOutcomeDeleted,
+		ActionOutcomeNoOp,
+		ActionOutcomeFailed,
+	}
+	for _, outcome := range cases {
+		out := NewMetadataBuilder().WithActionOutcome(outcome).Build()
+		if out["action_outcome"] != outcome {
+			t.Errorf("WithActionOutcome(%q): got %v", outcome, out["action_outcome"])
+		}
+	}
+}
+
+func TestMetadataBuilder_ActionOutcome_EmptyOmits(t *testing.T) {
+	out := NewMetadataBuilder().WithActionOutcome("").Build()
+	if _, present := out["action_outcome"]; present {
+		t.Errorf("empty outcome should be omitted, got %v", out)
+	}
+}

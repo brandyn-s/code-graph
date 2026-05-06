@@ -143,6 +143,7 @@ func (s *Server) handleAffectedTests(_ context.Context, req *mcp.CallToolRequest
 		"changed_symbols": len(changedSymbols),
 		"tests_found":     len(tests),
 		"untested_count":  len(untested),
+		"_metadata":       s.stdReadGraphMetadata(effectiveProject),
 	}
 
 	return jsonResult(responseData), nil

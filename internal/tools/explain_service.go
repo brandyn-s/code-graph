@@ -302,6 +302,8 @@ func (s *Server) handleExplainService(_ context.Context, req *mcp.CallToolReques
 		result["security_surfaces"] = securitySurfaces
 	}
 
+	result["_metadata"] = s.stdReadGraphMetadata(projName)
+
 	return jsonResult(result), nil
 }
 

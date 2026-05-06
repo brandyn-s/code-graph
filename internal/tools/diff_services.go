@@ -179,6 +179,7 @@ func (s *Server) handleDiffServices(_ context.Context, req *mcp.CallToolRequest)
 		"total_files_changed": len(changes),
 		"security_impacted":   securityImpacted,
 		"domain_summary":      domainSummary,
+		"_metadata":           s.stdReadGraphMetadata(effectiveProject),
 	}
 
 	if len(allSecurityFiles) > 0 {

@@ -92,6 +92,7 @@ func (s *Server) handleExplainSymbol(_ context.Context, req *mcp.CallToolRequest
 
 	// Build the explanation
 	explanation := buildExplanation(st, node, projName)
+	explanation["_metadata"] = s.stdReadGraphMetadata(projName)
 
 	return jsonResult(explanation), nil
 }

@@ -121,6 +121,7 @@ func (s *Server) handleSearchCode(_ context.Context, req *mcp.CallToolRequest) (
 		"has_more":    hasMore,
 		"matches":     pageMatches,
 		"files_count": len(filePaths),
+		"_metadata":   s.stdReadGraphMetadata(params.project),
 	}
 	s.addIndexStatus(responseData)
 

@@ -109,6 +109,7 @@ func (s *Server) handleDetectCycles(_ context.Context, req *mcp.CallToolRequest)
 		"level":        level,
 		"max_depth":    maxDepth,
 		"graph_nodes":  len(depGraph),
+		"_metadata":    s.stdReadGraphMetadata(projName),
 	}
 
 	if truncated {

@@ -178,6 +178,7 @@ func (s *Server) handleDataFlow(_ context.Context, req *mcp.CallToolRequest) (*m
 		"auth":        auth,
 		"flow_path":   flowPath,
 		"edges":       buildEdgeList(result.Edges),
+		"_metadata":   s.stdReadGraphMetadata(effectiveProject),
 	}
 	s.addIndexStatus(responseData)
 

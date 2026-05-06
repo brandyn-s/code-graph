@@ -24,17 +24,18 @@ import (
 // Zero-valued fields are omitted from the output map so consumers don't
 // see misleading "null" when the tool simply didn't compute that signal.
 type MetadataBuilder struct {
-	freshnessState     string
-	indexedAt          string
-	stalenessSeconds   int64
-	hasStaleness       bool
-	toolVersion        string
-	dataSource         string
-	model              string
-	grammarVersions    map[string]string
-	confidenceBand     string
+	freshnessState      string
+	indexedAt           string
+	stalenessSeconds    int64
+	hasStaleness        bool
+	toolVersion         string
+	dataSource          string
+	model               string
+	grammarVersions     map[string]string
+	confidenceBand      string
 	confidenceRationale string
-	fallbackReason     string
+	fallbackReason      string
+	actionOutcome       string
 }
 
 // NewMetadataBuilder returns a fresh builder. All fields default to
@@ -108,6 +109,25 @@ func (b *MetadataBuilder) WithFallback(reason string) *MetadataBuilder {
 	return b
 }
 
+// Action outcome values for write-tool responses.
+const (
+	ActionOutcomeCreated = "created"
+	ActionOutcomeUpdated = "updated"
+	ActionOutcomeDeleted = "deleted"
+	ActionOutcomeNoOp    = "no_op"
+	ActionOutcomeFailed  = "failed"
+)
+
+// WithActionOutcome records the outcome of a write-tool invocation.
+// Use one of the ActionOutcome* constants. Empty string omits the field.
+//
+// Plan 3 Phase C addition for write-tool metadata coverage
+// (delete_project, index_repository, manage_adr write modes, ingest_traces).
+func (b *MetadataBuilder) WithActionOutcome(outcome string) *MetadataBuilder {
+	b.actionOutcome = outcome
+	return b
+}
+
 // Build produces the metadata map for embedding under "_metadata" in
 // a tool's response. Only non-zero fields are included; the consumer
 // sees exactly the signals the tool authentically produced.
@@ -160,6 +180,10 @@ func (b *MetadataBuilder) Build() map[string]any {
 		out["fallback_reason"] = b.fallbackReason
 	}
 
+	if b.actionOutcome != "" {
+		out["action_outcome"] = b.actionOutcome
+	}
+
 	return out
 }
 
@@ -177,4 +201,46 @@ func FreshnessFromProject(p *store.Project) (string, string) {
 		return "unknown", ""
 	}
 	return "current", p.IndexedAt
+}
+
+// stdReadGraphMetadata is the standard metadata block for read-graph tools
+// (search_*, query_*, get_*, find_*, detect_*, trace_*, explain_*, etc.).
+// It records freshness from the project's IndexedAt + provenance pointing
+// at the graph DB.
+//
+// Plan 3 Phase C: introduced to reduce per-tool boilerplate from ~6 lines
+// to 1. Tools that need additional fields (confidence band, model, action
+// outcome) should call NewMetadataBuilder directly rather than this helper.
+func (s *Server) stdReadGraphMetadata(projName string) map[string]any {
+	indexedAt := ""
+	if st, err := s.resolveStore(projName); err == nil && st != nil {
+		if proj, _ := st.GetProject(projName); proj != nil {
+			indexedAt = proj.IndexedAt
+		}
+	}
+	return NewMetadataBuilder().
+		WithFreshness(freshnessStateFromIndexedAt(indexedAt), indexedAt).
+		WithProvenance("", "graph_db").
+		Build()
+}
+
+// stdWriteToolMetadata is the standard metadata block for write-tool
+// responses (delete_project, index_repository, manage_adr write modes,
+// ingest_traces). Records provenance + action outcome.
+//
+// outcome should be one of the ActionOutcome* constants.
+func (s *Server) stdWriteToolMetadata(outcome string) map[string]any {
+	return NewMetadataBuilder().
+		WithProvenance("", "graph_db").
+		WithActionOutcome(outcome).
+		Build()
+}
+
+// stdStatusToolMetadata is the standard metadata block for pure-status
+// tools (index_status, list_projects, get_graph_schema). Records
+// provenance only — these don't have a single "project" with freshness.
+func (s *Server) stdStatusToolMetadata() map[string]any {
+	return NewMetadataBuilder().
+		WithProvenance("", "graph_db").
+		Build()
 }

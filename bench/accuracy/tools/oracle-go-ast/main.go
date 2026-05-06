@@ -46,16 +46,27 @@ type Output struct {
 }
 
 type visitor struct {
-	fset           *token.FileSet
-	project        string
-	fileQN         string // <project>.<file_no_ext>
-	fileRel        string // for edge.File
-	fnStack        []string
-	recvNameStack  []string                       // parallel to fnStack: receiver var name (e.g. "p" in `func (p *Pipeline) ...`), "" for free funcs
-	recvTypeStack  []string                       // parallel to fnStack: receiver type name (e.g. "Pipeline"), "" for free funcs
-	paramTypeStack []map[string]string            // parallel to fnStack: param identifier -> param type name (Y.6, 2026-05-02). Used to resolve `cmd.Method` callees inside `func writeCommands(cmd *Command, ...)` where cmd is a function parameter, not a receiver.
-	edges          []Edge
-	defs           []string
+	fset          *token.FileSet
+	project       string
+	fileQN        string // <project>.<file_no_ext>
+	fileRel       string // for edge.File
+	fnStack       []string
+	recvNameStack []string // parallel to fnStack: receiver var name (e.g. "p" in `func (p *Pipeline) ...`), "" for free funcs
+	recvTypeStack []string // parallel to fnStack: receiver type name (e.g. "Pipeline"), "" for free funcs
+	// paramTypeStack: param identifier -> param type name (Y.6, 2026-05-02).
+	// Used to resolve `cmd.Method` callees inside
+	// `func writeCommands(cmd *Command, ...)` where cmd is a function
+	// parameter, not a receiver.
+	paramTypeStack []map[string]string
+	// varTypeStack: local variable identifier -> declared type name (Plan
+	// 5 Phase E, 2026-05-06). Populated from `var p *S` declarations and
+	// short-var assignments where the RHS is a struct literal (`s := S{}`,
+	// `p := &S{}`). Used to resolve `p.Method` callees on local
+	// variables. Pre-existing Y.5 (receiver) and Y.6 (parameter) handlers
+	// don't fire on local-var calls.
+	varTypeStack []map[string]string
+	edges        []Edge
+	defs         []string
 }
 
 func (v *visitor) currentCaller() string {
@@ -101,6 +112,9 @@ func (v *visitor) Visit(node ast.Node) ast.Visitor {
 		v.recvNameStack = append(v.recvNameStack, recvName)
 		v.recvTypeStack = append(v.recvTypeStack, recvType)
 		v.paramTypeStack = append(v.paramTypeStack, paramTypes)
+		// Plan 5 Phase E: empty per-function map for local-variable types.
+		// Populated as we walk DeclStmt/AssignStmt nodes in the body.
+		v.varTypeStack = append(v.varTypeStack, make(map[string]string))
 		v.defs = append(v.defs, v.currentCaller())
 		if n.Body != nil {
 			ast.Walk(v, n.Body)
@@ -109,7 +123,27 @@ func (v *visitor) Visit(node ast.Node) ast.Visitor {
 		v.recvNameStack = v.recvNameStack[:len(v.recvNameStack)-1]
 		v.recvTypeStack = v.recvTypeStack[:len(v.recvTypeStack)-1]
 		v.paramTypeStack = v.paramTypeStack[:len(v.paramTypeStack)-1]
+		v.varTypeStack = v.varTypeStack[:len(v.varTypeStack)-1]
 		return nil
+
+	case *ast.DeclStmt:
+		// Plan 5 Phase E: capture `var p *S` / `var s S` declarations so
+		// later CallExpr resolution can substitute `p.M()` to `S.M()`.
+		if gd, ok := n.Decl.(*ast.GenDecl); ok && gd.Tok == token.VAR {
+			v.recordVarDecl(gd)
+		}
+		return v
+
+	case *ast.AssignStmt:
+		// Plan 5 Phase E: capture `s := S{}` and `p := &S{}` short-var
+		// declarations. Token must be DEFINE (`:=`) for the LHS to be
+		// fresh new bindings; ASSIGN (`=`) reuses existing names whose
+		// types we already captured (or which originate outside the
+		// function's local scope).
+		if n.Tok == token.DEFINE {
+			v.recordShortVarDecl(n)
+		}
+		return v
 
 	case *ast.CallExpr:
 		callee := extractCallee(n.Fun)
@@ -168,6 +202,34 @@ func (v *visitor) Visit(node ast.Node) ast.Visitor {
 					if !strings.Contains(methodName, ".") {
 						if paramType, ok := pt[paramName]; ok && paramType != "" {
 							callee = paramType + "." + methodName
+						}
+					}
+				}
+			}
+		}
+		// Plan 5 Phase E (2026-05-06): local-variable type substitution.
+		// Mirrors Y.5/Y.6 but for variables declared inside the function
+		// body via `var p *S` (DeclStmt) or `s := S{}` / `p := &S{}`
+		// (AssignStmt with token.DEFINE). The four method-call shapes
+		// covered:
+		//   value-recv pointer-call:  func (s S) M(); var p *S; p.M()    → S.M (Go auto-derefs)
+		//   value-recv value-call:    func (s S) M(); var s S;  s.M()    → S.M
+		//   ptr-recv pointer-call:    func (s *S) M(); var p *S; p.M()   → S.M
+		//   ptr-recv value-call:      func (s *S) M(); var s S;  s.M()   → S.M (Go auto-takes-addr)
+		// All four substitute to the same `Type.Method` form. The wrapper's
+		// recv_method_to_qns index resolves the callee identically, the
+		// same way Y.5 produces `Pipeline.Inner` from `p.Inner` inside
+		// `func (p *Pipeline) Outer()`.
+		if callee != "" && len(v.varTypeStack) > 0 {
+			vt := v.varTypeStack[len(v.varTypeStack)-1]
+			if len(vt) > 0 {
+				if dotIdx := strings.Index(callee, "."); dotIdx > 0 {
+					varName := callee[:dotIdx]
+					methodName := callee[dotIdx+1:]
+					// Single-level call only (skip `p.field.method`).
+					if !strings.Contains(methodName, ".") {
+						if varType, ok := vt[varName]; ok && varType != "" {
+							callee = varType + "." + methodName
 						}
 					}
 				}
@@ -249,6 +311,98 @@ func isCGOCallee(fun ast.Expr) bool {
 		return isCGOCallee(f.X)
 	}
 	return false
+}
+
+// recordVarDecl walks `var x T` and `var x, y T` declarations and
+// records the local variable -> type mapping in the current function's
+// var-type frame.
+//
+// Plan 5 Phase E: only `var name Type` shape is recorded; `var name = expr`
+// (without an explicit type) is skipped because we'd need full type
+// inference to derive Type from the RHS. The struct-literal short-decl
+// case is handled by recordShortVarDecl below.
+func (v *visitor) recordVarDecl(gd *ast.GenDecl) {
+	if len(v.varTypeStack) == 0 {
+		return
+	}
+	frame := v.varTypeStack[len(v.varTypeStack)-1]
+	for _, spec := range gd.Specs {
+		vs, ok := spec.(*ast.ValueSpec)
+		if !ok || vs.Type == nil {
+			continue
+		}
+		typeName := paramTypeName(vs.Type)
+		if typeName == "" {
+			continue
+		}
+		for _, name := range vs.Names {
+			if name.Name != "" && name.Name != "_" {
+				frame[name.Name] = typeName
+			}
+		}
+	}
+}
+
+// recordShortVarDecl walks `s := S{}` / `p := &S{}` / `s := SomeFunc()`
+// short-var declarations and records the LHS->type mapping when the RHS
+// shape lets us derive the type without full type inference.
+//
+// Plan 5 Phase E: covered RHS shapes:
+//   - struct literal `S{}` → record S
+//   - address-of struct literal `&S{}` → record S
+//   - composite literal `S{f: 1, g: 2}` → record S
+//
+// NOT covered (silently skipped):
+//   - function-call returns (`s := NewS()`) — would need return-type
+//     resolution which depends on the function's declared signature
+//   - type assertions (`s := iface.(S)`)
+//   - complex expressions (`s := getS(x).child`)
+//   - multi-value assignments where one side is a simple struct and the
+//     other isn't (rare)
+// Skipped cases just leave the variable's type un-recorded; the oracle
+// keeps emitting the pre-substitution form, which the wrapper drops as
+// unresolvable. Safe by construction — false-positives don't appear.
+func (v *visitor) recordShortVarDecl(as *ast.AssignStmt) {
+	if len(v.varTypeStack) == 0 {
+		return
+	}
+	frame := v.varTypeStack[len(v.varTypeStack)-1]
+	// Pair-wise LHS / RHS. `a, b := f()` has LHS=2, RHS=1 — skip those.
+	if len(as.Lhs) != len(as.Rhs) {
+		return
+	}
+	for i, lhs := range as.Lhs {
+		ident, ok := lhs.(*ast.Ident)
+		if !ok || ident.Name == "" || ident.Name == "_" {
+			continue
+		}
+		typeName := rhsLiteralType(as.Rhs[i])
+		if typeName == "" {
+			continue
+		}
+		frame[ident.Name] = typeName
+	}
+}
+
+// rhsLiteralType extracts the struct type name from RHS expressions
+// where the type is syntactically obvious. Returns "" for everything
+// else so unresolvable RHS shapes don't poison the var-type table.
+func rhsLiteralType(e ast.Expr) string {
+	switch r := e.(type) {
+	case *ast.CompositeLit:
+		// `S{}` or `S{Field: x}` — extract S from the type expression.
+		if r.Type != nil {
+			return paramTypeName(r.Type)
+		}
+	case *ast.UnaryExpr:
+		// `&S{}` — descend through the address-of operator.
+		if r.Op == token.AND {
+			return rhsLiteralType(r.X)
+		}
+	case *ast.ParenExpr:
+		return rhsLiteralType(r.X)
+	}
+	return ""
 }
 
 // receiverTypeName extracts the type name from a Go method receiver expression.

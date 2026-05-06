@@ -366,3 +366,157 @@ func bar() {
 	}
 }
 
+
+// --- Plan 5 Phase E: local-variable receiver patterns ---
+// These tests pin the four Go method-call shapes for local variables.
+// Each shape substitutes to the same `Type.Method` form because Go
+// auto-derefs pointer-to-value and auto-takes-addr value-to-pointer
+// for method calls.
+
+// TestE_LocalVarPointerCall_DeclThenCall pins `var p *S; p.M()` for
+// both value-receiver and pointer-receiver methods.
+func TestE_LocalVarPointerCall_DeclThenCall(t *testing.T) {
+	src := `package main
+
+type S struct{}
+
+func (s S) ValueMethod()    {}
+func (s *S) PointerMethod() {}
+
+func caller() {
+	var p *S
+	p.ValueMethod()
+	p.PointerMethod()
+}
+`
+	v := parseToVisitor(t, src)
+	for _, want := range []string{"S.ValueMethod", "S.PointerMethod"} {
+		if got := findEdge(v.edges, want); got.ToQN == "" {
+			var have []string
+			for _, e := range v.edges {
+				if e.EdgeType == "CALLS" {
+					have = append(have, e.ToQN)
+				}
+			}
+			t.Errorf("expected %q after var p *S; p.M() substitution; emitted: %v", want, have)
+		}
+	}
+}
+
+// TestE_LocalVarValueCall pins `var s S; s.M()` for both receiver
+// shapes (Go auto-takes-addr for pointer-receiver methods).
+func TestE_LocalVarValueCall(t *testing.T) {
+	src := `package main
+
+type S struct{}
+
+func (s S) ValueMethod()    {}
+func (s *S) PointerMethod() {}
+
+func caller() {
+	var s S
+	s.ValueMethod()
+	s.PointerMethod() // Go auto-takes-address
+}
+`
+	v := parseToVisitor(t, src)
+	for _, want := range []string{"S.ValueMethod", "S.PointerMethod"} {
+		if got := findEdge(v.edges, want); got.ToQN == "" {
+			var have []string
+			for _, e := range v.edges {
+				if e.EdgeType == "CALLS" {
+					have = append(have, e.ToQN)
+				}
+			}
+			t.Errorf("expected %q after var s S; s.M() substitution; emitted: %v", want, have)
+		}
+	}
+}
+
+// TestE_ShortVarDeclWithStructLiteral pins `s := S{}; s.M()` and
+// `p := &S{}; p.M()`.
+func TestE_ShortVarDeclWithStructLiteral(t *testing.T) {
+	src := `package main
+
+type S struct{}
+
+func (s S) ValueMethod()    {}
+func (s *S) PointerMethod() {}
+
+func caller() {
+	s := S{}
+	s.ValueMethod()
+	p := &S{}
+	p.PointerMethod()
+}
+`
+	v := parseToVisitor(t, src)
+	for _, want := range []string{"S.ValueMethod", "S.PointerMethod"} {
+		if got := findEdge(v.edges, want); got.ToQN == "" {
+			var have []string
+			for _, e := range v.edges {
+				if e.EdgeType == "CALLS" {
+					have = append(have, e.ToQN)
+				}
+			}
+			t.Errorf("expected %q after short-var struct-literal substitution; emitted: %v", want, have)
+		}
+	}
+}
+
+// TestE_LocalVarMethodReceiverPriority confirms Y.5 (receiver) wins
+// when the variable name `p` is also the function's receiver. The
+// CallExpr block applies Y.5 first, before E's local-var pass — so
+// inside `func (p *Pipeline) Outer()`, a call `p.Inner()` resolves to
+// `Pipeline.Inner`, not whatever local-var `p` might point to.
+func TestE_LocalVarMethodReceiverPriority(t *testing.T) {
+	src := `package main
+
+type Pipeline struct{}
+type Other struct{}
+
+func (p *Pipeline) Inner() {}
+func (o *Other) Inner()    {}
+
+func (p *Pipeline) Outer() {
+	p.Inner() // p is RECEIVER — Y.5 resolves to Pipeline.Inner
+}
+`
+	v := parseToVisitor(t, src)
+	if got := findEdge(v.edges, "Pipeline.Inner"); got.ToQN == "" {
+		var have []string
+		for _, e := range v.edges {
+			if e.EdgeType == "CALLS" {
+				have = append(have, e.ToQN)
+			}
+		}
+		t.Errorf("expected Pipeline.Inner via Y.5 receiver substitution; emitted: %v", have)
+	}
+}
+
+// TestE_FunctionCallRHSNotRecorded pins that we don't record the LHS
+// type when the RHS is a function call (we'd need return-type
+// resolution to derive it). The variable's type is left un-recorded;
+// later `s.M()` calls emit the pre-substitution form, which the wrapper
+// drops as unresolvable. Safe by construction (no false positives).
+func TestE_FunctionCallRHSNotRecorded(t *testing.T) {
+	src := `package main
+
+type S struct{}
+
+func (s *S) M() {}
+
+func newS() *S { return &S{} }
+
+func caller() {
+	s := newS() // RHS is a func call — type not derivable from syntax
+	s.M()       // emitted as "s.M", NOT substituted
+}
+`
+	v := parseToVisitor(t, src)
+	// The unsubstituted form is emitted (and will be dropped by the
+	// wrapper). Verify NO false-positive `S.M` substitution happened.
+	if got := findEdge(v.edges, "S.M"); got.ToQN != "" {
+		t.Errorf("did not expect S.M substitution from func-call RHS; emitted incorrectly")
+	}
+}

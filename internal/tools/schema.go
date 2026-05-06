@@ -40,6 +40,7 @@ func (s *Server) handleGetGraphSchema(_ context.Context, req *mcp.CallToolReques
 	adr, _ := st.GetADR(projName)
 
 	return jsonResult(map[string]any{
-		"projects": []projectSchema{{Project: projName, Schema: schema, ADRPresent: adr != nil}},
+		"projects":  []projectSchema{{Project: projName, Schema: schema, ADRPresent: adr != nil}},
+		"_metadata": s.stdStatusToolMetadata(),
 	}), nil
 }

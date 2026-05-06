@@ -20,14 +20,15 @@ const ReportFileName = "ARCHITECTURE_REPORT.md"
 
 // orientationReportResult is the structured return value of generate_report.
 type orientationReportResult struct {
-	Project  string `json:"project"`
-	Path     string `json:"path"`
-	Nodes    int    `json:"nodes"`
-	Edges    int    `json:"edges"`
-	Bytes    int    `json:"bytes"`
-	GodNodes int    `json:"god_nodes"`
-	Clusters int    `json:"clusters"`
-	Routes   int    `json:"routes"`
+	Project  string         `json:"project"`
+	Path     string         `json:"path"`
+	Nodes    int            `json:"nodes"`
+	Edges    int            `json:"edges"`
+	Bytes    int            `json:"bytes"`
+	GodNodes int            `json:"god_nodes"`
+	Clusters int            `json:"clusters"`
+	Routes   int            `json:"routes"`
+	Metadata map[string]any `json:"_metadata,omitempty"`
 }
 
 // handleGenerateReport is the generate_report MCP tool handler. Regenerates
@@ -50,6 +51,7 @@ func (s *Server) handleGenerateReport(_ context.Context, req *mcp.CallToolReques
 	if err != nil {
 		return errResult(fmt.Sprintf("generate report: %v", err)), nil
 	}
+	result.Metadata = s.stdWriteToolMetadata(ActionOutcomeCreated)
 
 	body, _ := json.MarshalIndent(result, "", "  ")
 	return &mcp.CallToolResult{

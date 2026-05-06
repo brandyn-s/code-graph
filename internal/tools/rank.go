@@ -10,13 +10,14 @@ import (
 )
 
 type rankByQueryResult struct {
-	Query        string                `json:"query"`
-	Project      string                `json:"project"`
-	TopK         int                   `json:"top_k"`
-	SeedStrategy string                `json:"seed_strategy"`
-	Matches      []ranking.RankedNode  `json:"matches"`
-	Total        int                   `json:"total_returned"`
-	Note         string                `json:"note,omitempty"`
+	Query        string               `json:"query"`
+	Project      string               `json:"project"`
+	TopK         int                  `json:"top_k"`
+	SeedStrategy string               `json:"seed_strategy"`
+	Matches      []ranking.RankedNode `json:"matches"`
+	Total        int                  `json:"total_returned"`
+	Note         string               `json:"note,omitempty"`
+	Metadata     map[string]any       `json:"_metadata,omitempty"`
 }
 
 // handleRankByQuery is the rank_by_query MCP tool. Wraps
@@ -66,6 +67,7 @@ func (s *Server) handleRankByQuery(ctx context.Context, req *mcp.CallToolRequest
 	if len(matches) == 0 {
 		out.Note = "No nodes matched the query. Try more specific tokens (function/class names) or expand `top_k`."
 	}
+	out.Metadata = s.stdReadGraphMetadata(project)
 
 	body, _ := json.MarshalIndent(out, "", "  ")
 	return &mcp.CallToolResult{

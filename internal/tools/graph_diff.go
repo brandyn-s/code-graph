@@ -26,13 +26,14 @@ type diffFile struct {
 }
 
 type diffGraphResult struct {
-	Project      string     `json:"project"`
-	FromSHA      string     `json:"from_sha"`
-	ToSHA        string     `json:"to_sha"`
-	FilesChanged int        `json:"files_changed"`
-	Files        []diffFile `json:"files"`
-	SymbolCount  int        `json:"symbol_count"`
-	Note         string     `json:"note,omitempty"`
+	Project      string         `json:"project"`
+	FromSHA      string         `json:"from_sha"`
+	ToSHA        string         `json:"to_sha"`
+	FilesChanged int            `json:"files_changed"`
+	Files        []diffFile     `json:"files"`
+	SymbolCount  int            `json:"symbol_count"`
+	Note         string         `json:"note,omitempty"`
+	Metadata     map[string]any `json:"_metadata,omitempty"`
 }
 
 // handleDiffGraph serves the diff_graph MCP tool. Given two git
@@ -108,6 +109,7 @@ func (s *Server) handleDiffGraph(_ context.Context, req *mcp.CallToolRequest) (*
 
 	if len(changed) == 0 {
 		out.Note = "no files changed between these revisions"
+		out.Metadata = s.stdReadGraphMetadata(project)
 		body, _ := json.MarshalIndent(out, "", "  ")
 		return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(body)}}}, nil
 	}
@@ -139,6 +141,7 @@ func (s *Server) handleDiffGraph(_ context.Context, req *mcp.CallToolRequest) (*
 	if out.SymbolCount == 0 {
 		out.Note = "git identified changed files but none map to currently-indexed symbols. Files may be outside the index scope (e.g. docs, lockfiles) or the symbols were deleted after to_sha."
 	}
+	out.Metadata = s.stdReadGraphMetadata(project)
 
 	body, _ := json.MarshalIndent(out, "", "  ")
 	return &mcp.CallToolResult{

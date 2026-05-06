@@ -128,8 +128,9 @@ func (s *Server) handleRelevantContext(_ context.Context, req *mcp.CallToolReque
 
 	if len(targetNodeIDs) == 0 {
 		return jsonResult(map[string]any{
-			"files":   []any{},
-			"summary": fmt.Sprintf("No symbols found in graph for files: %v. Is the project indexed?", files),
+			"files":     []any{},
+			"summary":   fmt.Sprintf("No symbols found in graph for files: %v. Is the project indexed?", files),
+			"_metadata": s.stdReadGraphMetadata(projName),
 		}), nil
 	}
 
@@ -268,6 +269,7 @@ func (s *Server) handleRelevantContext(_ context.Context, req *mcp.CallToolReque
 			"%d files selected (%d tokens), %d excluded over budget. Relationships: %v",
 			len(selected), usedTokens, len(excluded), byRelationship,
 		),
+		"_metadata": s.stdReadGraphMetadata(projName),
 	}), nil
 }
 

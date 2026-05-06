@@ -25,6 +25,7 @@ type findRationaleResult struct {
 	Entries     []rationaleEntry `json:"entries"`
 	CountByKind map[string]int   `json:"count_by_kind,omitempty"`
 	Note        string           `json:"note,omitempty"`
+	Metadata    map[string]any   `json:"_metadata,omitempty"`
 }
 
 // handleFindRationale serves the find_rationale MCP tool. Queries
@@ -88,6 +89,7 @@ func (s *Server) handleFindRationale(_ context.Context, req *mcp.CallToolRequest
 			"No rationale nodes for project %q yet. Reindex with this binary to populate: index_repository(repo_path=..., force=true). "+
 				"Rationale extraction runs automatically on every index.",
 			project)
+		out.Metadata = s.stdReadGraphMetadata(project)
 		body, _ := json.MarshalIndent(out, "", "  ")
 		return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(body)}}}, nil
 	}
@@ -133,6 +135,7 @@ func (s *Server) handleFindRationale(_ context.Context, req *mcp.CallToolRequest
 				"Omit `kind` to see all, or use one of the known values.",
 			kind, known)
 	}
+	out.Metadata = s.stdReadGraphMetadata(project)
 
 	body, _ := json.MarshalIndent(out, "", "  ")
 	return &mcp.CallToolResult{

@@ -11,14 +11,15 @@ import (
 )
 
 type codeLocalizeResult struct {
-	IssueDescription string                       `json:"issue_description"`
-	Project          string                       `json:"project"`
-	Depth            int                          `json:"depth"`
-	TopK             int                          `json:"top_k"`
-	SeedStrategy     string                       `json:"seed_strategy"`
-	Matches          []localize.LocalizedEntity   `json:"matches"`
-	Total            int                          `json:"total_returned"`
-	Note             string                       `json:"note,omitempty"`
+	IssueDescription string                     `json:"issue_description"`
+	Project          string                     `json:"project"`
+	Depth            int                        `json:"depth"`
+	TopK             int                        `json:"top_k"`
+	SeedStrategy     string                     `json:"seed_strategy"`
+	Matches          []localize.LocalizedEntity `json:"matches"`
+	Total            int                        `json:"total_returned"`
+	Note             string                     `json:"note,omitempty"`
+	Metadata         map[string]any             `json:"_metadata,omitempty"`
 }
 
 // handleCodeLocalize is the code_localize MCP tool handler. Wraps
@@ -70,6 +71,7 @@ func (s *Server) handleCodeLocalize(ctx context.Context, req *mcp.CallToolReques
 	if len(matches) == 0 {
 		out.Note = "No nodes matched the issue. Try more specific tokens (function/class names) or expand `top_k`/`depth`."
 	}
+	out.Metadata = s.stdReadGraphMetadata(project)
 
 	body, _ := json.MarshalIndent(out, "", "  ")
 	return &mcp.CallToolResult{

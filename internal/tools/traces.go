@@ -67,5 +67,14 @@ func (s *Server) handleIngestTraces(_ context.Context, req *mcp.CallToolRequest)
 		return errResult(err.Error()), nil
 	}
 
-	return jsonResult(result), nil
+	// Wrap the IngestResult in a map so we can add the standard
+	// _metadata block alongside the trace counts. The IngestResult
+	// struct is owned by internal/traces, so wrapping at the tool
+	// boundary keeps cross-package coupling minimal.
+	return jsonResult(map[string]any{
+		"spans_processed": result.SpansProcessed,
+		"edges_validated": result.EdgesValidated,
+		"edges_enriched":  result.EdgesEnriched,
+		"_metadata":       s.stdWriteToolMetadata(ActionOutcomeUpdated),
+	}), nil
 }

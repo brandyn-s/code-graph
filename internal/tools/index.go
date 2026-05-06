@@ -132,6 +132,15 @@ func (s *Server) handleIndexRepository(ctx context.Context, req *mcp.CallToolReq
 		indexedAt = proj.IndexedAt
 	}
 
+	// Distinguish first-time index (Created) from re-index (Updated).
+	// proj is non-nil only when the project record already existed
+	// before this Run() call. forceReindex=true is treated as Updated
+	// because the project record persists through file-hash deletion.
+	outcome := ActionOutcomeCreated
+	if proj != nil {
+		outcome = ActionOutcomeUpdated
+	}
+
 	result := map[string]any{
 		"project":       projectName,
 		"mode":          string(mode),
@@ -139,6 +148,7 @@ func (s *Server) handleIndexRepository(ctx context.Context, req *mcp.CallToolReq
 		"nodes":         nodeCount,
 		"edges":         edgeCount,
 		"indexed_at":    indexedAt,
+		"_metadata":     s.stdWriteToolMetadata(outcome),
 	}
 
 	// Check for ADR presence and suggest creation if missing

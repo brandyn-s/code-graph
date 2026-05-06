@@ -25,6 +25,7 @@ type similarFunctionsResult struct {
 	Matches    []similarFunctionMatch `json:"matches"`
 	TotalFound int                    `json:"total_found"`
 	Note       string                 `json:"note,omitempty"`
+	Metadata   map[string]any         `json:"_metadata,omitempty"`
 }
 
 // handleFindSimilarFunctions is the find_similar_functions MCP tool.
@@ -149,6 +150,7 @@ func (s *Server) handleFindSimilarFunctions(_ context.Context, req *mcp.CallTool
 			"No matches above threshold=%.2f. Either %q is unique in this codebase, or its embedding is in a sparse region of vector space. Try a lower threshold or limit=50 to see the nearest regardless of score.",
 			threshold, name)
 	}
+	out.Metadata = s.stdReadGraphMetadata(project)
 
 	body, _ := json.MarshalIndent(out, "", "  ")
 	return &mcp.CallToolResult{

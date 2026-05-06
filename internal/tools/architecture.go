@@ -48,6 +48,7 @@ func (s *Server) handleGetArchitecture(_ context.Context, req *mcp.CallToolReque
 
 	responseData := buildArchResponse(projName, info)
 	addADRToResponse(responseData, aspects, st, projName)
+	responseData["_metadata"] = s.stdReadGraphMetadata(projName)
 
 	s.addIndexStatus(responseData)
 	result := jsonResult(responseData)
@@ -203,9 +204,10 @@ func (s *Server) handleADRGet(st *store.Store, projName string, include []string
 			hint += fmt.Sprintf(" Existing architecture docs found: %v — consider reading these first.", docs)
 		}
 		return jsonResult(map[string]any{
-			"project":  projName,
-			"adr":      nil,
-			"adr_hint": hint,
+			"project":   projName,
+			"adr":       nil,
+			"adr_hint":  hint,
+			"_metadata": s.stdStatusToolMetadata(),
 		}), nil
 	}
 
@@ -229,6 +231,7 @@ func (s *Server) handleADRGet(st *store.Store, projName string, include []string
 			"sections":       filtered,
 			"updated_at":     adr.UpdatedAt,
 			"alignment_hint": alignHint,
+			"_metadata":      s.stdStatusToolMetadata(),
 		}), nil
 	}
 
@@ -238,6 +241,7 @@ func (s *Server) handleADRGet(st *store.Store, projName string, include []string
 		"text":           adr.Content,
 		"updated_at":     adr.UpdatedAt,
 		"alignment_hint": alignHint,
+		"_metadata":      s.stdStatusToolMetadata(),
 	}), nil
 }
 
@@ -258,6 +262,7 @@ func (s *Server) handleADRStore(st *store.Store, projName, content string) (*mcp
 		"status":     "stored",
 		"project":    projName,
 		"updated_at": store.Now(),
+		"_metadata":  s.stdWriteToolMetadata(ActionOutcomeCreated),
 	}), nil
 }
 
@@ -279,6 +284,7 @@ func (s *Server) handleADRUpdate(st *store.Store, projName string, sections map[
 		"sections":   parsed,
 		"text":       adr.Content,
 		"updated_at": adr.UpdatedAt,
+		"_metadata":  s.stdWriteToolMetadata(ActionOutcomeUpdated),
 	}), nil
 }
 
@@ -287,8 +293,9 @@ func (s *Server) handleADRDelete(st *store.Store, projName string) (*mcp.CallToo
 		return errResult(fmt.Sprintf("delete ADR: %v", err)), nil
 	}
 	return jsonResult(map[string]any{
-		"status":  "deleted",
-		"project": projName,
+		"status":    "deleted",
+		"project":   projName,
+		"_metadata": s.stdWriteToolMetadata(ActionOutcomeDeleted),
 	}), nil
 }
 
@@ -337,6 +344,7 @@ func (s *Server) handleADRAuto(st *store.Store, projName string) (*mcp.CallToolR
 		"mode":       "auto",
 		"updated_at": store.Now(),
 		"hint":       "Auto-generated ADR stored. Use manage_adr(mode='get') to review, then manage_adr(mode='update', sections={...}) to refine individual sections.",
+		"_metadata":  s.stdWriteToolMetadata(ActionOutcomeCreated),
 	}), nil
 }
 

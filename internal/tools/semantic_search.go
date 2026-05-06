@@ -110,14 +110,26 @@ func (s *Server) handleSearchCodeSemantic(ctx context.Context, req *mcp.CallTool
 		}
 	}
 
+	indexedAt := ""
+	if proj, _ := st.GetProject(project); proj != nil {
+		indexedAt = proj.IndexedAt
+	}
+	metadata := NewMetadataBuilder().
+		WithFreshness(freshnessStateFromIndexedAt(indexedAt), indexedAt).
+		WithProvenance("", "graph_db").
+		WithModel("voyage-4-large").
+		Build()
+
 	out, _ := json.MarshalIndent(struct {
 		Results    []semanticMatch `json:"results"`
 		Count      int             `json:"count"`
 		Embeddings int             `json:"embeddings_indexed"`
+		Metadata   map[string]any  `json:"_metadata,omitempty"`
 	}{
 		Results:    matches,
 		Count:      len(matches),
 		Embeddings: count,
+		Metadata:   metadata,
 	}, "", "  ")
 
 	return &mcp.CallToolResult{

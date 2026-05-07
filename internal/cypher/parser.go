@@ -497,6 +497,37 @@ func (p *Parser) parseCondition() (Condition, error) {
 		}
 		// IS NULL / IS NOT NULL take no value; return early.
 		return c, nil
+	case TokIn:
+		// IN [list] — value list of strings or numbers.
+		p.advance() // consume IN
+		if err := p.expect(TokLBracket); err != nil {
+			return c, fmt.Errorf("expected '[' after IN: %w", err)
+		}
+		c.Operator = "IN"
+		// Empty list is a parse error — `WHERE x IN []` would always be false
+		// and is almost certainly user error. Reject it explicitly.
+		if p.peek().Type == TokRBracket {
+			return c, fmt.Errorf("empty list after IN at pos %d", p.peek().Pos)
+		}
+		for {
+			vt := p.advance()
+			switch vt.Type {
+			case TokString, TokNumber:
+				c.Values = append(c.Values, vt.Value)
+			default:
+				return c, fmt.Errorf("expected string or number in IN list, got %q at pos %d", vt.Value, vt.Pos)
+			}
+			if p.peek().Type == TokComma {
+				p.advance() // consume ,
+				continue
+			}
+			break
+		}
+		if err := p.expect(TokRBracket); err != nil {
+			return c, fmt.Errorf("expected ']' to close IN list: %w", err)
+		}
+		// IN takes a list, not a scalar value; return early.
+		return c, nil
 	default:
 		return c, fmt.Errorf("expected comparison operator, got %q at pos %d", op.Value, op.Pos)
 	}

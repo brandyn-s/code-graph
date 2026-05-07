@@ -139,6 +139,21 @@ var positiveCypherFixtures = []struct {
 		"IS NOT NULL (Plan 3 Phase A: parser extended 2026-05-06)",
 	},
 	{
+		"in_string_list",
+		`MATCH (f:Function) WHERE f.name IN ['HandleOrder', 'ValidateOrder'] RETURN f.name`,
+		"IN with string list (B1: parser extended 2026-05-07)",
+	},
+	{
+		"in_number_list",
+		`MATCH (f:Function) WHERE f.start_line IN [10, 25] RETURN f.name`,
+		"IN with number list (B1: parser extended 2026-05-07)",
+	},
+	{
+		"in_single_value",
+		`MATCH (f:Function) WHERE f.name IN ['HandleOrder'] RETURN f.name`,
+		"IN with single-element list — useful for programmatic query construction",
+	},
+	{
 		"edge_confidence_filter",
 		`MATCH (a)-[r:CALLS]->(b) WHERE r.confidence >= 0.7 RETURN a.name, b.name`,
 		"edge property filter (r.confidence)",
@@ -258,6 +273,24 @@ var negativeCypherFixtures = []struct {
 		"MATCH (f) WHERE f.name ENDS 'X' RETURN f",
 		"WITH after ENDS",
 		"ENDS must be followed by WITH (parser.go:477)",
+	},
+	{
+		"in_empty_list_rejected",
+		"MATCH (f) WHERE f.name IN [] RETURN f",
+		"empty list",
+		"empty IN list is always-false; reject explicitly (B1: 2026-05-07)",
+	},
+	{
+		"in_missing_close_bracket",
+		"MATCH (f) WHERE f.name IN ['a' RETURN f",
+		"",
+		"unterminated IN list (B1: 2026-05-07)",
+	},
+	{
+		"in_invalid_value_type",
+		"MATCH (f) WHERE f.name IN [f.x] RETURN f",
+		"string or number",
+		"IN list values must be string or number literals (B1: 2026-05-07)",
 	},
 }
 

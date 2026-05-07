@@ -10,7 +10,7 @@ code-graph implements a **read-only subset of openCypher** for graph
 queries against the indexed code graph. Supported features:
 
 - `MATCH (n:Label)` — node patterns with optional label
-- `WHERE` — comparison ops (=, <>, <, >, <=, >=), regex (=~), STARTS WITH, ENDS WITH, CONTAINS, AND/OR, IS NULL, IS NOT NULL
+- `WHERE` — comparison ops (=, <>, <, >, <=, >=), regex (=~), STARTS WITH, ENDS WITH, CONTAINS, AND/OR, IS NULL, IS NOT NULL, IN [list]
 - `RETURN` — projection, COUNT(*), DISTINCT, ORDER BY, LIMIT, OFFSET
 - Variable-length paths: `(a)-[:REL*1..3]->(b)`
 - Directional relationships: `-[:REL]->`, `<-[:REL]-`, `-[:REL]-`
@@ -133,6 +133,23 @@ would have continued to drift undetected. The second run (after
 Plan 3 Phase A) verifies parser + executor + tool description are
 now in sync, with 22 positive fixtures + 7 negative fixtures
 passing.
+
+### Resolved 2026-05-07 (B1: IN operator)
+
+The PSM test battery (2026-05-07) found that `IN` was documented in
+some user-facing references but produced parse errors. Resolved:
+
+- `IN [list]` — lexer reserves `IN`; parser handles
+  `expr IN '[' string|number, ... ']'`; executor compares actual
+  property value against each list entry via the same string
+  formatting used by `=`. List values may be string or number
+  literals; mixed types in the same list are accepted (numeric
+  properties match numeric list entries by string equality).
+- Empty list (`IN []`) is rejected at parse time — always-false and
+  almost certainly user error.
+- 3 positive fixtures (string list, number list, single-element
+  list) and 3 negative fixtures (empty, unterminated, non-literal
+  values) pin the new behavior.
 
 ## Adding a fixture
 

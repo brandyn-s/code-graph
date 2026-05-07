@@ -29,6 +29,7 @@ const (
 	TokIs                        // IS
 	TokNull                      // NULL
 	TokNot                       // NOT
+	TokIn                        // IN
 	TokAsc                       // ASC
 	TokDesc                      // DESC
 
@@ -103,6 +104,7 @@ var keywords = map[string]TokenType{
 	"IS":       TokIs,
 	"NULL":     TokNull,
 	"NOT":      TokNot,
+	"IN":       TokIn,
 	"ASC":      TokAsc,
 	"DESC":     TokDesc,
 	"CREATE":   TokCreate,

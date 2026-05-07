@@ -1,6 +1,7 @@
 package cypher
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/DeusData/codebase-memory-mcp/internal/store"
@@ -1065,5 +1066,183 @@ func TestEdgeBuiltinPropertyFilter(t *testing.T) {
 	}
 	if len(result.Rows) != 2 {
 		t.Fatalf("expected 2 rows (both HTTP_CALLS edges), got %d", len(result.Rows))
+	}
+}
+
+// --- IN operator (B1, 2026-05-07) ---
+
+func TestParseWhereInStrings(t *testing.T) {
+	q, err := Parse(`MATCH (f:Function) WHERE f.name IN ['HandleOrder', 'ValidateOrder'] RETURN f`)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	c := q.Where.Conditions[0]
+	if c.Operator != "IN" {
+		t.Errorf("expected IN, got %q", c.Operator)
+	}
+	if len(c.Values) != 2 || c.Values[0] != "HandleOrder" || c.Values[1] != "ValidateOrder" {
+		t.Errorf("expected [HandleOrder, ValidateOrder], got %v", c.Values)
+	}
+}
+
+func TestParseWhereInNumbers(t *testing.T) {
+	q, err := Parse(`MATCH (f:Function) WHERE f.start_line IN [10, 25] RETURN f`)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	c := q.Where.Conditions[0]
+	if c.Operator != "IN" {
+		t.Errorf("expected IN, got %q", c.Operator)
+	}
+	if len(c.Values) != 2 || c.Values[0] != "10" || c.Values[1] != "25" {
+		t.Errorf("expected [10, 25], got %v", c.Values)
+	}
+}
+
+func TestParseWhereInSingleValue(t *testing.T) {
+	// Single-element list should still parse — useful for programmatic
+	// query construction where the list size is not known statically.
+	q, err := Parse(`MATCH (f:Function) WHERE f.name IN ['HandleOrder'] RETURN f`)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	c := q.Where.Conditions[0]
+	if len(c.Values) != 1 || c.Values[0] != "HandleOrder" {
+		t.Errorf("expected [HandleOrder], got %v", c.Values)
+	}
+}
+
+func TestParseWhereInEmptyListRejected(t *testing.T) {
+	// Empty IN list is always-false and almost certainly user error;
+	// reject at parse time so it surfaces immediately.
+	_, err := Parse(`MATCH (f:Function) WHERE f.name IN [] RETURN f`)
+	if err == nil {
+		t.Fatal("expected parse error for empty IN list")
+	}
+	if !strings.Contains(err.Error(), "empty list") {
+		t.Errorf("expected 'empty list' in error, got %v", err)
+	}
+}
+
+func TestParseWhereInMissingClose(t *testing.T) {
+	_, err := Parse(`MATCH (f:Function) WHERE f.name IN ['a', 'b' RETURN f`)
+	if err == nil {
+		t.Fatal("expected parse error for unterminated IN list")
+	}
+}
+
+func TestExecuteWhereInStrings(t *testing.T) {
+	s := setupTestStore(t)
+	defer s.Close()
+
+	exec := &Executor{Store: s}
+	result, err := exec.Execute(`MATCH (f:Function) WHERE f.name IN ['HandleOrder', 'ValidateOrder'] RETURN f.name`)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if len(result.Rows) != 2 {
+		t.Fatalf("expected 2 rows, got %d", len(result.Rows))
+	}
+	got := map[string]bool{}
+	for _, row := range result.Rows {
+		got[row["f.name"].(string)] = true
+	}
+	if !got["HandleOrder"] || !got["ValidateOrder"] {
+		t.Errorf("expected HandleOrder and ValidateOrder, got %v", got)
+	}
+}
+
+func TestExecuteWhereInNumeric(t *testing.T) {
+	s := setupTestStore(t)
+	defer s.Close()
+
+	exec := &Executor{Store: s}
+	// SubmitOrder has start_line=25, ValidateOrder has start_line=5,
+	// LogError has start_line=1, HandleOrder has start_line=10.
+	result, err := exec.Execute(`MATCH (f:Function) WHERE f.start_line IN [10, 25] RETURN f.name`)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if len(result.Rows) != 2 {
+		t.Fatalf("expected 2 rows, got %d", len(result.Rows))
+	}
+}
+
+func TestExecuteWhereInNoMatch(t *testing.T) {
+	s := setupTestStore(t)
+	defer s.Close()
+
+	exec := &Executor{Store: s}
+	result, err := exec.Execute(`MATCH (f:Function) WHERE f.name IN ['DoesNotExist', 'AlsoMissing'] RETURN f.name`)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if len(result.Rows) != 0 {
+		t.Errorf("expected 0 rows, got %d", len(result.Rows))
+	}
+}
+
+// --- IS NULL / IS NOT NULL parser+executor tests ---
+// Parser was extended in Plan 3 Phase A (2026-05-06); conformance
+// corpus pins the parse path. These tests pin the executor path against
+// the unit-test store fixture.
+
+func TestParseWhereIsNull(t *testing.T) {
+	q, err := Parse(`MATCH (f:Function) WHERE f.docstring IS NULL RETURN f.name`)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	c := q.Where.Conditions[0]
+	if c.Operator != "IS NULL" {
+		t.Errorf("expected 'IS NULL', got %q", c.Operator)
+	}
+	if c.Value != "" {
+		t.Errorf("expected empty Value for IS NULL, got %q", c.Value)
+	}
+}
+
+func TestParseWhereIsNotNull(t *testing.T) {
+	q, err := Parse(`MATCH (f:Function) WHERE f.docstring IS NOT NULL RETURN f.name`)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	c := q.Where.Conditions[0]
+	if c.Operator != "IS NOT NULL" {
+		t.Errorf("expected 'IS NOT NULL', got %q", c.Operator)
+	}
+}
+
+func TestExecuteWhereIsNull(t *testing.T) {
+	s := setupTestStore(t)
+	defer s.Close()
+
+	exec := &Executor{Store: s}
+	// LogError has no signature property; the others do (see setupTestStore).
+	// IS NULL matches both nil and empty-string (the on-disk representation
+	// of an absent optional string).
+	result, err := exec.Execute(`MATCH (f:Function) WHERE f.signature IS NULL RETURN f.name`)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if len(result.Rows) != 1 {
+		t.Fatalf("expected 1 row (LogError), got %d", len(result.Rows))
+	}
+	if result.Rows[0]["f.name"] != "LogError" {
+		t.Errorf("expected LogError, got %v", result.Rows[0]["f.name"])
+	}
+}
+
+func TestExecuteWhereIsNotNull(t *testing.T) {
+	s := setupTestStore(t)
+	defer s.Close()
+
+	exec := &Executor{Store: s}
+	result, err := exec.Execute(`MATCH (f:Function) WHERE f.signature IS NOT NULL RETURN f.name`)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	// HandleOrder, ValidateOrder, SubmitOrder all have signatures; LogError doesn't.
+	if len(result.Rows) != 3 {
+		t.Errorf("expected 3 rows, got %d", len(result.Rows))
 	}
 }

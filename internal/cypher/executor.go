@@ -1099,6 +1099,19 @@ func (e *Executor) evaluateCondition(b binding, c Condition) (bool, error) {
 			return false, nil
 		}
 		return true, nil
+	case "IN":
+		// Membership test against the parsed list literal. Values are
+		// always strings at parse time (TokString and TokNumber both
+		// come through as the raw text); compare via fmt.Sprintf so
+		// numeric properties (e.g. start_line) match against numeric
+		// list entries with the same string formatting used by '='.
+		actualStr := fmt.Sprintf("%v", actual)
+		for _, v := range c.Values {
+			if actualStr == v {
+				return true, nil
+			}
+		}
+		return false, nil
 	case ">", "<", ">=", "<=":
 		return compareNumeric(actual, c.Value, c.Operator)
 	default:

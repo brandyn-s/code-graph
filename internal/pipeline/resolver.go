@@ -4,6 +4,8 @@ import (
 	"math"
 	"strings"
 	"sync"
+
+	"github.com/DeusData/codebase-memory-mcp/internal/lang"
 )
 
 // ResolutionResult carries the resolved QN plus quality metadata.
@@ -58,6 +60,26 @@ type CallContext struct {
 	ReceiverType   string
 	ImportBindings map[string]string
 	Aliases        map[string]string
+
+	// Language identifies the source language of the call site. Populated
+	// by CALLS-edge resolution paths (resolveCallEdge -> resolveCallWithTypes
+	// -> ResolveCtx) so language-specific drop policies can apply. Empty
+	// string means "language unknown" — the drop policies below treat
+	// unknown as "do not drop" (preserve legacy behavior on Resolve()
+	// callers that don't set this field). Added 2026-05-06 to support
+	// CG-1 (Python drop-on-no-match for cross-package-suffix bucket).
+	Language lang.Language
+}
+
+// shouldDropCrossPackageSuffix returns true when an import_map_suffix /
+// suffix_match strategy result should be dropped instead of emitted, based
+// on the call site's language. Drop policy is currently Python-only:
+// 2026-05-06 baselines show 0.07-0.23 precision on Python adversarial
+// fixtures (essentially noise) for the cross-package-suffix bucket, while
+// Go and Rust score 0.85-0.95 on the same bucket. See
+// `bench/accuracy/baselines/2026-05-06-adversarial-rerun-finding.md`.
+func shouldDropCrossPackageSuffix(language lang.Language) bool {
+	return language == lang.Python
 }
 
 // FunctionRegistry indexes all Function, Method, and Class nodes by qualified
@@ -226,6 +248,15 @@ func (r *FunctionRegistry) resolveViaImportMap(ctx CallContext) ResolutionResult
 	if suffix != "" {
 		for qn := range r.exact {
 			if strings.HasPrefix(qn, resolved+".") && strings.HasSuffix(qn, "."+suffix) {
+				// CG-1 drop-on-no-match for Python: this strategy
+				// scores 0.07 precision on flask-adversarial. Drop
+				// here lets downstream same_module / nameLookup try;
+				// if neither resolves, the call goes unresolved (the
+				// correct outcome — we don't have evidence this is
+				// the right target).
+				if shouldDropCrossPackageSuffix(ctx.Language) {
+					return ResolutionResult{}
+				}
 				return ResolutionResult{QualifiedName: qn, Strategy: "import_map_suffix", Confidence: 0.85, CandidateCount: 1}
 			}
 		}
@@ -623,6 +654,15 @@ func (r *FunctionRegistry) applyImportBindingFilter(ctx CallContext, candidates 
 
 // resolveSuffixMatch handles Strategy 4 — suffix-based matching among multiple candidates.
 func (r *FunctionRegistry) resolveSuffixMatch(ctx CallContext, candidates []string) ResolutionResult {
+	// CG-1 drop-on-no-match for Python: the suffix_match strategy is
+	// catastrophically imprecise on Python adversarial fixtures (0.07
+	// flask, 0.23 requests). Drop entire branch for Python; downstream
+	// callers (resolveViaNameLookup) treat empty result as "unresolved"
+	// rather than emitting a phantom edge. Go and Rust keep current
+	// behavior (precision 0.85+ on those languages).
+	if shouldDropCrossPackageSuffix(ctx.Language) {
+		return ResolutionResult{}
+	}
 	_, suffix := splitCalleeName(ctx.CalleeName)
 	var matches []string
 	for _, qn := range candidates {
@@ -652,6 +692,13 @@ func (r *FunctionRegistry) resolveSuffixMatch(ctx CallContext, candidates []stri
 // type-aware tiebreak (prefer Method over Function for method-call shape).
 func (r *FunctionRegistry) pickBestCandidate(ctx CallContext, candidates []string) ResolutionResult {
 	if len(candidates) <= 1 {
+		return ResolutionResult{}
+	}
+	// CG-1 drop-on-no-match for Python: pickBestCandidate emits at the
+	// suffix_match strategy when forced to choose among ambiguous
+	// project-wide name matches. Same precision concern as
+	// resolveSuffixMatch above — drop entire branch for Python.
+	if shouldDropCrossPackageSuffix(ctx.Language) {
 		return ResolutionResult{}
 	}
 	filtered := candidates

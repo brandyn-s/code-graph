@@ -1929,6 +1929,7 @@ func (p *Pipeline) resolveCallWithTypes(
 	calleeName, callerQN, moduleQN string,
 	importMap map[string]string,
 	typeMap TypeMap,
+	language lang.Language,
 ) ResolutionResult {
 	// ACC-006 (2026-05-03): strip the project's own crate-name prefix from
 	// `::`-form callees so qualified-path calls like
@@ -2073,6 +2074,7 @@ func (p *Pipeline) resolveCallWithTypes(
 		ImportMap:      importMap,
 		ReceiverType:   receiverType,
 		ImportBindings: importBindings,
+		Language:       language,
 	})
 }
 

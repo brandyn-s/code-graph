@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/DeusData/codebase-memory-mcp/internal/cbm"
+	"github.com/DeusData/codebase-memory-mcp/internal/lang"
 )
 
 // TestResolverRuleFromLSPStrategy_TypeDispatch — Go LSP type-dispatch
@@ -174,7 +175,7 @@ func TestResolveCallEdge_PseudoEdgeIsModalPseudo(t *testing.T) {
 	// resolution produces same-package-shadow rule which modal-pseudo
 	// must override.
 	pseudoCall := cbm.Call{CalleeName: "Target", EnclosingFuncQN: ""}
-	edge, ok := p.resolveCallEdge(pseudoCall, moduleQN, importMap, typeMap, lspCallerMethods)
+	edge, ok := p.resolveCallEdge(pseudoCall, moduleQN, importMap, typeMap, lspCallerMethods, lang.Language(""))
 	if !ok {
 		t.Fatalf("expected resolveCallEdge to emit on same-module callee")
 	}
@@ -203,7 +204,7 @@ func TestResolveCallEdge_SamePackageFreeFunction(t *testing.T) {
 	lspCallerMethods := map[string]bool{}
 
 	call := cbm.Call{CalleeName: "Target", EnclosingFuncQN: "proj.main.Caller"}
-	edge, ok := p.resolveCallEdge(call, moduleQN, importMap, typeMap, lspCallerMethods)
+	edge, ok := p.resolveCallEdge(call, moduleQN, importMap, typeMap, lspCallerMethods, lang.Language(""))
 	if !ok {
 		t.Fatalf("expected resolveCallEdge to emit on same-module callee")
 	}
@@ -266,7 +267,7 @@ func TestResolveCallEdge_CrossPackageImportMap(t *testing.T) {
 	// Call: bar.Target() inside Caller. bar is in importMap → resolves
 	// to proj.bar.Target via import_map strategy.
 	call := cbm.Call{CalleeName: "bar.Target", EnclosingFuncQN: "proj.foo.Caller"}
-	edge, ok := p.resolveCallEdge(call, moduleQN, importMap, typeMap, lspCallerMethods)
+	edge, ok := p.resolveCallEdge(call, moduleQN, importMap, typeMap, lspCallerMethods, lang.Language(""))
 	if !ok {
 		t.Fatalf("expected resolveCallEdge to emit on import_map resolution")
 	}
@@ -411,7 +412,7 @@ func TestResolveCallEdge_TypeDispatchInterfaceDispatch(t *testing.T) {
 	// Call: obj.DoThing() — TypeMap says obj has type MyStruct;
 	// MyStruct.DoThing exists in registry → type_dispatch strategy.
 	call := cbm.Call{CalleeName: "obj.DoThing", EnclosingFuncQN: "proj.foo.Caller"}
-	edge, ok := p.resolveCallEdge(call, moduleQN, importMap, typeMap, lspCallerMethods)
+	edge, ok := p.resolveCallEdge(call, moduleQN, importMap, typeMap, lspCallerMethods, lang.Language(""))
 	if !ok {
 		t.Fatalf("expected resolveCallEdge to emit on type_dispatch")
 	}
@@ -437,7 +438,7 @@ func TestResolveCallEdge_SelfMethod(t *testing.T) {
 	lspCallerMethods := map[string]bool{}
 
 	call := cbm.Call{CalleeName: "self.helper", EnclosingFuncQN: "app.module.MyClass.entry"}
-	edge, ok := p.resolveCallEdge(call, moduleQN, importMap, typeMap, lspCallerMethods)
+	edge, ok := p.resolveCallEdge(call, moduleQN, importMap, typeMap, lspCallerMethods, lang.Language(""))
 	if !ok {
 		t.Fatalf("expected resolveCallEdge to emit on self.helper")
 	}

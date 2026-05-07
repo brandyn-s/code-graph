@@ -9,6 +9,7 @@ import (
 
 	"github.com/DeusData/codebase-memory-mcp/internal/cbm"
 	"github.com/DeusData/codebase-memory-mcp/internal/discover"
+	"github.com/DeusData/codebase-memory-mcp/internal/lang"
 	"github.com/DeusData/codebase-memory-mcp/internal/store"
 )
 
@@ -941,7 +942,7 @@ func TestResolveCallEdge_ModuleDefaultProducesPseudo(t *testing.T) {
 	// Call site with empty EnclosingFuncQN — should default to moduleQN
 	// and emit CALLS_PSEUDO.
 	pseudoCall := cbm.Call{CalleeName: "Helper", EnclosingFuncQN: ""}
-	got, ok := p.resolveCallEdge(pseudoCall, moduleQN, importMap, typeMap, lspCallerMethods)
+	got, ok := p.resolveCallEdge(pseudoCall, moduleQN, importMap, typeMap, lspCallerMethods, lang.Language(""))
 	if !ok {
 		t.Fatal("resolveCallEdge returned ok=false for module-default caller")
 	}
@@ -954,7 +955,7 @@ func TestResolveCallEdge_ModuleDefaultProducesPseudo(t *testing.T) {
 
 	// Real caller — should be CALLS.
 	realCall := cbm.Call{CalleeName: "Helper", EnclosingFuncQN: "proj.main.run"}
-	got2, ok := p.resolveCallEdge(realCall, moduleQN, importMap, typeMap, lspCallerMethods)
+	got2, ok := p.resolveCallEdge(realCall, moduleQN, importMap, typeMap, lspCallerMethods, lang.Language(""))
 	if !ok {
 		t.Fatal("resolveCallEdge returned ok=false for real caller")
 	}

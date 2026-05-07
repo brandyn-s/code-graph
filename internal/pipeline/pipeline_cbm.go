@@ -421,7 +421,7 @@ func (p *Pipeline) resolveFileCallsCBM(relPath string, ext *cachedExtraction) ([
 		if typeMap == nil {
 			typeMap = TypeMap{}
 		}
-		if edge, ok := p.resolveCallEdge(call, moduleQN, importMap, typeMap, lspCallerMethods); ok {
+		if edge, ok := p.resolveCallEdge(call, moduleQN, importMap, typeMap, lspCallerMethods, ext.Language); ok {
 			edges = append(edges, edge)
 		} else {
 			unresolvedByCaller[callerQN]++
@@ -511,6 +511,7 @@ func collectLSPResolvedEdges(resolvedCalls []cbm.ResolvedCall, registry *Functio
 func (p *Pipeline) resolveCallEdge(
 	call cbm.Call, moduleQN string, importMap map[string]string,
 	typeMap TypeMap, lspCallerMethods map[string]bool,
+	language lang.Language,
 ) (resolvedEdge, bool) {
 	calleeName := call.CalleeName
 	callerQN := call.EnclosingFuncQN
@@ -580,7 +581,7 @@ func (p *Pipeline) resolveCallEdge(
 	}
 
 	// Type-based method dispatch for qualified calls like obj.method()
-	result := p.resolveCallWithTypes(calleeName, callerQN, moduleQN, importMap, typeMap)
+	result := p.resolveCallWithTypes(calleeName, callerQN, moduleQN, importMap, typeMap, language)
 	if result.QualifiedName == "" {
 		// Phase 3a/b: route the fuzzy fallback through FuzzyResolveCtx
 		// so Tier 2 (receiver-type) and Tier 3 (import-binding)
@@ -593,6 +594,7 @@ func (p *Pipeline) resolveCallEdge(
 			ModuleQN:       moduleQN,
 			ImportMap:      importMap,
 			ImportBindings: p.importBindings[moduleQN],
+			Language:       language,
 		}
 		if strings.Contains(calleeName, ".") {
 			rootName := strings.SplitN(calleeName, ".", 2)[0]

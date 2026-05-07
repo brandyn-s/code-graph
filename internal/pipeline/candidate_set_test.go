@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/DeusData/codebase-memory-mcp/internal/cbm"
+	"github.com/DeusData/codebase-memory-mcp/internal/lang"
 )
 
 // TestCandidateSetSizeFromResolution_Unique — single-candidate
@@ -67,7 +68,7 @@ func TestResolveCallEdge_SamePackageFreeFunction_CandidateSetSizeOne(t *testing.
 	lspCallerMethods := map[string]bool{}
 
 	call := cbm.Call{CalleeName: "Target", EnclosingFuncQN: "proj.main.Caller"}
-	edge, ok := p.resolveCallEdge(call, moduleQN, importMap, typeMap, lspCallerMethods)
+	edge, ok := p.resolveCallEdge(call, moduleQN, importMap, typeMap, lspCallerMethods, lang.Language(""))
 	if !ok {
 		t.Fatalf("expected resolveCallEdge to emit on same-module callee")
 	}
@@ -99,7 +100,7 @@ func TestResolveCallEdge_CrossPackageImportMap_CandidateSetSizeOne(t *testing.T)
 	lspCallerMethods := map[string]bool{}
 
 	call := cbm.Call{CalleeName: "bar.Target", EnclosingFuncQN: "proj.foo.Caller"}
-	edge, ok := p.resolveCallEdge(call, moduleQN, importMap, typeMap, lspCallerMethods)
+	edge, ok := p.resolveCallEdge(call, moduleQN, importMap, typeMap, lspCallerMethods, lang.Language(""))
 	if !ok {
 		t.Fatalf("expected resolveCallEdge to emit on import_map resolution")
 	}
@@ -126,7 +127,7 @@ func TestResolveCallEdge_UniqueNameAcrossPackages_CandidateSetSizeOne(t *testing
 	lspCallerMethods := map[string]bool{}
 
 	call := cbm.Call{CalleeName: "RareFunc", EnclosingFuncQN: "proj.foo.Caller"}
-	edge, ok := p.resolveCallEdge(call, moduleQN, importMap, typeMap, lspCallerMethods)
+	edge, ok := p.resolveCallEdge(call, moduleQN, importMap, typeMap, lspCallerMethods, lang.Language(""))
 	if !ok {
 		t.Fatalf("expected resolveCallEdge to emit on unique_name resolution")
 	}
@@ -161,7 +162,7 @@ func TestResolveCallEdge_SameNamedMethodOnTwoStructs_TaggedSpeculativeJanusian(t
 	lspCallerMethods := map[string]bool{}
 
 	call := cbm.Call{CalleeName: "obj.Run", EnclosingFuncQN: "proj.app.Caller"}
-	edge, ok := p.resolveCallEdge(call, moduleQN, importMap, typeMap, lspCallerMethods)
+	edge, ok := p.resolveCallEdge(call, moduleQN, importMap, typeMap, lspCallerMethods, lang.Language(""))
 	if !ok {
 		t.Fatal("ambiguous cross-package-heuristic edge should be EMITTED with speculative-janusian band, not dropped")
 	}
@@ -194,7 +195,7 @@ func TestResolveCallEdge_JanusianPenalty_PreservesSamePackageShadow(t *testing.T
 	lspCallerMethods := map[string]bool{}
 
 	call := cbm.Call{CalleeName: "local", EnclosingFuncQN: "proj.app.Caller"}
-	edge, ok := p.resolveCallEdge(call, moduleQN, importMap, typeMap, lspCallerMethods)
+	edge, ok := p.resolveCallEdge(call, moduleQN, importMap, typeMap, lspCallerMethods, lang.Language(""))
 	if !ok {
 		t.Fatal("same-package-shadow should not be affected by Y.3 penalty")
 	}
@@ -229,7 +230,7 @@ func TestResolveCallEdge_InterfaceSatisfactionTwoImpls_CandidateSetSizeAtLeastTw
 	// candidates → multi-candidate fall-through, picked by import
 	// distance.
 	call := cbm.Call{CalleeName: "Handle", EnclosingFuncQN: "proj.dispatch.Caller"}
-	edge, ok := p.resolveCallEdge(call, moduleQN, importMap, typeMap, lspCallerMethods)
+	edge, ok := p.resolveCallEdge(call, moduleQN, importMap, typeMap, lspCallerMethods, lang.Language(""))
 	if !ok {
 		// Bare-name "Handle" with two candidates may not resolve at
 		// all if no candidate is import-reachable AND none ties on
@@ -268,7 +269,7 @@ func TestResolveCallEdge_SelfMethod_CandidateSetSizeOne(t *testing.T) {
 	lspCallerMethods := map[string]bool{}
 
 	call := cbm.Call{CalleeName: "self.helper", EnclosingFuncQN: "app.module.MyClass.entry"}
-	edge, ok := p.resolveCallEdge(call, moduleQN, importMap, typeMap, lspCallerMethods)
+	edge, ok := p.resolveCallEdge(call, moduleQN, importMap, typeMap, lspCallerMethods, lang.Language(""))
 	if !ok {
 		t.Fatalf("expected resolveCallEdge to emit on self.helper")
 	}
@@ -328,7 +329,7 @@ func TestResolveCallEdge_PseudoEdgeStillCarriesCandidateSetSize(t *testing.T) {
 	// EnclosingFuncQN empty → CALLS_PSEUDO; underlying same-module
 	// resolution returns CandidateCount=1.
 	pseudoCall := cbm.Call{CalleeName: "Target", EnclosingFuncQN: ""}
-	edge, ok := p.resolveCallEdge(pseudoCall, moduleQN, importMap, typeMap, lspCallerMethods)
+	edge, ok := p.resolveCallEdge(pseudoCall, moduleQN, importMap, typeMap, lspCallerMethods, lang.Language(""))
 	if !ok {
 		t.Fatalf("expected resolveCallEdge to emit on same-module callee")
 	}

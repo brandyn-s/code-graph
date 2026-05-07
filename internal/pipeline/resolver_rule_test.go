@@ -296,7 +296,7 @@ func TestResolveCallEdge_DropLooseCrossPackage_Off(t *testing.T) {
 	lspCallerMethods := map[string]bool{}
 
 	call := cbm.Call{CalleeName: "Target", EnclosingFuncQN: "proj.foo.Caller"}
-	edge, ok := p.resolveCallEdge(call, moduleQN, importMap, typeMap, lspCallerMethods)
+	edge, ok := p.resolveCallEdge(call, moduleQN, importMap, typeMap, lspCallerMethods, lang.Language(""))
 	if !ok {
 		t.Fatal("expected emit when env-var unset (status quo)")
 	}
@@ -326,7 +326,7 @@ func TestResolveCallEdge_DropLooseCrossPackage_On(t *testing.T) {
 	lspCallerMethods := map[string]bool{}
 
 	call := cbm.Call{CalleeName: "Target", EnclosingFuncQN: "proj.foo.Caller"}
-	_, ok := p.resolveCallEdge(call, moduleQN, importMap, typeMap, lspCallerMethods)
+	_, ok := p.resolveCallEdge(call, moduleQN, importMap, typeMap, lspCallerMethods, lang.Language(""))
 	if ok {
 		t.Fatal("expected DROP when env-var set on unique_name strategy")
 	}
@@ -355,7 +355,7 @@ func TestResolveCallEdge_DropLooseCrossPackage_PreservesImportMap(t *testing.T) 
 	// `bar.Target` resolves through import_map (precise path) — must NOT
 	// be dropped even with env-var on.
 	call := cbm.Call{CalleeName: "bar.Target", EnclosingFuncQN: "proj.foo.Caller"}
-	edge, ok := p.resolveCallEdge(call, moduleQN, importMap, typeMap, lspCallerMethods)
+	edge, ok := p.resolveCallEdge(call, moduleQN, importMap, typeMap, lspCallerMethods, lang.Language(""))
 	if !ok {
 		t.Fatal("expected EMIT for import_map (precise) path even with env-var on")
 	}
@@ -382,7 +382,7 @@ func TestResolveCallEdge_DropLooseCrossPackage_PreservesSamePackage(t *testing.T
 	lspCallerMethods := map[string]bool{}
 
 	call := cbm.Call{CalleeName: "Local", EnclosingFuncQN: "proj.app.Caller"}
-	edge, ok := p.resolveCallEdge(call, moduleQN, importMap, typeMap, lspCallerMethods)
+	edge, ok := p.resolveCallEdge(call, moduleQN, importMap, typeMap, lspCallerMethods, lang.Language(""))
 	if !ok {
 		t.Fatal("expected EMIT for same-package-shadow even with env-var on")
 	}

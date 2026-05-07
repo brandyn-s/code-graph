@@ -2245,6 +2245,76 @@ func hasFrameworkDecorator(decorators []string) bool {
 	return false
 }
 
+// resolvePythonRelativeImport handles Python relative-import syntax.
+//
+// CBM's extract_imports.c builds the ModulePath via
+// `cbm_arena_sprintf("%s.%s", mod_path, name)` where mod_path is the
+// text of tree-sitter's `relative_import` node and name is the imported
+// symbol. This ALWAYS produces a "." separator between mod_path and
+// name, which collides with the leading dots from the relative_import
+// node text. So:
+//
+//   from . import sibling      → mod_path=".",      full="..sibling"
+//   from .sub import helper    → mod_path=".sub",   full=".sub.helper"
+//   from .. import top         → mod_path="..",     full="...top"
+//   from ..top import x        → mod_path="..top",  full="..top.x"
+//
+// To recover semantic-leading-dots from raw-leading-dots, we use the
+// fact that Python's imported `name` is always a single identifier
+// (no internal dots): if the `rest` after stripping leading dots
+// contains 0 dots, the source was an "all-dots mod_path" (dots only,
+// no module after them) and the raw-dot-count is one MORE than the
+// semantic dot count. If rest has internal dots, the source had
+// `dots + module` and raw == semantic.
+//
+// Rules (CG-3):
+//   - 1 semantic dot = current package (strip 1 segment from moduleQN)
+//   - N semantic dots = strip N segments
+//   - rest (the module portion if any, plus imported name) appended to parent
+//   - if rest was just the imported name ("all-dots" case), localName is
+//     appended to parent
+//
+// Returns the resolved target QN, or the original targetQN if no leading
+// dot was present (no rewrite needed).
+func resolvePythonRelativeImport(targetQN, moduleQN, localName string) string {
+	rawDots := 0
+	for rawDots < len(targetQN) && targetQN[rawDots] == '.' {
+		rawDots++
+	}
+	if rawDots == 0 {
+		return targetQN
+	}
+	rest := targetQN[rawDots:]
+	// Recover semantic dot count: if rest has no internal dots, the
+	// source was "from <dots> import <name>" (no module), raw = sem+1.
+	// Otherwise raw = sem.
+	semDots := rawDots
+	allDotsMode := !strings.Contains(rest, ".")
+	if allDotsMode {
+		semDots = rawDots - 1
+		if semDots < 1 {
+			// Defensive: shouldn't happen — `from . import X` produces
+			// raw=2, sem=1. Single raw dot would mean a flat absolute
+			// path that started with a dot, which shouldn't occur.
+			return targetQN
+		}
+	}
+	parts := strings.Split(moduleQN, ".")
+	if len(parts) < semDots {
+		// More dots than the moduleQN can support — give up.
+		return targetQN
+	}
+	parent := strings.Join(parts[:len(parts)-semDots], ".")
+	if allDotsMode {
+		// rest IS the imported name. Target is parent.<name>.
+		return parent + "." + rest
+	}
+	// rest is "module.name" or "module.sub.name". Target QN keeps
+	// everything; downstream suffix fallback strips trailing name to
+	// find the module.
+	return parent + "." + rest
+}
+
 // passImports creates IMPORTS edges from the import maps built during pass 2.
 func (p *Pipeline) passImports() {
 	slog.Info("pass2b.imports")
@@ -2256,6 +2326,15 @@ func (p *Pipeline) passImports() {
 			continue
 		}
 		for localName, targetQN := range importMap {
+			// CG-3: Python relative imports (`from . import X`,
+			// `from .sub import Y`, `from ..top import Z`). CBM
+			// preserves the dot prefix from tree-sitter's
+			// relative_import node; rewrite to a concrete package QN
+			// before lookup. mcp-servers IMPORTS F1 0.979 confirms
+			// the existing path works for absolute imports; this
+			// handles the Python idioms flask uses heavily that
+			// scored 0.038 F1 pre-fix.
+			targetQN = resolvePythonRelativeImport(targetQN, moduleQN, localName)
 			// Try to find the target as a Module node first
 			targetNode, _ := p.findNodeByQN(p.ProjectName, targetQN)
 			if targetNode == nil {

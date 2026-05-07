@@ -21,7 +21,26 @@ type FieldTypeMap map[string]string
 // ReturnTypeMap maps function QN to the return type name.
 type ReturnTypeMap map[string]string
 
-// resolveAsClass checks if a name refers to a Class/Type node in the registry.
+// resolveAsClass checks if a name refers to a class-like node in the
+// registry (Class / Type / Interface / Enum / Struct / Trait).
+//
+// A2 (2026-05-07): Struct and Trait added to the accepted label set.
+// The Rust extractor labels traits as "Trait" and structs as "Struct"
+// (NOT "Class"); without these labels in the accepted set,
+// `implementsRust` (in implements.go) and the IMPLEMENTS pass in
+// pipeline.go silently dropped every Rust impl-block — both
+// `resolveAsClass(traitName)` AND `resolveAsClass(structName)`
+// returned empty, so the IMPLEMENTS edge was never emitted. PSM
+// 2026-05-07 baseline: 365 IMPLEMENTS edges across 2,065 Rust files
+// (CradlepointApiClientSync IMPLEMENTS CradlepointClientSync was
+// missing) — explained entirely by this label-mismatch.
+//
+// Risk: anywhere `resolveAsClass` was used as a way to detect
+// "is this name a CLASS specifically (not a Trait/Struct)" — but
+// every existing call site uses `resolveAsClass` to find the QN of
+// a type for IMPLEMENTS / EXTENDS / receiver-type binding. None of
+// these care whether the type is technically a Class vs Struct vs
+// Trait — they all behave identically.
 func resolveAsClass(name string, registry *FunctionRegistry, moduleQN string, importMap map[string]string) string {
 	result := registry.Resolve(name, moduleQN, importMap)
 	if result.QualifiedName == "" {
@@ -36,9 +55,9 @@ func resolveAsClass(name string, registry *FunctionRegistry, moduleQN string, im
 		return ""
 	}
 
-	// Only return if it's a class-like node
+	// Only return if it's a class-like node.
 	switch label {
-	case "Class", "Type", "Interface", "Enum":
+	case "Class", "Type", "Interface", "Enum", "Struct", "Trait":
 		return result.QualifiedName
 	}
 	return ""

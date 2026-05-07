@@ -1182,6 +1182,62 @@ func TestExecuteWhereInNoMatch(t *testing.T) {
 	}
 }
 
+// --- B2 (2026-05-07) — WITH clause error-fast ---
+
+func TestParseRejectsWithAfterMatch(t *testing.T) {
+	_, err := Parse(`MATCH (a)-[r:CALLS]->(b) WITH b.name AS callee, COUNT(*) AS calls RETURN callee, calls`)
+	if err == nil {
+		t.Fatal("expected parse error for WITH after MATCH")
+	}
+	if !strings.Contains(err.Error(), "WITH clause not supported") {
+		t.Errorf("error should name the gap; got %v", err)
+	}
+	if !strings.Contains(err.Error(), "Workarounds") {
+		t.Errorf("error should suggest workarounds; got %v", err)
+	}
+	if !strings.Contains(err.Error(), "search_graph") {
+		t.Errorf("error should mention search_graph alternative; got %v", err)
+	}
+}
+
+func TestParseRejectsWithAfterWhere(t *testing.T) {
+	_, err := Parse(`MATCH (a) WHERE a.label = 'Function' WITH a RETURN a`)
+	if err == nil {
+		t.Fatal("expected parse error for WITH after WHERE")
+	}
+	if !strings.Contains(err.Error(), "WITH clause not supported") {
+		t.Errorf("error should name the gap; got %v", err)
+	}
+}
+
+func TestStartsWithStillParses(t *testing.T) {
+	// Defensive: STARTS WITH and ENDS WITH consume the WITH token
+	// inside parseCondition. They must NOT trip the WITH-clause
+	// rejection at clause boundaries.
+	_, err := Parse(`MATCH (f:Function) WHERE f.name STARTS WITH 'handle' RETURN f`)
+	if err != nil {
+		t.Fatalf("STARTS WITH must still parse: %v", err)
+	}
+	_, err = Parse(`MATCH (f:Function) WHERE f.file_path ENDS WITH '.go' RETURN f`)
+	if err != nil {
+		t.Fatalf("ENDS WITH must still parse: %v", err)
+	}
+}
+
+func TestExecuteRejectsWithClause(t *testing.T) {
+	s := setupTestStore(t)
+	defer s.Close()
+
+	exec := &Executor{Store: s}
+	_, err := exec.Execute(`MATCH (a) WITH a RETURN a`)
+	if err == nil {
+		t.Fatal("expected Execute to surface the parse error for WITH")
+	}
+	if !strings.Contains(err.Error(), "WITH clause not supported") {
+		t.Errorf("Execute should propagate the WITH-clause error; got %v", err)
+	}
+}
+
 // --- IS NULL / IS NOT NULL parser+executor tests ---
 // Parser was extended in Plan 3 Phase A (2026-05-06); conformance
 // corpus pins the parse path. These tests pin the executor path against

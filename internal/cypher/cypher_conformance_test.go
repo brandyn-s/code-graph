@@ -292,6 +292,24 @@ var negativeCypherFixtures = []struct {
 		"string or number",
 		"IN list values must be string or number literals (B1: 2026-05-07)",
 	},
+	{
+		"with_clause_after_match_rejected",
+		"MATCH (a)-[r:CALLS]->(b) WITH b.name AS callee, COUNT(*) AS calls WHERE calls > 100 RETURN callee, calls",
+		"WITH clause not supported",
+		"WITH-clause aggregation rejected with actionable error (B2: 2026-05-07)",
+	},
+	{
+		"with_clause_simple_pass_through_rejected",
+		"MATCH (a) WITH a RETURN a",
+		"WITH clause not supported",
+		"Even simple WITH pass-through is rejected (no projection/aggregation support)",
+	},
+	{
+		"with_clause_after_where_rejected",
+		"MATCH (a) WHERE a.label = 'Function' WITH a RETURN a",
+		"WITH clause not supported",
+		"WITH between WHERE and RETURN also rejected (B2: 2026-05-07)",
+	},
 }
 
 func TestCypherConformance_Positive(t *testing.T) {

@@ -66,6 +66,10 @@ func (p *Parser) parseQuery() (*Query, error) {
 	if err := p.rejectWriteKeyword(p.peek()); err != nil {
 		return nil, err
 	}
+	// Reject WITH clause between MATCH and WHERE/RETURN.
+	if err := p.rejectWithClause(p.peek()); err != nil {
+		return nil, err
+	}
 
 	// WHERE clause (optional)
 	if p.peek().Type == TokWhere {
@@ -76,8 +80,11 @@ func (p *Parser) parseQuery() (*Query, error) {
 		q.Where = w
 	}
 
-	// Reject write keyword between WHERE and RETURN.
+	// Reject write keyword / WITH clause between WHERE and RETURN.
 	if err := p.rejectWriteKeyword(p.peek()); err != nil {
+		return nil, err
+	}
+	if err := p.rejectWithClause(p.peek()); err != nil {
 		return nil, err
 	}
 
@@ -98,10 +105,41 @@ func (p *Parser) parseQuery() (*Query, error) {
 		if err := p.rejectWriteKeyword(p.peek()); err != nil {
 			return nil, err
 		}
+		if err := p.rejectWithClause(p.peek()); err != nil {
+			return nil, err
+		}
 		return nil, fmt.Errorf("unexpected trailing token %q at pos %d", p.peek().Value, p.peek().Pos)
 	}
 
 	return q, nil
+}
+
+// rejectWithClause emits a clear error when the parser encounters a
+// `WITH` token where it would begin a clause (i.e. NOT inside `STARTS
+// WITH` / `ENDS WITH`, which are consumed inside parseCondition before
+// parseQuery sees them at clause boundaries).
+//
+// Background: code-graph's Cypher subset does not implement the
+// `WITH` intermediate-projection clause. Bare `MATCH ... WITH ...
+// RETURN ...` queries previously fell through to a generic
+// "unexpected trailing token" error message. PSM 2026-05-07 baseline
+// reported confusion when callers wrote aggregation queries (`WITH
+// b.name AS callee, COUNT(*) AS calls ...`) — the generic message
+// did not surface the actual cause (no aggregation-via-WITH support)
+// or the recommended workarounds. This rejection is the B2 error-
+// fast path: name the gap, point at the workarounds. Full WITH /
+// aggregation support remains a separate workstream.
+func (p *Parser) rejectWithClause(t Token) error {
+	if t.Type != TokWith {
+		return nil
+	}
+	return fmt.Errorf(
+		"WITH clause not supported in code-graph's Cypher subset (pos %d). "+
+			"Aggregation via `WITH ... COUNT(*)` is not implemented. "+
+			"Workarounds: (a) use `RETURN COUNT(*)` directly when the entire "+
+			"MATCH should be counted; (b) use `search_graph` with `min_degree`/"+
+			"`max_degree` filters for fan-in/fan-out counting; (c) post-process "+
+			"raw rows in the caller", t.Pos)
 }
 
 // rejectWriteKeyword returns a clear error if the token is a write

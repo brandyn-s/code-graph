@@ -151,6 +151,27 @@ some user-facing references but produced parse errors. Resolved:
   list) and 3 negative fixtures (empty, unterminated, non-literal
   values) pin the new behavior.
 
+### Resolved 2026-05-07 (B2: WITH clause error-fast)
+
+The PSM test battery (2026-05-07) reported confusion when callers
+attempted aggregation queries via `WITH ... COUNT(*)`. The previous
+generic "unexpected trailing token" error did not surface the cause
+(no WITH-clause support) or the workarounds. Resolved:
+
+- `WITH` between MATCH and WHERE/RETURN now rejected at parse time
+  with a clear actionable error: names the gap (`WITH clause not
+  supported`), and lists three workarounds:
+    1. `RETURN COUNT(*)` directly when the entire MATCH should be counted
+    2. `search_graph` with `min_degree`/`max_degree` for fan-in/fan-out
+    3. post-process raw rows in the caller
+- `STARTS WITH` and `ENDS WITH` continue to parse normally (the WITH
+  token is consumed inside parseCondition before clause boundaries).
+- 3 negative fixtures (after MATCH, after WHERE, simple pass-through).
+- 4 unit tests pin error-message contents (gap-name + workarounds).
+
+Full WITH/aggregation support is a separate workstream. The error-
+fast path eliminates the silent-truncation confusion until then.
+
 ## Adding a fixture
 
 1. Create the query text + expected outcome in

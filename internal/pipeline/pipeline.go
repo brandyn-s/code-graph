@@ -2016,7 +2016,20 @@ func (p *Pipeline) resolveCallWithTypes(
 					// Chain landed on a final receiver type. Try direct
 					// candidate match first (high-confidence early return).
 					candidate := currentType + "." + methodName
-					if p.registry.Exists(candidate) {
+					// CG-2 (2026-05-06): only emit type_dispatch when
+					// `currentType` is actually a registered class-like
+					// type. Without this gate, the chain walker can
+					// emit interface-dispatch edges for cases where
+					// `currentType` resolved to e.g. a Module name that
+					// happens to have a child with the same simple name
+					// as the method — bypassing the
+					// applyReceiverTypeFilter safety net used by
+					// resolveViaNameLookup. The 2026-05-06 PSM baseline
+					// shows interface-dispatch precision 0.81 (22 FPs
+					// in 118 emissions). This gate is one of several
+					// possible contributors; per-edge incident data
+					// would be needed to attribute exact share.
+					if p.registry.Exists(candidate) && p.registry.IsClassLike(currentType) {
 						return ResolutionResult{
 							QualifiedName:  candidate,
 							Strategy:       "type_dispatch",

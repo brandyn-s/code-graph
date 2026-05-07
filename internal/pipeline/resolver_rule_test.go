@@ -399,6 +399,11 @@ func TestResolveCallEdge_TypeDispatchInterfaceDispatch(t *testing.T) {
 		ProjectName: "proj",
 		registry:    NewFunctionRegistry(),
 	}
+	// CG-2: MyStruct is registered as Class so the chain walker's
+	// IsClassLike gate accepts it; without this registration the gate
+	// would (correctly) skip type_dispatch emission. Real pipeline
+	// always registers Class/Struct definitions.
+	p.registry.Register("MyStruct", "proj.foo.MyStruct", "Struct")
 	p.registry.Register("DoThing", "proj.foo.MyStruct.DoThing", "Method")
 	p.registry.Register("Caller", "proj.foo.Caller", "Function")
 

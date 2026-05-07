@@ -840,6 +840,25 @@ func (r *FunctionRegistry) LabelOf(qualifiedName string) string {
 	return r.exact[qualifiedName]
 }
 
+// IsClassLike returns true if `qualifiedName` is registered as a
+// class-like type (Class, Struct, Enum, Trait, Interface). Used by the
+// chain walker (CG-2) to gate type_dispatch emission: even if
+// `currentType.method` exists exactly, we should not emit type_dispatch
+// when `currentType` itself isn't a registered class. This catches
+// edge cases where the chain walker would otherwise bypass the
+// `applyReceiverTypeFilter` safety net (e.g. when `currentType` is a
+// Module name or other non-class entity that happens to share a
+// qualified-name prefix with a method).
+func (r *FunctionRegistry) IsClassLike(qualifiedName string) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	switch r.exact[qualifiedName] {
+	case "Class", "Struct", "Enum", "Trait", "Interface":
+		return true
+	}
+	return false
+}
+
 // Exists returns true if a qualified name is registered.
 // Uses RLock for concurrent read safety.
 func (r *FunctionRegistry) Exists(qualifiedName string) bool {

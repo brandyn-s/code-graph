@@ -2,6 +2,7 @@ package pipeline
 
 import (
 	"log/slog"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -628,6 +629,27 @@ func (p *Pipeline) resolveCallEdge(
 	if pseudoRule {
 		rule = ResolverRuleModalPseudo
 	}
+
+	// Rec 1 (2026-05-06): drop-on-no-match for the two LOW-PRECISION
+	// cross-package sub-buckets (suffix-match fall-through and project-
+	// wide unique-name lookup). Gated behind RESOLVER_DROP_LOOSE_CROSS_PACKAGE
+	// so production behavior is unchanged when the env var is unset.
+	//
+	// The 2026-05-06 sub-bucket-split measurement (PR #234) found these
+	// two buckets have catastrophic precision on Python adversarial
+	// fixtures (0.00-0.35) but merely-poor on Go (0.48 on gin's suffix,
+	// 0.88-0.95 on Go unique-name). Dropping unconditionally would
+	// crater Go recall by 57-68%. The env-var gate lets the eval
+	// harness apply the drop selectively (Python fixtures only) while
+	// production behavior remains the recall-favorable status quo.
+	//
+	// Pseudo-caller edges are excluded from the drop — they're already
+	// classified as ResolverRuleModalPseudo above, which is not in the
+	// loose-cross-package set.
+	if isLooseCrossPackageRule(rule) && os.Getenv("RESOLVER_DROP_LOOSE_CROSS_PACKAGE") != "" {
+		return resolvedEdge{}, false
+	}
+
 	// Y.3 (2026-05-02 plateau-2 plan): Janusian-ambiguity penalty.
 	// Step 6 baseline showed ambiguous-site (candidate_set_size>=2)
 	// precision was 0.20 vs unambiguous 0.82 — a 62pp gap. Refuse to

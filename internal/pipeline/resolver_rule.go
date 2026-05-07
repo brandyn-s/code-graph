@@ -262,3 +262,28 @@ func isCrossPackageRule(rule string) bool {
 	}
 	return false
 }
+
+// isLooseCrossPackageRule returns true if `rule` is one of the two
+// LOW-PRECISION cross-package sub-buckets — `unique-name` (project-wide
+// simple-name lookup) or `suffix` (suffix-match fall-through). These
+// are the buckets the 2026-05-06 sub-bucket-split measurement found
+// have catastrophic precision on Python adversarial fixtures (0.00-0.35)
+// and merely-poor precision on Go (0.48 on gin's suffix bucket).
+//
+// The PRECISE sub-bucket `cross-package-import-map` is excluded — it
+// resolves through an explicit imported-alias binding and is high-
+// confidence by construction.
+//
+// Used by RESOLVER_DROP_LOOSE_CROSS_PACKAGE env-var gate (Rec 1
+// implementation, 2026-05-06): when the env var is set, edges in these
+// buckets are dropped at emit time. The eval harness sets the env var
+// for Python fixtures (where the buckets are noise) and leaves it unset
+// for Go (where unique-name carries 88-95% precision and dropping
+// would crater recall by 57-68% of TPs).
+func isLooseCrossPackageRule(rule string) bool {
+	switch rule {
+	case ResolverRuleCrossPackageUniqueName, ResolverRuleCrossPackageSuffix:
+		return true
+	}
+	return false
+}

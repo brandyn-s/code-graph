@@ -215,6 +215,36 @@ func TestResolveCallEdge_SamePackageFreeFunction(t *testing.T) {
 	}
 }
 
+// TestIsLooseCrossPackageRule — pinpoints the two LOW-PRECISION buckets
+// that the RESOLVER_DROP_LOOSE_CROSS_PACKAGE env-var gate targets.
+// Excludes import-map (precise) and the legacy lumped name (used by
+// older indexes; would be too aggressive to drop).
+func TestIsLooseCrossPackageRule(t *testing.T) {
+	loose := []string{
+		ResolverRuleCrossPackageUniqueName,
+		ResolverRuleCrossPackageSuffix,
+	}
+	for _, r := range loose {
+		if !isLooseCrossPackageRule(r) {
+			t.Errorf("isLooseCrossPackageRule(%q) = false, want true", r)
+		}
+	}
+	notLoose := []string{
+		ResolverRuleCrossPackageImportMap,    // precise — excluded
+		ResolverRuleCrossPackageHeuristic,    // legacy — excluded
+		ResolverRuleSamePackageShadow,
+		ResolverRuleExactQN,
+		ResolverRuleInterfaceDispatch,
+		ResolverRuleFuzzyResolve,
+		"",
+	}
+	for _, r := range notLoose {
+		if isLooseCrossPackageRule(r) {
+			t.Errorf("isLooseCrossPackageRule(%q) = true, want false", r)
+		}
+	}
+}
+
 // TestResolveCallEdge_CrossPackageImportMap — import_map strategy
 // (callee qualified by imported package alias) routes to
 // cross-package-import-map (the precise sub-bucket per 2026-05-06 split).
@@ -242,6 +272,121 @@ func TestResolveCallEdge_CrossPackageImportMap(t *testing.T) {
 	}
 	if got := edge.Properties["resolver_rule"]; got != ResolverRuleCrossPackageImportMap {
 		t.Errorf("import_map resolution must be cross-package-import-map, got %v", got)
+	}
+}
+
+// TestResolveCallEdge_DropLooseCrossPackage_Off — env-var unset means
+// the loose cross-package buckets emit normally (status quo behavior;
+// production default).
+func TestResolveCallEdge_DropLooseCrossPackage_Off(t *testing.T) {
+	t.Setenv("RESOLVER_DROP_LOOSE_CROSS_PACKAGE", "")
+
+	p := &Pipeline{
+		ProjectName: "proj",
+		registry:    NewFunctionRegistry(),
+	}
+	// Project-wide unique name "Target" → unique_name strategy fires.
+	p.registry.Register("Target", "proj.bar.Target", "Function")
+	p.registry.Register("Caller", "proj.foo.Caller", "Function")
+
+	moduleQN := "proj.foo"
+	importMap := map[string]string{} // no import_map binding for "Target"
+	typeMap := TypeMap{}
+	lspCallerMethods := map[string]bool{}
+
+	call := cbm.Call{CalleeName: "Target", EnclosingFuncQN: "proj.foo.Caller"}
+	edge, ok := p.resolveCallEdge(call, moduleQN, importMap, typeMap, lspCallerMethods)
+	if !ok {
+		t.Fatal("expected emit when env-var unset (status quo)")
+	}
+	if got := edge.Properties["resolver_rule"]; got != ResolverRuleCrossPackageUniqueName {
+		t.Errorf("unique_name strategy must be cross-package-unique-name, got %v", got)
+	}
+}
+
+// TestResolveCallEdge_DropLooseCrossPackage_On — env-var set drops
+// emissions in the unique-name and suffix sub-buckets. Pinpoints the
+// Rec 1 behavior: the eval harness sets the env var for Python fixtures
+// to suppress the catastrophic-precision buckets without touching the
+// import-map (precise) or non-cross-package paths.
+func TestResolveCallEdge_DropLooseCrossPackage_On(t *testing.T) {
+	t.Setenv("RESOLVER_DROP_LOOSE_CROSS_PACKAGE", "1")
+
+	p := &Pipeline{
+		ProjectName: "proj",
+		registry:    NewFunctionRegistry(),
+	}
+	p.registry.Register("Target", "proj.bar.Target", "Function")
+	p.registry.Register("Caller", "proj.foo.Caller", "Function")
+
+	moduleQN := "proj.foo"
+	importMap := map[string]string{}
+	typeMap := TypeMap{}
+	lspCallerMethods := map[string]bool{}
+
+	call := cbm.Call{CalleeName: "Target", EnclosingFuncQN: "proj.foo.Caller"}
+	_, ok := p.resolveCallEdge(call, moduleQN, importMap, typeMap, lspCallerMethods)
+	if ok {
+		t.Fatal("expected DROP when env-var set on unique_name strategy")
+	}
+}
+
+// TestResolveCallEdge_DropLooseCrossPackage_PreservesImportMap — env-var
+// set must NOT drop import-map (precise) emissions, only the loose
+// sub-buckets.
+func TestResolveCallEdge_DropLooseCrossPackage_PreservesImportMap(t *testing.T) {
+	t.Setenv("RESOLVER_DROP_LOOSE_CROSS_PACKAGE", "1")
+
+	p := &Pipeline{
+		ProjectName: "proj",
+		registry:    NewFunctionRegistry(),
+	}
+	p.registry.Register("Target", "proj.bar.Target", "Function")
+	p.registry.Register("Caller", "proj.foo.Caller", "Function")
+
+	moduleQN := "proj.foo"
+	importMap := map[string]string{
+		"bar": "proj.bar",
+	}
+	typeMap := TypeMap{}
+	lspCallerMethods := map[string]bool{}
+
+	// `bar.Target` resolves through import_map (precise path) — must NOT
+	// be dropped even with env-var on.
+	call := cbm.Call{CalleeName: "bar.Target", EnclosingFuncQN: "proj.foo.Caller"}
+	edge, ok := p.resolveCallEdge(call, moduleQN, importMap, typeMap, lspCallerMethods)
+	if !ok {
+		t.Fatal("expected EMIT for import_map (precise) path even with env-var on")
+	}
+	if got := edge.Properties["resolver_rule"]; got != ResolverRuleCrossPackageImportMap {
+		t.Errorf("import_map must produce cross-package-import-map, got %v", got)
+	}
+}
+
+// TestResolveCallEdge_DropLooseCrossPackage_PreservesSamePackage — env-var
+// set must NOT drop same-package-shadow emissions. Targeting non-cross-
+// package buckets would crater recall on every fixture.
+func TestResolveCallEdge_DropLooseCrossPackage_PreservesSamePackage(t *testing.T) {
+	t.Setenv("RESOLVER_DROP_LOOSE_CROSS_PACKAGE", "1")
+
+	p := &Pipeline{
+		ProjectName: "proj",
+		registry:    NewFunctionRegistry(),
+	}
+	p.registry.Register("Local", "proj.app.Local", "Function")
+
+	moduleQN := "proj.app"
+	importMap := map[string]string{}
+	typeMap := TypeMap{}
+	lspCallerMethods := map[string]bool{}
+
+	call := cbm.Call{CalleeName: "Local", EnclosingFuncQN: "proj.app.Caller"}
+	edge, ok := p.resolveCallEdge(call, moduleQN, importMap, typeMap, lspCallerMethods)
+	if !ok {
+		t.Fatal("expected EMIT for same-package-shadow even with env-var on")
+	}
+	if got := edge.Properties["resolver_rule"]; got != ResolverRuleSamePackageShadow {
+		t.Errorf("same-package callee must produce same-package-shadow, got %v", got)
 	}
 }
 

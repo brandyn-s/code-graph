@@ -159,6 +159,12 @@ The earlier "we exceed 92.7%" claim in this doc was apples-to-oranges (n=16 Loc-
 - Security tagging pass (labels nodes as auth/crypto/input/hardware_io)
 - LRU query cache for `search_graph` and `query_graph`
 
+### Resolver env vars
+
+| Env var | Default | Purpose |
+|---------|---------|---------|
+| `RESOLVER_DROP_LOOSE_CROSS_PACKAGE` | unset (production: emit) | When set to any non-empty string, drops emissions in the `cross-package-unique-name` and `cross-package-suffix` resolver-rule sub-buckets at index time. Per the 2026-05-06 sub-bucket-split measurement (PR #234), these two buckets have catastrophic precision (0.00-0.35) on Python adversarial fixtures while being high-precision (0.88-0.95) on Go. The eval harness sets this for Python fixtures to suppress the noise without affecting Go (where dropping would crater recall). The precise `cross-package-import-map` sub-bucket is NOT dropped — it resolves through explicit imported-alias bindings and is high-confidence by construction. Measured impact (2026-05-06): flask-adversarial F1 0.49 → 0.61 (+12pp); requests-adversarial F1 flat. See `bench/accuracy/baselines/2026-05-06-rec1-python-drop-finding.md`. |
+
 ## Test Conventions
 
 ### Zero-value filter activation

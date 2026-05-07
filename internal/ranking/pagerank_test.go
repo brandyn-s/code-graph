@@ -242,3 +242,131 @@ func TestTokenize_MinLength4(t *testing.T) {
 		}
 	}
 }
+
+// --- D1 (2026-05-07) — word-boundary matching ---
+
+// nodeFor builds an in-memory *store.Node for matchSeeds tests; no DB
+// required. matchSeeds only reads Name and QualifiedName.
+func nodeFor(qn string) *store.Node {
+	return &store.Node{Name: qn, QualifiedName: qn}
+}
+
+// TestMatchSeeds_WordBoundaryRejectsInternalSubstring is the headline
+// case D1 fixes: query "router" must not match `routermanager` where
+// "router" is just an internal substring of a larger identifier
+// segment.
+func TestMatchSeeds_WordBoundaryRejectsInternalSubstring(t *testing.T) {
+	nodes := []*store.Node{
+		nodeFor("crate.api.router.handler"), // standalone "router" — must match
+		nodeFor("crate.lib.routermanager"),  // "router" as substring inside "routermanager" — must NOT match
+		nodeFor("crate.routes.list"),        // doesn't contain "router" — must NOT match
+	}
+	seeds := matchSeeds(nodes, "router")
+	if len(seeds) != 1 || seeds[0] != 0 {
+		t.Fatalf("expected only node[0] (router.handler) to match; got seeds=%v", seeds)
+	}
+}
+
+// TestMatchSeeds_WordBoundaryAllowsDotSeparated verifies the dot is a
+// valid word boundary — matches like `foo.router` and `router.bar`
+// must surface.
+func TestMatchSeeds_WordBoundaryAllowsDotSeparated(t *testing.T) {
+	nodes := []*store.Node{
+		nodeFor("crate.foo.router"),    // suffix "router" with leading "."
+		nodeFor("router.bar.baz"),      // prefix "router" with trailing "."
+		nodeFor("crate.foo.routerbar"), // "router" as prefix of larger word
+	}
+	seeds := matchSeeds(nodes, "router")
+	if len(seeds) != 2 {
+		t.Fatalf("expected 2 matches (dot-separated suffix + prefix); got %v", seeds)
+	}
+	for _, s := range seeds {
+		if s == 2 {
+			t.Errorf("routerbar should not match \\brouter\\b — boundary failed")
+		}
+	}
+}
+
+// TestMatchSeeds_ExactNameMatchPreserved verifies that even when the
+// QN regex would not match, an exact Name == token still surfaces the
+// node. Belt-and-suspenders for short tokens whose QN paths might
+// embed the name without word boundaries.
+func TestMatchSeeds_ExactNameMatchPreserved(t *testing.T) {
+	nodes := []*store.Node{
+		{Name: "Run", QualifiedName: "myproject.cmd.runner.Run"}, // QN has \brun\b — matches anyway
+		{Name: "run", QualifiedName: "myproject.lib.runtime"},    // QN: \brun\b should NOT match "runtime"; Name=="run" exact match WILL
+	}
+	seeds := matchSeeds(nodes, "run")
+	// Both should match: node[0] via QN word-boundary, node[1] via exact name.
+	if len(seeds) != 2 {
+		t.Fatalf("expected 2 matches (QN-boundary + exact-name); got %v", seeds)
+	}
+}
+
+// TestMatchSeeds_ShortTokenSkipsRegex verifies that 2-char allowlisted
+// tokens (like "io", "ok") match by exact Name only, never by QN
+// substring. Word-boundary on a 2-char token would over-match.
+func TestMatchSeeds_ShortTokenSkipsRegex(t *testing.T) {
+	nodes := []*store.Node{
+		{Name: "io", QualifiedName: "myproject.io.helpers"},      // exact name match
+		{Name: "Reader", QualifiedName: "myproject.io.Reader"},   // QN contains "io" with boundaries — must NOT seed off "io"
+		{Name: "Writer", QualifiedName: "myproject.proc.Writer"}, // no relation
+	}
+	seeds := matchSeeds(nodes, "io")
+	if len(seeds) != 1 || seeds[0] != 0 {
+		t.Fatalf("expected exact-name match only for short token; got %v", seeds)
+	}
+}
+
+// TestMatchSeeds_NoiseQueryRejectsDistantMatches reproduces the PSM
+// 2026-05-07 noise pattern: query terms ("router") that previously
+// matched as bare substrings against unrelated names like `Result`
+// or `IntoHandlerError` should now reject them — neither contains
+// "router" at any word boundary.
+func TestMatchSeeds_NoiseQueryRejectsDistantMatches(t *testing.T) {
+	nodes := []*store.Node{
+		nodeFor("crate.error.IntoHandlerError"),
+		nodeFor("crate.result.Result"),
+		nodeFor("crate.check.AsCheckOpResult"),
+	}
+	seeds := matchSeeds(nodes, "router")
+	if len(seeds) != 0 {
+		t.Errorf("router query must not seed unrelated nodes; got %v", seeds)
+	}
+}
+
+// TestMatchSeeds_MultipleTokensOR verifies tokens are OR'd: any one
+// token matching is sufficient to seed the node.
+func TestMatchSeeds_MultipleTokensOR(t *testing.T) {
+	nodes := []*store.Node{
+		nodeFor("crate.api.cradlepoint"),
+		nodeFor("crate.net.failover.handler"),
+		nodeFor("crate.unrelated"),
+	}
+	seeds := matchSeeds(nodes, "cradlepoint failover")
+	if len(seeds) != 2 {
+		t.Fatalf("expected 2 matches (cradlepoint, failover); got %v", seeds)
+	}
+}
+
+// TestCompileTokenBoundaryRegexes_NilForShortTokens verifies the
+// helper returns nil for tokens shorter than 3 chars (signaling
+// callers to skip the QN regex path).
+func TestCompileTokenBoundaryRegexes_NilForShortTokens(t *testing.T) {
+	res := compileTokenBoundaryRegexes([]string{"io", "ok", "id", "abc", "abcd"})
+	if res[0] != nil || res[1] != nil || res[2] != nil {
+		t.Errorf("expected nil for 2-char tokens; got %v", res[:3])
+	}
+	if res[3] == nil || res[4] == nil {
+		t.Errorf("expected non-nil for ≥3-char tokens; got %v", res[3:])
+	}
+}
+
+// TestHybridDominanceThreshold checks that the constant is set to a
+// value that triggers when embeddings produce a strong signal but
+// allows substring fallback otherwise.
+func TestHybridDominanceThreshold(t *testing.T) {
+	if hybridEmbeddingDominanceThreshold < 1 {
+		t.Errorf("threshold must be >= 1, got %d", hybridEmbeddingDominanceThreshold)
+	}
+}

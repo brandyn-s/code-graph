@@ -143,10 +143,27 @@ func MatchSeedNodesByEmbedding(ctx context.Context, st *store.Store, project, qu
 	return out, nil
 }
 
+// hybridEmbeddingDominanceThreshold is the number of embedding seeds
+// at which hybrid mode drops the substring seeds entirely. Rationale
+// (D1, 2026-05-07): when embedding produces ≥3 high-cosine matches,
+// the query has a strong intent signal and substring seeds primarily
+// add noise via incidental name overlap (PSM example: query
+// "cradlepoint router WAN failover priority" — embedding picks the
+// real handlers; substring also adds dozens of nodes whose QNs
+// contain "router" as a substring, which then pollute the top-10
+// via PageRank propagation). Below 3 embedding seeds, the embedding
+// signal is weak and substring seeds remain useful as a fallback.
+const hybridEmbeddingDominanceThreshold = 3
+
 // MatchSeedNodesHybrid runs both substring and embedding matching and
-// merges the results, deduplicated by NodeID. Substring seeds appear
-// first (preserving exact-identifier match priority) followed by any
-// embedding seeds not already present.
+// merges the results.
+//
+// Behavior (D1, 2026-05-07):
+//   - If embedding returns ≥hybridEmbeddingDominanceThreshold seeds,
+//     drop substring seeds entirely. The strong embedding signal is
+//     a better intent match; substring at that point is mostly noise.
+//   - Otherwise, merge: substring seeds first (preserving exact-
+//     identifier match priority), embedding seeds appended.
 //
 // If embedding match fails (e.g., no VOYAGE_API_KEY or no embeddings),
 // returns substring-only results with no error — graceful degradation
@@ -163,6 +180,11 @@ func MatchSeedNodesHybrid(ctx context.Context, st *store.Store, project, query s
 	if embErr != nil {
 		// Embeddings unavailable — fall back to substring-only.
 		return subs, nil
+	}
+
+	// Strong-embedding-signal short-circuit: drop substring entirely.
+	if len(embeds) >= hybridEmbeddingDominanceThreshold {
+		return embeds, nil
 	}
 
 	// Merge with dedup. Substring seeds first (caller relied on that

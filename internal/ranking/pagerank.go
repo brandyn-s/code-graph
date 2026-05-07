@@ -29,8 +29,10 @@ package ranking
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/DeusData/codebase-memory-mcp/internal/store"
 )
@@ -191,19 +193,51 @@ func MatchSeedNodes(st *store.Store, project, query string) ([]*store.Node, erro
 
 // matchSeeds returns the compact indices of nodes whose Name exactly
 // matches any query token (case-insensitive) or whose QualifiedName
-// contains any token (case-insensitive substring).
+// matches any token at a word boundary (case-insensitive).
+//
+// Word-boundary matching (D1, 2026-05-07) replaces the prior bare
+// substring match. Bare substring caused over-matching on common
+// roots: query "router" matched `RouterMode`, `router_handler`, AND
+// `routermanager` (where "router" is an internal substring). The
+// PSM 2026-05-07 baseline showed `Result` / `IntoHandlerError` /
+// `AsCheckOpResult` polluting the top-10 of `rank_by_query
+// "cradlepoint router WAN failover priority"` — many came from
+// substring-loose seeds amplified through PageRank.
+//
+// The boundary is Go's `\b` (word-char ↔ non-word-char transition).
+// Lowercased QNs in this graph use `.`, `/`, `_`, and digits as
+// separators between identifier segments — all non-word-char, so
+// `\brouter\b` matches `cradlepoint.api.router.mode` but not
+// `routermanager`. CamelCase remains literal for now (lowercased
+// `RouterMode` → `routermode` has no boundary inside); D1 trades
+// some CamelCase recall for substantial precision lift, with
+// embedding-seed fallback covering CamelCase via cosine.
+//
+// Tokens with len < 3 (rare — only the 2-char shortGoMethodAllow
+// entries `ok`, `io`, `id`) skip the QN regex entirely and fall back
+// to exact-name match, since `\bok\b` against any QN containing the
+// letters "ok" would still over-match.
 func matchSeeds(nodes []*store.Node, query string) []int {
 	tokens := tokenize(query)
 	if len(tokens) == 0 {
 		return nil
 	}
+	tokenRes := compileTokenBoundaryRegexes(tokens)
 	seen := make(map[int]bool)
 	var seeds []int
 	for i, node := range nodes {
 		nameLower := strings.ToLower(node.Name)
 		qnLower := strings.ToLower(node.QualifiedName)
-		for _, tok := range tokens {
-			if nameLower == tok || strings.Contains(qnLower, tok) {
+		for ti, tok := range tokens {
+			if nameLower == tok {
+				if !seen[i] {
+					seen[i] = true
+					seeds = append(seeds, i)
+				}
+				break
+			}
+			re := tokenRes[ti]
+			if re != nil && re.MatchString(qnLower) {
 				if !seen[i] {
 					seen[i] = true
 					seeds = append(seeds, i)
@@ -213,6 +247,38 @@ func matchSeeds(nodes []*store.Node, query string) []int {
 		}
 	}
 	return seeds
+}
+
+// tokenBoundaryRegexCache caches compiled \btoken\b regexes across
+// matchSeeds calls. Tokens are lowercased + bounded by tokenize, so
+// the cache key is just the lowered token text. Cache is unbounded
+// in count but tokens are tiny strings; on a long-running server,
+// the universe of practical query tokens is small.
+var (
+	tokenBoundaryRegexCache   = sync.Map{} // tok string -> *regexp.Regexp
+	tokenBoundaryRegexNilSent = (*regexp.Regexp)(nil)
+)
+
+// compileTokenBoundaryRegexes returns one regex per token (or nil for
+// tokens shorter than 3 chars, for which boundary matching is unsafe).
+// regexp.MustCompile would panic on a malformed token, but tokenize
+// has already trimmed punctuation so QuoteMeta is sufficient defense.
+func compileTokenBoundaryRegexes(tokens []string) []*regexp.Regexp {
+	out := make([]*regexp.Regexp, len(tokens))
+	for i, tok := range tokens {
+		if len(tok) < 3 {
+			out[i] = tokenBoundaryRegexNilSent
+			continue
+		}
+		if cached, ok := tokenBoundaryRegexCache.Load(tok); ok {
+			out[i] = cached.(*regexp.Regexp)
+			continue
+		}
+		re := regexp.MustCompile(`\b` + regexp.QuoteMeta(tok) + `\b`)
+		tokenBoundaryRegexCache.Store(tok, re)
+		out[i] = re
+	}
+	return out
 }
 
 // tokenize splits the query on whitespace, lowercases, and filters

@@ -22,10 +22,12 @@ func setupArchTestStore(t *testing.T) *Store {
 		_, _ = s.UpsertNode(&Node{Project: "test", Label: "File", Name: fp, QualifiedName: "test." + fp, FilePath: fp})
 	}
 
-	// Packages
-	_, _ = s.UpsertNode(&Node{Project: "test", Label: "Package", Name: "cmd", QualifiedName: "test.cmd"})
-	_, _ = s.UpsertNode(&Node{Project: "test", Label: "Package", Name: "handler", QualifiedName: "test.handler"})
-	_, _ = s.UpsertNode(&Node{Project: "test", Label: "Package", Name: "service", QualifiedName: "test.service"})
+	// Packages — first-party Package nodes are produced by the directory-
+	// scan pass with FilePath set. Lockfile-parsed third-party packages
+	// would have FilePath == ""; archPackages filters those out.
+	_, _ = s.UpsertNode(&Node{Project: "test", Label: "Package", Name: "cmd", QualifiedName: "test.cmd", FilePath: "cmd"})
+	_, _ = s.UpsertNode(&Node{Project: "test", Label: "Package", Name: "handler", QualifiedName: "test.handler", FilePath: "internal/handler"})
+	_, _ = s.UpsertNode(&Node{Project: "test", Label: "Package", Name: "service", QualifiedName: "test.service", FilePath: "internal/service"})
 
 	// Functions with different packages (4-segment QNs for realistic sub-package extraction)
 	idMain, _ := s.UpsertNode(&Node{
@@ -1146,5 +1148,222 @@ func TestIsTestFilePath(t *testing.T) {
 		if got != tt.want {
 			t.Errorf("isTestFilePath(%q) = %v, want %v", tt.fp, got, tt.want)
 		}
+	}
+}
+
+// --- A4 (2026-05-07) — get_architecture vendored-path + stdlib-derive filters ---
+
+// setupArchVendoredFixture seeds the store with a mix of first-party
+// content and vendored content (node_modules / vendor / target / Cargo.nix)
+// to exercise the architecture filters added in A4.
+func setupArchVendoredFixture(t *testing.T) *Store {
+	t.Helper()
+	s, err := OpenMemory()
+	if err != nil {
+		t.Fatalf("OpenMemory: %v", err)
+	}
+	if err := s.UpsertProject("vfx", "/tmp/vfx"); err != nil {
+		t.Fatalf("UpsertProject: %v", err)
+	}
+
+	// Files: 2 first-party Go + 1 first-party Rust, then 3 vendored
+	// (node_modules JS, vendor Go, target/ Rust). Cargo.nix is also
+	// in the vendored set (Nix-managed lockfile clone).
+	files := []struct {
+		name string
+		fp   string
+	}{
+		{"main.go", "cmd/main.go"},
+		{"handler.go", "internal/handler/handler.go"},
+		{"lib.rs", "src/lib.rs"},
+		{"index.js", "node_modules/@babel/core/lib/index.js"},
+		{"helper.go", "vendor/github.com/x/y/helper.go"},
+		{"crate.rs", "target/debug/build/foo/out/crate.rs"},
+		{"Cargo.nix", "Cargo.nix"},
+	}
+	for _, f := range files {
+		_, _ = s.UpsertNode(&Node{Project: "vfx", Label: "File", Name: f.name, QualifiedName: "vfx." + f.name, FilePath: f.fp})
+	}
+
+	// Packages: 2 first-party (FilePath set, clean dirs) + 3 vendored +
+	// 1 lockfile-parsed (no FilePath, the `@babel/core` flavor).
+	_, _ = s.UpsertNode(&Node{Project: "vfx", Label: "Package", Name: "cmd", QualifiedName: "vfx.cmd", FilePath: "cmd"})
+	_, _ = s.UpsertNode(&Node{Project: "vfx", Label: "Package", Name: "handler", QualifiedName: "vfx.handler", FilePath: "internal/handler"})
+	_, _ = s.UpsertNode(&Node{Project: "vfx", Label: "Package", Name: "@babel/core", QualifiedName: "vfx.__pkg__.@babel/core"}) // lockfile-parsed (no FilePath)
+	_, _ = s.UpsertNode(&Node{Project: "vfx", Label: "Package", Name: "vendored_a", QualifiedName: "vfx.vendored_a", FilePath: "vendor/a"})
+	_, _ = s.UpsertNode(&Node{Project: "vfx", Label: "Package", Name: "target_b", QualifiedName: "vfx.target_b", FilePath: "target/debug/build/b"})
+	_, _ = s.UpsertNode(&Node{Project: "vfx", Label: "Package", Name: "node_modules_c", QualifiedName: "vfx.node_modules_c", FilePath: "node_modules/c"})
+
+	return s
+}
+
+func TestArchLanguagesFiltersVendored(t *testing.T) {
+	s := setupArchVendoredFixture(t)
+	defer s.Close()
+
+	langs, err := s.archLanguages("vfx")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]int{}
+	for _, l := range langs {
+		got[l.Language] = l.FileCount
+	}
+	if got["Go"] != 2 {
+		t.Errorf("expected 2 Go files (main.go, handler.go) — vendor/.go filtered; got %d", got["Go"])
+	}
+	if got["Rust"] != 1 {
+		t.Errorf("expected 1 Rust file (lib.rs) — target/.rs filtered; got %d", got["Rust"])
+	}
+	// JS file at node_modules/@babel/core/lib/index.js must not appear.
+	if got["JavaScript"] != 0 {
+		t.Errorf("expected 0 JS files (node_modules filtered); got %d", got["JavaScript"])
+	}
+}
+
+func TestArchPackagesFiltersVendored(t *testing.T) {
+	s := setupArchVendoredFixture(t)
+	defer s.Close()
+
+	pkgs, err := s.archPackages("vfx")
+	if err != nil {
+		t.Fatal(err)
+	}
+	names := map[string]bool{}
+	for _, p := range pkgs {
+		names[p.Name] = true
+	}
+	// First-party packages should be present.
+	if !names["cmd"] || !names["handler"] {
+		t.Errorf("expected first-party packages cmd, handler; got %v", names)
+	}
+	// Lockfile-parsed (@babel/core has no FilePath) must be excluded.
+	if names["@babel/core"] {
+		t.Error("lockfile-parsed @babel/core leaked into packages — file_path filter not active")
+	}
+	// Vendored-path packages must be excluded.
+	for _, n := range []string{"vendored_a", "target_b", "node_modules_c"} {
+		if names[n] {
+			t.Errorf("vendored package %q leaked into packages — vendoredPathSQLClause not active", n)
+		}
+	}
+}
+
+func TestArchHotspotsFiltersStdlibDerive(t *testing.T) {
+	s, err := OpenMemory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if err := s.UpsertProject("hot", "/tmp/hot"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a "real" hotspot (custom function) and stdlib-derive
+	// hotspots (to_string, unwrap, fmt). Each gets the same fan-in (1)
+	// so ordering is by name; the filter must exclude the derives
+	// regardless.
+	idCaller, _ := s.UpsertNode(&Node{
+		Project: "hot", Label: "Function", Name: "Caller",
+		QualifiedName: "hot.Caller", FilePath: "src/main.rs",
+	})
+	idCustom, _ := s.UpsertNode(&Node{
+		Project: "hot", Label: "Function", Name: "ProcessOrder",
+		QualifiedName: "hot.ProcessOrder", FilePath: "src/order.rs",
+	})
+	idToString, _ := s.UpsertNode(&Node{
+		Project: "hot", Label: "Method", Name: "to_string",
+		QualifiedName: "hot.SomeType.to_string", FilePath: "src/types.rs",
+	})
+	idUnwrap, _ := s.UpsertNode(&Node{
+		Project: "hot", Label: "Method", Name: "unwrap",
+		QualifiedName: "hot.SomeType.unwrap", FilePath: "src/types.rs",
+	})
+	idFmt, _ := s.UpsertNode(&Node{
+		Project: "hot", Label: "Method", Name: "fmt",
+		QualifiedName: "hot.SomeType.fmt", FilePath: "src/types.rs",
+	})
+	for _, target := range []int64{idCustom, idToString, idUnwrap, idFmt} {
+		_, _ = s.InsertEdge(&Edge{Project: "hot", SourceID: idCaller, TargetID: target, Type: "CALLS"})
+	}
+
+	hotspots, err := s.archHotspots("hot")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, h := range hotspots {
+		if stdlibDeriveMethods[h.Name] {
+			t.Errorf("stdlib-derive method %q leaked into hotspots", h.Name)
+		}
+	}
+	// ProcessOrder is the only non-derive method called; expect it surfaced.
+	found := false
+	for _, h := range hotspots {
+		if h.Name == "ProcessOrder" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected ProcessOrder in hotspots, got %+v", hotspots)
+	}
+}
+
+func TestArchHotspotsFiltersVendoredPaths(t *testing.T) {
+	s, err := OpenMemory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if err := s.UpsertProject("hot2", "/tmp/hot2"); err != nil {
+		t.Fatal(err)
+	}
+
+	idCaller, _ := s.UpsertNode(&Node{
+		Project: "hot2", Label: "Function", Name: "Caller",
+		QualifiedName: "hot2.Caller", FilePath: "src/main.go",
+	})
+	// Vendored hotspot — must be filtered even with high fan-in.
+	idVendored, _ := s.UpsertNode(&Node{
+		Project: "hot2", Label: "Function", Name: "VendoredHelper",
+		QualifiedName: "hot2.VendoredHelper",
+		FilePath:      "vendor/github.com/x/y/helper.go",
+	})
+	for i := 0; i < 5; i++ {
+		_, _ = s.InsertEdge(&Edge{Project: "hot2", SourceID: idCaller, TargetID: idVendored, Type: "CALLS"})
+	}
+
+	hotspots, err := s.archHotspots("hot2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, h := range hotspots {
+		if h.Name == "VendoredHelper" {
+			t.Errorf("vendored hotspot leaked into top-10: %s", h.QualifiedName)
+		}
+	}
+}
+
+func TestStdlibDeriveMethodsContainsExpected(t *testing.T) {
+	expected := []string{
+		"to_string", "unwrap", "map", "iter", "collect", "into", "from",
+		"default", "clone", "eq", "hash", "fmt", "as_str", "as_ref",
+		"len", "is_empty", "get", "set",
+	}
+	for _, name := range expected {
+		if !stdlibDeriveMethods[name] {
+			t.Errorf("expected %q in stdlibDeriveMethods", name)
+		}
+	}
+}
+
+func TestVendoredPathSQLClauseShape(t *testing.T) {
+	got := vendoredPathSQLClause("file_path")
+	for _, p := range vendoredPathPatterns {
+		if !strings.Contains(got, p) {
+			t.Errorf("vendoredPathSQLClause missing pattern %q in %q", p, got)
+		}
+	}
+	if !strings.Contains(got, "file_path NOT LIKE") {
+		t.Errorf("vendoredPathSQLClause should reference column; got %q", got)
 	}
 }

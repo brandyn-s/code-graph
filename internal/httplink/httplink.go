@@ -159,9 +159,28 @@ func isGoFile(path string) bool {
 	return strings.ToLower(filepath.Ext(path)) == ".go"
 }
 
+// isJSFile returns true for client-or-server JavaScript/TypeScript files.
+// Used by the broader graph layer (CALLS, USAGE, etc.) where React/Vue
+// component files matter equally with Node.js server files.
 func isJSFile(path string) bool {
 	switch strings.ToLower(filepath.Ext(path)) {
 	case ".js", ".ts", ".jsx", ".tsx", ".mjs", ".cjs", ".mts", ".cts":
+		return true
+	}
+	return false
+}
+
+// isServerJSFile returns true for JavaScript/TypeScript files that
+// could host an Express/Fastify/Koa-style HTTP server. Deliberately
+// EXCLUDES `.jsx` / `.tsx` — those are React component files; any
+// `.get('/foo')` / `.post('/bar')` matches in JSX are virtually always
+// client-side handlers (router wiring, fetch wrappers, mocked routes
+// in Storybook), not server-mounted routes. PSM 2026-05-07 baseline:
+// 144 Route nodes; the JSX/TSX subset that this filter removes was the
+// dominant false-positive source per the test battery.
+func isServerJSFile(path string) bool {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".js", ".ts", ".mjs", ".cjs", ".mts", ".cts":
 		return true
 	}
 	return false
@@ -408,7 +427,7 @@ func (l *Linker) discoverRoutes(rootPath string) []RouteHandler {
 				if isGoFile(f.FilePath) {
 					routes = append(routes, extractGoRoutes(f, source)...)
 				}
-				if isJSFile(f.FilePath) {
+				if isServerJSFile(f.FilePath) {
 					routes = append(routes, extractExpressRoutes(f, source)...)
 				}
 				if isPHPFile(f.FilePath) {
@@ -440,10 +459,9 @@ func (l *Linker) discoverRoutes(rootPath string) []RouteHandler {
 		}
 
 		isPHP := strings.HasSuffix(m.FilePath, ".php")
-		isJSTS := strings.HasSuffix(m.FilePath, ".js") ||
-			strings.HasSuffix(m.FilePath, ".ts") ||
-			strings.HasSuffix(m.FilePath, ".mjs") ||
-			strings.HasSuffix(m.FilePath, ".mts")
+		// Server-side JS/TS only — excludes .jsx/.tsx (React client).
+		// See isServerJSFile comment for the rationale.
+		isJSTS := isServerJSFile(m.FilePath)
 
 		if !isPHP && !isJSTS {
 			continue

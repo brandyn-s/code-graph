@@ -156,6 +156,69 @@ func (s *Store) GetArchitecture(project string, aspects []string) (*Architecture
 
 // --- Aspect implementations ---
 
+// vendoredPathPatterns are SQL LIKE patterns for paths that represent
+// third-party / generated / build-output content rather than first-party
+// code. Architecture aspects (languages, packages, hotspots) suppress
+// these so the surfaced output reflects what the team owns, not what
+// dependencies and build systems contribute. PSM 2026-05-07 baseline:
+// without this, get_architecture(packages) returned 14/15 @babel/* node
+// modules; languages was dominated by node_modules and Cargo target/.
+//
+// Patterns use `%dir/%` (no leading slash) so they match BOTH absolute
+// paths (`/repo/node_modules/x`) AND relative paths (`node_modules/x`).
+// The graph stores file_path as relative-to-project-root, so the
+// no-leading-slash form is the actual storage shape; the `%` prefix
+// also accommodates absolute paths if any pass through.
+var vendoredPathPatterns = []string{
+	"%node_modules/%",
+	"%vendor/%",
+	"%target/%",
+	"%Cargo.nix%",
+}
+
+// vendoredPathSQLClause returns a SQL fragment that ANDs NOT-LIKE checks
+// against `column` for every entry in vendoredPathPatterns. The empty-
+// string check is intentionally NOT included here — first-party Package
+// nodes have file_path set, lockfile-parsed third-party Package nodes do
+// not, so callers that want to distinguish first-party vs dep-tree
+// should add `AND <column> != ''` themselves.
+func vendoredPathSQLClause(column string) string {
+	parts := make([]string, 0, len(vendoredPathPatterns))
+	for _, p := range vendoredPathPatterns {
+		parts = append(parts, column+" NOT LIKE '"+p+"'")
+	}
+	return strings.Join(parts, " AND ")
+}
+
+// stdlibDeriveMethods are Rust trait-method / Go interface / general
+// stdlib-derive method names that flood the hotspots query because they
+// are called from every type that derives Display/Debug/Clone/Hash/Eq
+// or implements iter/collect/from. They drown out the actually-
+// interesting fan-in winners. The list is intentionally conservative —
+// only names that have NO meaning beyond stdlib derivation. Project-
+// specific extensions go through the existing test/file_path exclusion
+// path or surface via /find_similar_functions.
+var stdlibDeriveMethods = map[string]bool{
+	"to_string": true,
+	"unwrap":    true,
+	"map":       true,
+	"iter":      true,
+	"collect":   true,
+	"into":      true,
+	"from":      true,
+	"default":   true,
+	"clone":     true,
+	"eq":        true,
+	"hash":      true,
+	"fmt":       true,
+	"as_str":    true,
+	"as_ref":    true,
+	"len":       true,
+	"is_empty":  true,
+	"get":       true,
+	"set":       true,
+}
+
 // extToLang maps file extensions to language names.
 var extToLang = map[string]string{
 	".py": "Python", ".go": "Go", ".js": "JavaScript", ".ts": "TypeScript",
@@ -172,7 +235,8 @@ var extToLang = map[string]string{
 }
 
 func (s *Store) archLanguages(project string) ([]LanguageCount, error) {
-	rows, err := s.q.Query(`SELECT file_path FROM nodes WHERE project=? AND label='File'`, project)
+	q := `SELECT file_path FROM nodes WHERE project=? AND label='File' AND ` + vendoredPathSQLClause("file_path")
+	rows, err := s.q.Query(q, project)
 	if err != nil {
 		return nil, err
 	}
@@ -207,13 +271,21 @@ func (s *Store) archLanguages(project string) ([]LanguageCount, error) {
 }
 
 func (s *Store) archPackages(project string) ([]PackageSummary, error) {
-	// Get all packages with node counts
-	rows, err := s.q.Query(`
+	// Filter rules:
+	//   - file_path != ''  → exclude lockfile-parsed third-party packages
+	//     (npm/Cargo dep tree). Those have FilePath unset; first-party
+	//     directory-derived Package nodes have FilePath set.
+	//   - vendoredPathSQLClause(file_path) → defense-in-depth against
+	//     vendored content (node_modules, vendor/, target/, Cargo.nix).
+	q := `
 		SELECT n.name, COUNT(*) as cnt
 		FROM nodes n
 		WHERE n.project=? AND n.label='Package'
+		  AND n.file_path != ''
+		  AND ` + vendoredPathSQLClause("n.file_path") + `
 		GROUP BY n.name
-		ORDER BY cnt DESC LIMIT 15`, project)
+		ORDER BY cnt DESC LIMIT 15`
+	rows, err := s.q.Query(q, project)
 	if err != nil {
 		return nil, err
 	}
@@ -345,28 +417,44 @@ func (s *Store) archRoutes(project string) ([]RouteInfo, error) {
 }
 
 func (s *Store) archHotspots(project string) ([]HotspotFunction, error) {
-	rows, err := s.q.Query(`
+	// Over-fetch: query 50 candidates and let Go-side filtering drop
+	// stdlib-derive method names (to_string, unwrap, map, ...) that
+	// flood the top 10 with derive-implementation noise. Stdlib derives
+	// can occupy most of the top-10 because every type that derives
+	// Display/Debug/Clone gets a CALLS-target node for the named method.
+	// The over-fetch ratio (50 / 10 = 5x) is plenty: PSM 2026-05-07
+	// baseline showed 7-9 of top 10 were stdlib derives, so 5x cushion
+	// always recovers 10 non-derive winners.
+	q := `
 		SELECT n.name, n.qualified_name, COUNT(*) as fan_in
 		FROM nodes n
 		JOIN edges e ON e.target_id = n.id AND e.type = 'CALLS'
 		WHERE n.project=? AND n.label IN ('Function', 'Method')
 		AND (json_extract(n.properties, '$.is_test') IS NULL OR json_extract(n.properties, '$.is_test') != 1)
 		AND n.file_path NOT LIKE '%test%'
+		AND ` + vendoredPathSQLClause("n.file_path") + `
 		GROUP BY n.id
 		ORDER BY fan_in DESC
-		LIMIT 10`, project)
+		LIMIT 50`
+	rows, err := s.q.Query(q, project)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var result []HotspotFunction
+	result := make([]HotspotFunction, 0, 10)
 	for rows.Next() {
 		var h HotspotFunction
 		if err := rows.Scan(&h.Name, &h.QualifiedName, &h.FanIn); err != nil {
 			return nil, err
 		}
+		if stdlibDeriveMethods[h.Name] {
+			continue
+		}
 		result = append(result, h)
+		if len(result) == 10 {
+			break
+		}
 	}
 	return result, rows.Err()
 }

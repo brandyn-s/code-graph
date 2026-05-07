@@ -1532,3 +1532,45 @@ func TestIsTestNodeFiltering(t *testing.T) {
 		}
 	}
 }
+
+// A4 (2026-05-07): isServerJSFile excludes .jsx/.tsx (React client)
+// from Express route extraction.
+func TestIsServerJSFileExcludesReactExtensions(t *testing.T) {
+	tests := []struct {
+		path string
+		want bool
+		why  string
+	}{
+		{"server/index.js", true, "plain server JS"},
+		{"src/api.ts", true, "server-side TS"},
+		{"lib/server.mjs", true, "ESM server"},
+		{"lib/server.cjs", true, "CommonJS server"},
+		{"src/api.mts", true, "ESM TypeScript"},
+		{"src/api.cts", true, "CommonJS TypeScript"},
+		// React client extensions — must be rejected.
+		{"src/components/Button.jsx", false, "React JSX component"},
+		{"src/pages/Home.tsx", false, "React TSX page"},
+		// Other extensions
+		{"main.go", false, "non-JS"},
+		{"main.py", false, "non-JS"},
+		{"", false, "empty path"},
+	}
+	for _, tt := range tests {
+		got := isServerJSFile(tt.path)
+		if got != tt.want {
+			t.Errorf("isServerJSFile(%q) = %v, want %v (%s)", tt.path, got, tt.want, tt.why)
+		}
+	}
+}
+
+// isJSFile is used outside the route extractor (general file
+// classification). It MUST still recognize .jsx / .tsx so non-route
+// graph passes work unchanged.
+func TestIsJSFileStillIncludesReactExtensions(t *testing.T) {
+	if !isJSFile("src/Button.jsx") {
+		t.Error("isJSFile should still match .jsx for non-route uses")
+	}
+	if !isJSFile("src/Page.tsx") {
+		t.Error("isJSFile should still match .tsx for non-route uses")
+	}
+}

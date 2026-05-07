@@ -162,6 +162,101 @@ func TestExtractURLPaths(t *testing.T) {
 	}
 }
 
+// A1 (2026-05-07): filesystem paths are not URL paths.
+func TestExtractURLPaths_FiltersFilesystemPaths(t *testing.T) {
+	tests := []struct {
+		name string
+		text string
+		want []string
+	}{
+		{
+			name: "ssh_key_path_alone",
+			text: `key = "/home/redacted/.ssh/id_ecdsa"`,
+			want: nil,
+		},
+		{
+			name: "ssh_key_alongside_real_url",
+			text: `key = "/home/user/.ssh/id_rsa"; url = "https://service/api/orders"`,
+			want: []string{"/api/orders"},
+		},
+		{
+			name: "etc_config_path",
+			text: `cfg := "/etc/redacted/config.toml"`,
+			want: nil,
+		},
+		{
+			name: "var_log",
+			text: `log_path = "/var/log/sartv.log"`,
+			want: nil,
+		},
+		{
+			name: "tmp_socket",
+			text: `socket = "/tmp/runtime.sock"`,
+			want: nil,
+		},
+		{
+			name: "real_api_path_passes",
+			text: `path = "/api/v1/orders"`,
+			want: []string{"/api/v1/orders"},
+		},
+		{
+			name: "var_in_path_should_pass",
+			text: `path = "/api/var/orders"`, // /api/var/... is fine — only directory PREFIXES are filtered
+			want: []string{"/api/var/orders"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := extractURLPaths(tt.text)
+			if len(got) != len(tt.want) {
+				t.Fatalf("got %d paths %v, want %d %v", len(got), got, len(tt.want), tt.want)
+			}
+			for i, p := range got {
+				if p != tt.want[i] {
+					t.Errorf("path[%d] = %q, want %q", i, p, tt.want[i])
+				}
+			}
+		})
+	}
+}
+
+func TestIsFilesystemPath(t *testing.T) {
+	tests := []struct {
+		path string
+		want bool
+	}{
+		// Filesystem paths
+		{"/home/user/.ssh/id_rsa", true},
+		{"/root/.bashrc", true},
+		{"/var/log/app.log", true},
+		{"/etc/hosts", true},
+		{"/tmp/socket", true},
+		{"/usr/local/bin/foo", true},
+		{"/opt/redacted/bin", true},
+		{"/dev/null", true},
+		{"/proc/cpuinfo", true},
+		{"/sys/fs/cgroup", true},
+		{"/mnt/data", true},
+		{"/media/cdrom", true},
+		{"/srv/www", true},
+		{"/lib/x86_64-linux-gnu/libc.so.6", true},
+		{"/boot/vmlinuz", true},
+		{"/run/lock", true},
+		// API paths
+		{"/api/orders", false},
+		{"/v1/users/123", false},
+		{"/api/var/x", false}, // "var" inside path is fine
+		{"/health", false},
+		{"/", false},
+	}
+	for _, tt := range tests {
+		got := isFilesystemPath(tt.path)
+		if got != tt.want {
+			t.Errorf("isFilesystemPath(%q) = %v, want %v", tt.path, got, tt.want)
+		}
+	}
+}
+
 func TestExtractPythonRoutes(t *testing.T) {
 	node := &store.Node{
 		Name:          "create_order",

@@ -1131,6 +1131,50 @@ func ExtractURLPaths(text string) []string {
 	return extractURLPaths(text)
 }
 
+// filesystemPathPrefixes are POSIX directory prefixes that indicate
+// a quoted path literal is a filesystem path, not an HTTP URL path.
+// pathRe (`["'](/[a-zA-Z0-9_/:.\-]{2,})["']`) matches anything starting
+// with `/`, which over-matches strings like `"/home/user/.ssh/id_rsa"`
+// in functions that also contain `requests.get` (e.g. a function that
+// reads a key file then sends an HTTP request). PSM 2026-05-07 baseline:
+// 2 of 3 HTTP_CALLS edges in an 80K-node graph were filesystem-path
+// FPs. The fix is conservative — these prefixes are unambiguous on
+// Linux/macOS and have no overlap with sensible URL path roots.
+var filesystemPathPrefixes = []string{
+	"/home/",
+	"/root/",
+	"/var/",
+	"/etc/",
+	"/tmp/",
+	"/usr/",
+	"/opt/",
+	"/dev/",
+	"/proc/",
+	"/sys/",
+	"/mnt/",
+	"/media/",
+	"/srv/",
+	"/lib/",
+	"/lib64/",
+	"/boot/",
+	"/run/",
+	"/bin/",
+	"/sbin/",
+}
+
+// isFilesystemPath returns true if p has the shape of a Unix
+// filesystem path (e.g. /home/user/file). Used by extractURLPaths to
+// reject FPs from quoted path literals in functions that mix HTTP
+// client calls with filesystem reads.
+func isFilesystemPath(p string) bool {
+	for _, prefix := range filesystemPathPrefixes {
+		if strings.HasPrefix(p, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
 // extractURLPaths finds URL path segments from text.
 func extractURLPaths(text string) []string {
 	seen := map[string]bool{}
@@ -1149,9 +1193,12 @@ func extractURLPaths(text string) []string {
 		}
 	}
 
-	// Quoted path literals
+	// Quoted path literals — filter out filesystem-path FPs
 	for _, m := range pathRe.FindAllStringSubmatch(text, -1) {
 		p := m[1]
+		if isFilesystemPath(p) {
+			continue
+		}
 		if !seen[p] {
 			seen[p] = true
 			paths = append(paths, p)
@@ -1160,6 +1207,9 @@ func extractURLPaths(text string) []string {
 
 	// Try to extract URLs from embedded JSON strings (e.g., Cloud Tasks payloads)
 	for _, p := range extractJSONStringPaths(text) {
+		if isFilesystemPath(p) {
+			continue
+		}
 		if !seen[p] {
 			seen[p] = true
 			paths = append(paths, p)
@@ -1326,6 +1376,21 @@ func (l *Linker) matchAndLink(routes []RouteHandler, callSites []HTTPCallSite) [
 			callerNode, _ := l.store.FindNodeByQN(l.project, cs.SourceQualifiedName)
 			handlerNode, _ := l.store.FindNodeByQN(l.project, rh.QualifiedName)
 			if callerNode != nil && handlerNode != nil {
+				// Skip self-loop edges: when caller and handler live in
+				// the same source file, the matched call is almost
+				// always intra-file routing (a function that documents
+				// a route via a path constant, then handles it locally),
+				// not a cross-service HTTP call. PSM 2026-05-07 baseline:
+				// the JS Route → Route self-loop (mithrandir component
+				// matched by an Express extractor against itself) was
+				// 1 of 3 false-positive HTTP_CALLS edges. Self-loops at
+				// the node level are also filtered (caller == handler).
+				if callerNode.ID == handlerNode.ID {
+					continue
+				}
+				if callerNode.FilePath != "" && callerNode.FilePath == handlerNode.FilePath {
+					continue
+				}
 				band := confidenceBand(score)
 				props := map[string]any{
 					"url_path":        cs.Path,

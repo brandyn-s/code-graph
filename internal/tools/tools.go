@@ -914,7 +914,7 @@ func (s *Server) registerIndexAndTraceTool() {
 				},
 				"min_confidence": {
 					"type": "number",
-					"description": "Minimum confidence threshold (0.0-1.0) for CALLS edges. Filters out low-confidence fuzzy matches. Bands: high (>=0.7), medium (>=0.45), speculative (<0.45). Default 0 (no filter)."
+					"description": "Minimum confidence threshold (0.0-1.0) for CALLS edges. Filters out low-confidence fuzzy matches. Bands: high (>=0.7), medium (>=0.45), speculative (<0.45). Default 0.45 — filters speculative cross-crate name-only matches that frequently resolve to wrong-crate same-named methods. Pass 0 explicitly to disable filtering and see the full unfiltered trace."
 				},
 				"project": {
 					"type": "string",

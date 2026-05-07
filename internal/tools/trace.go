@@ -35,7 +35,13 @@ func (s *Server) handleTraceCallPath(_ context.Context, req *mcp.CallToolRequest
 	}
 
 	riskLabels := getBoolArg(args, "risk_labels")
-	minConfidence := getFloatArg(args, "min_confidence", 0)
+	// Default 0.45: filter speculative cross-crate matches that
+	// resolved by name-only fuzzy matching (PSM test battery 2026-05-07
+	// surfaced 4 such false positives at confidence 0.20-0.38 for a
+	// 14-line function — wrong crates, same method name). Users who want
+	// the full unfiltered trace can pass min_confidence=0 explicitly.
+	// Bands: high (>=0.7), medium (>=0.45), speculative (<0.45).
+	minConfidence := getFloatArg(args, "min_confidence", 0.45)
 	includeSource := getBoolArg(args, "include_source")
 
 	project := getStringArg(args, "project")

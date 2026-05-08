@@ -1,0 +1,17 @@
+{
+  "description": "Adversarial fixture for Phase D1 handler resolution. Two modules each define `list_users`; only the `server` module's version is the real handler registered on the axum router. The HTTP_CALLS edge from `client::call_users` MUST resolve to `server::list_users`, NOT `decoy::list_users`.",
+  "kind": "positive",
+  "expected_http_calls_min": 1,
+  "expected_http_call_edges": [
+    {
+      "from_qn_suffix": ".client.mod.call_users",
+      "to_qn_suffix": ".server.mod.list_users",
+      "url_path": "/api/users"
+    }
+  ],
+  "forbidden_to_qn_suffixes": [
+    ".decoy.mod.list_users",
+    ".server.routes.build_router"
+  ],
+  "notes": "The decoy module's list_users shares the bare-name with the real handler. Pre-D1 the resolution either picked the route-declaring function (build_router) or arbitrarily picked one of the two list_users via FindNodesByName. Post-D1 crate-locality wins: server::list_users shares more QN-prefix with server::routes::build_router than decoy::list_users does, so it gets selected. forbidden_to_qn_suffixes pin the assertion that the wrong handler does NOT appear as the edge target."
+}

@@ -1903,6 +1903,29 @@ func TestExtractAxumRoutes_EmptySource(t *testing.T) {
 	}
 }
 
+// D1 (Phase D, 2026-05-08): commonPrefixLen — the crate-locality
+// tie-breaker for handler resolution. Pin the byte-level behavior
+// so refactors don't silently change it.
+func TestCommonPrefixLen(t *testing.T) {
+	tests := []struct {
+		a, b string
+		want int
+	}{
+		{"proj.server.list_users", "proj.server.routes.build_router", len("proj.server.")},
+		{"proj.decoy.list_users", "proj.server.routes.build_router", len("proj.")},
+		{"identical", "identical", len("identical")},
+		{"", "anything", 0},
+		{"anything", "", 0},
+		{"abc", "abd", 2},
+	}
+	for _, tt := range tests {
+		got := commonPrefixLen(tt.a, tt.b)
+		if got != tt.want {
+			t.Errorf("commonPrefixLen(%q,%q) = %d, want %d", tt.a, tt.b, got, tt.want)
+		}
+	}
+}
+
 func TestIsRustFile(t *testing.T) {
 	tests := []struct {
 		path string

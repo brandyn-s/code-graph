@@ -1,4 +1,4 @@
-.PHONY: build test lint clean install check bench-memory bench-negative bench-negative-baseline bench-post-battery bench-rust-reqwest bench-react-fetch
+.PHONY: build test lint clean install check bench-memory bench-negative bench-negative-baseline bench-post-battery bench-rust-reqwest bench-react-fetch bench-handler-resolution
 
 BINARY=codebase-memory-mcp
 MODULE=github.com/DeusData/codebase-memory-mcp
@@ -60,3 +60,6 @@ bench-rust-reqwest: build  ## Regression gate for Rust reqwest URL extraction sh
 
 bench-react-fetch: build  ## Regression gate for TS/JSX fetch URL shapes (literal, template-literal prefix, template-literal id slot)
 	python bench/accuracy/check_react_fetch.py
+
+bench-handler-resolution: build  ## Adversarial gate for Phase D1 handler resolution (HandlerRef + crate-locality vs name-collision decoy)
+	python bench/accuracy/check_handler_resolution.py

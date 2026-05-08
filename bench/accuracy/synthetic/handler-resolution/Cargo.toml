@@ -1,0 +1,13 @@
+[package]
+name = "handler-resolution"
+version = "0.0.1"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "handler-resolution"
+path = "src/main.rs"
+
+[lib]
+name = "handler_resolution"
+path = "src/lib.rs"

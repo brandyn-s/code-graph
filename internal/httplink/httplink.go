@@ -1504,6 +1504,111 @@ func walkJSONForURLs(v any, out *[]string) {
 	}
 }
 
+// resolveHandlerNode returns the graph node that the route's handler
+// most likely refers to. Phase D1 (2026-05-08) rework: prefer the
+// handler symbol the route literally points at (rh.HandlerRef) over
+// the route-declaring function (rh.QualifiedName).
+//
+// Why: extractAxumRoutes / extractGoRoutes / extractExpressRoutes set
+// rh.QualifiedName to the function CONTAINING the .route(...) /
+// .GET(...) / app.get(...) call (e.g. `build_router`). For matchAndLink
+// to attach an HTTP_CALLS edge to the actual handler (e.g.
+// `handle_orders`), it has to look up the handler symbol by name.
+// Pre-D1 the lookup used rh.QualifiedName, which produced edges that
+// pointed AT the route-declaring function — visible in PSM as
+// `loadDoomperStatus → router`, `fetchPowerStatus → run_http_server`,
+// `BatteryIndicator → main`.
+//
+// Resolution order:
+//  1. If rh.HandlerRef is empty, fall back to legacy QualifiedName lookup.
+//  2. Strip any receiver/module prefix from HandlerRef ("h.create_user"
+//     and "routes::list_users" both become the bare last-segment name).
+//  3. Look up by name via FindNodesByName. If exactly one match, use it.
+//  4. If multiple matches, pick the candidate whose qualified name shares
+//     the longest common-prefix with rh.QualifiedName — that's the
+//     handler in the same crate / module as the route-declaring function.
+//     Falls back to the first candidate if all share zero prefix (which
+//     shouldn't happen in practice — every node shares the project-name
+//     prefix).
+//  5. If no name match, fall back to legacy QualifiedName lookup so the
+//     route-declaring function still produces SOME edge (matches pre-D1
+//     behavior for routes whose handler isn't an indexed Function node,
+//     e.g. closures or external trait dispatch).
+func (l *Linker) resolveHandlerNode(rh RouteHandler) *store.Node {
+	legacy, _ := l.store.FindNodeByQN(l.project, rh.QualifiedName)
+
+	if rh.HandlerRef == "" {
+		return legacy
+	}
+
+	name := rh.HandlerRef
+	// Strip any leading receiver/module path: "h.CreateOrder" → "CreateOrder",
+	// "routes::list_users" → "list_users".
+	if idx := strings.LastIndex(name, "."); idx >= 0 {
+		name = name[idx+1:]
+	}
+	if idx := strings.LastIndex(name, "::"); idx >= 0 {
+		name = name[idx+2:]
+	}
+	if name == "" {
+		return legacy
+	}
+
+	candidates, err := l.store.FindNodesByName(l.project, name)
+	if err != nil || len(candidates) == 0 {
+		return legacy
+	}
+
+	// Filter to Function/Method nodes only — Variable / Class / etc.
+	// would never be a route handler, and including them inflates the
+	// crate-locality tiebreak with noise.
+	filtered := make([]*store.Node, 0, len(candidates))
+	for _, c := range candidates {
+		if c.Label == "Function" || c.Label == "Method" {
+			filtered = append(filtered, c)
+		}
+	}
+	if len(filtered) == 0 {
+		return legacy
+	}
+	if len(filtered) == 1 {
+		return filtered[0]
+	}
+
+	// Multiple same-name candidates: pick the one with the longest
+	// common QN-prefix with rh.QualifiedName. That candidate lives in
+	// the same crate / module path as the route declaration, which is
+	// the standard layout (router and handlers both under the same
+	// crate). On collision (e.g. two crates with `fn list_users` where
+	// neither is the router's crate) the first-seen candidate wins —
+	// not ideal, but avoids dropping the edge entirely.
+	var best *store.Node
+	bestLen := -1
+	for _, c := range filtered {
+		n := commonPrefixLen(rh.QualifiedName, c.QualifiedName)
+		if n > bestLen {
+			bestLen = n
+			best = c
+		}
+	}
+	return best
+}
+
+// commonPrefixLen returns the number of leading bytes a and b share.
+// Used by resolveHandlerNode to break ties between same-name handler
+// candidates by crate-locality (longer shared prefix → same crate).
+func commonPrefixLen(a, b string) int {
+	n := 0
+	max := len(a)
+	if len(b) < max {
+		max = len(b)
+	}
+	for n < max && a[n] == b[n] {
+		n++
+	}
+	return n
+}
+
 // matchAndLink matches call site paths to route handler paths and creates edges.
 // Uses multi-signal probabilistic scoring (path Jaccard, depth, method, source type).
 // Only creates edges above the confidence threshold.
@@ -1542,7 +1647,7 @@ func (l *Linker) matchAndLink(routes []RouteHandler, callSites []HTTPCallSite) [
 			}
 
 			callerNode, _ := l.store.FindNodeByQN(l.project, cs.SourceQualifiedName)
-			handlerNode, _ := l.store.FindNodeByQN(l.project, rh.QualifiedName)
+			handlerNode := l.resolveHandlerNode(rh)
 			if callerNode != nil && handlerNode != nil {
 				// Skip self-loop edges: when caller and handler live in
 				// the same source file, the matched call is almost
@@ -1578,10 +1683,14 @@ func (l *Linker) matchAndLink(routes []RouteHandler, callSites []HTTPCallSite) [
 				})
 			}
 
+			handlerQN := rh.QualifiedName
+			if handlerNode != nil {
+				handlerQN = handlerNode.QualifiedName
+			}
 			links = append(links, HTTPLink{
 				CallerQN:    cs.SourceQualifiedName,
 				CallerLabel: cs.SourceLabel,
-				HandlerQN:   rh.QualifiedName,
+				HandlerQN:   handlerQN,
 				URLPath:     cs.Path,
 				EdgeType:    edgeType,
 			})

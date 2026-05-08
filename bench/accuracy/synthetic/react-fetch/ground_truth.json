@@ -5,19 +5,19 @@
   "expected_http_call_edges": [
     {
       "from_qn_suffix": ".web.src.fetch_literal.fetchItems",
-      "to_qn_suffix": ".server.src.main.build_router",
+      "to_qn_suffix": ".server.src.main.handle_items",
       "url_path": "/api/items"
     },
     {
       "from_qn_suffix": ".web.src.fetch_template.fetchOrders",
-      "to_qn_suffix": ".server.src.main.build_router",
+      "to_qn_suffix": ".server.src.main.handle_orders",
       "url_path": "/api/orders"
     },
     {
       "from_qn_suffix": ".web.src.fetch_id_slot.fetchUserById",
-      "to_qn_suffix": ".server.src.main.build_router",
+      "to_qn_suffix": ".server.src.main.handle_users_collection",
       "url_path": "/api/users"
     }
   ],
-  "notes": "The fixture is split into a `server/` Rust crate and a `web/` TS/JSX directory so matchAndLink's sameService filter (strip-2 directory comparison) classes the two as cross-service. The to_qn_suffix lands on `build_router` because today's matchAndLink uses RouteHandler.QualifiedName (route-declaring function), not the handler symbol — Phase D1 will rework that. The fetch_id_slot.tsx URL `/api/users/${id}` extracts to `/api/users` (trailing slash trimmed) and matchAndLink's path normalization pairs that against the axum route `/api/users/:id`."
+  "notes": "The fixture is split into a `server/` Rust crate and a `web/` TS/JSX directory so matchAndLink's sameService filter (strip-2 directory comparison) classes the two as cross-service. The to_qn_suffix lands on the actual handler functions (handle_items, handle_orders, handle_users_collection) because Phase D1 (PR #257) reworked matchAndLink to look up handlers via RouteHandler.HandlerRef + crate-locality bias. The fetch_id_slot.tsx URL `/api/users/${id}` extracts to `/api/users` (trailing slash trimmed) and matchAndLink pairs that against the axum route at exactly `/api/users`."
 }

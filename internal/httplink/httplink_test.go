@@ -1765,3 +1765,72 @@ func TestIsRustFile(t *testing.T) {
 		}
 	}
 }
+
+// --- 2026-05-08: SVG xmlns FP class ---
+
+func TestExtractURLPaths_FiltersSVGXmlns(t *testing.T) {
+	tests := []struct {
+		name string
+		text string
+		want []string
+	}{
+		{
+			name: "svg_xmlns_alone_filtered",
+			text: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">`,
+			want: nil,
+		},
+		{
+			name: "svg_xmlns_alongside_real_url",
+			text: `<svg xmlns="http://www.w3.org/2000/svg"></svg>; fetch("/api/items")`,
+			want: []string{"/api/items"},
+		},
+		{
+			name: "w3_org_no_www_filtered",
+			text: `<svg xmlns="http://w3.org/2000/svg">`,
+			want: nil,
+		},
+		{
+			name: "json_schema_org_filtered",
+			text: `const schema = {"$schema": "http://json-schema.org/draft-07/schema#"};`,
+			want: nil,
+		},
+		{
+			name: "w3_tr_pages_filtered",
+			text: `link to https://www.w3.org/TR/html5/`,
+			want: nil,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := extractURLPaths(tt.text)
+			if len(got) != len(tt.want) {
+				t.Fatalf("got %d paths %v, want %d %v", len(got), got, len(tt.want), tt.want)
+			}
+			for i, p := range got {
+				if p != tt.want[i] {
+					t.Errorf("path[%d] = %q, want %q", i, p, tt.want[i])
+				}
+			}
+		})
+	}
+}
+
+func TestIsExternalDomain_NamespaceURIs(t *testing.T) {
+	for _, d := range []string{
+		"w3.org", "www.w3.org",
+		"xmlns.com",
+		"json-schema.org",
+		"schemas.microsoft.com",
+		"WWW.W3.ORG", // case-insensitive
+	} {
+		if !isExternalDomain(d) {
+			t.Errorf("isExternalDomain(%q) should be true (XML namespace / schema URI)", d)
+		}
+	}
+	// Internal-shaped domains must NOT be filtered.
+	for _, d := range []string{"localhost", "myapp.internal", "api.example.com"} {
+		if isExternalDomain(d) {
+			t.Errorf("isExternalDomain(%q) should be false", d)
+		}
+	}
+}

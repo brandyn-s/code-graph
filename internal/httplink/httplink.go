@@ -1142,6 +1142,15 @@ func extractFunctionCallSites(f *store.Node, rootPath string) []HTTPCallSite {
 
 // externalDomains are well-known external API domains whose paths
 // should not be matched against internal route handlers.
+//
+// 2026-05-08 addition: w3.org and www.w3.org. JSX SVG elements
+// declare `xmlns="http://www.w3.org/2000/svg"`; the urlRe regex
+// extracts `(www.w3.org, /2000/svg)` and produces phantom HTTP_CALLS
+// edges to internal handlers named "main" / "router" / etc. that
+// happen to match the path "/2000/svg". Post-Phase-D2 PSM index
+// observed 3 of 20 HTTP_CALLS as `performLLMSearch → /2000/svg` —
+// purely from React component source containing `<svg xmlns="...">`.
+// These are documentation namespace identifiers, never HTTP fetches.
 var externalDomains = []string{
 	"googleapis.com",
 	"google.com",
@@ -1154,6 +1163,13 @@ var externalDomains = []string{
 	"cloudflare.com",
 	"sentry.io",
 	"aws.amazon.com",
+	// XML namespace declarations — not HTTP fetches.
+	"w3.org",
+	"www.w3.org",
+	"xmlns.com",
+	// Schema / spec URIs that appear in source as identifiers, not fetches.
+	"json-schema.org",
+	"schemas.microsoft.com",
 }
 
 // defaultExcludePaths are common utility endpoints that produce noise in HTTP_CALLS.

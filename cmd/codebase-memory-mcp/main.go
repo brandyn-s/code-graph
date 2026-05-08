@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime/debug"
@@ -19,7 +21,65 @@ import (
 
 var version = "dev"
 
+// configureSlogOutput routes slog to a file when CODE_GRAPH_LOG_FILE is
+// set. Without this, slog writes to stderr, which Claude Code's MCP
+// harness captures internally — useful for the harness, but invisible
+// to anyone wanting to grep for `implementsRust.summary` or other
+// diagnostic output.
+//
+// Behavior:
+//   - CODE_GRAPH_LOG_FILE unset → slog continues to stderr (default).
+//   - CODE_GRAPH_LOG_FILE=<path> → slog tees to BOTH stderr AND that
+//     file (append mode). Stderr stays so the MCP harness still sees
+//     log output for its own diagnostics; the file gives external
+//     observers (and humans grepping for specific log lines) a stable
+//     place to look.
+//   - CODE_GRAPH_LOG_FILE_ONLY=<path> → routes ONLY to the file; useful
+//     when the caller has a specific reason to suppress stderr.
+//
+// Errors opening the file are logged to stderr and the function falls
+// back to default stderr-only behavior — never crash on logging setup.
+//
+// Returns a closer that should be called at process exit. Safe to call
+// even when no file was opened (no-op in that case).
+func configureSlogOutput() func() {
+	filePath := os.Getenv("CODE_GRAPH_LOG_FILE")
+	exclusivePath := os.Getenv("CODE_GRAPH_LOG_FILE_ONLY")
+	if filePath == "" && exclusivePath == "" {
+		return func() {}
+	}
+
+	target := filePath
+	exclusive := false
+	if exclusivePath != "" {
+		target = exclusivePath
+		exclusive = true
+	}
+
+	if dir := filepath.Dir(target); dir != "" && dir != "." {
+		_ = os.MkdirAll(dir, 0o755)
+	}
+
+	f, err := os.OpenFile(target, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "slog: failed to open log file %q: %v\n", target, err)
+		return func() {}
+	}
+
+	var w io.Writer = f
+	if !exclusive {
+		w = io.MultiWriter(os.Stderr, f)
+	}
+	slog.SetDefault(slog.New(slog.NewTextHandler(w, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	})))
+	return func() { _ = f.Close() }
+}
+
 func main() {
+	closeLog := configureSlogOutput()
+	defer closeLog()
+
 	tools.SetVersion(version)
 
 	// Parse global flags before subcommand dispatch.

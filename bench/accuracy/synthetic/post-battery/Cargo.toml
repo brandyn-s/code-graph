@@ -1,0 +1,13 @@
+[package]
+name = "post-battery"
+version = "0.0.1"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "post-battery"
+path = "src/main.rs"
+
+[lib]
+name = "post_battery"
+path = "src/lib.rs"

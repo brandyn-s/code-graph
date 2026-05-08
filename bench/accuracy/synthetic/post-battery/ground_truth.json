@@ -1,0 +1,17 @@
+{
+  "description": "Hand-authored ground truth for the post-battery synthetic fixture. Mirrors the 12-item PSM battery (HTTP_CALLS via reqwest, axum builder routes, impl Trait, SAFETY rationale, fetch in TS) so future PRs can't regress these capabilities silently.",
+  "kind": "positive",
+  "expected_internal_calls": [
+    {"from_qn": "post-battery.src.main.main", "to_qn": "call_status"},
+    {"from_qn": "post-battery.src.main.main", "to_qn": "call_create"},
+    {"from_qn": "post-battery.src.main.main", "to_qn": "call_update"},
+    {"from_qn": "post-battery.src.main.main", "to_qn": "call_delete"},
+    {"from_qn": "post-battery.src.main.main", "to_qn": "build_router"},
+    {"from_qn": "post-battery.src.main.main", "to_qn": "do_unsafe_thing"}
+  ],
+  "expected_http_calls_min": 2,
+  "expected_implements_min": 2,
+  "expected_handles_min": 3,
+  "expected_safety_rationale_min": 1,
+  "notes": "Floors set to CURRENT observed capability so the gate detects regressions. Empirical state on 2026-05-08 main: HTTP_CALLS=2 (both from web/fetch.tsx fetch() calls cross-resolving to axum_routes.build_router via shared /api/users path; reqwest extractor does NOT fire on the Client::new().get(...).send() chain pattern in reqwest_calls.rs); IMPLEMENTS=2 (Cat-Animal + Dog-Animal); HANDLES=3 (the axum router's 3 .route() calls); Rationale[SAFETY]=1 (do_unsafe_thing). FUTURE GATES: when Phase C1 (Rust reqwest URL extraction) ships, raise expected_http_calls_min to 6 (the 4 reqwest calls + 2 fetch cross-links); when Phase C2 (TS/JSX fetch reclassification) ships and HandlerRef-based resolution (D1) is in place, the fetch edges will be classified consistently. The reqwest_calls.rs fixture file is intentionally retained at the current state so the C1 PR's reqwest extractor is exercised against it."
+}

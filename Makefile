@@ -1,4 +1,4 @@
-.PHONY: build test lint clean install check bench-memory bench-negative bench-negative-baseline
+.PHONY: build test lint clean install check bench-memory bench-negative bench-negative-baseline bench-post-battery
 
 BINARY=codebase-memory-mcp
 MODULE=github.com/DeusData/codebase-memory-mcp
@@ -51,3 +51,6 @@ bench-negative: build  ## Run negative-fixture regression gate (fails on phantom
 
 bench-negative-baseline: build  ## Re-pin negative-fixture baselines (use after intentional resolver changes)
 	python bench/accuracy/check_negative_fixtures.py --write-baseline
+
+bench-post-battery: build  ## Regression gate for the 12-item PSM post-battery (HTTP_CALLS, axum HANDLES, IMPLEMENTS, SAFETY rationale)
+	python bench/accuracy/check_post_battery.py

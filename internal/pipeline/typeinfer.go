@@ -46,6 +46,15 @@ const (
 	// class-like-labeled candidate instead. Tracks how many of PR #262's
 	// 153 label-mismatch cases this fallback closes.
 	ResolveOKViaFallbackFromMismatch ResolveAsClassReason = "ok:fallback-from-mismatch"
+	// ResolveOKViaFallbackFromExternal — Phase A2 (2026-05-08, plan
+	// 2026-05-08-external-crate-trait-registry). After all 9 strategies
+	// + PR #265's label-aware project-wide fallback returned empty, the
+	// curated SyntheticInterfaceRegistry matched the trait name against
+	// stdlib/tier-1-prelude entries (From, Display, Debug, Iterator,
+	// Send, Sync, Serialize, Deserialize, etc.) and returned a synthetic
+	// `_external.<crate>.<trait>` QN. Tracks how many of PR #265's 722
+	// remaining resolve-empty cases this 11th strategy closes.
+	ResolveOKViaFallbackFromExternal ResolveAsClassReason = "ok:fallback-from-external"
 	// ResolveEmpty — registry.Resolve returned no QN AND the byName
 	// fallback found zero or multiple class-like candidates (so we
 	// can't disambiguate without making something up).
@@ -144,11 +153,24 @@ func resolveAsClassWithReason(name string, registry *FunctionRegistry, moduleQN 
 	registry.mu.RUnlock()
 
 	if len(classLikeMatches) == 0 {
-		// No class-like candidates by name. PSM measurement: this is
-		// the dominant case for external stdlib traits (`From`, `TryFrom`,
-		// `Display`, etc.) — they're not registered as Interface nodes
-		// because std isn't in the indexed graph. No fallback possible
-		// without external-crate awareness (deferred to a future plan).
+		// No class-like candidates by name. PSM measurement (PR #265
+		// baseline): this is the dominant case for external stdlib
+		// traits (`From`, `TryFrom`, `Display`, etc.) — they're not
+		// registered as Interface nodes because std isn't in the
+		// indexed graph.
+		//
+		// Phase A2 (2026-05-08, plan #459): try the curated
+		// SyntheticInterfaceRegistry as the 11th strategy. If the
+		// trait name matches a well-known stdlib/tier-1 entry,
+		// emit IMPLEMENTS with a synthetic `_external.<crate>.<trait>`
+		// target. This recovers PSM IMPLEMENTS edges that would
+		// otherwise be silently dropped.
+		//
+		// Use bareName (post-prefix-strip) so `std::convert::From`
+		// and `From` both match the registry entry for "From".
+		if syntheticQN, ok := lookupSyntheticTrait(bareName); ok {
+			return syntheticQN, ResolveOKViaFallbackFromExternal
+		}
 		return "", primaryReason
 	}
 

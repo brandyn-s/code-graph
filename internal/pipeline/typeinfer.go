@@ -21,6 +21,63 @@ type FieldTypeMap map[string]string
 // ReturnTypeMap maps function QN to the return type name.
 type ReturnTypeMap map[string]string
 
+// ResolveAsClassReason names the specific failure mode when
+// resolveAsClassWithReason returns an empty QN. Used by Phase D
+// instrumentation (2026-05-08) to split the previously-aggregate
+// `traitQN-empty` skip reason in implements.go into its three
+// downstream causes — without changing any caller behavior.
+type ResolveAsClassReason string
+
+const (
+	// ResolveOK — the name resolved to a class-like QN. No failure.
+	ResolveOK ResolveAsClassReason = ""
+	// ResolveEmpty — registry.Resolve returned no QN at all. The
+	// trait/struct name isn't reachable via any of the 9 resolver
+	// strategies (import_map, same_module, type_dispatch, ...).
+	// On PSM, this is the dominant failure mode for
+	// `impl From<X> for Y` because `From` comes through Rust's
+	// implicit prelude (no `use` statement) and the prelude isn't
+	// in the imports map.
+	ResolveEmpty ResolveAsClassReason = "resolve-empty"
+	// ResolveLabelMissing — registry.Resolve returned a QN but
+	// registry.exact has no label entry for that QN. Should be rare;
+	// indicates a registry-population gap.
+	ResolveLabelMissing ResolveAsClassReason = "label-missing"
+	// ResolveLabelMismatch — registry.Resolve returned a QN with a
+	// label that isn't class-like (e.g., Function, Module). Indicates
+	// the resolver is binding the trait name to a non-trait symbol —
+	// usually a same-named function or variable shadowing the trait.
+	ResolveLabelMismatch ResolveAsClassReason = "label-mismatch"
+)
+
+// resolveAsClassWithReason mirrors resolveAsClass but additionally
+// returns a structured reason when the QN is empty. Phase D-Instrument
+// (2026-05-08) callers use this to split traitQN-empty into the three
+// failure sub-buckets above.
+//
+// resolveAsClass remains as the legacy wrapper (forwards here, drops
+// the reason) so existing callers don't change.
+func resolveAsClassWithReason(name string, registry *FunctionRegistry, moduleQN string, importMap map[string]string) (string, ResolveAsClassReason) {
+	result := registry.Resolve(name, moduleQN, importMap)
+	if result.QualifiedName == "" {
+		return "", ResolveEmpty
+	}
+
+	registry.mu.RLock()
+	defer registry.mu.RUnlock()
+
+	label, exists := registry.exact[result.QualifiedName]
+	if !exists {
+		return "", ResolveLabelMissing
+	}
+
+	switch label {
+	case "Class", "Type", "Interface", "Enum", "Struct", "Trait":
+		return result.QualifiedName, ResolveOK
+	}
+	return "", ResolveLabelMismatch
+}
+
 // resolveAsClass checks if a name refers to a class-like node in the
 // registry (Class / Type / Interface / Enum / Struct / Trait).
 //
@@ -42,23 +99,6 @@ type ReturnTypeMap map[string]string
 // these care whether the type is technically a Class vs Struct vs
 // Trait — they all behave identically.
 func resolveAsClass(name string, registry *FunctionRegistry, moduleQN string, importMap map[string]string) string {
-	result := registry.Resolve(name, moduleQN, importMap)
-	if result.QualifiedName == "" {
-		return ""
-	}
-
-	registry.mu.RLock()
-	defer registry.mu.RUnlock()
-
-	label, exists := registry.exact[result.QualifiedName]
-	if !exists {
-		return ""
-	}
-
-	// Only return if it's a class-like node.
-	switch label {
-	case "Class", "Type", "Interface", "Enum", "Struct", "Trait":
-		return result.QualifiedName
-	}
-	return ""
+	qn, _ := resolveAsClassWithReason(name, registry, moduleQN, importMap)
+	return qn
 }

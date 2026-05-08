@@ -427,22 +427,27 @@ func (p *Pipeline) implementsRust() (linkCount, overrideCount int) {
 
 		for _, it := range ext.Result.ImplTraits {
 			implBlocksSeen++
-			traitQN := resolveAsClass(it.TraitName, p.registry, moduleQN, importMap)
+			traitQN, traitReason := resolveAsClassWithReason(it.TraitName, p.registry, moduleQN, importMap)
 			if traitQN == "" {
-				bumpSkip("traitQN-empty")
+				// Phase D-Instrument (2026-05-08): split previously-aggregate
+				// traitQN-empty into 3 sub-reasons (resolve-empty / label-missing /
+				// label-mismatch) so the dominant failure mode drives D-Implement.
+				skipKey := "traitQN-empty:" + string(traitReason)
+				bumpSkip(skipKey)
 				slog.Debug("implementsRust.skip",
-					"reason", "traitQN-empty",
+					"reason", skipKey,
 					"module", moduleQN,
 					"trait", it.TraitName,
 					"struct", it.StructName,
 				)
 				continue
 			}
-			structQN := resolveAsClass(it.StructName, p.registry, moduleQN, importMap)
+			structQN, structReason := resolveAsClassWithReason(it.StructName, p.registry, moduleQN, importMap)
 			if structQN == "" {
-				bumpSkip("structQN-empty")
+				skipKey := "structQN-empty:" + string(structReason)
+				bumpSkip(skipKey)
 				slog.Debug("implementsRust.skip",
-					"reason", "structQN-empty",
+					"reason", skipKey,
 					"module", moduleQN,
 					"trait", it.TraitName,
 					"struct", it.StructName,

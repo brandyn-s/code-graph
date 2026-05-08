@@ -386,7 +386,34 @@ func (p *Pipeline) createOverrideEdgesExplicit(classNode, ifaceNode *store.Node)
 // --- Rust: impl Trait for Struct ---
 
 // implementsRust detects `impl Trait for Struct` from CBM extraction data.
+//
+// Phase C instrumentation (2026-05-07): when this pass runs on a repo
+// where the IMPLEMENTS count appears suspiciously low, we want to know
+// WHICH stage of the resolve→lookup→emit pipeline is dropping
+// candidates. Each `continue` path now bumps a per-reason counter, and
+// the caller logs an aggregate summary. Diagnoses three distinct
+// failure shapes in one pass without re-indexing:
+//
+//   - traitQN-empty: name didn't resolve to a class-like registry entry
+//     (registry doesn't know about the trait, or the label allowlist
+//     in `resolveAsClass` rejects its label)
+//   - structQN-empty: same as above for the struct side
+//   - trait-node-nil / struct-node-nil: QN resolved but no node in the
+//     graph DB (DEFINES/upsert ran out of scope, or DB inconsistency)
+//
+// On PSM 2026-05-07 baseline (365 IMPLEMENTS edges across 2,065 Rust
+// files), the conjecture was that A2's label-set expansion would lift
+// the count substantially. It didn't — count stayed at 365. The
+// instrumentation proves whether 365 is the true ceiling (zero-skip
+// run), or whether resolver gaps are dropping legitimate impl-blocks
+// silently.
 func (p *Pipeline) implementsRust() (linkCount, overrideCount int) {
+	implBlocksSeen := 0
+	skipReasons := map[string]int{}
+	bumpSkip := func(reason string) {
+		skipReasons[reason]++
+	}
+
 	for relPath, ext := range p.extractionCache {
 		if ext.Language != lang.Rust || ext.Result == nil {
 			continue
@@ -399,18 +426,48 @@ func (p *Pipeline) implementsRust() (linkCount, overrideCount int) {
 		importMap := p.importMaps[moduleQN]
 
 		for _, it := range ext.Result.ImplTraits {
+			implBlocksSeen++
 			traitQN := resolveAsClass(it.TraitName, p.registry, moduleQN, importMap)
 			if traitQN == "" {
+				bumpSkip("traitQN-empty")
+				slog.Debug("implementsRust.skip",
+					"reason", "traitQN-empty",
+					"module", moduleQN,
+					"trait", it.TraitName,
+					"struct", it.StructName,
+				)
 				continue
 			}
 			structQN := resolveAsClass(it.StructName, p.registry, moduleQN, importMap)
 			if structQN == "" {
+				bumpSkip("structQN-empty")
+				slog.Debug("implementsRust.skip",
+					"reason", "structQN-empty",
+					"module", moduleQN,
+					"trait", it.TraitName,
+					"struct", it.StructName,
+				)
 				continue
 			}
 
 			traitDBNode, _ := p.findNodeByQN(p.ProjectName, traitQN)
+			if traitDBNode == nil {
+				bumpSkip("trait-node-nil")
+				slog.Debug("implementsRust.skip",
+					"reason", "trait-node-nil",
+					"trait_qn", traitQN,
+					"struct_qn", structQN,
+				)
+				continue
+			}
 			structDBNode, _ := p.findNodeByQN(p.ProjectName, structQN)
-			if traitDBNode == nil || structDBNode == nil {
+			if structDBNode == nil {
+				bumpSkip("struct-node-nil")
+				slog.Debug("implementsRust.skip",
+					"reason", "struct-node-nil",
+					"trait_qn", traitQN,
+					"struct_qn", structQN,
+				)
 				continue
 			}
 
@@ -428,5 +485,16 @@ func (p *Pipeline) implementsRust() (linkCount, overrideCount int) {
 			overrideCount += p.createOverrideEdgesExplicit(structDBNode, traitDBNode)
 		}
 	}
+
+	totalSkipped := 0
+	for _, n := range skipReasons {
+		totalSkipped += n
+	}
+	slog.Info("implementsRust.summary",
+		"impl_blocks_seen", implBlocksSeen,
+		"emitted", linkCount,
+		"skipped", totalSkipped,
+		"reasons", skipReasons,
+	)
 	return
 }

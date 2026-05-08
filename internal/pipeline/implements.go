@@ -510,13 +510,41 @@ func (p *Pipeline) implementsRust() (linkCount, overrideCount int) {
 			}
 			structDBNode, _ := p.findNodeByQN(p.ProjectName, structQN)
 			if structDBNode == nil {
-				bumpSkip("struct-node-nil")
-				slog.Debug("implementsRust.skip",
-					"reason", "struct-node-nil",
-					"trait_qn", traitQN,
-					"struct_qn", structQN,
-				)
-				continue
+				// Phase A2 struct-side mirror (2026-05-08, plan #459
+				// follow-up to PR #267): when the resolver returned a
+				// synthetic external struct QN (`_external.<crate>.<struct>`),
+				// upsert a synthetic Class node on demand so emitImpl can
+				// wire the IMPLEMENTS edge. Mirror of the trait-side fix
+				// in PR #267, applied to the struct side.
+				if strings.HasPrefix(structQN, "_external.") {
+					structName := structQN
+					if idx := strings.LastIndex(structName, "."); idx >= 0 {
+						structName = structName[idx+1:]
+					}
+					if err := p.upsertNode(&store.Node{
+						Project:       p.ProjectName,
+						Label:         "Class",
+						Name:          structName,
+						QualifiedName: structQN,
+						Properties: map[string]any{
+							"synthetic":  true,
+							"source":     "SyntheticStructRegistry",
+							"definition": "external",
+						},
+					}); err == nil {
+						structDBNode, _ = p.findNodeByQN(p.ProjectName, structQN)
+					}
+				}
+				if structDBNode == nil {
+					bumpSkip("struct-node-nil")
+					slog.Debug("implementsRust.skip",
+						"reason", "struct-node-nil",
+						"trait_qn", traitQN,
+						"struct_qn", structQN,
+					)
+					continue
+				}
+				bumpSkip("structQN-rescued:synthetic-node-upsert")
 			}
 
 			_ = p.insertEdge(&store.Edge{

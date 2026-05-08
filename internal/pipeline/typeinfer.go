@@ -171,6 +171,15 @@ func resolveAsClassWithReason(name string, registry *FunctionRegistry, moduleQN 
 		if syntheticQN, ok := lookupSyntheticTrait(bareName); ok {
 			return syntheticQN, ResolveOKViaFallbackFromExternal
 		}
+		// Phase A2 struct-side mirror (2026-05-08, plan #459 follow-up):
+		// resolveAsClassWithReason is called for BOTH the trait AND the
+		// struct side of `impl Trait for Struct`. PR #266+#267 covered
+		// the trait side. This second registry catches external struct
+		// names like Vec, HashMap, Box, Option, Result, String — used
+		// when PSM has foreign-impls like `impl SomeTrait for Vec<T>`.
+		if syntheticQN, ok := lookupSyntheticStruct(bareName); ok {
+			return syntheticQN, ResolveOKViaFallbackFromExternal
+		}
 		return "", primaryReason
 	}
 

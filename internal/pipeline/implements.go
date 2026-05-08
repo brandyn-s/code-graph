@@ -468,13 +468,45 @@ func (p *Pipeline) implementsRust() (linkCount, overrideCount int) {
 
 			traitDBNode, _ := p.findNodeByQN(p.ProjectName, traitQN)
 			if traitDBNode == nil {
-				bumpSkip("trait-node-nil")
-				slog.Debug("implementsRust.skip",
-					"reason", "trait-node-nil",
-					"trait_qn", traitQN,
-					"struct_qn", structQN,
-				)
-				continue
+				// Phase A2 layer-2 fix (2026-05-08, plan #459 / PR #266
+				// follow-up): if the resolver returned a synthetic external
+				// trait QN (`_external.<crate>.<trait>`), there's no graph
+				// node by design — std/external crates aren't indexed.
+				// Upsert a synthetic Interface node on demand so emitImpl
+				// can wire the IMPLEMENTS edge.
+				//
+				// Without this fix, the synthetic-QN approach silently
+				// drops 640 of 722 PSM resolve-empty cases at trait-node-nil
+				// (verified empirically in PR #266 first re-index).
+				if strings.HasPrefix(traitQN, "_external.") {
+					traitName := traitQN
+					if idx := strings.LastIndex(traitName, "."); idx >= 0 {
+						traitName = traitName[idx+1:]
+					}
+					if err := p.upsertNode(&store.Node{
+						Project:       p.ProjectName,
+						Label:         "Interface",
+						Name:          traitName,
+						QualifiedName: traitQN,
+						Properties: map[string]any{
+							"synthetic":  true,
+							"source":     "SyntheticInterfaceRegistry",
+							"definition": "external",
+						},
+					}); err == nil {
+						traitDBNode, _ = p.findNodeByQN(p.ProjectName, traitQN)
+					}
+				}
+				if traitDBNode == nil {
+					bumpSkip("trait-node-nil")
+					slog.Debug("implementsRust.skip",
+						"reason", "trait-node-nil",
+						"trait_qn", traitQN,
+						"struct_qn", structQN,
+					)
+					continue
+				}
+				bumpSkip("traitQN-rescued:synthetic-node-upsert")
 			}
 			structDBNode, _ := p.findNodeByQN(p.ProjectName, structQN)
 			if structDBNode == nil {

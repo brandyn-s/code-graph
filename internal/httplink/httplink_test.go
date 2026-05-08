@@ -1669,3 +1669,99 @@ func TestIsJSFileStillIncludesReactExtensions(t *testing.T) {
 		t.Error("isJSFile should still match .tsx for non-route uses")
 	}
 }
+
+// --- Phase D2 (2026-05-07) — Axum route extraction ---
+
+func TestExtractAxumRoutes_BasicGet(t *testing.T) {
+	source := `pub fn build_router() -> Router {
+    Router::new()
+        .route("/api/users", get(list_users))
+        .route("/api/users/:id", get(get_user))
+}`
+	f := &store.Node{Name: "build_router", QualifiedName: "myproj.api.build_router", FilePath: "src/api.rs"}
+	routes := extractAxumRoutes(f, source)
+	if len(routes) != 2 {
+		t.Fatalf("expected 2 routes, got %d: %+v", len(routes), routes)
+	}
+	if routes[0].Path != "/api/users" || routes[0].Method != "GET" || routes[0].HandlerRef != "list_users" {
+		t.Errorf("route[0]: %+v, want path=/api/users method=GET handler=list_users", routes[0])
+	}
+	if routes[1].Path != "/api/users/:id" || routes[1].HandlerRef != "get_user" {
+		t.Errorf("route[1]: %+v, want path=/api/users/:id handler=get_user", routes[1])
+	}
+}
+
+func TestExtractAxumRoutes_AllMethods(t *testing.T) {
+	source := `Router::new()
+    .route("/g", get(h_get))
+    .route("/p", post(h_post))
+    .route("/u", put(h_put))
+    .route("/d", delete(h_delete))
+    .route("/pa", patch(h_patch))
+    .route("/h", head(h_head))
+    .route("/o", options(h_options))`
+	f := &store.Node{Name: "router", QualifiedName: "p.router", FilePath: "src/r.rs"}
+	routes := extractAxumRoutes(f, source)
+	if len(routes) != 7 {
+		t.Fatalf("expected 7 routes, got %d", len(routes))
+	}
+	wantMethods := []string{"GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"}
+	for i, want := range wantMethods {
+		if routes[i].Method != want {
+			t.Errorf("route[%d].Method = %q, want %q", i, routes[i].Method, want)
+		}
+	}
+}
+
+func TestExtractAxumRoutes_StripsHandlerModulePrefix(t *testing.T) {
+	source := `.route("/admin", post(admin::create_user))`
+	f := &store.Node{Name: "x", QualifiedName: "p.x", FilePath: "src/x.rs"}
+	routes := extractAxumRoutes(f, source)
+	if len(routes) != 1 {
+		t.Fatalf("expected 1 route, got %d", len(routes))
+	}
+	if routes[0].HandlerRef != "create_user" {
+		t.Errorf("HandlerRef = %q, want create_user (module prefix stripped)", routes[0].HandlerRef)
+	}
+}
+
+func TestExtractAxumRoutes_NoMatchOnNonAxumSource(t *testing.T) {
+	// Actix-style attributes shouldn't match the axum regex (they're
+	// extracted via decorators, not source-line scan).
+	source := `#[get("/api/users")]
+async fn list_users() -> impl Responder {
+    HttpResponse::Ok().body("users")
+}`
+	f := &store.Node{Name: "list_users", QualifiedName: "p.list_users", FilePath: "src/api.rs"}
+	routes := extractAxumRoutes(f, source)
+	if len(routes) != 0 {
+		t.Errorf("expected 0 routes (actix shape), got %d: %+v", len(routes), routes)
+	}
+}
+
+func TestExtractAxumRoutes_EmptySource(t *testing.T) {
+	f := &store.Node{Name: "x", QualifiedName: "p.x", FilePath: "src/x.rs"}
+	routes := extractAxumRoutes(f, "")
+	if len(routes) != 0 {
+		t.Errorf("empty source should produce 0 routes, got %d", len(routes))
+	}
+}
+
+func TestIsRustFile(t *testing.T) {
+	tests := []struct {
+		path string
+		want bool
+	}{
+		{"src/main.rs", true},
+		{"foo.RS", true}, // case-insensitive
+		{"src/main.go", false},
+		{"src/main.py", false},
+		{"foo.rsx", false},
+		{"", false},
+	}
+	for _, tt := range tests {
+		if got := isRustFile(tt.path); got != tt.want {
+			t.Errorf("isRustFile(%q) = %v, want %v", tt.path, got, tt.want)
+		}
+	}
+}

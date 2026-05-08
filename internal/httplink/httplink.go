@@ -99,6 +99,12 @@ var (
 	// Rust Actix annotations: #[get("/path")], #[post("/path")]
 	actixRouteRe = regexp.MustCompile(`#\[(get|post|put|delete|patch)\(\s*"([^"]+)"`)
 
+	// Rust Axum routes: Router::new().route("/path", get(handler))
+	// Captures path (group 1), HTTP method (group 2), handler symbol (group 3).
+	// Method must be lowercase (axum convention: get/post/put/delete/patch);
+	// handler is a bare identifier or `module::handler`.
+	axumRouteRe = regexp.MustCompile(`\.route\s*\(\s*"([^"]+)"\s*,\s*(get|post|put|delete|patch|head|options|trace|connect)\s*\(\s*([\w:]+)\s*\)`)
+
 	// PHP Laravel routes: Route::get("/path", Route::post("/path"
 	laravelRouteRe = regexp.MustCompile(`Route::(get|post|put|delete|patch)\(\s*["']([^"']+)["']`)
 
@@ -436,6 +442,11 @@ func (l *Linker) discoverRoutes(rootPath string) []RouteHandler {
 				if isKotlinFile(f.FilePath) {
 					routes = append(routes, extractKtorRoutes(f, source)...)
 				}
+				if isRustFile(f.FilePath) {
+					// Phase D2 (2026-05-07): axum builder-style routes.
+					// Actix attribute routes are handled above by extractRustRoutes.
+					routes = append(routes, extractAxumRoutes(f, source)...)
+				}
 			}
 		}
 
@@ -744,6 +755,47 @@ func extractRustRoutes(f *store.Node) []RouteHandler {
 		}
 	}
 	return routes
+}
+
+// extractAxumRoutes extracts Rust Axum route registrations from
+// function source. Pattern: `Router::new().route("/path", get(handler))`.
+//
+// Phase D2 (2026-05-07): closes the recall gap where Rust services
+// using axum (rather than actix) had no route extraction at all.
+// The actix path uses attribute decorators (#[get("/path")]); axum
+// declares routes inline via builder calls. The handler symbol is
+// captured for downstream HandlerRef resolution but is not currently
+// used to resolve to a Function node — caller registration logic is
+// shared with other extractors and resolves by name match.
+func extractAxumRoutes(f *store.Node, source string) []RouteHandler {
+	routes := make([]RouteHandler, 0, 4)
+	for _, line := range strings.Split(source, "\n") {
+		matches := axumRouteRe.FindAllStringSubmatch(line, -1)
+		for _, m := range matches {
+			// m[1]=path, m[2]=method, m[3]=handler
+			handler := m[3]
+			// Strip module prefix from handler ref (e.g. `routes::list_users`
+			// → `list_users`) so HandlerRef matches the Function node's Name.
+			if idx := strings.LastIndex(handler, "::"); idx >= 0 {
+				handler = handler[idx+2:]
+			}
+			routes = append(routes, RouteHandler{
+				Path:          m[1],
+				Method:        strings.ToUpper(m[2]),
+				FunctionName:  f.Name,
+				QualifiedName: f.QualifiedName,
+				HandlerRef:    handler,
+			})
+		}
+	}
+	return routes
+}
+
+// isRustFile returns true for `.rs` source files. Rust route extractors
+// (Actix attribute-based + Axum builder-based) are gated by this so
+// non-Rust files don't get scanned with Rust-specific regexes.
+func isRustFile(path string) bool {
+	return strings.ToLower(filepath.Ext(path)) == ".rs"
 }
 
 // extractLaravelRoutes extracts route registrations from PHP Laravel source.

@@ -442,6 +442,14 @@ func (p *Pipeline) implementsRust() (linkCount, overrideCount int) {
 				)
 				continue
 			}
+			// Phase A (2026-05-08): track resolveAsClassWithReason fallback
+			// hits — successful resolutions that ONLY happened because the
+			// new label-aware fallback fired. Lets the summary attribute
+			// emitted-IMPLEMENTS-edges-rescued back to the fallback strategy
+			// vs the existing 9 strategies.
+			if traitReason == ResolveOKViaFallbackFromEmpty || traitReason == ResolveOKViaFallbackFromMismatch {
+				bumpSkip("traitQN-rescued:" + string(traitReason))
+			}
 			structQN, structReason := resolveAsClassWithReason(it.StructName, p.registry, moduleQN, importMap)
 			if structQN == "" {
 				skipKey := "structQN-empty:" + string(structReason)
@@ -453,6 +461,9 @@ func (p *Pipeline) implementsRust() (linkCount, overrideCount int) {
 					"struct", it.StructName,
 				)
 				continue
+			}
+			if structReason == ResolveOKViaFallbackFromEmpty || structReason == ResolveOKViaFallbackFromMismatch {
+				bumpSkip("structQN-rescued:" + string(structReason))
 			}
 
 			traitDBNode, _ := p.findNodeByQN(p.ProjectName, traitQN)

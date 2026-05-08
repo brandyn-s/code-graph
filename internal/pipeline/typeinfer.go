@@ -1,5 +1,7 @@
 package pipeline
 
+import "strings"
+
 // TypeMap maps variable names to their resolved class QN.
 type TypeMap map[string]string
 
@@ -29,26 +31,45 @@ type ReturnTypeMap map[string]string
 type ResolveAsClassReason string
 
 const (
-	// ResolveOK — the name resolved to a class-like QN. No failure.
+	// ResolveOK — the name resolved to a class-like QN via the existing
+	// 9 resolver strategies. No failure, no fallback fired.
 	ResolveOK ResolveAsClassReason = ""
-	// ResolveEmpty — registry.Resolve returned no QN at all. The
-	// trait/struct name isn't reachable via any of the 9 resolver
-	// strategies (import_map, same_module, type_dispatch, ...).
-	// On PSM, this is the dominant failure mode for
-	// `impl From<X> for Y` because `From` comes through Rust's
-	// implicit prelude (no `use` statement) and the prelude isn't
-	// in the imports map.
+	// ResolveOKViaFallbackFromEmpty — Phase A (2026-05-08, plan
+	// 2026-05-08-d-implement-actix-extension). The existing 9 strategies
+	// returned no QN, but the byName + class-like-label filter found
+	// exactly one match. Tracks how many of PR #262's 736 resolve-empty
+	// cases this fallback closes.
+	ResolveOKViaFallbackFromEmpty ResolveAsClassReason = "ok:fallback-from-empty"
+	// ResolveOKViaFallbackFromMismatch — Phase A. Existing strategies
+	// returned a QN with a non-class-like label (e.g., Variable for a
+	// TS story export named "Default"); the byName fallback found a
+	// class-like-labeled candidate instead. Tracks how many of PR #262's
+	// 153 label-mismatch cases this fallback closes.
+	ResolveOKViaFallbackFromMismatch ResolveAsClassReason = "ok:fallback-from-mismatch"
+	// ResolveEmpty — registry.Resolve returned no QN AND the byName
+	// fallback found zero or multiple class-like candidates (so we
+	// can't disambiguate without making something up).
 	ResolveEmpty ResolveAsClassReason = "resolve-empty"
 	// ResolveLabelMissing — registry.Resolve returned a QN but
 	// registry.exact has no label entry for that QN. Should be rare;
 	// indicates a registry-population gap.
 	ResolveLabelMissing ResolveAsClassReason = "label-missing"
 	// ResolveLabelMismatch — registry.Resolve returned a QN with a
-	// label that isn't class-like (e.g., Function, Module). Indicates
-	// the resolver is binding the trait name to a non-trait symbol —
-	// usually a same-named function or variable shadowing the trait.
+	// non-class-like label, AND the byName fallback found zero or
+	// multiple class-like candidates.
 	ResolveLabelMismatch ResolveAsClassReason = "label-mismatch"
 )
+
+// isClassLikeLabel checks whether a registry label denotes a type-like
+// node that's a valid trait/struct/class IMPLEMENTS target. Centralized
+// so the existing 2-step flow and the Phase A fallback both agree.
+func isClassLikeLabel(label string) bool {
+	switch label {
+	case "Class", "Type", "Interface", "Enum", "Struct", "Trait":
+		return true
+	}
+	return false
+}
 
 // resolveAsClassWithReason mirrors resolveAsClass but additionally
 // returns a structured reason when the QN is empty. Phase D-Instrument
@@ -59,23 +80,131 @@ const (
 // the reason) so existing callers don't change.
 func resolveAsClassWithReason(name string, registry *FunctionRegistry, moduleQN string, importMap map[string]string) (string, ResolveAsClassReason) {
 	result := registry.Resolve(name, moduleQN, importMap)
-	if result.QualifiedName == "" {
-		return "", ResolveEmpty
+
+	// Step 1: existing 2-step flow — Resolve, then label-check.
+	if result.QualifiedName != "" {
+		registry.mu.RLock()
+		label, exists := registry.exact[result.QualifiedName]
+		registry.mu.RUnlock()
+		if exists && isClassLikeLabel(label) {
+			return result.QualifiedName, ResolveOK
+		}
+	}
+
+	// Determine the reason the existing flow failed — needed both for
+	// fallback bucket attribution and for the no-fallback-hit return.
+	var primaryReason ResolveAsClassReason
+	switch {
+	case result.QualifiedName == "":
+		primaryReason = ResolveEmpty
+	default:
+		registry.mu.RLock()
+		_, exists := registry.exact[result.QualifiedName]
+		registry.mu.RUnlock()
+		if !exists {
+			primaryReason = ResolveLabelMissing
+		} else {
+			primaryReason = ResolveLabelMismatch
+		}
+	}
+
+	// Step 2 (Phase A, 2026-05-08): label-aware project-wide fallback.
+	// Strip module prefix from name (e.g., "redacted_core::Foo" → "Foo",
+	// "obj.Method" → "Method"). Then scan registry.byName for entries
+	// with a class-like label. If exactly one match, return it.
+	//
+	// Why: PR #262's PSM measurement showed 736 resolve-empty + 153
+	// label-mismatch traitQN failures. Sample failing impls: `Default`
+	// resolves to a TS Story Export (Variable label), `Clone` resolves
+	// to a Go Method, `Debug` resolves to a markdown Section. The
+	// existing 9 strategies pick the wrong-label hit via name-uniqueness
+	// because they're not filtering by class-like-label. This fallback
+	// fires only for resolveAsClassWithReason callers (IMPLEMENTS),
+	// not for the generic Resolve path used by CALLS — so receiver-type
+	// binding and call resolution are unchanged.
+	bareName := name
+	if idx := strings.LastIndex(bareName, "::"); idx >= 0 {
+		bareName = bareName[idx+2:]
+	}
+	if idx := strings.LastIndex(bareName, "."); idx >= 0 {
+		bareName = bareName[idx+1:]
+	}
+	if bareName == "" {
+		return "", primaryReason
 	}
 
 	registry.mu.RLock()
-	defer registry.mu.RUnlock()
+	candidates := registry.byName[bareName]
+	classLikeMatches := make([]string, 0, 4)
+	for _, qn := range candidates {
+		if label, ok := registry.exact[qn]; ok && isClassLikeLabel(label) {
+			classLikeMatches = append(classLikeMatches, qn)
+		}
+	}
+	registry.mu.RUnlock()
 
-	label, exists := registry.exact[result.QualifiedName]
-	if !exists {
-		return "", ResolveLabelMissing
+	if len(classLikeMatches) == 0 {
+		// No class-like candidates by name. PSM measurement: this is
+		// the dominant case for external stdlib traits (`From`, `TryFrom`,
+		// `Display`, etc.) — they're not registered as Interface nodes
+		// because std isn't in the indexed graph. No fallback possible
+		// without external-crate awareness (deferred to a future plan).
+		return "", primaryReason
 	}
 
-	switch label {
-	case "Class", "Type", "Interface", "Enum", "Struct", "Trait":
-		return result.QualifiedName, ResolveOK
+	var picked string
+	if len(classLikeMatches) == 1 {
+		picked = classLikeMatches[0]
+	} else {
+		// Phase A v2 (2026-05-08): crate-locality tiebreaker for ambiguous
+		// matches. PSM has many trait-shaped names with multiple Interface
+		// definitions (e.g., separate `Command` traits in assetman / cmd /
+		// healthcheck). Pick the candidate whose qualified name shares the
+		// longest common prefix with moduleQN — that's the same-crate
+		// candidate by construction. Same heuristic PR #257 (D1) used for
+		// HTTP handler resolution.
+		bestLen := -1
+		for _, qn := range classLikeMatches {
+			n := commonStringPrefixLen(moduleQN, qn)
+			if n > bestLen {
+				bestLen = n
+				picked = qn
+			}
+		}
+		// If tied at bestLen=0 (no shared prefix at all — shouldn't happen
+		// since every node shares the project prefix), fall through with
+		// `picked` = first iterated candidate. Map iteration order in Go
+		// is randomized; this is the only nondeterministic case and only
+		// affects truly cross-project name collisions.
 	}
-	return "", ResolveLabelMismatch
+
+	// Tag with the original failure mode so the implementsRust.summary
+	// can attribute closures to specific sub-buckets.
+	switch primaryReason {
+	case ResolveEmpty:
+		return picked, ResolveOKViaFallbackFromEmpty
+	case ResolveLabelMissing, ResolveLabelMismatch:
+		return picked, ResolveOKViaFallbackFromMismatch
+	}
+	return picked, ResolveOK
+}
+
+// commonStringPrefixLen returns the number of leading bytes a and b share.
+// Used by resolveAsClassWithReason to pick the same-crate trait when
+// multiple class-like candidates share the bare name. Local copy avoids
+// importing `commonPrefixLen` from another package; the helper is short
+// enough that the duplication is preferable to introducing a cross-package
+// helper-only import.
+func commonStringPrefixLen(a, b string) int {
+	n := 0
+	max := len(a)
+	if len(b) < max {
+		max = len(b)
+	}
+	for n < max && a[n] == b[n] {
+		n++
+	}
+	return n
 }
 
 // resolveAsClass checks if a name refers to a class-like node in the

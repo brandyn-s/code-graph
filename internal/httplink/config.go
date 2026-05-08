@@ -53,12 +53,24 @@ func LoadConfig(dir string) *LinkerConfig {
 }
 
 // EffectiveMinConfidence returns the configured minimum confidence,
-// or the default (0.25) if not set.
+// or the default if not set.
+//
+// Phase E (2026-05-08): default raised from 0.25 to 0.36. PSM
+// hand-labeling of all 98 HTTP_CALLS edges (Phase C state) revealed
+// that conf < 0.36 is dominated by partial-match FPs targeting
+// catch-all functions (`get_payload`, `userCertHandler`) — 14 FPs
+// dropped vs 2 TP losses among the 16 below-threshold edges (7:1
+// FP-drop / TP-loss ratio). The prior 0.25 default was set when the
+// resolver couldn't reach most real handlers (PSM HTTP_CALLS = 17
+// pre-Phase-C); now that the actix-builder extractor (PR #261) and
+// HandlerRef resolution (PR #257) reach 98 real edges, the
+// speculative band is no longer needed to surface load-bearing
+// matches.
 func (c *LinkerConfig) EffectiveMinConfidence() float64 {
 	if c.HTTPLinker.MinConfidence != nil {
 		return *c.HTTPLinker.MinConfidence
 	}
-	return 0.25
+	return 0.36
 }
 
 // EffectiveFuzzyMatching returns the configured fuzzy matching setting,

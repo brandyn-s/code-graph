@@ -22,6 +22,7 @@ type RouteHandler struct {
 	HandlerRef        string // resolved handler function reference (e.g. "h.CreateOrder")
 	ResolvedHandlerQN string // set by createRegistrationCallEdges — actual handler QN
 	Protocol          string // "ws", "sse", or "" (standard HTTP)
+	SourceExtractor   string // Phase B1 (2026-05-08): tags which extractor produced this entry — surfaced on Route node properties + routes.extractor.summary slog
 }
 
 // HTTPCallSite represents a discovered HTTP call site.
@@ -349,6 +350,13 @@ func (l *Linker) buildRouteProps(rh *RouteHandler, handlerNode *store.Node, root
 		"handler": handlerQN,
 	}
 
+	// Phase B1 (2026-05-08): tag the Route node with the extractor that
+	// produced it so downstream queries (psm_compare.py routes-by-extractor)
+	// can attribute coverage gaps to the right extractor.
+	if rh.SourceExtractor != "" {
+		routeProps["extractor"] = rh.SourceExtractor
+	}
+
 	// Protocol from route extraction (Python websocket, Spring MessageMapping, Ktor webSocket)
 	if rh.Protocol != "" {
 		routeProps["protocol"] = rh.Protocol
@@ -439,6 +447,22 @@ func (l *Linker) discoverRoutes(rootPath string) []RouteHandler {
 	// Track which PHP files have Function/Method nodes (for dedup in module scan)
 	phpFilesWithFuncs := map[string]bool{}
 
+	// Phase B1 (2026-05-08): per-extractor counters. Surfaces which extractor
+	// contributed which RouteHandler entries. The pre-instrumentation state
+	// gave a single aggregate count; post-instrumentation reveals which
+	// extractor is producing 0 routes (= covered shape missing for that
+	// language) vs which is dominant. Drives the PSM-first methodology.
+	extractorCounts := map[string]int{}
+	tagAndCount := func(name string, newRoutes []RouteHandler) []RouteHandler {
+		extractorCounts[name] += len(newRoutes)
+		for i := range newRoutes {
+			if newRoutes[i].SourceExtractor == "" {
+				newRoutes[i].SourceExtractor = name
+			}
+		}
+		return newRoutes
+	}
+
 	for _, f := range funcs {
 		// Skip test files — test fixtures should not produce Route nodes
 		if isTestNode(f) {
@@ -446,37 +470,37 @@ func (l *Linker) discoverRoutes(rootPath string) []RouteHandler {
 		}
 
 		// Python: check decorators property
-		routes = append(routes, extractPythonRoutes(f)...)
+		routes = append(routes, tagAndCount("python", extractPythonRoutes(f))...)
 
 		// Java: check annotation-based decorators (Spring)
-		routes = append(routes, extractJavaRoutes(f)...)
+		routes = append(routes, tagAndCount("java", extractJavaRoutes(f))...)
 
 		// Rust: check attribute decorators (Actix)
-		routes = append(routes, extractRustRoutes(f)...)
+		routes = append(routes, tagAndCount("rust-actix-attribute", extractRustRoutes(f))...)
 
 		// C# ASP.NET: check attribute decorators
-		routes = append(routes, extractASPNetRoutes(f)...)
+		routes = append(routes, tagAndCount("aspnet", extractASPNetRoutes(f))...)
 
 		// Source-based route discovery — each framework's regex only applies to its own file types
 		if f.FilePath != "" && f.StartLine > 0 && f.EndLine > 0 {
 			source := readSourceLines(rootPath, f.FilePath, f.StartLine, f.EndLine)
 			if source != "" {
 				if isGoFile(f.FilePath) {
-					routes = append(routes, extractGoRoutes(f, source)...)
+					routes = append(routes, tagAndCount("go", extractGoRoutes(f, source))...)
 				}
 				if isServerJSFile(f.FilePath) {
-					routes = append(routes, extractExpressRoutes(f, source)...)
+					routes = append(routes, tagAndCount("express", extractExpressRoutes(f, source))...)
 				}
 				if isPHPFile(f.FilePath) {
-					routes = append(routes, extractLaravelRoutes(f, source)...)
+					routes = append(routes, tagAndCount("laravel", extractLaravelRoutes(f, source))...)
 				}
 				if isKotlinFile(f.FilePath) {
-					routes = append(routes, extractKtorRoutes(f, source)...)
+					routes = append(routes, tagAndCount("ktor", extractKtorRoutes(f, source))...)
 				}
 				if isRustFile(f.FilePath) {
 					// Phase D2 (2026-05-07): axum builder-style routes.
 					// Actix attribute routes are handled above by extractRustRoutes.
-					routes = append(routes, extractAxumRoutes(f, source)...)
+					routes = append(routes, tagAndCount("rust-axum-builder", extractAxumRoutes(f, source))...)
 				}
 			}
 		}
@@ -485,6 +509,17 @@ func (l *Linker) discoverRoutes(rootPath string) []RouteHandler {
 			phpFilesWithFuncs[f.FilePath] = true
 		}
 	}
+
+	// Defer the routes.extractor.summary emit — module-scan extractors
+	// (Express on JS modules, Laravel on PHP modules) also contribute.
+	// We emit after both function-loop and module-loop complete.
+	defer func() {
+		slog.Info(
+			"routes.extractor.summary",
+			"counts", extractorCounts,
+			"total", len(routes),
+		)
+	}()
 
 	// Module-level route scanning: some frameworks register routes at file top level
 	// (not inside any function body). Scan modules for route patterns.
@@ -517,10 +552,10 @@ func (l *Linker) discoverRoutes(rootPath string) []RouteHandler {
 			continue
 		}
 		if isPHP {
-			routes = append(routes, extractLaravelRoutes(m, source)...)
+			routes = append(routes, tagAndCount("laravel-module", extractLaravelRoutes(m, source))...)
 		}
 		if isJSTS {
-			routes = append(routes, extractExpressRoutes(m, source)...)
+			routes = append(routes, tagAndCount("express-module", extractExpressRoutes(m, source))...)
 		}
 	}
 
@@ -1632,9 +1667,43 @@ func (l *Linker) matchAndLink(routes []RouteHandler, callSites []HTTPCallSite) [
 				continue
 			}
 
-			score := pathScore*sourceWeight(cs.SourceLabel) + methodBonus(cs.Method, rh.Method)
-			if score < l.config.EffectiveMinConfidence() {
+			weight := sourceWeight(cs.SourceLabel)
+			mBonus := methodBonus(cs.Method, rh.Method)
+			score := pathScore*weight + mBonus
+			minConfidence := l.config.EffectiveMinConfidence()
+			if score < minConfidence {
+				// Phase B2 (2026-05-08): gated debug slog of rejected pairs.
+				// Set CODE_GRAPH_MATCH_TRACE=1 to surface which (caller, route)
+				// pairs scored above 0 but below threshold. Useful when tuning
+				// pathMatchScore for the partial-match-FP class (Phase E1).
+				if os.Getenv("CODE_GRAPH_MATCH_TRACE") != "" {
+					slog.Debug(
+						"matchAndLink.reject_below_threshold",
+						"caller", cs.SourceQualifiedName,
+						"caller_url", cs.Path,
+						"route_path", rh.Path,
+						"route_qn", rh.QualifiedName,
+						"path_score", pathScore,
+						"source_weight", weight,
+						"method_bonus", mBonus,
+						"final_score", score,
+						"min_confidence", minConfidence,
+					)
+				}
 				continue
+			}
+			if os.Getenv("CODE_GRAPH_MATCH_TRACE") != "" {
+				slog.Debug(
+					"matchAndLink.accept",
+					"caller", cs.SourceQualifiedName,
+					"caller_url", cs.Path,
+					"route_path", rh.Path,
+					"route_qn", rh.QualifiedName,
+					"path_score", pathScore,
+					"source_weight", weight,
+					"method_bonus", mBonus,
+					"final_score", score,
+				)
 			}
 			if score > 1.0 {
 				score = 1.0

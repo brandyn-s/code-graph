@@ -272,6 +272,57 @@ func TestExtractURLPaths_FormatMacro(t *testing.T) {
 	}
 }
 
+// C2 (Phase C, 2026-05-08): JS/TS template literal path extraction.
+// `fetch(`/api/users/${id}`)` carries `/api/users/` inside backticks
+// that pathRe never sees. Without this, the call emits no HTTP_CALLS
+// edge and the URL is invisible to matchAndLink.
+func TestExtractURLPaths_TemplateLiteral(t *testing.T) {
+	tests := []struct {
+		name string
+		text string
+		want []string
+	}{
+		{
+			name: "fetch_template_with_id_slot",
+			text: "const r = await fetch(`/api/users/${id}`);",
+			want: []string{"/api/users"},
+		},
+		{
+			name: "fetch_template_static_prefix_then_dynamic",
+			text: "fetch(`${baseUrl}/api/orders`)",
+			want: []string{"/api/orders"},
+		},
+		{
+			name: "fetch_template_simple_path_no_interp",
+			text: "fetch(`/api/items`)",
+			want: []string{"/api/items"},
+		},
+		{
+			name: "no_backticks_no_extraction",
+			text: "fetch(/* /api/skipped */)",
+			want: nil,
+		},
+		{
+			name: "template_with_filesystem_path_filtered",
+			text: "const p = `${root}/var/log/app.log`;",
+			want: nil,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := extractURLPaths(tt.text)
+			if len(got) != len(tt.want) {
+				t.Fatalf("got %d paths %v, want %d %v", len(got), got, len(tt.want), tt.want)
+			}
+			for i, p := range got {
+				if p != tt.want[i] {
+					t.Errorf("path[%d] = %q, want %q", i, p, tt.want[i])
+				}
+			}
+		})
+	}
+}
+
 // C1 (Phase C, 2026-05-08): rustConstUrlRe shape coverage.
 // Top-level Rust const URL definitions take many shapes. Pin the
 // regex on the exact subset extractFunctionCallSites depends on.

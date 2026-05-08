@@ -1,0 +1,9 @@
+[package]
+name = "react-fetch-server"
+version = "0.0.1"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "react-fetch-server"
+path = "src/main.rs"

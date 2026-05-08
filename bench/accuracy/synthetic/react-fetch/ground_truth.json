@@ -1,0 +1,23 @@
+{
+  "description": "Hand-authored ground truth for react-fetch synthetic fixture. Three TS/JSX fetch URL shapes each produce one HTTP_CALLS edge to the matching axum handler in the sibling server crate.",
+  "kind": "positive",
+  "expected_http_calls_min": 3,
+  "expected_http_call_edges": [
+    {
+      "from_qn_suffix": ".web.src.fetch_literal.fetchItems",
+      "to_qn_suffix": ".server.src.main.build_router",
+      "url_path": "/api/items"
+    },
+    {
+      "from_qn_suffix": ".web.src.fetch_template.fetchOrders",
+      "to_qn_suffix": ".server.src.main.build_router",
+      "url_path": "/api/orders"
+    },
+    {
+      "from_qn_suffix": ".web.src.fetch_id_slot.fetchUserById",
+      "to_qn_suffix": ".server.src.main.build_router",
+      "url_path": "/api/users"
+    }
+  ],
+  "notes": "The fixture is split into a `server/` Rust crate and a `web/` TS/JSX directory so matchAndLink's sameService filter (strip-2 directory comparison) classes the two as cross-service. The to_qn_suffix lands on `build_router` because today's matchAndLink uses RouteHandler.QualifiedName (route-declaring function), not the handler symbol — Phase D1 will rework that. The fetch_id_slot.tsx URL `/api/users/${id}` extracts to `/api/users` (trailing slash trimmed) and matchAndLink's path normalization pairs that against the axum route `/api/users/:id`."
+}

@@ -148,6 +148,14 @@ var (
 	// the const to `client.get(NAME)`.
 	rustConstUrlRe = regexp.MustCompile(`(?m)^\s*(?:pub(?:\s*\([^)]*\))?\s+)?(?:const|static|let)\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?::\s*&?\s*'?[a-zA-Z_]*\s*(?:str|&str)?)?\s*=\s*"((?:https?://[^"\\]+)|/[^"\\]+)"`)
 
+	// C2 (Phase C, TS/JSX fetch reclassification): JavaScript template
+	// literals `\`...\`` are the fetch URL form pathRe never sees because
+	// pathRe requires `'` or `"` quotes. `fetch(\`/api/users/${id}\`)`
+	// carries `/api/users/` inside the backticks; without this, the call
+	// emits no HTTP_CALLS edge. Same shape and trailing-slash policy as
+	// formatMacroRe + pathInFormatRe.
+	templateLiteralRe = regexp.MustCompile("`([^`]+)`")
+
 	// Python WebSocket routes: @app.websocket("/path"), @app.websocket("")
 	pyWSRouteRe = regexp.MustCompile(`@\w+\.websocket\(\s*["']([^"']*)["']`)
 
@@ -1338,6 +1346,30 @@ func extractURLPaths(text string) []string {
 	for _, m := range formatMacroRe.FindAllStringSubmatch(text, -1) {
 		fmtStr := m[1]
 		for _, raw := range pathInFormatRe.FindAllString(fmtStr, -1) {
+			p := strings.TrimRight(raw, "/")
+			if p == "" {
+				continue
+			}
+			if isFilesystemPath(p) {
+				continue
+			}
+			if !seen[p] {
+				seen[p] = true
+				paths = append(paths, p)
+			}
+		}
+	}
+
+	// C2 (Phase C): JS/TS template literals.
+	// `fetch(\`/api/users/${id}\`)` carries `/api/users/` inside backticks
+	// that pathRe never matches. Same /path extraction + trailing-slash
+	// trim as the format!() branch above. Note: this fires regardless of
+	// language because backticks-as-template-literals are JS/TS-specific
+	// in our supported stacks; on languages that don't use backticks
+	// for strings the regex matches nothing and the loop is a no-op.
+	for _, m := range templateLiteralRe.FindAllStringSubmatch(text, -1) {
+		tmplStr := m[1]
+		for _, raw := range pathInFormatRe.FindAllString(tmplStr, -1) {
 			p := strings.TrimRight(raw, "/")
 			if p == "" {
 				continue

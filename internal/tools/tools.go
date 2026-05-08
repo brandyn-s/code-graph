@@ -645,7 +645,7 @@ func (s *Server) registerRankByQueryTool() {
 				"seed_strategy": {
 					"type": "string",
 					"enum": ["substring", "embedding", "hybrid"],
-					"description": "How to match query → seed nodes. 'substring' (legacy): tokens substring-match Name/QualifiedName. 'embedding': Voyage-embed the query, cosine-search node embeddings (requires VOYAGE_API_KEY + index with embeddings populated). 'hybrid' (default): both, deduplicated; falls back to substring if embeddings unavailable."
+					"description": "How to match query → seed nodes. 'hybrid' (default, recommended): substring + embedding seeds with embedding-dominance threshold (≥3 embedding seeds drops substring entirely). 'embedding': Voyage-embed only (requires VOYAGE_API_KEY + index with embeddings populated). 'substring': tokens word-boundary-match Name/QualifiedName. NOTE: when 'substring' is requested AND the project has embeddings, the call is auto-routed to 'hybrid' — substring on its own surfaces PageRank-propagation noise (generic types / error wrappers accumulating rank from seeded callers) that hybrid eliminates. Bare substring runs only when no embeddings exist."
 				}
 			},
 			"required": ["query"]

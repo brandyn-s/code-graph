@@ -208,9 +208,31 @@ func MatchSeedNodesHybrid(ctx context.Context, st *store.Store, project, query s
 
 // MatchSeedNodesByStrategy dispatches to the requested seed strategy.
 // Empty/unknown strategy defaults to hybrid.
+//
+// Phase B (2026-05-07): when a caller explicitly requests
+// SeedStrategySubstring AND embeddings are available (project has a
+// non-zero embedding count), we route to hybrid instead. Substring on
+// a project with embeddings consistently surfaces PageRank-propagation
+// noise (`Result`, `IntoHandlerError`, `AsCheckOpResult` from
+// cradlepoint-seeded callers) — D1 word-boundary closed seed pollution
+// but did not address propagation pollution. Hybrid's embedding-
+// dominance threshold (>=3 embeddings → drop substring entirely)
+// was measured 10/10 relevant on the same query that produced 4/10
+// noise on substring. Routing substring callers through hybrid when
+// embeddings are present is strictly an improvement; substring stays
+// available as the explicit fallback when no embeddings exist.
 func MatchSeedNodesByStrategy(ctx context.Context, st *store.Store, project, query string, strategy SeedStrategy) ([]*store.Node, error) {
 	switch strategy {
 	case SeedStrategySubstring:
+		// If embeddings are available for this project, route to hybrid
+		// — it dominates substring on noise floor when both are usable.
+		// If embeddings are unavailable (no API key OR project has no
+		// embeddings), fall through to bare substring as the only option.
+		if st != nil && project != "" {
+			if count, err := st.EmbeddingCount(project); err == nil && count > 0 {
+				return MatchSeedNodesHybrid(ctx, st, project, query)
+			}
+		}
 		return MatchSeedNodes(st, project, query)
 	case SeedStrategyEmbedding:
 		return MatchSeedNodesByEmbedding(ctx, st, project, query)

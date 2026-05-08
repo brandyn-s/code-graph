@@ -116,7 +116,22 @@ var (
 	// when stepping past the match. Without it, `.route(`'s `(` is consumed
 	// inside the match but its `)` is left for the loop, decrementing depth
 	// without a paired increment and prematurely popping scopes.
-	actixBuilderRouteRe = regexp.MustCompile(`\.route\s*\(\s*"([^"]*)"\s*,\s*web::(get|post|put|delete|patch|head|options|trace|connect)\s*\(\s*\)\s*\.to\s*\(\s*([\w:]+)\s*\)\s*\)`)
+	// Phase B (2026-05-08, plan 2026-05-08-d-implement-actix-extension):
+	// extended to handle the 142 of 206 PSM actix-builder routes the v1
+	// regex missed. Three changes:
+	//   1. (?s) flag — `\s` and `[^()]*` cross newlines so multi-line
+	//      `.route(\n  PATH,\n  web::get().to(HANDLER)\n)` matches.
+	//   2. (?:[\w:]+::)? — optional namespace prefix before the method
+	//      builder. Matches `web::get()`, `paperclip::actix::web::get()`,
+	//      and bare `get()` (after `use actix_web::web::get;`).
+	//   3. Trailing `)` of outer `.route(...)` consumed (unchanged from v1)
+	//      so the depth-tracking loop doesn't drift.
+	// PSM Phase 3.5 sample of uncovered shapes:
+	//   apid/src/main.rs:499         multi-line axum-shape (skipped — different framework)
+	//   assetman/src/auth/mod.rs:42  multi-line web::get
+	//   assetman/src/routes/http.rs:68 paperclip::actix::web::get
+	//   assetman/src/routes/mod.rs:43 bare get() after `use ... ::get`
+	actixBuilderRouteRe = regexp.MustCompile(`(?s)\.route\s*\(\s*"([^"]*)"\s*,\s*(?:[\w:]+::)?(get|post|put|delete|patch|head|options|trace|connect)\s*\(\s*\)\s*\.to\s*\(\s*([\w:]+)\s*\)\s*,?\s*\)`)
 
 	// Phase C: scope path declaration. Tracked by paren-depth bookkeeping
 	// to support nested `web::scope("/api/v1").service(web::scope("/device")...)`.

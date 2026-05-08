@@ -1977,6 +1977,83 @@ func TestExtractActixBuilderRoutes_PathParameter(t *testing.T) {
 	}
 }
 
+// Phase B (2026-05-08): the v1 regex required `web::` prefix and a
+// single-line .route(...) match. PSM has 142 routes the v1 regex misses
+// because they use multi-line forms, paperclip prefix, or bare `get()`
+// after `use actix_web::web::get`. Pin all three shapes.
+
+func TestExtractActixBuilderRoutes_MultiLine(t *testing.T) {
+	f := &store.Node{Name: "configure", QualifiedName: "p.configure", FilePath: "src/routes.rs"}
+	source := `web::scope("/api")
+		.route(
+			"/users",
+			web::get().to(controllers::user::list),
+		)`
+	routes := extractActixBuilderRoutes(f, source)
+	if len(routes) != 1 {
+		t.Fatalf("expected 1 multi-line route, got %d: %v", len(routes), routes)
+	}
+	r := routes[0]
+	if r.Path != "/api/users" || r.Method != "GET" || r.HandlerRef != "list" {
+		t.Errorf("got %+v, want path=/api/users method=GET handler=list", r)
+	}
+}
+
+func TestExtractActixBuilderRoutes_PaperclipPrefix(t *testing.T) {
+	f := &store.Node{Name: "configure", QualifiedName: "p.configure", FilePath: "src/routes.rs"}
+	source := `web::scope("/api")
+		.route("/health", paperclip::actix::web::get().to(crate::healthcheck::run))`
+	routes := extractActixBuilderRoutes(f, source)
+	if len(routes) != 1 {
+		t.Fatalf("expected 1 paperclip route, got %d: %v", len(routes), routes)
+	}
+	r := routes[0]
+	if r.Path != "/api/health" || r.Method != "GET" || r.HandlerRef != "run" {
+		t.Errorf("got %+v, want path=/api/health method=GET handler=run (stripped from crate::healthcheck::run)", r)
+	}
+}
+
+func TestExtractActixBuilderRoutes_BareGet(t *testing.T) {
+	// After `use actix_web::web::get;` the call is bare `get().to(...)`.
+	f := &store.Node{Name: "configure", QualifiedName: "p.configure", FilePath: "src/routes.rs"}
+	source := `web::scope("/api")
+		.route("/items", get().to(controller::list_items))`
+	routes := extractActixBuilderRoutes(f, source)
+	if len(routes) != 1 {
+		t.Fatalf("expected 1 bare-get route, got %d: %v", len(routes), routes)
+	}
+	r := routes[0]
+	if r.Path != "/api/items" || r.Method != "GET" || r.HandlerRef != "list_items" {
+		t.Errorf("got %+v, want path=/api/items method=GET handler=list_items", r)
+	}
+}
+
+func TestExtractActixBuilderRoutes_MultiLinePaperclipNested(t *testing.T) {
+	// Combination of all three: nested scope + multi-line + paperclip.
+	f := &store.Node{Name: "configure", QualifiedName: "p.configure", FilePath: "src/routes.rs"}
+	source := `cfg.service(
+		web::scope("/api/v1")
+			.service(
+				web::scope("/device")
+					.route(
+						"/timeline",
+						paperclip::actix::web::get().to(controllers::device::timeline),
+					)
+			)
+	);`
+	routes := extractActixBuilderRoutes(f, source)
+	if len(routes) != 1 {
+		t.Fatalf("expected 1 nested+multiline+paperclip route, got %d: %v", len(routes), routes)
+	}
+	r := routes[0]
+	if r.Path != "/api/v1/device/timeline" {
+		t.Errorf("path = %q, want /api/v1/device/timeline", r.Path)
+	}
+	if r.Method != "GET" || r.HandlerRef != "timeline" {
+		t.Errorf("got %+v, want method=GET handler=timeline", r)
+	}
+}
+
 func TestExtractActixBuilderRoutes_DoesNotMatchAxum(t *testing.T) {
 	// Axum's pattern uses bare `get(handler)` without `web::` prefix and
 	// without `.to()`. Must NOT match.

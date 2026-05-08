@@ -1,0 +1,23 @@
+{
+  "description": "Hand-authored ground truth for rust-reqwest synthetic fixture. Three reqwest URL-extraction shapes (literal, const, format!()) each produce one HTTP_CALLS edge to the matching axum handler.",
+  "kind": "positive",
+  "expected_http_calls_min": 3,
+  "expected_http_call_edges": [
+    {
+      "from_qn_suffix": ".callers.literal.call_literal",
+      "to_qn_suffix": ".server.routes.build_router",
+      "url_path": "/api/orders"
+    },
+    {
+      "from_qn_suffix": ".callers.const_url.call_const",
+      "to_qn_suffix": ".server.routes.build_router",
+      "url_path": "/api/users"
+    },
+    {
+      "from_qn_suffix": ".callers.format_url.call_format",
+      "to_qn_suffix": ".server.routes.build_router",
+      "url_path": "/api/items"
+    }
+  ],
+  "notes": "Each module exercises one of the three URL-extraction shapes Phase C1 makes durable. The URLs are absolute (https://...) but the path-only portion (/api/orders, /api/users, /api/items) is what matchAndLink uses to pair caller↔route. The fixture is split into src/callers/ and src/server/ subdirectories so matchAndLink's sameService filter (strip-2 directory comparison) classes them as cross-service — without that split, the linker treats them as intra-service and skips the edges. The to_qn_suffix lands on `build_router` because today's matchAndLink uses RouteHandler.QualifiedName (which extractAxumRoutes sets to the route-declaring function, not the handler symbol). Phase D1 will rework that to point at the handler — when D1 ships, update these to_qn_suffixes to the handle_* names."
+}

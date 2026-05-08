@@ -220,6 +220,111 @@ func TestExtractURLPaths_FiltersFilesystemPaths(t *testing.T) {
 	}
 }
 
+// C1 (Phase C, 2026-05-08): Rust format!() macro path extraction.
+// `format!("{}/api/users", base)` carries `/api/users` inside the
+// format string but pathRe never sees it (the literal starts with
+// `{`, not `/`). Without this, reqwest call sites that compute their
+// URL via format!() emit no HTTP_CALLS edge.
+func TestExtractURLPaths_FormatMacro(t *testing.T) {
+	tests := []struct {
+		name string
+		text string
+		want []string
+	}{
+		{
+			name: "format_with_leading_brace_then_path",
+			text: `let url = format!("{}/api/users", base);`,
+			want: []string{"/api/users"},
+		},
+		{
+			name: "format_with_path_then_id_slot",
+			text: `let url = format!("{}/api/users/{}", base, id);`,
+			want: []string{"/api/users"},
+		},
+		{
+			name: "format_no_leading_base_just_path_template",
+			text: `let url = format!("/api/orders/{}", id);`,
+			want: []string{"/api/orders"},
+		},
+		{
+			name: "no_format_no_extraction",
+			text: `let url = String::from("plain"); /* /api/skipped */`,
+			want: nil,
+		},
+		{
+			name: "format_with_filesystem_path_filtered",
+			text: `let p = format!("{}/var/log/app.log", base);`,
+			want: nil,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := extractURLPaths(tt.text)
+			if len(got) != len(tt.want) {
+				t.Fatalf("got %d paths %v, want %d %v", len(got), got, len(tt.want), tt.want)
+			}
+			for i, p := range got {
+				if p != tt.want[i] {
+					t.Errorf("path[%d] = %q, want %q", i, p, tt.want[i])
+				}
+			}
+		})
+	}
+}
+
+// C1 (Phase C, 2026-05-08): rustConstUrlRe shape coverage.
+// Top-level Rust const URL definitions take many shapes. Pin the
+// regex on the exact subset extractFunctionCallSites depends on.
+func TestRustConstUrlRe(t *testing.T) {
+	tests := []struct {
+		name string
+		text string
+		want [][2]string // [name, url]
+	}{
+		{
+			name: "const_with_str_type",
+			text: `const BASE_URL: &str = "https://api.example.com/v1";`,
+			want: [][2]string{{"BASE_URL", "https://api.example.com/v1"}},
+		},
+		{
+			name: "static_with_static_lifetime",
+			text: `static BASE_URL: &'static str = "https://api.example.com/v2";`,
+			want: [][2]string{{"BASE_URL", "https://api.example.com/v2"}},
+		},
+		{
+			name: "let_binding_no_type",
+			text: `let endpoint = "/api/users";`,
+			want: [][2]string{{"endpoint", "/api/users"}},
+		},
+		{
+			name: "pub_const",
+			text: `pub const URL: &str = "https://x.com/y";`,
+			want: [][2]string{{"URL", "https://x.com/y"}},
+		},
+		{
+			name: "non_url_string_literal_ignored",
+			text: `const NAME: &str = "alice";`,
+			want: nil,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := rustConstUrlRe.FindAllStringSubmatch(tt.text, -1)
+			if len(got) != len(tt.want) {
+				t.Fatalf("got %d matches %v, want %d %v", len(got), got, len(tt.want), tt.want)
+			}
+			for i, m := range got {
+				if m[1] != tt.want[i][0] {
+					t.Errorf("name[%d] = %q, want %q", i, m[1], tt.want[i][0])
+				}
+				if m[2] != tt.want[i][1] {
+					t.Errorf("url[%d] = %q, want %q", i, m[2], tt.want[i][1])
+				}
+			}
+		})
+	}
+}
+
 func TestIsFilesystemPath(t *testing.T) {
 	tests := []struct {
 		path string

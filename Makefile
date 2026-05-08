@@ -1,4 +1,4 @@
-.PHONY: build test lint clean install check bench-memory bench-negative bench-negative-baseline bench-post-battery
+.PHONY: build test lint clean install check bench-memory bench-negative bench-negative-baseline bench-post-battery bench-rust-reqwest
 
 BINARY=codebase-memory-mcp
 MODULE=github.com/DeusData/codebase-memory-mcp
@@ -54,3 +54,6 @@ bench-negative-baseline: build  ## Re-pin negative-fixture baselines (use after 
 
 bench-post-battery: build  ## Regression gate for the 12-item PSM post-battery (HTTP_CALLS, axum HANDLES, IMPLEMENTS, SAFETY rationale)
 	python bench/accuracy/check_post_battery.py
+
+bench-rust-reqwest: build  ## Regression gate for Rust reqwest URL extraction shapes (literal, const, format!())
+	python bench/accuracy/check_rust_reqwest.py

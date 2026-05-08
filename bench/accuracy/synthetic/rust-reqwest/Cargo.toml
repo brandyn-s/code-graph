@@ -1,0 +1,13 @@
+[package]
+name = "rust-reqwest"
+version = "0.0.1"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "rust-reqwest"
+path = "src/main.rs"
+
+[lib]
+name = "rust_reqwest"
+path = "src/lib.rs"

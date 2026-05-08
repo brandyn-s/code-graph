@@ -125,6 +125,29 @@ var (
 	// Path-only patterns: "/api/something" (quoted paths starting with /)
 	pathRe = regexp.MustCompile(`["'](/[a-zA-Z0-9_/:.\-]{2,})["']`)
 
+	// C1 (Phase C, Rust reqwest URL extraction): two patterns the existing
+	// urlRe / pathRe miss but appear constantly in real reqwest call sites.
+	//
+	// formatMacroRe captures Rust `format!("...", ...)` and `format!("...")` —
+	// the format string itself is exposed for /path extraction. Without
+	// this, `format!("{}/api/users", base)` slips past pathRe (the format
+	// string's leading char is `{`, not `/`) and the call site emits no
+	// HTTP_CALLS edge despite having a fully qualified URL substring.
+	formatMacroRe = regexp.MustCompile(`format!\s*\(\s*"([^"]+)"`)
+
+	// pathInFormatRe finds /path-shaped substrings inside a format!() string.
+	// Anchored with the same path-charset as pathRe (no quote requirement
+	// because we're scanning AFTER unquoting the format string).
+	pathInFormatRe = regexp.MustCompile(`/[a-zA-Z][a-zA-Z0-9_/:.\-]*`)
+
+	// rustConstUrlRe captures Rust top-level `const|static|let NAME [: &str]
+	// = "URL"` definitions. Scoped to the simplest, most common shapes —
+	// covers `const FOO: &str = "https://..."`, `static FOO: &'static str =
+	// "/api/x"`, and bare `let FOO = "https://..."` at file-top scope. Used
+	// to resolve identifier references inside function bodies that hand
+	// the const to `client.get(NAME)`.
+	rustConstUrlRe = regexp.MustCompile(`(?m)^\s*(?:pub(?:\s*\([^)]*\))?\s+)?(?:const|static|let)\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?::\s*&?\s*'?[a-zA-Z_]*\s*(?:str|&str)?)?\s*=\s*"((?:https?://[^"\\]+)|/[^"\\]+)"`)
+
 	// Python WebSocket routes: @app.websocket("/path"), @app.websocket("")
 	pyWSRouteRe = regexp.MustCompile(`@\w+\.websocket\(\s*["']([^"']*)["']`)
 
@@ -1098,6 +1121,24 @@ func extractFunctionCallSites(f *store.Node, rootPath string) []HTTPCallSite {
 		return sites
 	}
 
+	// C1 (Phase C, Rust reqwest URL extraction): when the function body
+	// references a top-level const URL by name (e.g.
+	// `client.get(BASE_URL)`), the function-line slice misses the const
+	// definition — the URL literal lives outside f.StartLine..f.EndLine.
+	// Resolve those references by scanning the whole file for const URL
+	// bindings, then appending the URL strings of any const referenced
+	// inside the function body. Existing extractURLPaths picks them up
+	// from the appended literals.
+	//
+	// Scoped to .rs files so this doesn't perturb non-Rust paths
+	// (Python's f-strings, JS template literals, etc. already work via
+	// the format!() and pathRe paths).
+	if strings.HasSuffix(strings.ToLower(f.FilePath), ".rs") {
+		if extra := resolveRustConstURLs(rootPath, f.FilePath, source); extra != "" {
+			source = source + "\n" + extra
+		}
+	}
+
 	// Require at least one HTTP client or async dispatch keyword to avoid
 	// false positives from functions that merely store URL strings in variables
 	hasHTTPClient := false
@@ -1281,6 +1322,33 @@ func extractURLPaths(text string) []string {
 		if !seen[p] {
 			seen[p] = true
 			paths = append(paths, p)
+		}
+	}
+
+	// C1 (Phase C): Rust format!() macro paths.
+	// `format!("{}/api/users", base)` carries `/api/users` inside the
+	// format string but pathRe never sees it (the literal starts with
+	// `{`, not `/`). Scan format strings for /path-shaped substrings.
+	//
+	// Trailing-slash policy: format!("{}/api/users/{}", base, id) emits
+	// `/api/users/` because pathInFormatRe greedily consumes through
+	// the slash before the next placeholder. Trim the trailing slash
+	// so the canonical form matches what pathRe produces for ordinary
+	// quoted paths (and what matchAndLink's normalizePath expects).
+	for _, m := range formatMacroRe.FindAllStringSubmatch(text, -1) {
+		fmtStr := m[1]
+		for _, raw := range pathInFormatRe.FindAllString(fmtStr, -1) {
+			p := strings.TrimRight(raw, "/")
+			if p == "" {
+				continue
+			}
+			if isFilesystemPath(p) {
+				continue
+			}
+			if !seen[p] {
+				seen[p] = true
+				paths = append(paths, p)
+			}
 		}
 	}
 
@@ -1965,6 +2033,46 @@ func (l *Linker) createRegistrationCallEdges(routes []RouteHandler) {
 	if count > 0 {
 		slog.Info("httplink.registration_edges", "count", count)
 	}
+}
+
+// resolveRustConstURLs scans rootPath/relPath for top-level Rust const
+// URL bindings (`const FOO: &str = "https://..."`, etc.) and returns
+// the URL literals of those bindings whose names appear inside
+// funcSource. Returned as a newline-joined block of quoted literals
+// suitable for appending to the function source — extractURLPaths
+// then picks them up via the existing urlRe / pathRe loops.
+//
+// Scoping rules:
+//   - matches whole-word identifier references (`\bNAME\b`) so
+//     `BASE_URL` doesn't match a local var `MY_BASE_URL_PREFIX`.
+//   - case-insensitive identifier-name regex match would over-include;
+//     we keep it case-sensitive to mirror Rust's identifier rules.
+//   - returns "" if either the file can't be read or no referenced
+//     consts are found, so callers can no-op safely.
+func resolveRustConstURLs(rootPath, relPath, funcSource string) string {
+	fileSource := readSourceFull(rootPath, relPath)
+	if fileSource == "" {
+		return ""
+	}
+	matches := rustConstUrlRe.FindAllStringSubmatch(fileSource, -1)
+	if len(matches) == 0 {
+		return ""
+	}
+	var extras []string
+	for _, m := range matches {
+		name := m[1]
+		url := m[2]
+		// Defensive cap: very long URLs are unlikely to be real and
+		// expanding them blows up downstream regex cost.
+		if len(url) > 512 {
+			continue
+		}
+		if !regexp.MustCompile(`\b` + regexp.QuoteMeta(name) + `\b`).MatchString(funcSource) {
+			continue
+		}
+		extras = append(extras, `"`+url+`"`)
+	}
+	return strings.Join(extras, "\n")
 }
 
 // readSourceLines reads specific lines from a file on disk.

@@ -20,11 +20,19 @@ The harness is `bench/accuracy/check_post_battery.py`. Run via
 
 ## What is NOT yet protected
 
-- **reqwest URL extraction** (Phase C1): the `src/reqwest_calls.rs`
-  module exists but currently emits zero HTTP_CALLS — the existing
-  extractor doesn't fire on the `Client::new().get(...).send()`
-  chained pattern. C1 will close that gap. When C1 lands, raise
-  `expected_http_calls_min` from 2 to 6 in `ground_truth.json`.
+- **reqwest URL extraction**: even after Phase C1 (PR #255+,
+  format!() macros + const URLs), the `src/reqwest_calls.rs` module
+  still emits zero HTTP_CALLS edges in this fixture because all Rust
+  files live under `<project>.src.*`. matchAndLink's `sameService`
+  filter strips the last 2 segments of the qualified-name path; with
+  callers and routes both ending up at `<project>.src`, every pair
+  is classified intra-service and the edge is dropped. The dedicated
+  `bench/accuracy/synthetic/rust-reqwest/` fixture (added with C1)
+  splits the call sites into `src/callers/` vs `src/server/` so the
+  strip-2 dirs differ — that's where the 3 reqwest URL shapes are
+  validated end-to-end. To raise this fixture's HTTP_CALLS floor,
+  restructure post-battery the same way (separate
+  `src/callers/reqwest_calls.rs` from `src/server/axum_routes.rs`).
 - **TS/JSX fetch direct classification** (Phase C2): `web/fetch.tsx`
   already emits HTTP_CALLS via path cross-resolution to the axum
   router, not via direct fetch-call classification. C2 makes the

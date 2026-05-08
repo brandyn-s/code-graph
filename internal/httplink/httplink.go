@@ -106,6 +106,23 @@ var (
 	// handler is a bare identifier or `module::handler`.
 	axumRouteRe = regexp.MustCompile(`\.route\s*\(\s*"([^"]+)"\s*,\s*(get|post|put|delete|patch|head|options|trace|connect)\s*\(\s*([\w:]+)\s*\)`)
 
+	// Phase C (2026-05-08): actix-web BUILDER style.
+	// Pattern: `.route(PATH, web::METHOD().to(HANDLER))` — distinct from
+	// axum's `.route(PATH, METHOD(HANDLER))` by requiring the `web::` prefix
+	// on the method, which actix-web uses but axum does not. PSM has 206
+	// of these (60% of its HTTP route surface) currently uncovered.
+	// The trailing `\s*\)` matches the OUTER `.route(...)` closing paren so
+	// the depth-tracking loop in extractActixBuilderRoutes doesn't drift
+	// when stepping past the match. Without it, `.route(`'s `(` is consumed
+	// inside the match but its `)` is left for the loop, decrementing depth
+	// without a paired increment and prematurely popping scopes.
+	actixBuilderRouteRe = regexp.MustCompile(`\.route\s*\(\s*"([^"]*)"\s*,\s*web::(get|post|put|delete|patch|head|options|trace|connect)\s*\(\s*\)\s*\.to\s*\(\s*([\w:]+)\s*\)\s*\)`)
+
+	// Phase C: scope path declaration. Tracked by paren-depth bookkeeping
+	// to support nested `web::scope("/api/v1").service(web::scope("/device")...)`.
+	// Captures the scope's path literal.
+	actixScopeRe = regexp.MustCompile(`web::scope\s*\(\s*"([^"]*)"\s*\)`)
+
 	// PHP Laravel routes: Route::get("/path", Route::post("/path"
 	laravelRouteRe = regexp.MustCompile(`Route::(get|post|put|delete|patch)\(\s*["']([^"']+)["']`)
 
@@ -501,6 +518,11 @@ func (l *Linker) discoverRoutes(rootPath string) []RouteHandler {
 					// Phase D2 (2026-05-07): axum builder-style routes.
 					// Actix attribute routes are handled above by extractRustRoutes.
 					routes = append(routes, tagAndCount("rust-axum-builder", extractAxumRoutes(f, source))...)
+					// Phase C (2026-05-08): actix-web builder-style routes.
+					// Pattern: .route(PATH, web::METHOD().to(HANDLER)) inside
+					// optional web::scope("/prefix") chains. PSM's sysmanager
+					// service uses this shape exclusively (206 PSM routes).
+					routes = append(routes, tagAndCount("rust-actix-builder", extractActixBuilderRoutes(f, source))...)
 				}
 			}
 		}
@@ -862,6 +884,119 @@ func extractAxumRoutes(f *store.Node, source string) []RouteHandler {
 // non-Rust files don't get scanned with Rust-specific regexes.
 func isRustFile(path string) bool {
 	return strings.ToLower(filepath.Ext(path)) == ".rs"
+}
+
+// extractActixBuilderRoutes extracts Rust actix-web BUILDER-style route
+// registrations from function source. Pattern:
+//   web::scope("/prefix")
+//       .route(PATH, web::METHOD().to(HANDLER))
+//
+// Phase C (2026-05-08, plan 2026-05-08-psm-first-code-graph-search-fix):
+// closes the dominant HTTP_CALLS recall gap on PSM. Pre-Phase C, the only
+// actix path was attribute-style (#[get("/path")]) via extractRustRoutes.
+// PSM's sysmanager service uses the builder shape — 206 routes uncovered
+// (~60% of PSM's HTTP route surface).
+//
+// Scope nesting: paths concatenate. `web::scope("/api/v1")` containing
+// `web::scope("/device")` containing `.route("/timeline", ...)` produces
+// path `/api/v1/device/timeline`. Tracked via paren-depth bookkeeping
+// because scopes are chained through `.service(...)` calls and the
+// closing depth is what bounds the scope's lifetime.
+//
+// Empty-path routes (`.route("", web::get().to(...))`) emit at the parent
+// scope path itself; the trailing-slash trim happens when the path
+// concatenates to a non-empty parent.
+func extractActixBuilderRoutes(f *store.Node, source string) []RouteHandler {
+	routes := make([]RouteHandler, 0, 8)
+	if !strings.Contains(source, "web::") {
+		return routes
+	}
+
+	// Each scope entry: (path, depth_at_open).
+	// When paren-depth drops back to depth_at_open or below, pop.
+	type scopeEntry struct {
+		path  string
+		depth int
+	}
+	var scopes []scopeEntry
+	depth := 0
+
+	// Walk source character by character. At each position, check whether the
+	// substring beginning here matches a scope-open or a route-registration.
+	// Track paren depth between matches to know when scopes close.
+	for i := 0; i < len(source); i++ {
+		ch := source[i]
+		switch ch {
+		case '(':
+			depth++
+			continue
+		case ')':
+			depth--
+			// Pop scopes whose declared depth is now greater than the
+			// new current depth — those scopes' enclosing context just
+			// closed.
+			for len(scopes) > 0 && scopes[len(scopes)-1].depth > depth {
+				scopes = scopes[:len(scopes)-1]
+			}
+			continue
+		}
+		// Try scope match starting at this position
+		if i+len("web::scope") < len(source) && source[i] == 'w' {
+			if loc := actixScopeRe.FindStringSubmatchIndex(source[i:]); loc != nil && loc[0] == 0 {
+				// loc[0]..loc[1] is the full scope match; loc[2]..loc[3] is the captured path
+				scopePath := source[i+loc[2] : i+loc[3]]
+				// Push at the CURRENT depth — that's the depth of the
+				// scope's enclosing context (the parent .service() or
+				// cfg.service() paren). Scope is active until current
+				// depth drops below this value.
+				scopes = append(scopes, scopeEntry{path: scopePath, depth: depth})
+				// Skip ahead past the matched scope literal to avoid re-matching the path
+				// inside route extraction (the inner `"PATH"` won't trigger the route regex
+				// without a preceding `.route(`).
+				i += loc[1] - 1
+				continue
+			}
+		}
+		// Try route match starting at this position
+		if ch == '.' {
+			if loc := actixBuilderRouteRe.FindStringSubmatchIndex(source[i:]); loc != nil && loc[0] == 0 {
+				routePath := source[i+loc[2] : i+loc[3]]
+				method := strings.ToUpper(source[i+loc[4] : i+loc[5]])
+				handler := source[i+loc[6] : i+loc[7]]
+				if hidx := strings.LastIndex(handler, "::"); hidx >= 0 {
+					handler = handler[hidx+2:]
+				}
+				// Concatenate scope chain + route path
+				var sb strings.Builder
+				for _, s := range scopes {
+					sb.WriteString(s.path)
+				}
+				sb.WriteString(routePath)
+				fullPath := sb.String()
+				// Strip trailing slash unless path is exactly "/" (root)
+				if len(fullPath) > 1 && strings.HasSuffix(fullPath, "/") {
+					fullPath = fullPath[:len(fullPath)-1]
+				}
+				if fullPath == "" {
+					// Skip degenerate empty paths — happens if both scope chain
+					// and route path are empty strings.
+					i += loc[1] - 1
+					continue
+				}
+				routes = append(routes, RouteHandler{
+					Path:          fullPath,
+					Method:        method,
+					FunctionName:  f.Name,
+					QualifiedName: f.QualifiedName,
+					HandlerRef:    handler,
+				})
+				i += loc[1] - 1
+				continue
+			}
+		}
+	}
+
+	return routes
 }
 
 // extractLaravelRoutes extracts route registrations from PHP Laravel source.

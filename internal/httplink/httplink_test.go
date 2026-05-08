@@ -1903,6 +1903,109 @@ func TestExtractAxumRoutes_EmptySource(t *testing.T) {
 	}
 }
 
+// Phase C (2026-05-08): actix-web BUILDER route extractor.
+// Pattern: `.route(PATH, web::METHOD().to(HANDLER))` with optional
+// `web::scope("/prefix")` nesting. Pin the major shapes PSM's
+// sysmanager uses.
+
+func TestExtractActixBuilderRoutes_FlatRoute(t *testing.T) {
+	f := &store.Node{Name: "configure", QualifiedName: "p.configure", FilePath: "src/routes.rs"}
+	source := `cfg.service(
+		web::scope("/api/v1")
+			.route("/users", web::get().to(controllers::user::list))
+	);`
+	routes := extractActixBuilderRoutes(f, source)
+	if len(routes) != 1 {
+		t.Fatalf("expected 1 route, got %d: %v", len(routes), routes)
+	}
+	r := routes[0]
+	if r.Path != "/api/v1/users" {
+		t.Errorf("path = %q, want /api/v1/users", r.Path)
+	}
+	if r.Method != "GET" {
+		t.Errorf("method = %q, want GET", r.Method)
+	}
+	if r.HandlerRef != "list" {
+		t.Errorf("handler = %q, want list (stripped from controllers::user::list)", r.HandlerRef)
+	}
+}
+
+func TestExtractActixBuilderRoutes_NestedScopes(t *testing.T) {
+	f := &store.Node{Name: "configure", QualifiedName: "p.configure", FilePath: "src/routes.rs"}
+	source := `cfg.service(
+		web::scope("/api/v1")
+			.service(
+				web::scope("/device")
+					.route("", web::post().to(controllers::device::create))
+					.route("/timeline", web::get().to(controllers::device::timeline))
+			)
+			.service(
+				web::scope("/auth")
+					.route("/login", web::post().to(controllers::auth::login))
+			)
+	);`
+	routes := extractActixBuilderRoutes(f, source)
+	if len(routes) != 3 {
+		t.Fatalf("expected 3 routes, got %d: %v", len(routes), routes)
+	}
+	expected := []struct {
+		path, method, handler string
+	}{
+		{"/api/v1/device", "POST", "create"},
+		{"/api/v1/device/timeline", "GET", "timeline"},
+		{"/api/v1/auth/login", "POST", "login"},
+	}
+	for i, want := range expected {
+		got := routes[i]
+		if got.Path != want.path || got.Method != want.method || got.HandlerRef != want.handler {
+			t.Errorf("routes[%d] = %v, want path=%s method=%s handler=%s",
+				i, got, want.path, want.method, want.handler)
+		}
+	}
+}
+
+func TestExtractActixBuilderRoutes_PathParameter(t *testing.T) {
+	f := &store.Node{Name: "configure", QualifiedName: "p.configure", FilePath: "src/routes.rs"}
+	source := `web::scope("/api")
+		.route("/users/{id}", web::get().to(handlers::get_user))`
+	routes := extractActixBuilderRoutes(f, source)
+	if len(routes) != 1 {
+		t.Fatalf("expected 1 route, got %d", len(routes))
+	}
+	if routes[0].Path != "/api/users/{id}" {
+		t.Errorf("path = %q, want /api/users/{id}", routes[0].Path)
+	}
+}
+
+func TestExtractActixBuilderRoutes_DoesNotMatchAxum(t *testing.T) {
+	// Axum's pattern uses bare `get(handler)` without `web::` prefix and
+	// without `.to()`. Must NOT match.
+	f := &store.Node{Name: "configure", QualifiedName: "p.configure", FilePath: "src/routes.rs"}
+	source := `Router::new().route("/users", get(list_users))`
+	routes := extractActixBuilderRoutes(f, source)
+	if len(routes) != 0 {
+		t.Errorf("axum source should produce 0 actix-builder routes, got %d: %v", len(routes), routes)
+	}
+}
+
+func TestExtractActixBuilderRoutes_NoWebPrefix(t *testing.T) {
+	// Without the `web::` keyword, the file isn't actix — early return.
+	f := &store.Node{Name: "x", QualifiedName: "p.x", FilePath: "src/x.rs"}
+	source := `fn main() { println!("hello"); }`
+	routes := extractActixBuilderRoutes(f, source)
+	if len(routes) != 0 {
+		t.Errorf("non-actix source should produce 0 routes, got %d", len(routes))
+	}
+}
+
+func TestExtractActixBuilderRoutes_EmptySource(t *testing.T) {
+	f := &store.Node{Name: "x", QualifiedName: "p.x", FilePath: "src/x.rs"}
+	routes := extractActixBuilderRoutes(f, "")
+	if len(routes) != 0 {
+		t.Errorf("empty source should produce 0 routes, got %d", len(routes))
+	}
+}
+
 // D1 (Phase D, 2026-05-08): commonPrefixLen — the crate-locality
 // tie-breaker for handler resolution. Pin the byte-level behavior
 // so refactors don't silently change it.

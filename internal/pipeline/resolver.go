@@ -2,6 +2,7 @@ package pipeline
 
 import (
 	"math"
+	"os"
 	"strings"
 	"sync"
 
@@ -80,6 +81,25 @@ type CallContext struct {
 // `bench/accuracy/baselines/2026-05-06-adversarial-rerun-finding.md`.
 func shouldDropCrossPackageSuffix(language lang.Language) bool {
 	return language == lang.Python
+}
+
+// shouldRequireImportsForLooseCrossPackage gates emissions in the
+// cross-package-unique-name and cross-package-suffix buckets on
+// import-reachability. When the env var
+// RESOLVER_REQUIRE_IMPORTS_FOR_LOOSE_CROSS_PACKAGE is non-empty, a
+// candidate that is NOT import-reachable (no IMPORTS edge from the call
+// site's module to the candidate's package) is dropped instead of emitted
+// at halved confidence. Default unset = current behavior (emit at halved
+// confidence, which leaks precision on adversarial fixtures).
+//
+// Phase F (Plan 8-Phase Arc, 2026-05-09): the existing Python language-
+// gated drop (shouldDropCrossPackageSuffix) loses recall on real Python
+// codebases that don't have full import maps. The import-reachability gate
+// is more surgical: keep candidates that have explicit IMPORTS edge support
+// (high precision), drop candidates that don't (the noise). See
+// `bench/research/phase-f-resolver-imports-gate-2026-05-09.md`.
+func shouldRequireImportsForLooseCrossPackage() bool {
+	return os.Getenv("RESOLVER_REQUIRE_IMPORTS_FOR_LOOSE_CROSS_PACKAGE") != ""
 }
 
 // FunctionRegistry indexes all Function, Method, and Class nodes by qualified
@@ -479,6 +499,15 @@ func (r *FunctionRegistry) resolveViaNameLookup(ctx CallContext) ResolutionResul
 
 	// Strategy 3: unique name — single candidate project-wide
 	if len(candidates) == 1 {
+		// Phase F (2026-05-09): when RESOLVER_REQUIRE_IMPORTS_FOR_LOOSE_CROSS_PACKAGE
+		// is set, drop unique_name candidates that are not import-reachable
+		// instead of emitting at halved confidence. The halved-confidence
+		// emission leaks precision on Python adversarial fixtures where the
+		// project-wide unique name is real but the call site doesn't import it.
+		if shouldRequireImportsForLooseCrossPackage() && ctx.ImportMap != nil &&
+			!isImportReachable(candidates[0], ctx.ImportMap) {
+			return ResolutionResult{}
+		}
 		conf := 0.75
 		if ctx.ImportMap != nil && !isImportReachable(candidates[0], ctx.ImportMap) {
 			conf *= 0.5
@@ -664,13 +693,22 @@ func (r *FunctionRegistry) resolveSuffixMatch(ctx CallContext, candidates []stri
 		return ResolutionResult{}
 	}
 	_, suffix := splitCalleeName(ctx.CalleeName)
+	requireImports := shouldRequireImportsForLooseCrossPackage()
 	var matches []string
 	for _, qn := range candidates {
 		if strings.HasSuffix(qn, "."+ctx.CalleeName) {
+			// Phase F (2026-05-09): drop on no-import-edge when env var set.
+			if requireImports && ctx.ImportMap != nil && !isImportReachable(qn, ctx.ImportMap) {
+				continue
+			}
 			conf := candidateCountPenalty(importAdjustedConfidence(0.55, qn, ctx.ImportMap), len(candidates))
 			return ResolutionResult{QualifiedName: qn, Strategy: "suffix_match", Confidence: conf, CandidateCount: len(candidates)}
 		}
 		if strings.HasSuffix(qn, "."+suffix) {
+			// Phase F (2026-05-09): drop on no-import-edge when env var set.
+			if requireImports && ctx.ImportMap != nil && !isImportReachable(qn, ctx.ImportMap) {
+				continue
+			}
 			matches = append(matches, qn)
 		}
 	}
@@ -704,6 +742,12 @@ func (r *FunctionRegistry) pickBestCandidate(ctx CallContext, candidates []strin
 	filtered := candidates
 	if ctx.ImportMap != nil {
 		filtered = filterImportReachable(candidates, ctx.ImportMap)
+	}
+	// Phase F (2026-05-09): when env var is set and import-filter eliminated
+	// every candidate, drop the bucket entirely instead of falling back to
+	// best-by-distance among non-import-reachable candidates.
+	if shouldRequireImportsForLooseCrossPackage() && len(filtered) == 0 {
+		return ResolutionResult{}
 	}
 	if len(filtered) == 0 {
 		best := r.bestByImportDistancePreferMethod(candidates, ctx.ModuleQN, ctx.CalleeName)

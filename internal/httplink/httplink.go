@@ -153,7 +153,12 @@ var (
 	laravelHandlerAtRe    = regexp.MustCompile(`Route::(get|post|put|delete|patch)\(\s*["'][^"']+["']\s*,\s*["'](\w+)@(\w+)["']`)
 
 	// URL patterns in source: https://host/path or http://host/path — captures domain and path
-	urlRe = regexp.MustCompile(`https?://([a-zA-Z0-9.\-]+)(/[a-zA-Z0-9_/:.\-]+)`)
+	// Phase H4 (Plan 8-Phase Arc, 2026-05-09): host group extended to
+	// accept :port. Pre-Phase-H, the host class `[a-zA-Z0-9.\-]+` rejected
+	// `localhost:9090` so URLs in shell scripts like
+	// `curl http://localhost:9090/api/health` failed extraction. Adding
+	// `:` makes hostname:port match.
+	urlRe = regexp.MustCompile(`https?://([a-zA-Z0-9.\-:]+)(/[a-zA-Z0-9_/:.\-]+)`)
 
 	// Path-only patterns: "/api/something" (quoted paths starting with /)
 	pathRe = regexp.MustCompile(`["'](/[a-zA-Z0-9_/:.\-]{2,})["']`)
@@ -1340,6 +1345,11 @@ var httpClientKeywords = []string{
 	"OkHttpClient", "HttpClient", "ktor.client",
 	// Generic
 	"send_request", "http_client",
+	// Phase H3 (Plan 8-Phase Arc, 2026-05-09): shell scripts. Combined
+	// with Phase H4's `:port` host-group extension, this enables URL
+	// extraction from `curl http://localhost:9090/...` patterns common
+	// in dev scripts and health-check probes.
+	"curl ",
 }
 
 // asyncDispatchKeywords indicate cross-service async dispatch via HTTP.
@@ -1785,6 +1795,50 @@ func walkJSONForURLs(v any, out *[]string) {
 	}
 }
 
+// routeDeclarerNames are the last-segment names commonly used for the
+// FUNCTION CONTAINING the route declarations (router builder, server
+// startup, main). When resolveHandlerNode would fall back to the legacy
+// route-declarer lookup, an edge pointing at one of these names is
+// almost always a misroute — the route was declared, not handled, by
+// that function. Phase H1 (2026-05-09): drop the edge instead of
+// emitting it pointing at the route-declarer.
+//
+// PSM 2026-05-07 baseline showed 5 generic-target misroutes to
+// `run_http_server`, `main`, and `router` patterns. These are the
+// failure mode: rh.HandlerRef was empty / name lookup found nothing;
+// legacy fallback pointed at the route-declaring function which is
+// definitionally NOT the handler.
+var routeDeclarerNames = map[string]bool{
+	"run_http_server": true,
+	"build_router":    true,
+	"router":          true,
+	"main":            true,
+	"setup_routes":    true,
+	"register_routes": true,
+	"new_router":      true,
+	"create_router":   true,
+	"start_server":    true,
+}
+
+// isRouteDeclarerNode returns true if the node's bare-name (last segment
+// of qualified_name) is a route-declarer pattern. Used by Phase H1's
+// drop-on-misroute rule.
+func isRouteDeclarerNode(n *store.Node) bool {
+	if n == nil {
+		return false
+	}
+	qn := n.QualifiedName
+	// Last segment after . or ::
+	last := qn
+	if idx := strings.LastIndex(qn, "."); idx >= 0 {
+		last = qn[idx+1:]
+	}
+	if idx := strings.LastIndex(last, "::"); idx >= 0 {
+		last = last[idx+2:]
+	}
+	return routeDeclarerNames[last]
+}
+
 // resolveHandlerNode returns the graph node that the route's handler
 // most likely refers to. Phase D1 (2026-05-08) rework: prefer the
 // handler symbol the route literally points at (rh.HandlerRef) over
@@ -1800,8 +1854,15 @@ func walkJSONForURLs(v any, out *[]string) {
 // `loadDoomperStatus → router`, `fetchPowerStatus → run_http_server`,
 // `BatteryIndicator → main`.
 //
+// Phase H1 (2026-05-09): when falling back to the legacy route-
+// declarer lookup, drop the edge if the legacy node's name is a
+// known route-declarer pattern (run_http_server, build_router, main,
+// router, etc.). Better no edge than an edge pointing at the route
+// declaration itself.
+//
 // Resolution order:
-//  1. If rh.HandlerRef is empty, fall back to legacy QualifiedName lookup.
+//  1. If rh.HandlerRef is empty, fall back to legacy QualifiedName
+//     lookup; if legacy is a route-declarer, return nil (drop edge).
 //  2. Strip any receiver/module prefix from HandlerRef ("h.create_user"
 //     and "routes::list_users" both become the bare last-segment name).
 //  3. Look up by name via FindNodesByName. If exactly one match, use it.
@@ -1811,15 +1872,22 @@ func walkJSONForURLs(v any, out *[]string) {
 //     Falls back to the first candidate if all share zero prefix (which
 //     shouldn't happen in practice — every node shares the project-name
 //     prefix).
-//  5. If no name match, fall back to legacy QualifiedName lookup so the
-//     route-declaring function still produces SOME edge (matches pre-D1
-//     behavior for routes whose handler isn't an indexed Function node,
-//     e.g. closures or external trait dispatch).
+//  5. If no name match, fall back to legacy QualifiedName lookup; if
+//     legacy is a route-declarer, return nil (drop edge) instead.
 func (l *Linker) resolveHandlerNode(rh RouteHandler) *store.Node {
 	legacy, _ := l.store.FindNodeByQN(l.project, rh.QualifiedName)
 
+	// Phase H1: legacy fallback that targets a route-declarer is a
+	// known misroute. Drop the edge.
+	legacyOrNil := func(n *store.Node) *store.Node {
+		if isRouteDeclarerNode(n) {
+			return nil
+		}
+		return n
+	}
+
 	if rh.HandlerRef == "" {
-		return legacy
+		return legacyOrNil(legacy)
 	}
 
 	name := rh.HandlerRef
@@ -1837,7 +1905,7 @@ func (l *Linker) resolveHandlerNode(rh RouteHandler) *store.Node {
 
 	candidates, err := l.store.FindNodesByName(l.project, name)
 	if err != nil || len(candidates) == 0 {
-		return legacy
+		return legacyOrNil(legacy)
 	}
 
 	// Filter to Function/Method nodes only — Variable / Class / etc.
@@ -1850,7 +1918,7 @@ func (l *Linker) resolveHandlerNode(rh RouteHandler) *store.Node {
 		}
 	}
 	if len(filtered) == 0 {
-		return legacy
+		return legacyOrNil(legacy)
 	}
 	if len(filtered) == 1 {
 		return filtered[0]

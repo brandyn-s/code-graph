@@ -2319,3 +2319,91 @@ func TestIsExternalDomain_NamespaceURIs(t *testing.T) {
 		}
 	}
 }
+
+// Phase H3+H4 (Plan 8-Phase Arc, 2026-05-09): shell-curl URL extraction.
+// H3 added "curl " to httpClientKeywords so shell scripts using curl
+// produce HTTP_CALLS. H4 extended urlRe to accept :port in the host
+// group so http://localhost:9090/... extracts.
+
+func TestExtractURLPaths_LocalhostWithPort(t *testing.T) {
+	tests := []struct {
+		text string
+		want int
+	}{
+		// Phase H4: host:port now accepted
+		{`curl http://localhost:9090/api/health`, 1},
+		{`URL=http://localhost:8080/v1/status`, 1},
+		{`endpoint = "http://127.0.0.1:8000/health"`, 1},
+		{`https://api.example.com:8443/v1/items`, 1},
+		// Existing host-only forms still work
+		{`fetch("http://host/api/v1/items")`, 1},
+	}
+	for _, tt := range tests {
+		got := extractURLPaths(tt.text)
+		if len(got) != tt.want {
+			t.Errorf("extractURLPaths(%q) returned %d paths, want %d: %v", tt.text, len(got), tt.want, got)
+		}
+	}
+}
+
+func TestHttpClientKeywords_IncludesCurl(t *testing.T) {
+	// H3: shell scripts containing 'curl ' now register as HTTP client sites.
+	found := false
+	for _, kw := range httpClientKeywords {
+		if kw == "curl " {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("httpClientKeywords missing 'curl ' (Phase H3) — shell-curl call sites won't register as HTTP clients")
+	}
+}
+
+// Phase H1 (Plan 8-Phase Arc, 2026-05-09): drop misroutes that point at
+// route-declaring functions instead of handlers.
+
+func TestIsRouteDeclarerNode_PositiveCases(t *testing.T) {
+	for _, qn := range []string{
+		"crate::main::run_http_server",
+		"github.com/x/api.build_router",
+		"my-service::server::router",
+		"auth-gateway::main",
+		"foo::bar::register_routes",
+		"baz.create_router",
+	} {
+		n := &storeNode{QualifiedName: qn}
+		if !isRouteDeclarerNode(n.toStoreNode()) {
+			t.Errorf("isRouteDeclarerNode(%q) should be true (last segment is route-declarer)", qn)
+		}
+	}
+}
+
+func TestIsRouteDeclarerNode_NegativeCases(t *testing.T) {
+	for _, qn := range []string{
+		"crate::handlers::handle_orders",
+		"github.com/x/api.GetUser",
+		"my-service::auth::login",
+		"foo::bar::process_request",
+	} {
+		n := &storeNode{QualifiedName: qn}
+		if isRouteDeclarerNode(n.toStoreNode()) {
+			t.Errorf("isRouteDeclarerNode(%q) should be false (last segment is a handler-like name)", qn)
+		}
+	}
+}
+
+func TestIsRouteDeclarerNode_NilSafe(t *testing.T) {
+	if isRouteDeclarerNode(nil) {
+		t.Error("isRouteDeclarerNode(nil) should be false (defensive)")
+	}
+}
+
+// storeNode is a tiny local helper that wraps QualifiedName for tests
+// that need to construct *store.Node without importing the full Store
+// machinery. Kept inline so tests stay self-contained.
+type storeNode struct{ QualifiedName string }
+
+func (n *storeNode) toStoreNode() *store.Node {
+	return &store.Node{QualifiedName: n.QualifiedName}
+}

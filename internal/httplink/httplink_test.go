@@ -1625,6 +1625,132 @@ func TestExpressRouteFiltering(t *testing.T) {
 	}
 }
 
+// TestIsClientSideJSPath covers the 2026-05-08 Phase B Express FP cleanup.
+// Regression guard for path-segment skip filter — files under /public/scripts/,
+// /static/js/, /dist/, etc. must NOT yield express routes even if the regex
+// matches (because client-side JS routinely has app.get(...) shapes).
+func TestIsClientSideJSPath(t *testing.T) {
+	tests := []struct {
+		name string
+		path string
+		want bool
+	}{
+		{"public/scripts", "sysmanager/public/scripts/settings.js", true},
+		{"public/js", "frontend/public/js/app.js", true},
+		{"static/scripts", "static/scripts/main.js", true},
+		{"static/js (subpath)", "app/static/js/foo.js", true},
+		{"assets/js", "src/assets/js/widget.ts", true},
+		{"dist", "package/dist/bundle.js", true},
+		{"build", "build/output.js", true},
+		{".next", ".next/server/app.js", true},
+		{".nuxt", ".nuxt/dist/foo.js", true},
+		{"backslash separator (Windows)", `sysmanager\public\scripts\settings.js`, true},
+		{"mixed case", "Sysmanager/Public/Scripts/Settings.js", true},
+
+		// Should NOT trigger — server-side conventions
+		{"src/server", "src/server/app.ts", false},
+		{"backend/routes", "backend/routes/api.js", false},
+		{"api/v1", "api/v1/users.js", false},
+		{"node-server", "server.js", false},
+		{"empty path", "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isClientSideJSPath(tt.path)
+			if got != tt.want {
+				t.Errorf("isClientSideJSPath(%q) = %v, want %v", tt.path, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestHasExpressServerEvidence covers the source-content check applied at
+// module-level extraction. Real Express/Koa/Fastify servers virtually
+// always have express() / Router() / require('express') / etc. somewhere
+// in the file. Client-side modules with app.get(...) shapes don't.
+func TestHasExpressServerEvidence(t *testing.T) {
+	tests := []struct {
+		name   string
+		source string
+		want   bool
+	}{
+		// Should detect — real server files
+		{"express()", "const app = express();\napp.get('/api', h);", true},
+		{"Router()", "const r = Router();\nr.get('/x', h);", true},
+		{"require single quote", "const e = require('express');", true},
+		{"require double quote", `const e = require("express");`, true},
+		{"import single quote", "import express from 'express';", true},
+		{"import double quote", `import express from "express";`, true},
+		{"fastify()", "const f = fastify();", true},
+		{"new Koa()", "const app = new Koa();", true},
+
+		// Should NOT detect — client-side or bare patterns
+		{"app.get only", "app.get('/api/foo', handler);", false},
+		{"router.post only", "router.post('/x', h);", false},
+		{"no instantiation", "const app = makeRoutes();\napp.get('/x', h);", false},
+		{"empty source", "", false},
+		// Note: a "from 'express'" inside a comment would still match;
+		// the heuristic accepts that level of false-positive because
+		// commented-out import lines are rare and not load-bearing.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := hasExpressServerEvidence(tt.source)
+			if got != tt.want {
+				t.Errorf("hasExpressServerEvidence(...) = %v, want %v\nsource: %q",
+					got, tt.want, tt.source)
+			}
+		})
+	}
+}
+
+// TestExtractExpressRoutes_ClientSideSkip covers the integration: when the
+// Function/Module node's FilePath matches a client-side convention, the
+// extractor must return zero routes regardless of source matches.
+func TestExtractExpressRoutes_ClientSideSkip(t *testing.T) {
+	tests := []struct {
+		name     string
+		filePath string
+		source   string
+		wantLen  int
+	}{
+		{
+			"client-side JS yields zero routes",
+			"sysmanager/public/scripts/settings.js",
+			`app.get('/api/foo', handler);
+app.post('/api/bar', handler);`,
+			0,
+		},
+		{
+			"server-side JS still yields routes",
+			"backend/server.js",
+			`app.get('/api/foo', handler);
+app.post('/api/bar', handler);`,
+			2,
+		},
+		{
+			"empty file path falls through to extract",
+			"",
+			`app.get('/api/foo', handler);`,
+			1,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			node := &store.Node{
+				Name:          "testFunc",
+				QualifiedName: "proj.test.testFunc",
+				FilePath:      tt.filePath,
+			}
+			routes := extractExpressRoutes(node, tt.source)
+			if len(routes) != tt.wantLen {
+				t.Errorf("got %d routes, want %d (filePath=%q)",
+					len(routes), tt.wantLen, tt.filePath)
+			}
+		})
+	}
+}
+
 func TestLaravelModuleLevelRoutes(t *testing.T) {
 	dir, err := os.MkdirTemp("", "httplink-laravel-module-*")
 	if err != nil {

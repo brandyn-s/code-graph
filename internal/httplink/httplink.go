@@ -223,6 +223,75 @@ var expressReceiverAllowlist = map[string]bool{
 	"routes": true, "express": true, "route": true,
 }
 
+// clientSidePathSegments are file-path conventions that virtually always
+// indicate client-side JavaScript (browser code), not Node.js Express/Koa
+// servers. The express extractor's regex matches `<receiver>.METHOD("/path",
+// ...)` patterns which can fire on client-side router calls (e.g.
+// `app.get(`/api/${id}`)` in a fetch wrapper, or `route.get(...)` in a
+// frontend SPA router). Files under these path segments are excluded from
+// express route extraction.
+//
+// 2026-05-08 incident: PSM has 46 Route nodes with handlers under
+// `sysmanager/public/scripts/` (e.g. saveInfo, processCalibration,
+// refreshBatteryDiagnostics). These are CLIENT-side functions issuing
+// fetch() calls; the express extractor mislabeled them as server routes,
+// inflating PSM's unlinked-route denominator and creating spurious
+// linked-routes (16 of 110 HTTP_CALLS edges pointed at client-side
+// "handlers" that can never receive HTTP).
+var clientSidePathSegments = []string{
+	"/public/scripts/", "/public/js/", "/static/scripts/", "/static/js/",
+	"/assets/js/", "/dist/", "/build/", "/.next/", "/.nuxt/",
+}
+
+// isClientSideJSPath returns true if the file path matches a known
+// client-side JavaScript convention. Path comparison is case-insensitive
+// and uses forward slashes; a leading slash is prepended so segments at
+// the project root (e.g. "build/output.js") match `/build/`.
+func isClientSideJSPath(filePath string) bool {
+	if filePath == "" {
+		return false
+	}
+	normalized := "/" + strings.TrimPrefix(
+		strings.ReplaceAll(strings.ToLower(filePath), "\\", "/"),
+		"/",
+	)
+	for _, seg := range clientSidePathSegments {
+		if strings.Contains(normalized, seg) {
+			return true
+		}
+	}
+	return false
+}
+
+// hasExpressServerEvidence returns true when the source contains
+// instantiation evidence of an Express/Koa/Fastify server. Server-side
+// JS virtually always has `express()`, `Router()`, `require('express')`,
+// or `from 'express'` somewhere in the file. Client-side JS that happens
+// to have `app.get(...)` or `route.get(...)` patterns lacks these.
+//
+// This is a content-check FALLBACK applied to per-function extraction
+// where path heuristics are insufficient.
+func hasExpressServerEvidence(source string) bool {
+	// Cheap substring checks before any regex
+	if strings.Contains(source, "express(") {
+		return true
+	}
+	if strings.Contains(source, "Router(") {
+		return true
+	}
+	if strings.Contains(source, "require('express')") || strings.Contains(source, `require("express")`) {
+		return true
+	}
+	if strings.Contains(source, "from 'express'") || strings.Contains(source, `from "express"`) {
+		return true
+	}
+	// Fastify / Koa server signatures
+	if strings.Contains(source, "fastify(") || strings.Contains(source, "Koa(") || strings.Contains(source, "new Koa(") {
+		return true
+	}
+	return false
+}
+
 // File extension helpers to scope framework-specific route regexes.
 // Use filepath.Ext + ToLower for case-insensitive matching.
 func isGoFile(path string) bool {
@@ -592,6 +661,17 @@ func (l *Linker) discoverRoutes(rootPath string) []RouteHandler {
 			routes = append(routes, tagAndCount("laravel-module", extractLaravelRoutes(m, source))...)
 		}
 		if isJSTS {
+			// Content-evidence skip: at the module level, the whole-file
+			// source should contain `express()` / `Router()` / similar
+			// server instantiation if this is a real Node.js server file.
+			// Client-side modules that happen to have app.get(...) shapes
+			// (frontend SPA routers, fetch wrappers) lack these signals.
+			// Combined with the path-segment skip inside extractExpressRoutes,
+			// this drops the 2026-05-08 PSM false-positive bucket
+			// (46 routes from public/scripts/*.js modules).
+			if !hasExpressServerEvidence(source) {
+				continue
+			}
 			routes = append(routes, tagAndCount("express-module", extractExpressRoutes(m, source))...)
 		}
 	}
@@ -745,8 +825,24 @@ func resolveGroupPrefix(line, method, path string, groupPrefixes map[string]stri
 
 // extractExpressRoutes extracts route registrations from JS/TS source (Express/Koa patterns).
 // Uses receiver allowlist to avoid false positives from req.get(), res.get(), etc.
+//
+// 2026-05-08: also filters by path-segment when the file path matches a
+// known client-side convention (/public/scripts/, /static/js/, /dist/, etc.).
+// Without this filter, the regex fires on client-side JS doing e.g.
+// `app.get(\`/api/${x}\`)` in a fetch wrapper. PSM 2026-05-08 baseline: 46
+// false-positive routes from sysmanager/public/scripts/*.js were mislabeled
+// as server routes. Source-content evidence (presence of `express()` /
+// `Router()` instantiation) is enforced ONLY at the module-level call site
+// because per-function source is just the function body and won't contain
+// the module-level express() instantiation.
 func extractExpressRoutes(f *store.Node, source string) []RouteHandler {
 	routes := make([]RouteHandler, 0, 4)
+	// Path-segment skip: known client-side conventions. Applies universally
+	// (per-function and per-module). Empty FilePath (test fixtures) is a no-op
+	// since no segments match.
+	if isClientSideJSPath(f.FilePath) {
+		return routes
+	}
 	for _, line := range strings.Split(source, "\n") {
 		rm := expressRouteRe.FindStringSubmatch(line)
 		if rm == nil {

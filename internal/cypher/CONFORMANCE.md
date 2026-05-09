@@ -134,6 +134,34 @@ Plan 3 Phase A) verifies parser + executor + tool description are
 now in sync, with 22 positive fixtures + 7 negative fixtures
 passing.
 
+### Resolved 2026-05-09 (Phase B: COUNT(DISTINCT) + labels())
+
+The 8-Phase Multi-Month Arc Plan
+(`~/Documents/knowledge-base/plans/2026-05-09-code-search-code-graph-multi-month-arc.md`)
+identified two dialect gaps observed during the prior session:
+
+- `COUNT(DISTINCT x)` — `COUNT(DISTINCT var)` counts unique bindings;
+  `COUNT(DISTINCT var.prop)` counts unique property values across bindings.
+  Implemented via a new `Distinct bool` field on `ReturnItem` and
+  set-based counting in `buildGroups`. SQL pushdown is disabled when
+  `countItem.Distinct` is true (the join-aggregate over-counts for DISTINCT
+  semantics); the Go path tracks distinct values via a per-group set.
+- `labels(node)` built-in function — returns the node's label as a
+  single-element string array (consistent with standard openCypher; nodes
+  in code-graph have one label each). Implemented via a new
+  `parseFunctionCallItem` parser path that handles `labels(var)` in RETURN
+  items, and a `LABELS` short-circuit in `resolveItemValue`.
+- 6 positive fixtures + 2 negative fixtures added to the conformance corpus
+  (covering basic forms, with-alias, group-by interaction, COUNT(DISTINCT *)
+  rejection, and unknown-function rejection).
+- 5 new executor tests pin =~ / CONTAINS / STARTS WITH / ENDS WITH on
+  `file_path` returning correct results; the prior session's "0 results"
+  observation on those operators was an issue at the regex-syntax / data-
+  shape layer caller-side, not an engine bug.
+
+Full WITH/aggregation support remains a separate workstream (the existing
+2026-05-07 error-fast path stands).
+
 ### Resolved 2026-05-07 (B1: IN operator)
 
 The PSM test battery (2026-05-07) found that `IN` was documented in

@@ -74,5 +74,10 @@ type ReturnItem struct {
 	Variable string // "f"
 	Property string // "name" (empty = return whole node)
 	Alias    string // "AS call_count" (optional)
-	Func     string // "COUNT" (optional aggregation)
+	Func     string // "COUNT" / "LABELS" (optional aggregation or function)
+
+	// Distinct is true for COUNT(DISTINCT x) — count unique non-null
+	// values of x rather than total bindings. Only meaningful when
+	// Func == "COUNT".
+	Distinct bool
 }

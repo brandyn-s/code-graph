@@ -3,6 +3,7 @@ package cypher
 import (
 	"fmt"
 	"strconv"
+	"strings"
 )
 
 // Parser converts a token stream into an AST.
@@ -642,11 +643,20 @@ func (p *Parser) parseReturnItem() (ReturnItem, error) {
 		return p.parseCountItem()
 	}
 
-	// variable or variable.property
+	// variable or variable.property or func_name(variable)
 	varTok := p.advance()
 	if varTok.Type != TokIdent {
 		return item, fmt.Errorf("expected variable in RETURN item, got %q at pos %d", varTok.Value, varTok.Pos)
 	}
+
+	// Phase B2 (Plan 8-Phase Arc, 2026-05-09): function-call form.
+	// `labels(node)` is the openCypher standard form for getting a node's
+	// label set. code-graph nodes have one label each, so the result is
+	// always a single-element array.
+	if p.peek().Type == TokLParen {
+		return p.parseFunctionCallItem(varTok)
+	}
+
 	item.Variable = varTok.Value
 
 	if p.peek().Type == TokDot {
@@ -671,10 +681,54 @@ func (p *Parser) parseReturnItem() (ReturnItem, error) {
 	return item, nil
 }
 
-// parseCountItem parses a COUNT(variable | *) [AS alias] expression.
+// parseFunctionCallItem parses a built-in function call in a RETURN item.
+// Currently supports: labels(variable). Extending the set later means adding
+// more cases here and matching executor logic in resolveItemValue.
+//
+// The funcTok has already been consumed; we expect '(' next.
+func (p *Parser) parseFunctionCallItem(funcTok Token) (ReturnItem, error) {
+	item := ReturnItem{}
+	funcName := strings.ToUpper(funcTok.Value)
+	switch funcName {
+	case "LABELS":
+		// labels(node) — fall through.
+	default:
+		return item, fmt.Errorf(
+			"unknown function %q at pos %d (supported: labels)",
+			funcTok.Value, funcTok.Pos)
+	}
+	item.Func = funcName
+	if err := p.expect(TokLParen); err != nil {
+		return item, fmt.Errorf("expected '(' after %s: %w", funcName, err)
+	}
+	argTok := p.advance()
+	if argTok.Type != TokIdent {
+		return item, fmt.Errorf(
+			"expected variable in %s(), got %q at pos %d",
+			funcName, argTok.Value, argTok.Pos)
+	}
+	item.Variable = argTok.Value
+	if err := p.expect(TokRParen); err != nil {
+		return item, fmt.Errorf("expected ')' after %s argument: %w", funcName, err)
+	}
+	// Optional AS alias
+	if p.peek().Type == TokAs {
+		p.advance()
+		aliasTok := p.advance()
+		if aliasTok.Type != TokIdent {
+			return item, fmt.Errorf("expected alias after AS, got %q", aliasTok.Value)
+		}
+		item.Alias = aliasTok.Value
+	}
+	return item, nil
+}
+
+// parseCountItem parses a COUNT(variable | * | DISTINCT variable) [AS alias] expression.
 // COUNT(*) is the openCypher standard form for counting all rows;
-// COUNT(var) counts non-null bindings of a specific variable. The
-// executor treats both as a row-count aggregation.
+// COUNT(var) counts non-null bindings of a specific variable;
+// COUNT(DISTINCT var) counts unique values of var across bindings.
+// The executor treats COUNT(*) and COUNT(var) as row-count aggregations
+// and COUNT(DISTINCT var) as a set-cardinality aggregation.
 func (p *Parser) parseCountItem() (ReturnItem, error) {
 	item := ReturnItem{}
 	p.advance() // consume COUNT
@@ -682,14 +736,35 @@ func (p *Parser) parseCountItem() (ReturnItem, error) {
 	if err := p.expect(TokLParen); err != nil {
 		return item, fmt.Errorf("expected '(' after COUNT: %w", err)
 	}
+	// COUNT(DISTINCT var) — consume DISTINCT and continue to the variable.
+	// Phase B1 (Plan 8-Phase Arc, 2026-05-09): standard openCypher form.
+	if p.peek().Type == TokDistinct {
+		p.advance() // consume DISTINCT
+		item.Distinct = true
+	}
 	varTok := p.advance()
 	switch varTok.Type {
 	case TokIdent:
 		item.Variable = varTok.Value
+		// Optional .property — COUNT(DISTINCT n.name) counts unique
+		// values of the named property rather than unique bindings.
+		if p.peek().Type == TokDot {
+			p.advance() // consume .
+			propTok := p.advance()
+			if propTok.Type != TokIdent {
+				return item, fmt.Errorf("expected property after '.' in COUNT(), got %q at pos %d",
+					propTok.Value, propTok.Pos)
+			}
+			item.Property = propTok.Value
+		}
 	case TokStar:
 		// COUNT(*) — represented internally with Variable="*".
 		// Executor short-circuits to the binding count without
 		// requiring a specific variable to be non-null.
+		if item.Distinct {
+			return item, fmt.Errorf("COUNT(DISTINCT *) is not valid — use COUNT(*) or COUNT(DISTINCT var) at pos %d",
+				varTok.Pos)
+		}
 		item.Variable = "*"
 	default:
 		return item, fmt.Errorf("expected variable or '*' in COUNT(), got %q at pos %d", varTok.Value, varTok.Pos)

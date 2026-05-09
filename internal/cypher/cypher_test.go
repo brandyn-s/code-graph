@@ -467,6 +467,90 @@ func TestExecuteWhereContains(t *testing.T) {
 	}
 }
 
+// Phase B4/B5 (Plan 8-Phase Arc, 2026-05-09): user reported `=~` and
+// `CONTAINS` returning 0 unexpectedly on file_path. These tests pin
+// engine-correct behavior on file_path filtering. If they pass, the
+// observed "0 results" cases were likely caller-side data/regex-syntax
+// issues, not engine bugs. The conformance test additions in
+// cypher_conformance_test.go provide further coverage at the parser
+// level.
+
+func TestExecuteWhereContainsOnFilePath(t *testing.T) {
+	s := setupTestStore(t)
+	defer s.Close()
+
+	exec := &Executor{Store: s}
+	result, err := exec.Execute(`MATCH (f:Function) WHERE f.file_path CONTAINS "service" RETURN f.name`)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	// ValidateOrder + SubmitOrder are in service.go
+	if len(result.Rows) != 2 {
+		t.Errorf("expected 2 rows (ValidateOrder, SubmitOrder), got %d: %+v", len(result.Rows), result.Rows)
+	}
+}
+
+func TestExecuteWhereRegexOnFilePath(t *testing.T) {
+	s := setupTestStore(t)
+	defer s.Close()
+
+	exec := &Executor{Store: s}
+	// `.*\\.go$` matches all .go files (escaped backslash for Go string)
+	result, err := exec.Execute(`MATCH (f:Function) WHERE f.file_path =~ ".*\\.go$" RETURN f.name`)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	// All 4 functions are in .go files (HandleOrder, ValidateOrder, SubmitOrder, LogError)
+	if len(result.Rows) != 4 {
+		t.Errorf("expected 4 rows for .go file_path regex, got %d: %+v", len(result.Rows), result.Rows)
+	}
+}
+
+func TestExecuteWhereRegexOnFilePathSubstring(t *testing.T) {
+	s := setupTestStore(t)
+	defer s.Close()
+
+	exec := &Executor{Store: s}
+	// `.*service.*` regex (no anchors) matches anywhere in file_path
+	result, err := exec.Execute(`MATCH (f:Function) WHERE f.file_path =~ ".*service.*" RETURN f.name`)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	// ValidateOrder + SubmitOrder
+	if len(result.Rows) != 2 {
+		t.Errorf("expected 2 rows for service.* regex on file_path, got %d: %+v", len(result.Rows), result.Rows)
+	}
+}
+
+func TestExecuteWhereStartsWithOnFilePath(t *testing.T) {
+	s := setupTestStore(t)
+	defer s.Close()
+
+	exec := &Executor{Store: s}
+	result, err := exec.Execute(`MATCH (f:Function) WHERE f.file_path STARTS WITH "main" RETURN f.name`)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	// HandleOrder is in main.go
+	if len(result.Rows) != 1 {
+		t.Errorf("expected 1 row (HandleOrder in main.go), got %d: %+v", len(result.Rows), result.Rows)
+	}
+}
+
+func TestExecuteWhereEndsWithOnFilePath(t *testing.T) {
+	s := setupTestStore(t)
+	defer s.Close()
+
+	exec := &Executor{Store: s}
+	result, err := exec.Execute(`MATCH (f:Function) WHERE f.file_path ENDS WITH ".go" RETURN f.name`)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if len(result.Rows) != 4 {
+		t.Errorf("expected 4 rows for .go ENDS WITH on file_path, got %d", len(result.Rows))
+	}
+}
+
 func TestExecuteWhereNumeric(t *testing.T) {
 	s := setupTestStore(t)
 	defer s.Close()

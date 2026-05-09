@@ -162,6 +162,18 @@ func (e *Executor) tryAggregateSQL(plan *Plan) (*Result, bool) {
 		return nil, false
 	}
 
+	// Phase B1 (Plan 8-Phase Arc, 2026-05-09): COUNT(DISTINCT var) cannot
+	// be pushed to the current SQL aggregation path because the join
+	// produces one row per (caller, target) edge — naive COUNT() over the
+	// joined table over-counts when the same target appears via multiple
+	// edges. The Go path tracks distinct values via a set per group, which
+	// is correct. Falling back to the Go path is a small perf cost on
+	// queries that would otherwise SQL-aggregate but currently don't
+	// dominate any common query.
+	if countItem.Distinct {
+		return nil, false
+	}
+
 	scan, expand, filter, ok := parseFusibleSteps(plan.Steps)
 	if !ok {
 		return nil, false
@@ -1316,6 +1328,20 @@ func buildColumnNames(items []ReturnItem) []string {
 		if item.Property != "" {
 			col = item.Variable + "." + item.Property
 		}
+		// Phase B1/B2 (Plan 8-Phase Arc, 2026-05-09): function-call return
+		// items render as `FUNC(args)` for callers that don't supply an alias
+		// (consistent with previous COUNT(*) behavior).
+		if item.Func != "" && item.Alias == "" {
+			arg := item.Variable
+			if item.Property != "" {
+				arg = item.Variable + "." + item.Property
+			}
+			if item.Distinct {
+				col = item.Func + "(DISTINCT " + arg + ")"
+			} else {
+				col = item.Func + "(" + arg + ")"
+			}
+		}
 		if item.Alias != "" {
 			col = item.Alias
 		}
@@ -1334,7 +1360,25 @@ func buildProjectionRow(b binding, items []ReturnItem, cols []string) map[string
 }
 
 // resolveItemValue resolves a return item value from a binding (node or edge).
+//
+// Phase B2 (Plan 8-Phase Arc, 2026-05-09): function-call items (item.Func)
+// short-circuit ahead of the property-access path. Currently only "LABELS"
+// is supported; future built-ins extend this switch. Standard openCypher
+// labels(node) returns an array of labels; code-graph nodes have a single
+// label, so the result is a single-element array of strings.
 func resolveItemValue(b binding, item ReturnItem) any {
+	if item.Func == "LABELS" {
+		if node, ok := b.nodes[item.Variable]; ok {
+			if node.Label == "" {
+				return []string{}
+			}
+			return []string{node.Label}
+		}
+		// labels() on an edge or unknown variable is undefined. Returning
+		// an empty array (rather than nil) matches openCypher behavior on
+		// missing nodes.
+		return []string{}
+	}
 	if node, ok := b.nodes[item.Variable]; ok {
 		return resolveNodeItemValue(node, item.Property)
 	}
@@ -1418,7 +1462,7 @@ func applyLimit(rows []map[string]any, limit, maxRows int) ([]map[string]any, bo
 
 func (e *Executor) aggregateResults(bindings []binding, ret *ReturnClause) (*Result, error) {
 	groupItems, countItem := splitAggregateItems(ret.Items)
-	groups, order := buildGroups(bindings, groupItems)
+	groups, order := buildGroups(bindings, groupItems, countItem)
 
 	// Build columns
 	cols := buildColumnNames(ret.Items)
@@ -1426,7 +1470,16 @@ func (e *Executor) aggregateResults(bindings []binding, ret *ReturnClause) (*Res
 	// Build result rows
 	countCol := countItem.Alias
 	if countCol == "" {
-		countCol = "COUNT(" + countItem.Variable + ")"
+		// Phase B1: COUNT(DISTINCT x.prop) renders distinctly from COUNT(x).
+		arg := countItem.Variable
+		if countItem.Property != "" {
+			arg = countItem.Variable + "." + countItem.Property
+		}
+		if countItem.Distinct {
+			countCol = "COUNT(DISTINCT " + arg + ")"
+		} else {
+			countCol = "COUNT(" + arg + ")"
+		}
 	}
 
 	rows := make([]map[string]any, 0, len(order))
@@ -1469,10 +1522,19 @@ type groupEntry struct {
 	key   string
 	row   map[string]any
 	count int
+	// Phase B1: distinctValues tracks unique values seen for COUNT(DISTINCT var)
+	// or COUNT(DISTINCT var.prop). nil for non-DISTINCT aggregations.
+	distinctValues map[string]struct{}
 }
 
 // buildGroups groups bindings by non-COUNT items and counts occurrences.
-func buildGroups(bindings []binding, groupItems []ReturnItem) (groups map[string]*groupEntry, order []string) {
+//
+// Phase B1 (Plan 8-Phase Arc, 2026-05-09): when countItem.Distinct is true,
+// the count for each group is the cardinality of the set of distinct values
+// of countItem's variable+property across the group's bindings, NOT the
+// total binding count. Empty/nil values are excluded from the set, matching
+// COUNT(DISTINCT) semantics in standard Cypher (NULL values don't count).
+func buildGroups(bindings []binding, groupItems []ReturnItem, countItem ReturnItem) (groups map[string]*groupEntry, order []string) {
 	groups = make(map[string]*groupEntry)
 
 	for _, b := range bindings {
@@ -1491,11 +1553,34 @@ func buildGroups(bindings []binding, groupItems []ReturnItem) (groups map[string
 			keyParts = append(keyParts, fmt.Sprintf("%v", val))
 		}
 		key := strings.Join(keyParts, "\x00")
-		if g, ok := groups[key]; ok {
-			g.count++
-		} else {
-			groups[key] = &groupEntry{key: key, row: row, count: 1}
+		g, ok := groups[key]
+		if !ok {
+			g = &groupEntry{key: key, row: row, count: 0}
+			if countItem.Distinct {
+				g.distinctValues = make(map[string]struct{})
+			}
+			groups[key] = g
 			order = append(order, key)
+		}
+		if countItem.Distinct {
+			// Resolve the COUNT(DISTINCT var) target value for this binding.
+			distinctVal := resolveItemValue(b, countItem)
+			if distinctVal == nil {
+				continue
+			}
+			s := fmt.Sprintf("%v", distinctVal)
+			if s == "" {
+				continue
+			}
+			g.distinctValues[s] = struct{}{}
+		} else {
+			g.count++
+		}
+	}
+	// Finalize: for DISTINCT, count = cardinality of the value set.
+	for _, g := range groups {
+		if g.distinctValues != nil {
+			g.count = len(g.distinctValues)
 		}
 	}
 	return groups, order

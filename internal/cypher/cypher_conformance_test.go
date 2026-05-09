@@ -158,6 +158,37 @@ var positiveCypherFixtures = []struct {
 		`MATCH (a)-[r:CALLS]->(b) WHERE r.confidence >= 0.7 RETURN a.name, b.name`,
 		"edge property filter (r.confidence)",
 	},
+	// Phase B (Plan 8-Phase Arc, 2026-05-09): COUNT(DISTINCT) + labels()
+	{
+		"count_distinct_variable",
+		`MATCH (a)-[:HTTP_CALLS]->(b) RETURN COUNT(DISTINCT b)`,
+		"COUNT(DISTINCT var) — count unique handler bindings (Phase B1)",
+	},
+	{
+		"count_distinct_property",
+		`MATCH (a)-[:CALLS]->(b) RETURN COUNT(DISTINCT b.name)`,
+		"COUNT(DISTINCT var.prop) — count unique property values (Phase B1)",
+	},
+	{
+		"count_distinct_with_groupby",
+		`MATCH (a)-[:CALLS]->(b) RETURN a.name, COUNT(DISTINCT b.name)`,
+		"COUNT(DISTINCT var.prop) with GROUP BY (Phase B1)",
+	},
+	{
+		"count_distinct_with_alias",
+		`MATCH (a)-[:HTTP_CALLS]->(b) RETURN COUNT(DISTINCT b) AS unique_handlers`,
+		"COUNT(DISTINCT var) AS alias (Phase B1)",
+	},
+	{
+		"labels_basic",
+		`MATCH (n) RETURN labels(n)`,
+		"labels(node) — built-in function returning label array (Phase B2)",
+	},
+	{
+		"labels_with_alias",
+		`MATCH (n:Function) RETURN n.name, labels(n) AS lbls`,
+		"labels(node) AS alias (Phase B2)",
+	},
 }
 
 // negativeCypherFixtures: queries that MUST fail (lex / parse / plan).
@@ -309,6 +340,20 @@ var negativeCypherFixtures = []struct {
 		"MATCH (a) WHERE a.label = 'Function' WITH a RETURN a",
 		"WITH clause not supported",
 		"WITH between WHERE and RETURN also rejected (B2: 2026-05-07)",
+	},
+	// Phase B (Plan 8-Phase Arc, 2026-05-09): negative cases for COUNT(DISTINCT)
+	// + labels() error paths.
+	{
+		"count_distinct_star_rejected",
+		"MATCH (n) RETURN COUNT(DISTINCT *)",
+		"COUNT(DISTINCT *) is not valid",
+		"COUNT(DISTINCT *) is not standard openCypher (Phase B1)",
+	},
+	{
+		"unknown_function_rejected",
+		"MATCH (n) RETURN size(n)",
+		"unknown function",
+		"functions other than COUNT/labels are rejected with actionable error (Phase B2)",
 	},
 }
 

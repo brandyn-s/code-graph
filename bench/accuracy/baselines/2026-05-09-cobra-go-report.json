@@ -1,0 +1,1009 @@
+{
+  "schema_version": 1,
+  "date": "2026-05-09",
+  "fixture": "cobra-go",
+  "sha": "f2878bab8c96afd6e36968af96343b35dbb82a82",
+  "short_sha": "f2878ba",
+  "project_name": "c-Users-user-Documents-bench-fixtures-cobra",
+  "results": {
+    "CALLS": {
+      "oracle": "go-ast",
+      "per_project": [
+        {
+          "project": "c-Users-user-Documents-bench-fixtures-cobra",
+          "oracle_count": 906,
+          "measured_count": 1585,
+          "tp": 894,
+          "fp": 564,
+          "fn": 12,
+          "precision": 0.6132,
+          "recall": 0.9868,
+          "f1": 0.7563
+        }
+      ],
+      "oracle_count": 906,
+      "measured_count": 1585,
+      "oracle_caller_count": 442,
+      "exact": {
+        "tp": 894,
+        "fp": 691,
+        "fn": 12,
+        "precision": 0.564,
+        "recall": 0.9868,
+        "f1": 0.7178
+      },
+      "suffix_3seg": {
+        "tp": 894,
+        "fp": 691,
+        "fn": 12,
+        "precision": 0.564,
+        "recall": 0.9868,
+        "f1": 0.7178
+      },
+      "scope_aligned": {
+        "tp": 894,
+        "fp": 105,
+        "fn": 12,
+        "precision": 0.8949,
+        "recall": 0.9868,
+        "f1": 0.9386
+      },
+      "scope_aligned_high_confidence": {
+        "tp": 894,
+        "fp": 105,
+        "fn": 12,
+        "precision": 0.8949,
+        "recall": 0.9868,
+        "f1": 0.9386
+      },
+      "scope_impl_normalized": {
+        "tp": 894,
+        "fp": 105,
+        "fn": 12,
+        "precision": 0.8949,
+        "recall": 0.9868,
+        "f1": 0.9386
+      },
+      "scope_generic_normalized": {
+        "tp": 894,
+        "fp": 105,
+        "fn": 12,
+        "precision": 0.8949,
+        "recall": 0.9868,
+        "f1": 0.9386
+      },
+      "scope_canonical": {
+        "tp": 894,
+        "fp": 105,
+        "fn": 12,
+        "precision": 0.8949,
+        "recall": 0.9868,
+        "f1": 0.9386
+      },
+      "sample_fp_exact": [
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.active_help_test.TestActiveHelpAlone",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.AddCommand",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.active_help_test.TestActiveHelpForFlag",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.Flags",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.active_help_test.TestActiveHelpForFlag",
+          "c-Users-user-Documents-bench-fixtures-cobra.completions.Command.RegisterFlagCompletionFunc",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.active_help_test.TestActiveHelpWithComps",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.AddCommand",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.active_help_test.TestConfigActiveHelp",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.AddCommand",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.active_help_test.TestConfigActiveHelp",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.Flags",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.active_help_test.TestConfigActiveHelp",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.Name",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.active_help_test.TestConfigActiveHelp",
+          "c-Users-user-Documents-bench-fixtures-cobra.completions.Command.RegisterFlagCompletionFunc",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.active_help_test.TestDisableActiveHelp",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.AddCommand",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.active_help_test.TestDisableActiveHelp",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.Name",
+          "CALLS"
+        ]
+      ],
+      "sample_fn_exact": [
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.bash_completions_test.TestBashCompletions",
+          "c-Users-user-Documents-bench-fixtures-cobra.completions_test.customMultiString.String",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.doc.man_docs.genMan",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.CommandPath",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.doc.man_docs.manPreamble",
+          "c-Users-user-Documents-bench-fixtures-cobra.cobra.WriteStringAndCheck",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.doc.man_docs.manPrintFlags",
+          "c-Users-user-Documents-bench-fixtures-cobra.cobra.WriteStringAndCheck",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.doc.man_docs.manPrintOptions",
+          "c-Users-user-Documents-bench-fixtures-cobra.cobra.WriteStringAndCheck",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.doc.man_docs.manPrintOptions",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.InheritedFlags",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.doc.man_docs.manPrintOptions",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.NonInheritedFlags",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.doc.man_examples_test.ExampleGenMan",
+          "c-Users-user-Documents-bench-fixtures-cobra.cobra.CheckErr",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.doc.man_examples_test.ExampleGenMan",
+          "c-Users-user-Documents-bench-fixtures-cobra.doc.man_docs.GenMan",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.doc.man_examples_test.ExampleGenManTree",
+          "c-Users-user-Documents-bench-fixtures-cobra.cobra.CheckErr",
+          "CALLS"
+        ]
+      ],
+      "sample_fp_scoped": [
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.bash_completions.gen",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.IsAvailableCommand",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.bash_completions.writeCommands",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.IsAvailableCommand",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.bash_completions.writeCommands",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.Name",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.DebugFlags",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.HasFlags",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.DebugFlags",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.HasPersistentFlags",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.DebugFlags",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.HasSubCommands",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.DebugFlags",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.persistentFlag",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.ExecuteC",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.HelpFunc",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.ExecuteC",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.Name",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.ExecuteC",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.UsageString",
+          "CALLS"
+        ]
+      ],
+      "sample_fn_scoped": [
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.bash_completions_test.TestBashCompletions",
+          "c-Users-user-Documents-bench-fixtures-cobra.completions_test.customMultiString.String",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.doc.man_docs.genMan",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.CommandPath",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.doc.man_docs.manPreamble",
+          "c-Users-user-Documents-bench-fixtures-cobra.cobra.WriteStringAndCheck",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.doc.man_docs.manPrintFlags",
+          "c-Users-user-Documents-bench-fixtures-cobra.cobra.WriteStringAndCheck",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.doc.man_docs.manPrintOptions",
+          "c-Users-user-Documents-bench-fixtures-cobra.cobra.WriteStringAndCheck",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.doc.man_docs.manPrintOptions",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.InheritedFlags",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.doc.man_docs.manPrintOptions",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.NonInheritedFlags",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.doc.man_examples_test.ExampleGenMan",
+          "c-Users-user-Documents-bench-fixtures-cobra.cobra.CheckErr",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.doc.man_examples_test.ExampleGenMan",
+          "c-Users-user-Documents-bench-fixtures-cobra.doc.man_docs.GenMan",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.doc.man_examples_test.ExampleGenManTree",
+          "c-Users-user-Documents-bench-fixtures-cobra.cobra.CheckErr",
+          "CALLS"
+        ]
+      ],
+      "fp_scoped_full": [
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.bash_completions.gen",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.IsAvailableCommand",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.bash_completions.writeCommands",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.IsAvailableCommand",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.bash_completions.writeCommands",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.Name",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.DebugFlags",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.HasFlags",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.DebugFlags",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.HasPersistentFlags",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.DebugFlags",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.HasSubCommands",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.DebugFlags",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.persistentFlag",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.ExecuteC",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.HelpFunc",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.ExecuteC",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.Name",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.ExecuteC",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.UsageString",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.ExecuteC",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.execute",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.ExecuteC",
+          "c-Users-user-Documents-bench-fixtures-cobra.completions.flagCompError.Error",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.InitDefaultHelpCmd",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.Commands",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.InitDefaultHelpCmd",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.Help",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.InitDefaultHelpCmd",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.InitDefaultHelpFlag",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.InitDefaultHelpCmd",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.InitDefaultVersionFlag",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.InitDefaultHelpCmd",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.IsAvailableCommand",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.InitDefaultHelpCmd",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.Name",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.IsAdditionalHelpTopicCommand",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.IsAdditionalHelpTopicCommand",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.ParseFlags",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.commandSorterByName.Len",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.SuggestionsFor",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.IsAvailableCommand",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.SuggestionsFor",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.Name",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.Traverse",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.Traverse",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.UsageString",
+          "c-Users-user-Documents-bench-fixtures-cobra.completions_test.customMultiString.String",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.checkCommandGroups",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.CommandPath",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.checkCommandGroups",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.checkCommandGroups",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.execute",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.Parent",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.findNext",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.HasAlias",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.findNext",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.Name",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.findNext",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.hasNameOrAliasPrefix",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.findSuggestions",
+          "c-Users-user-Documents-bench-fixtures-cobra.completions_test.customMultiString.String",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.command.defaultHelpFunc",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.HasSubCommands",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.command.defaultHelpFunc",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.Runnable",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.command.defaultHelpFunc",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.UsageString",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.command.defaultUsageFunc",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.AllChildCommandsHaveGroup",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.command.defaultUsageFunc",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.CommandPath",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.command.defaultUsageFunc",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.CommandPathPadding",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.command.defaultUsageFunc",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.Commands",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.command.defaultUsageFunc",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.Groups",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.command.defaultUsageFunc",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.HasAvailableInheritedFlags",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.command.defaultUsageFunc",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.HasAvailableLocalFlags",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.command.defaultUsageFunc",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.HasAvailableSubCommands",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.command.defaultUsageFunc",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.HasExample",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.command.defaultUsageFunc",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.HasHelpSubCommands",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.command.defaultUsageFunc",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.InheritedFlags",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.command.defaultUsageFunc",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.IsAdditionalHelpTopicCommand",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.command.defaultUsageFunc",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.IsAvailableCommand",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.command.defaultUsageFunc",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.LocalFlags",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.command.defaultUsageFunc",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.Name",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.command.defaultUsageFunc",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.NameAndAliases",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.command.defaultUsageFunc",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.NamePadding",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.command.defaultUsageFunc",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.Runnable",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.command.defaultUsageFunc",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.UseLine",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.completions.Command.InitDefaultCompletionCmd",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.Flags",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.completions.Command.InitDefaultCompletionCmd",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.HasAlias",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.completions.Command.getCompletions",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.Commands",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.completions.Command.getCompletions",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.Find",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.completions.Command.getCompletions",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.Flags",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.completions.Command.getCompletions",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.InheritedFlags",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.completions.Command.getCompletions",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.InitDefaultHelpFlag",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.completions.Command.getCompletions",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.InitDefaultVersionFlag",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.completions.Command.getCompletions",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.IsAvailableCommand",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.completions.Command.getCompletions",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.LocalNonPersistentFlags",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.completions.Command.getCompletions",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.Name",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.completions.Command.getCompletions",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.NonInheritedFlags",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.completions.Command.getCompletions",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.ParseFlags",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.completions.Command.getCompletions",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.RemoveCommand",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.completions.Command.getCompletions",
+          "c-Users-user-Documents-bench-fixtures-cobra.completions.flagCompError.Error",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.completions.Command.getCompletions",
+          "c-Users-user-Documents-bench-fixtures-cobra.flag_groups.Command.enforceFlagGroupsForCompletion",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.completions.Command.initCompleteCmd",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.CalledAs",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.completions.Command.initCompleteCmd",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.ErrOrStderr",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.completions.Command.initCompleteCmd",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.Name",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.completions.Command.initCompleteCmd",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.OutOrStdout",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.completions.Command.initCompleteCmd",
+          "c-Users-user-Documents-bench-fixtures-cobra.completions.Command.getCompletions",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.completions.Command.initCompleteCmd",
+          "c-Users-user-Documents-bench-fixtures-cobra.completions.ShellCompDirective.string",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.completions.Command.initCompleteCmd",
+          "c-Users-user-Documents-bench-fixtures-cobra.completions.flagCompError.Error",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.doc.man_docs.GenManTreeFromOpts",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.IsAdditionalHelpTopicCommand",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.doc.man_docs.GenManTreeFromOpts",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.IsAvailableCommand",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.doc.man_docs.genMan",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.IsAdditionalHelpTopicCommand",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.doc.man_docs.genMan",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.IsAvailableCommand",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.doc.man_docs.genMan",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.Name",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.doc.man_docs.manPrintOptions",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.HasAvailableFlags",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.doc.md_docs.GenMarkdownCustom",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.IsAdditionalHelpTopicCommand",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.doc.md_docs.GenMarkdownCustom",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.IsAvailableCommand",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.doc.md_docs.GenMarkdownCustom",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.Name",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.doc.md_docs.GenMarkdownTreeCustom",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.IsAdditionalHelpTopicCommand",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.doc.md_docs.GenMarkdownTreeCustom",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.IsAvailableCommand",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.doc.rest_docs.GenReSTCustom",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.IsAdditionalHelpTopicCommand",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.doc.rest_docs.GenReSTCustom",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.IsAvailableCommand",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.doc.rest_docs.GenReSTCustom",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.Name",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.doc.rest_docs.GenReSTTreeCustom",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.IsAdditionalHelpTopicCommand",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.doc.rest_docs.GenReSTTreeCustom",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.IsAvailableCommand",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.doc.yaml_docs.GenYamlCustom",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.HasFlags",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.doc.yaml_docs.GenYamlCustom",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.IsAdditionalHelpTopicCommand",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.doc.yaml_docs.GenYamlCustom",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.IsAvailableCommand",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.doc.yaml_docs.GenYamlTreeCustom",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.IsAdditionalHelpTopicCommand",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.doc.yaml_docs.GenYamlTreeCustom",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.IsAvailableCommand",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.flag_groups.Command.enforceFlagGroupsForCompletion",
+          "c-Users-user-Documents-bench-fixtures-cobra.shell_completions.MarkFlagRequired",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.shell_completions.Command.MarkFlagCustom",
+          "c-Users-user-Documents-bench-fixtures-cobra.shell_completions.MarkFlagCustom",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.shell_completions.Command.MarkFlagDirname",
+          "c-Users-user-Documents-bench-fixtures-cobra.shell_completions.MarkFlagDirname",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.shell_completions.Command.MarkFlagFilename",
+          "c-Users-user-Documents-bench-fixtures-cobra.shell_completions.MarkFlagFilename",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.shell_completions.Command.MarkFlagRequired",
+          "c-Users-user-Documents-bench-fixtures-cobra.shell_completions.MarkFlagRequired",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.shell_completions.Command.MarkPersistentFlagDirname",
+          "c-Users-user-Documents-bench-fixtures-cobra.shell_completions.MarkFlagDirname",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.shell_completions.Command.MarkPersistentFlagFilename",
+          "c-Users-user-Documents-bench-fixtures-cobra.shell_completions.MarkFlagFilename",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.shell_completions.Command.MarkPersistentFlagRequired",
+          "c-Users-user-Documents-bench-fixtures-cobra.shell_completions.MarkFlagRequired",
+          "CALLS"
+        ]
+      ],
+      "fn_scoped_full": [
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.bash_completions_test.TestBashCompletions",
+          "c-Users-user-Documents-bench-fixtures-cobra.completions_test.customMultiString.String",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.doc.man_docs.genMan",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.CommandPath",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.doc.man_docs.manPreamble",
+          "c-Users-user-Documents-bench-fixtures-cobra.cobra.WriteStringAndCheck",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.doc.man_docs.manPrintFlags",
+          "c-Users-user-Documents-bench-fixtures-cobra.cobra.WriteStringAndCheck",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.doc.man_docs.manPrintOptions",
+          "c-Users-user-Documents-bench-fixtures-cobra.cobra.WriteStringAndCheck",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.doc.man_docs.manPrintOptions",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.InheritedFlags",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.doc.man_docs.manPrintOptions",
+          "c-Users-user-Documents-bench-fixtures-cobra.command.Command.NonInheritedFlags",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.doc.man_examples_test.ExampleGenMan",
+          "c-Users-user-Documents-bench-fixtures-cobra.cobra.CheckErr",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.doc.man_examples_test.ExampleGenMan",
+          "c-Users-user-Documents-bench-fixtures-cobra.doc.man_docs.GenMan",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.doc.man_examples_test.ExampleGenManTree",
+          "c-Users-user-Documents-bench-fixtures-cobra.cobra.CheckErr",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.doc.man_examples_test.ExampleGenManTree",
+          "c-Users-user-Documents-bench-fixtures-cobra.doc.man_docs.GenManTree",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-bench-fixtures-cobra.flag_groups.Command.enforceFlagGroupsForCompletion",
+          "c-Users-user-Documents-bench-fixtures-cobra.shell_completions.Command.MarkFlagRequired",
+          "CALLS"
+        ]
+      ],
+      "caller_kind_precision": {
+        "function-body": {
+          "tp": 145,
+          "fp": 46,
+          "precision": 0.7592,
+          "support": 191
+        },
+        "method-body": {
+          "tp": 287,
+          "fp": 59,
+          "precision": 0.8295,
+          "support": 346
+        },
+        "test-body": {
+          "tp": 462,
+          "fp": 0,
+          "precision": 1.0,
+          "support": 462
+        }
+      },
+      "pkg_block_caller_FP_rate": {
+        "value": 0.0,
+        "alarm": false,
+        "fp_count": 0,
+        "fp_total": 105
+      },
+      "caller_kind_complement_legitimacy": {
+        "value": 0.5312,
+        "legitimate_count": 537,
+        "population_total": 1011
+      },
+      "modality_precision": {
+        "exact-qn-match": {
+          "tp": 261,
+          "fp": 0,
+          "precision": 1.0,
+          "support": 261
+        },
+        "fuzzy-resolve": {
+          "tp": 604,
+          "fp": 81,
+          "precision": 0.8818,
+          "support": 685
+        }
+      },
+      "modality_mix_gini": {
+        "c-Users-user-Documents-bench-fixtures-cobra": 0.5568
+      },
+      "caller_context_tuple_precision": {
+        "function-body|cross-package-imported": {
+          "caller_kind": "function-body",
+          "callee_package_relation": "cross-package-imported",
+          "tp": 87,
+          "fp": 46,
+          "precision": 0.6541,
+          "support": 133
+        },
+        "function-body|same-package": {
+          "caller_kind": "function-body",
+          "callee_package_relation": "same-package",
+          "tp": 58,
+          "fp": 0,
+          "precision": 1.0,
+          "support": 58
+        },
+        "method-body|cross-package-imported": {
+          "caller_kind": "method-body",
+          "callee_package_relation": "cross-package-imported",
+          "tp": 84,
+          "fp": 34,
+          "precision": 0.7119,
+          "support": 118
+        },
+        "method-body|same-package": {
+          "caller_kind": "method-body",
+          "callee_package_relation": "same-package",
+          "tp": 203,
+          "fp": 25,
+          "precision": 0.8904,
+          "support": 228
+        },
+        "test-body|cross-package-imported": {
+          "caller_kind": "test-body",
+          "callee_package_relation": "cross-package-imported",
+          "tp": 259,
+          "fp": 0,
+          "precision": 1.0,
+          "support": 259
+        },
+        "test-body|same-package": {
+          "caller_kind": "test-body",
+          "callee_package_relation": "same-package",
+          "tp": 203,
+          "fp": 0,
+          "precision": 1.0,
+          "support": 203
+        }
+      },
+      "method_set_ambiguity_index": {
+        "c-Users-user-Documents-bench-fixtures-cobra": {
+          "value": 0.0046,
+          "ambiguous_sites": 2,
+          "total_sites": 439
+        }
+      },
+      "janusian_site_precision_split": {
+        "ambiguous": {
+          "tp": 0,
+          "fp": 2,
+          "precision": 0.0,
+          "support": 2
+        },
+        "unambiguous": {
+          "tp": 894,
+          "fp": 103,
+          "precision": 0.8967,
+          "support": 997
+        }
+      },
+      "janusian_precision_gap": 0.8967
+    },
+    "IMPORTS": {
+      "oracle": "go-ast (dropped)",
+      "oracle_count": 0,
+      "measured_count": 0,
+      "status": "known_limitation",
+      "note": "Go oracle drops IMPORTS until import-path -> internal-file-QN resolution is added."
+    }
+  }
+}

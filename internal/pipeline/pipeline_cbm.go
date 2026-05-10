@@ -396,6 +396,14 @@ func (p *Pipeline) resolveFileCallsCBM(relPath string, ext *cachedExtraction) ([
 	// Build per-function type map from CBM type assignments.
 	perFuncTypeMap := inferTypesCBM(ext.Result.TypeAssigns, p.registry, moduleQN, importMap)
 
+	// Augment with closure-parameter bindings inferred from iterator-method
+	// chains like `Type::iter().map(|param| ...)`. CBM does not currently
+	// emit TypeAssigns for closure parameters (they have no explicit type
+	// annotation in Rust source); this Go-side regex scan bridges the gap.
+	// Closes the receiver-resolution failure for closure-rooted chains
+	// (knowledge-base PR #491 / #492 terminal-doc next-plan target).
+	augmentRustClosureTypeMap(filepath.Join(p.RepoPath, relPath), ext.Result.Definitions, perFuncTypeMap)
+
 	// LSP-resolved calls take priority (high confidence, type-aware).
 	edges, lspCallerMethods := collectLSPResolvedEdges(ext.Result.ResolvedCalls, p.registry)
 

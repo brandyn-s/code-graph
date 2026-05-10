@@ -1,6 +1,7 @@
 package pipeline
 
 import (
+	"log/slog"
 	"math"
 	"os"
 	"strings"
@@ -8,6 +9,12 @@ import (
 
 	"github.com/DeusData/codebase-memory-mcp/internal/lang"
 )
+
+// tier2DebugEnabled gates the diagnostic slog records in applyReceiverTypeFilter.
+// Set RESOLVER_TIER2_DEBUG=1 to emit one slog.Info per call describing which
+// short-circuit path was taken. Used by Phase B of the assetman Tier-2 diagnostic
+// plan (knowledge-base PR #491) to classify the 72 ambiguous fuzzy edges.
+var tier2DebugEnabled = os.Getenv("RESOLVER_TIER2_DEBUG") != ""
 
 // ResolutionResult carries the resolved QN plus quality metadata.
 // Initial confidence values are estimates — recalibrate after measuring
@@ -564,11 +571,31 @@ func (r *FunctionRegistry) resolveViaNameLookup(ctx CallContext) ResolutionResul
 // parent-class semantics; they pass through unfiltered.
 func (r *FunctionRegistry) applyReceiverTypeFilter(ctx CallContext, candidates []string) (filtered []string, applied string, dropAll bool) {
 	if ctx.ReceiverType == "" || len(candidates) == 0 {
+		if tier2DebugEnabled {
+			slog.Info("tier2.short_circuit",
+				"path", "empty_receiver_or_no_candidates",
+				"callee", ctx.CalleeName,
+				"caller_qn", ctx.CallerQN,
+				"module_qn", ctx.ModuleQN,
+				"receiver_type", ctx.ReceiverType,
+				"candidate_count", len(candidates),
+			)
+		}
 		return candidates, "", false
 	}
 	// Only fire on method-call shape. Free-function calls go through
 	// Phase 3b's import-binding tier.
 	if !strings.Contains(ctx.CalleeName, ".") {
+		if tier2DebugEnabled {
+			slog.Info("tier2.short_circuit",
+				"path", "not_method_call_shape",
+				"callee", ctx.CalleeName,
+				"caller_qn", ctx.CallerQN,
+				"module_qn", ctx.ModuleQN,
+				"receiver_type", ctx.ReceiverType,
+				"candidate_count", len(candidates),
+			)
+		}
 		return candidates, "", false
 	}
 	// Trait/Impl support: when the receiver is a Struct, accept Methods
@@ -609,13 +636,52 @@ func (r *FunctionRegistry) applyReceiverTypeFilter(ctx CallContext, candidates [
 	// receiver type, the call is external by inference. Drop the
 	// binding (return empty).
 	if sawMethodCandidate && len(matching) == 0 {
+		if tier2DebugEnabled {
+			slog.Info("tier2.short_circuit",
+				"path", "drop_all_no_internal_match",
+				"callee", ctx.CalleeName,
+				"caller_qn", ctx.CallerQN,
+				"module_qn", ctx.ModuleQN,
+				"receiver_type", ctx.ReceiverType,
+				"candidate_count", len(candidates),
+			)
+		}
 		return nil, "receiver-type-no-internal-match", true
 	}
 	// If filtering shrank the set, that's a discrimination win. If it
 	// didn't (only non-method candidates present, or no Methods at all),
 	// pass through quietly so legacy behavior decides.
 	if sawMethodCandidate && len(matching) < len(candidates) {
+		if tier2DebugEnabled {
+			slog.Info("tier2.short_circuit",
+				"path", "narrowed",
+				"callee", ctx.CalleeName,
+				"caller_qn", ctx.CallerQN,
+				"module_qn", ctx.ModuleQN,
+				"receiver_type", ctx.ReceiverType,
+				"candidate_count", len(candidates),
+				"matching_count", len(matching),
+			)
+		}
 		return matching, "receiver-type-match", false
+	}
+	if tier2DebugEnabled {
+		// Pass-through: either no Method candidates at all, or filter
+		// was a no-op (matching == candidates). The most diagnostic
+		// distinction: did we see any Method candidate?
+		passReason := "no_method_candidates"
+		if sawMethodCandidate {
+			passReason = "no_op_all_matched"
+		}
+		slog.Info("tier2.short_circuit",
+			"path", "pass_through",
+			"reason", passReason,
+			"callee", ctx.CalleeName,
+			"caller_qn", ctx.CallerQN,
+			"module_qn", ctx.ModuleQN,
+			"receiver_type", ctx.ReceiverType,
+			"candidate_count", len(candidates),
+		)
 	}
 	return candidates, "", false
 }

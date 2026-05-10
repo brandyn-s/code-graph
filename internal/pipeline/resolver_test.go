@@ -1,7 +1,10 @@
 package pipeline
 
 import (
+	"bytes"
+	"log/slog"
 	"math"
+	"strings"
 	"testing"
 )
 
@@ -647,4 +650,105 @@ func TestSplitCalleeName(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestApplyReceiverTypeFilter_DebugLogging proves that when tier2DebugEnabled
+// is true, applyReceiverTypeFilter emits one slog record per call describing
+// which short-circuit path was taken. Used by Phase B of the assetman Tier-2
+// diagnostic plan (knowledge-base PR #491) to classify the 72 ambiguous
+// fuzzy edges by short-circuit path.
+func TestApplyReceiverTypeFilter_DebugLogging(t *testing.T) {
+	// Save and restore the package-level flag + default slog handler.
+	origFlag := tier2DebugEnabled
+	origLogger := slog.Default()
+	t.Cleanup(func() {
+		tier2DebugEnabled = origFlag
+		slog.SetDefault(origLogger)
+	})
+
+	cases := []struct {
+		name           string
+		setupReg       func(*FunctionRegistry)
+		ctx            CallContext
+		candidates     []string
+		wantPath       string
+		wantPathSubstr string
+	}{
+		{
+			name:       "empty_receiver",
+			setupReg:   func(r *FunctionRegistry) {},
+			ctx:        CallContext{CalleeName: "foo.bar", ReceiverType: ""},
+			candidates: []string{"a.b"},
+			wantPath:   "empty_receiver_or_no_candidates",
+		},
+		{
+			name:       "not_method_call_shape",
+			setupReg:   func(r *FunctionRegistry) {},
+			ctx:        CallContext{CalleeName: "foo", ReceiverType: "SomeType"},
+			candidates: []string{"a.b"},
+			wantPath:   "not_method_call_shape",
+		},
+		{
+			name: "drop_all_no_internal_match",
+			setupReg: func(r *FunctionRegistry) {
+				r.Register("execute", "proj.repo.Foo.execute", "Method")
+			},
+			ctx:        CallContext{CalleeName: "diesel.execute", ReceiverType: "diesel.Query"},
+			candidates: []string{"proj.repo.Foo.execute"},
+			wantPath:   "drop_all_no_internal_match",
+		},
+		{
+			name: "narrowed",
+			setupReg: func(r *FunctionRegistry) {
+				r.Register("get", "proj.repo.AssetRepo.get", "Method")
+				r.Register("get", "proj.repo.UserRepo.get", "Method")
+			},
+			ctx:        CallContext{CalleeName: "asset_repo.get", ReceiverType: "proj.repo.AssetRepo"},
+			candidates: []string{"proj.repo.AssetRepo.get", "proj.repo.UserRepo.get"},
+			wantPath:   "narrowed",
+		},
+		{
+			name: "pass_through_no_method",
+			setupReg: func(r *FunctionRegistry) {
+				r.Register("util", "proj.util", "Function")
+			},
+			ctx:        CallContext{CalleeName: "foo.util", ReceiverType: "SomeType"},
+			candidates: []string{"proj.util"},
+			wantPath:   "pass_through",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+			tier2DebugEnabled = true
+
+			reg := NewFunctionRegistry()
+			tc.setupReg(reg)
+			reg.applyReceiverTypeFilter(tc.ctx, tc.candidates)
+
+			out := buf.String()
+			if !strings.Contains(out, "tier2.short_circuit") {
+				t.Fatalf("expected slog record with msg=tier2.short_circuit, got: %s", out)
+			}
+			if !strings.Contains(out, "path="+tc.wantPath) {
+				t.Errorf("expected path=%q, got: %s", tc.wantPath, out)
+			}
+		})
+	}
+
+	// Also verify that with tier2DebugEnabled=false, NO records emit.
+	t.Run("disabled_emits_nothing", func(t *testing.T) {
+		var buf bytes.Buffer
+		slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+		tier2DebugEnabled = false
+
+		reg := NewFunctionRegistry()
+		reg.applyReceiverTypeFilter(CallContext{CalleeName: "foo.bar"}, []string{"a.b"})
+
+		if buf.Len() > 0 {
+			t.Errorf("expected no output when tier2DebugEnabled=false, got: %s", buf.String())
+		}
+	})
 }

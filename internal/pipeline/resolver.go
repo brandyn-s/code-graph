@@ -16,6 +16,37 @@ import (
 // plan (knowledge-base PR #491) to classify the 72 ambiguous fuzzy edges.
 var tier2DebugEnabled = os.Getenv("RESOLVER_TIER2_DEBUG") != ""
 
+// dropFuzzyJanusianChainsEnabled gates the Janusian-chain drop in
+// FuzzyResolveCtx (knowledge-base PR #492 next-plan target). When set, fuzzy
+// emissions are dropped when the call shape is a multi-segment chain
+// (root.field.method) AND receiver type is empty AND multiple Method
+// candidates exist on distinct parent classes. This is the empirical
+// signature of the 72 ambiguous fuzzy edges on PSM assetman. Default off
+// for A/B validation against the production fixture set.
+var dropFuzzyJanusianChainsEnabled = os.Getenv("RESOLVER_DROP_FUZZY_JANUSIAN_CHAINS") != ""
+
+// allMethodsWithDistinctParents returns true when every candidate is
+// labeled "Method" AND the candidates' parent classes (the QN segment
+// before the method bare name) are all distinct. Helper for the
+// Janusian-chain drop rule in FuzzyResolveCtx.
+func (r *FunctionRegistry) allMethodsWithDistinctParents(candidates []string) bool {
+	if len(candidates) < 2 {
+		return false
+	}
+	parents := make(map[string]struct{}, len(candidates))
+	for _, qn := range candidates {
+		if r.exact[qn] != "Method" {
+			return false
+		}
+		idx := strings.LastIndex(qn, ".")
+		if idx < 0 {
+			return false
+		}
+		parents[qn[:idx]] = struct{}{}
+	}
+	return len(parents) == len(candidates)
+}
+
 // ResolutionResult carries the resolved QN plus quality metadata.
 // Initial confidence values are estimates — recalibrate after measuring
 // precision per strategy on real repos.
@@ -912,6 +943,24 @@ func (r *FunctionRegistry) FuzzyResolveCtx(ctx CallContext) (ResolutionResult, b
 			QualifiedName: candidates[0], Strategy: "fuzzy",
 			Confidence: conf, CandidateCount: 1,
 		}, true
+	}
+
+	// Janusian-chain drop (knowledge-base PR #491 next-plan target):
+	// when CalleeName is a multi-segment chain (root + field(s) + method)
+	// AND ReceiverType is empty (Tier-2 couldn't fire) AND multiple Method
+	// candidates exist on distinct parent classes, the candidates are a
+	// classic Janusian co-hallucination — same method name on unrelated
+	// types, no way to disambiguate without receiver type. Empirically all
+	// 72 ambiguous fuzzy edges on PSM assetman fit this signature
+	// (knowledge-base PR #492 terminal doc). Drop rather than emit one at
+	// speculative confidence. Gated by RESOLVER_DROP_FUZZY_JANUSIAN_CHAINS
+	// for A/B comparison.
+	if dropFuzzyJanusianChainsEnabled &&
+		ctx.ReceiverType == "" &&
+		strings.Count(ctx.CalleeName, ".") >= 2 &&
+		len(candidates) >= 2 &&
+		r.allMethodsWithDistinctParents(candidates) {
+		return ResolutionResult{}, false
 	}
 
 	// Multiple candidates: filter by import reachability, then pick best by distance

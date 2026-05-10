@@ -646,6 +646,17 @@ func (p *Pipeline) resolveCallEdge(
 	// harness apply the drop selectively (Python fixtures only) while
 	// production behavior remains the recall-favorable status quo.
 	//
+	// 2026-05-10 Phase F2 finding: the broader Python-default-on drop
+	// was tested and rejected — it breaks legitimate cross-module
+	// `from X import Y` patterns whose project-wide unique_name lookup
+	// is correct. Flask adversarial F1 lift (+0.070) came from dropping
+	// phantom-unique-name matches that DON'T exist in production-style
+	// Python. Surgical alternative (per-candidate import-reachability)
+	// covered by shouldRequireImportsForLooseCrossPackage gate; a Python
+	// default-on flip there is named-next-plan because the existing
+	// shouldDropCrossPackageSuffix already covers the suffix bucket
+	// at the input layer.
+	//
 	// Pseudo-caller edges are excluded from the drop — they're already
 	// classified as ResolverRuleModalPseudo above, which is not in the
 	// loose-cross-package set.

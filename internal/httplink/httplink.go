@@ -2548,8 +2548,9 @@ func (l *Linker) createRegistrationCallEdges(routes []RouteHandler) {
 			TargetID: handler.ID,
 			Type:     "CALLS",
 			Properties: map[string]any{
-				"via":             "route_registration",
-				"confidence_tier": store.ConfidenceInferred,
+				"via":                 "route_registration",
+				"resolution_strategy": "route_registration",
+				"confidence_tier":     store.ConfidenceInferred,
 			},
 		})
 		count++

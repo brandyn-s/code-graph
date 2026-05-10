@@ -991,6 +991,17 @@ func RegisterRoutes(rg *gin.RouterGroup) {
 					t.Errorf("expected via=route_registration, got %v", via)
 				}
 			}
+			// Check resolution_strategy property — route-registration edges
+			// must populate this so per-strategy precision audits don't
+			// classify them as null-strategy outliers (PSM Rust 276
+			// null-strategy residual finding 2026-05-10).
+			rs, ok := e.Properties["resolution_strategy"]
+			if !ok {
+				t.Errorf("resolution_strategy missing on route-registration edge: %v", e.Properties)
+			}
+			if rs != "route_registration" {
+				t.Errorf("expected resolution_strategy=route_registration, got %v", rs)
+			}
 		}
 	}
 	if !foundCreate {

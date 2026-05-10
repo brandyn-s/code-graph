@@ -278,6 +278,34 @@ func TestResolveCallEdge_SelfMethod_CandidateSetSizeOne(t *testing.T) {
 	}
 }
 
+// TestResolveCallEdge_SelfMethod_CarriesResolutionStrategy — self.method()
+// emissions must populate resolution_strategy="self_method". Without this
+// observability, B2-style audits over r.resolution_strategy show null for
+// every self-receiver call (1122 of 1398 PSM Rust CALLS-edge nulls came
+// from this path before the 2026-05-10 fix).
+func TestResolveCallEdge_SelfMethod_CarriesResolutionStrategy(t *testing.T) {
+	p := &Pipeline{
+		ProjectName: "proj",
+		registry:    NewFunctionRegistry(),
+	}
+	p.registry.Register("MyClass", "app.module.MyClass", "Class")
+	p.registry.Register("helper", "app.module.MyClass.helper", "Method")
+	p.registry.Register("entry", "app.module.MyClass.entry", "Method")
+
+	call := cbm.Call{CalleeName: "self.helper", EnclosingFuncQN: "app.module.MyClass.entry"}
+	edge, ok := p.resolveCallEdge(call, "app.module", map[string]string{}, TypeMap{}, map[string]bool{}, lang.Language(""))
+	if !ok {
+		t.Fatalf("expected resolveCallEdge to emit on self.helper")
+	}
+	got, present := edge.Properties["resolution_strategy"]
+	if !present {
+		t.Fatalf("resolution_strategy missing on self.method emission: %v", edge.Properties)
+	}
+	if got != "self_method" {
+		t.Errorf("expected resolution_strategy=\"self_method\", got %q", got)
+	}
+}
+
 // TestCollectLSPResolvedEdges_CandidateSetSizeIsLSPDefault — every
 // LSP-resolved edge carries candidate_set_size == CandidateSetSizeLSPDefault
 // (=1) because the C-side LSP returns one definite target per call site

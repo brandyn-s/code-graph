@@ -571,6 +571,7 @@ func (p *Pipeline) resolveCallEdge(
 					TargetQN: p.preferImplOverTrait(candidate),
 					Type:     edgeType,
 					Properties: map[string]any{
+						"resolution_strategy":    "self_method",
 						"caller_node_kind":       callerKind,
 						"resolver_rule":          rule,
 						CandidateSetPropertyName: 1,

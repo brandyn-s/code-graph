@@ -188,3 +188,97 @@ func TestRequireImports_PickBestCandidateDrops(t *testing.T) {
 		t.Fatalf("with gate set, pickBestCandidate must drop when no import-reachable candidate; got %q", got.QualifiedName)
 	}
 }
+
+// TestRequireImports_RustDefaultOn — env var UNSET, but the per-language
+// default for Rust is now ON (B2 audit, 2026-05-09). Cross-language /
+// cross-crate-no-import phantoms must drop without explicit env var.
+func TestRequireImports_RustDefaultOn(t *testing.T) {
+	t.Setenv("RESOLVER_REQUIRE_IMPORTS_FOR_LOOSE_CROSS_PACKAGE", "")
+	r := NewFunctionRegistry()
+	// Two `sleep` candidates: one in a Rust crate not imported, one in a
+	// JS file that just happens to have the same suffix.
+	r.Register("sleep", "libmetrics.sink.sleep", "Function")
+	r.Register("sleep", "mithrandir.e2e.trackTestScript.sleep", "Function")
+
+	// Caller imports tokio::time::sleep — neither candidate matches.
+	importMap := map[string]string{
+		"sleep": "tokio.time.sleep",
+	}
+	got := r.ResolveCtx(CallContext{
+		CalleeName: "sleep",
+		ModuleQN:   "reloadd.handlers.handle_reboot_request",
+		ImportMap:  importMap,
+		Language:   lang.Rust,
+	})
+	if got.QualifiedName != "" {
+		t.Fatalf("Rust default-on gate must drop non-import-reachable candidates; got QN=%q", got.QualifiedName)
+	}
+}
+
+// TestRequireImports_RustDefaultOn_EmitsWhenImportReachable — Rust default-
+// on must NOT regress recall on real intra-workspace calls where the caller
+// has an explicit `use` statement reaching the candidate.
+func TestRequireImports_RustDefaultOn_EmitsWhenImportReachable(t *testing.T) {
+	t.Setenv("RESOLVER_REQUIRE_IMPORTS_FOR_LOOSE_CROSS_PACKAGE", "")
+	r := NewFunctionRegistry()
+	r.Register("wrap_half_range", "libtransform.angles.wrap_half_range", "Function")
+
+	// Caller has `use libtransform::angles::wrap_half_range`.
+	importMap := map[string]string{
+		"wrap_half_range": "libtransform.angles.wrap_half_range",
+		"angles":          "libtransform.angles",
+	}
+	got := r.ResolveCtx(CallContext{
+		CalleeName: "wrap_half_range",
+		ModuleQN:   "libais.types.ais",
+		ImportMap:  importMap,
+		Language:   lang.Rust,
+	})
+	if got.QualifiedName != "libtransform.angles.wrap_half_range" {
+		t.Fatalf("import-reachable Rust call must emit even with default-on gate; got %q", got.QualifiedName)
+	}
+}
+
+// TestRequireImports_GoDefaultOff — for non-Rust languages with no env
+// var, the gate stays OFF (preserve current emit-at-half behavior).
+func TestRequireImports_GoDefaultOff(t *testing.T) {
+	t.Setenv("RESOLVER_REQUIRE_IMPORTS_FOR_LOOSE_CROSS_PACKAGE", "")
+	r := NewFunctionRegistry()
+	r.Register("Process", "github.com/x/utils.Process", "Function")
+
+	// Caller's import map does NOT mention utils — non-import-reachable.
+	importMap := map[string]string{
+		"helpers": "github.com/x/helpers",
+	}
+	got := r.ResolveCtx(CallContext{
+		CalleeName: "Process",
+		ModuleQN:   "github.com/x/app",
+		ImportMap:  importMap,
+		Language:   lang.Go,
+	})
+	// Go default-off: still emit, at halved confidence.
+	if got.QualifiedName != "github.com/x/utils.Process" {
+		t.Fatalf("Go default-off must preserve emit-at-half behavior; got %q", got.QualifiedName)
+	}
+	if got.Confidence > 0.5 {
+		t.Errorf("expected halved confidence on Go default-off path; got %.2f", got.Confidence)
+	}
+}
+
+// TestRequireImports_RustDefaultOn_NoImportMap — Rust default-on must NOT
+// drop when caller has no import map (gate scope is import-map-present).
+func TestRequireImports_RustDefaultOn_NoImportMap(t *testing.T) {
+	t.Setenv("RESOLVER_REQUIRE_IMPORTS_FOR_LOOSE_CROSS_PACKAGE", "")
+	r := NewFunctionRegistry()
+	r.Register("Process", "libutils.Process", "Function")
+
+	got := r.ResolveCtx(CallContext{
+		CalleeName: "Process",
+		ModuleQN:   "libapp.run",
+		ImportMap:  nil, // no import map — can't apply the gate
+		Language:   lang.Rust,
+	})
+	if got.QualifiedName != "libutils.Process" {
+		t.Fatalf("no-import-map Rust call must emit (gate scope is import-map-present); got %q", got.QualifiedName)
+	}
+}

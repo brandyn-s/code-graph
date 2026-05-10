@@ -85,21 +85,38 @@ func shouldDropCrossPackageSuffix(language lang.Language) bool {
 
 // shouldRequireImportsForLooseCrossPackage gates emissions in the
 // cross-package-unique-name and cross-package-suffix buckets on
-// import-reachability. When the env var
-// RESOLVER_REQUIRE_IMPORTS_FOR_LOOSE_CROSS_PACKAGE is non-empty, a
-// candidate that is NOT import-reachable (no IMPORTS edge from the call
-// site's module to the candidate's package) is dropped instead of emitted
-// at halved confidence. Default unset = current behavior (emit at halved
-// confidence, which leaks precision on adversarial fixtures).
+// import-reachability. When the gate fires, a candidate that is NOT
+// import-reachable (no IMPORTS edge from the call site's module to the
+// candidate's package) is DROPPED instead of being emitted at halved
+// confidence.
 //
-// Phase F (Plan 8-Phase Arc, 2026-05-09): the existing Python language-
-// gated drop (shouldDropCrossPackageSuffix) loses recall on real Python
-// codebases that don't have full import maps. The import-reachability gate
-// is more surgical: keep candidates that have explicit IMPORTS edge support
-// (high precision), drop candidates that don't (the noise). See
-// `bench/research/phase-f-resolver-imports-gate-2026-05-09.md`.
-func shouldRequireImportsForLooseCrossPackage() bool {
-	return os.Getenv("RESOLVER_REQUIRE_IMPORTS_FOR_LOOSE_CROSS_PACKAGE") != ""
+// Default policy by language:
+//   - Rust: ON by default (2026-05-09, B2 audit). PSM Rust audit found
+//     43% phantom rate (13/30 sampled CALLS edges) clustering into
+//     three buckets — cross-language phantom (Rust→JS/Py/sh), cross-
+//     crate std/core bare-name suffix-match (`join`, `ok`), and cross-
+//     crate third-party method phantom (actix/tokio). All three trace
+//     to the same root cause: bare-name suffix-match without import-
+//     reachability gate. PSM Rust callers reliably use explicit `use`
+//     statements for cross-crate calls, so the recall risk of default-
+//     on is small in practice and the precision win is large. See
+//     `bench/research/2026-05-09-psm-rust-dispatch-audit.md`.
+//   - Other languages: OFF by default. Python is already covered by
+//     shouldDropCrossPackageSuffix (more aggressive: drops the entire
+//     bucket regardless of imports). Go and TS keep current emit-at-
+//     half behavior. Phase F validation (2026-05-09) on Go cobra
+//     fixture showed the gate didn't move CALLS F1 because Go calls
+//     bypass the gated strategies (resolveViaImportMap fires upstream).
+//
+// Env var RESOLVER_REQUIRE_IMPORTS_FOR_LOOSE_CROSS_PACKAGE remains an
+// override: when non-empty, the gate fires for ALL languages
+// regardless of the per-language default. Useful for ad-hoc adversarial
+// fixture validation on Go/TS.
+func shouldRequireImportsForLooseCrossPackage(language lang.Language) bool {
+	if os.Getenv("RESOLVER_REQUIRE_IMPORTS_FOR_LOOSE_CROSS_PACKAGE") != "" {
+		return true
+	}
+	return language == lang.Rust
 }
 
 // FunctionRegistry indexes all Function, Method, and Class nodes by qualified
@@ -504,7 +521,7 @@ func (r *FunctionRegistry) resolveViaNameLookup(ctx CallContext) ResolutionResul
 		// instead of emitting at halved confidence. The halved-confidence
 		// emission leaks precision on Python adversarial fixtures where the
 		// project-wide unique name is real but the call site doesn't import it.
-		if shouldRequireImportsForLooseCrossPackage() && ctx.ImportMap != nil &&
+		if shouldRequireImportsForLooseCrossPackage(ctx.Language) && ctx.ImportMap != nil &&
 			!isImportReachable(candidates[0], ctx.ImportMap) {
 			return ResolutionResult{}
 		}
@@ -693,7 +710,7 @@ func (r *FunctionRegistry) resolveSuffixMatch(ctx CallContext, candidates []stri
 		return ResolutionResult{}
 	}
 	_, suffix := splitCalleeName(ctx.CalleeName)
-	requireImports := shouldRequireImportsForLooseCrossPackage()
+	requireImports := shouldRequireImportsForLooseCrossPackage(ctx.Language)
 	var matches []string
 	for _, qn := range candidates {
 		if strings.HasSuffix(qn, "."+ctx.CalleeName) {
@@ -746,7 +763,7 @@ func (r *FunctionRegistry) pickBestCandidate(ctx CallContext, candidates []strin
 	// Phase F (2026-05-09): when env var is set and import-filter eliminated
 	// every candidate, drop the bucket entirely instead of falling back to
 	// best-by-distance among non-import-reachable candidates.
-	if shouldRequireImportsForLooseCrossPackage() && len(filtered) == 0 {
+	if shouldRequireImportsForLooseCrossPackage(ctx.Language) && len(filtered) == 0 {
 		return ResolutionResult{}
 	}
 	if len(filtered) == 0 {

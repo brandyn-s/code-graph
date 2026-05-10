@@ -1,0 +1,1110 @@
+{
+  "schema_version": 1,
+  "date": "2026-05-10",
+  "fixture": "code-graph-go",
+  "sha": "1dab656f84135f8f6a448eb3066598c3f31f3fb5",
+  "short_sha": "1dab656",
+  "project_name": "c-Users-user-Documents-GitHub-code-graph",
+  "results": {
+    "CALLS": {
+      "oracle": "go-ast",
+      "per_project": [
+        {
+          "project": "c-Users-user-Documents-GitHub-code-graph-internal-store",
+          "oracle_count": 324,
+          "measured_count": 843,
+          "tp": 324,
+          "fp": 415,
+          "fn": 0,
+          "precision": 0.4384,
+          "recall": 1.0,
+          "f1": 0.6096
+        },
+        {
+          "project": "c-Users-user-Documents-GitHub-code-graph-internal-cypher",
+          "oracle_count": 247,
+          "measured_count": 290,
+          "tp": 247,
+          "fp": 41,
+          "fn": 0,
+          "precision": 0.8576,
+          "recall": 1.0,
+          "f1": 0.9234
+        },
+        {
+          "project": "c-Users-user-Documents-GitHub-code-graph-internal-pipeline",
+          "oracle_count": 1052,
+          "measured_count": 1322,
+          "tp": 1052,
+          "fp": 234,
+          "fn": 0,
+          "precision": 0.818,
+          "recall": 1.0,
+          "f1": 0.8999
+        },
+        {
+          "project": "c-Users-user-Documents-GitHub-code-graph-internal-tools",
+          "oracle_count": 717,
+          "measured_count": 734,
+          "tp": 717,
+          "fp": 10,
+          "fn": 0,
+          "precision": 0.9862,
+          "recall": 1.0,
+          "f1": 0.9931
+        },
+        {
+          "project": "c-Users-user-Documents-GitHub-code-graph-internal-cbm",
+          "oracle_count": 439,
+          "measured_count": 2151,
+          "tp": 439,
+          "fp": 5,
+          "fn": 0,
+          "precision": 0.9887,
+          "recall": 1.0,
+          "f1": 0.9943
+        }
+      ],
+      "oracle_count": 2779,
+      "measured_count": 5340,
+      "oracle_caller_count": 1267,
+      "exact": {
+        "tp": 2779,
+        "fp": 2561,
+        "fn": 0,
+        "precision": 0.5204,
+        "recall": 1.0,
+        "f1": 0.6846
+      },
+      "suffix_3seg": {
+        "tp": 2779,
+        "fp": 2231,
+        "fn": 0,
+        "precision": 0.5547,
+        "recall": 1.0,
+        "f1": 0.7136
+      },
+      "scope_aligned": {
+        "tp": 2779,
+        "fp": 143,
+        "fn": 0,
+        "precision": 0.9511,
+        "recall": 1.0,
+        "f1": 0.9749
+      },
+      "scope_aligned_high_confidence": {
+        "tp": 2779,
+        "fp": 143,
+        "fn": 0,
+        "precision": 0.9511,
+        "recall": 1.0,
+        "f1": 0.9749
+      },
+      "scope_impl_normalized": {
+        "tp": 2779,
+        "fp": 143,
+        "fn": 0,
+        "precision": 0.9511,
+        "recall": 1.0,
+        "f1": 0.9749
+      },
+      "scope_generic_normalized": {
+        "tp": 2779,
+        "fp": 143,
+        "fn": 0,
+        "precision": 0.9511,
+        "recall": 1.0,
+        "f1": 0.9749
+      },
+      "scope_canonical": {
+        "tp": 2779,
+        "fp": 143,
+        "fn": 0,
+        "precision": 0.9511,
+        "recall": 1.0,
+        "f1": 0.9749
+      },
+      "sample_fp_exact": [
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.arena",
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.arena.arena_grow",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.arena",
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.arena.cbm_arena_alloc",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.cbm",
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.arena.cbm_arena_destroy",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.cbm",
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.arena.cbm_arena_init",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.cbm",
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.arena.cbm_arena_strdup",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.cbm",
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.cbm.get_thread_parser",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.cbm",
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.cbm.now_ns",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.cbm",
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.extract_defs.cbm_extract_definitions",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.cbm",
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.extract_imports.cbm_extract_imports",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.cbm",
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.extract_unified.cbm_extract_unified",
+          "CALLS"
+        ]
+      ],
+      "sample_fn_exact": [],
+      "sample_fp_scoped": [
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.cbm.ExtractFile",
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.cbm.cbm_extract_file",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.cbm.ExtractFile",
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.cbm.cbm_free_result",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.lsp_bridge.RunGoLSPCrossFile",
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.arena.cbm_arena_destroy",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.lsp_bridge.RunGoLSPCrossFile",
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.arena.cbm_arena_init",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.lsp_bridge.RunGoLSPCrossFile",
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.lsp.go_lsp.cbm_run_go_lsp_cross",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-cypher.parser.Parse",
+          "c-Users-user-Documents-GitHub-code-graph-internal-cypher.parser.Parser.parseQuery",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-pipeline.adaptive.adaptivePool.onTick",
+          "c-Users-user-Documents-GitHub-code-graph-internal-pipeline.adaptive_csw_unix.getContentionSignal",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-pipeline.configlink_strategies.Pipeline.matchTerraformEnvVars",
+          "c-Users-user-Documents-GitHub-code-graph-internal-pipeline.resolver.FunctionRegistry.Size",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-pipeline.envscan.ScanProjectEnvURLs",
+          "c-Users-user-Documents-GitHub-code-graph-internal-pipeline.resolver.FunctionRegistry.Size",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-pipeline.go_dep_registry.goLSPDefIndex.integrateThirdPartyDeps",
+          "c-Users-user-Documents-GitHub-code-graph-internal-pipeline.go_dep_registry.goDepVersions.resolveModDir",
+          "CALLS"
+        ]
+      ],
+      "sample_fn_scoped": [],
+      "fp_scoped_full": [
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.cbm.ExtractFile",
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.cbm.cbm_extract_file",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.cbm.ExtractFile",
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.cbm.cbm_free_result",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.lsp_bridge.RunGoLSPCrossFile",
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.arena.cbm_arena_destroy",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.lsp_bridge.RunGoLSPCrossFile",
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.arena.cbm_arena_init",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.lsp_bridge.RunGoLSPCrossFile",
+          "c-Users-user-Documents-GitHub-code-graph-internal-cbm.lsp.go_lsp.cbm_run_go_lsp_cross",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-cypher.parser.Parse",
+          "c-Users-user-Documents-GitHub-code-graph-internal-cypher.parser.Parser.parseQuery",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-pipeline.adaptive.adaptivePool.onTick",
+          "c-Users-user-Documents-GitHub-code-graph-internal-pipeline.adaptive_csw_unix.getContentionSignal",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-pipeline.configlink_strategies.Pipeline.matchTerraformEnvVars",
+          "c-Users-user-Documents-GitHub-code-graph-internal-pipeline.resolver.FunctionRegistry.Size",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-pipeline.envscan.ScanProjectEnvURLs",
+          "c-Users-user-Documents-GitHub-code-graph-internal-pipeline.resolver.FunctionRegistry.Size",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-pipeline.go_dep_registry.goLSPDefIndex.integrateThirdPartyDeps",
+          "c-Users-user-Documents-GitHub-code-graph-internal-pipeline.go_dep_registry.goDepVersions.resolveModDir",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-pipeline.infrascan.Pipeline.passInfraFiles",
+          "c-Users-user-Documents-GitHub-code-graph-internal-pipeline.resolver.FunctionRegistry.Size",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-pipeline.pass_embeddings.Pipeline.passEmbeddings",
+          "c-Users-user-Documents-GitHub-code-graph-internal-pipeline.adaptive.contentionTier.String",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-pipeline.pass_embeddings.Pipeline.passEmbeddings",
+          "c-Users-user-Documents-GitHub-code-graph-internal-pipeline.voyage_client.VoyageClient.EmbedBatch",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-pipeline.pipeline.Pipeline.classifyFiles",
+          "c-Users-user-Documents-GitHub-code-graph-internal-pipeline.resolver.FunctionRegistry.Size",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-pipeline.pipeline.Pipeline.passDefinitions",
+          "c-Users-user-Documents-GitHub-code-graph-internal-pipeline.adaptive.adaptivePool.acquire",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-pipeline.pipeline.Pipeline.passDefinitions",
+          "c-Users-user-Documents-GitHub-code-graph-internal-pipeline.adaptive.adaptivePool.monitor",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-pipeline.pipeline.Pipeline.passDefinitions",
+          "c-Users-user-Documents-GitHub-code-graph-internal-pipeline.adaptive.adaptivePool.releaseBytes",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-pipeline.pipeline.Pipeline.passDefinitions",
+          "c-Users-user-Documents-GitHub-code-graph-internal-pipeline.adaptive.adaptivePool.stop",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-pipeline.pipeline.Pipeline.passDefinitions",
+          "c-Users-user-Documents-GitHub-code-graph-internal-pipeline.prefetch.prefetcher.advance",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-pipeline.pipeline.Pipeline.passDefinitions",
+          "c-Users-user-Documents-GitHub-code-graph-internal-pipeline.prefetch.prefetcher.run",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-pipeline.pipeline.Pipeline.passHTTPLinks",
+          "c-Users-user-Documents-GitHub-code-graph-internal-pipeline.pipeline.New",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-pipeline.pipeline.Pipeline.passHTTPLinks",
+          "c-Users-user-Documents-GitHub-code-graph-internal-pipeline.pipeline.Pipeline.Run",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-pipeline.pipeline.Pipeline.updateFileHashes",
+          "c-Users-user-Documents-GitHub-code-graph-internal-pipeline.resolver.FunctionRegistry.Size",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-pipeline.pipeline_cbm.cbmParseFile",
+          "c-Users-user-Documents-GitHub-code-graph-internal-pipeline.mmap_unix.mmapFile",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.architecture.Store.StoreADR",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.store.Querier.Exec",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.architecture.Store.archBoundaries",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.architecture.Store.archBoundaries",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.nodes.scanner.Scan",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.architecture.Store.archBoundaries",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.store.Querier.Query",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.architecture.Store.archClusters",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.architecture.Store.archClusters",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.nodes.scanner.Scan",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.architecture.Store.archClusters",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.store.Querier.Query",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.architecture.Store.archFileTree",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.architecture.Store.archFileTree",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.nodes.scanner.Scan",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.architecture.Store.archFileTree",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.store.Querier.Query",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.architecture.Store.archHotspots",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.architecture.Store.archHotspots",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.nodes.scanner.Scan",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.architecture.Store.archHotspots",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.store.Querier.Query",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.architecture.Store.archLanguages",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.architecture.Store.archLanguages",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.nodes.scanner.Scan",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.architecture.Store.archLanguages",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.store.Querier.Query",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.architecture.Store.archLayers",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.architecture.Store.archLayers",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.nodes.scanner.Scan",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.architecture.Store.archLayers",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.store.Querier.Query",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.architecture.Store.archPackages",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.architecture.Store.archPackages",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.nodes.scanner.Scan",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.architecture.Store.archPackages",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.store.Querier.Query",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.architecture.Store.archPackagesByQN",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.architecture.Store.archPackagesByQN",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.nodes.scanner.Scan",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.architecture.Store.archPackagesByQN",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.store.Querier.Query",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.architecture.Store.archRoutes",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.architecture.Store.archRoutes",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.nodes.scanner.Scan",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.architecture.Store.archRoutes",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.store.Querier.Query",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.architecture.Store.archServices",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.architecture.Store.archServices",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.nodes.scanner.Scan",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.architecture.Store.archServices",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.store.Querier.Query",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.architecture.Store.loadNodePackageMap",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.architecture.Store.loadNodePackageMap",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.nodes.scanner.Scan",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.architecture.Store.loadNodePackageMap",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.store.Querier.Query",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.auto_recovery.OpenPathWithAutoRecovery",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.auto_recovery.RecoveryEvent.String",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.bulk.Store.bulkInsertEdgeChunk",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.auto_recovery.RecoveryEvent.String",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.bulk.Store.bulkInsertEdgeChunk",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.store.Querier.Exec",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.bulk.Store.bulkInsertNodeChunk",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.auto_recovery.RecoveryEvent.String",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.bulk.Store.bulkInsertNodeChunk",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.store.Querier.Exec",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.cache.QueryCache.Set",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.store.Now",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.edges.Store.AllEdges",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.edges.Store.AllEdges",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.store.Querier.Query",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.edges.Store.FindEdgesBySource",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.edges.Store.FindEdgesBySource",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.store.Querier.Query",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.edges.Store.FindEdgesBySourceAndType",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.edges.Store.FindEdgesBySourceAndType",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.store.Querier.Query",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.edges.Store.FindEdgesBySourceIDs",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.edges.Store.FindEdgesBySourceIDs",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.store.Querier.Query",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.edges.Store.FindEdgesByTarget",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.edges.Store.FindEdgesByTarget",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.store.Querier.Query",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.edges.Store.FindEdgesByTargetAndType",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.edges.Store.FindEdgesByTargetAndType",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.store.Querier.Query",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.edges.Store.FindEdgesByTargetIDs",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.edges.Store.FindEdgesByTargetIDs",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.store.Querier.Query",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.edges.Store.FindEdgesByType",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.edges.Store.FindEdgesByType",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.store.Querier.Query",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.edges.Store.FindEdgesByURLPath",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.edges.Store.FindEdgesByURLPath",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.store.Querier.Query",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.edges.Store.InsertEdge",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.store.Querier.Exec",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.edges.Store.insertEdgeChunk",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.auto_recovery.RecoveryEvent.String",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.edges.Store.insertEdgeChunk",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.store.Querier.Exec",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.embeddings.Store.UpsertEmbedding",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.store.Querier.ExecContext",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.embeddings.Store.UpsertEmbeddingBatch",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.embeddings.Store.UpsertEmbeddingBatch",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.store.Querier.Exec",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.embeddings.Store.UpsertEmbeddingBatch",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.store.Querier.Prepare",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.embeddings.Store.loadEmbeddingCache",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.embeddings.Store.loadEmbeddingCache",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.nodes.scanner.Scan",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.embeddings.Store.loadEmbeddingCache",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.store.Querier.QueryContext",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.migrate.StoreRouter.migrate",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.migrate.StoreRouter.migrate",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.nodes.scanner.Scan",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.migrate.StoreRouter.migrate",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.store.Open",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.migrate.StoreRouter.migrate",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.store.Querier.QueryContext",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.migrate.StoreRouter.migrateProject",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.migrate.StoreRouter.migrateProject",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.nodes.scanner.Scan",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.migrate.StoreRouter.migrateProject",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.store.Querier.ExecContext",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.migrate.StoreRouter.migrateProject",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.store.Querier.QueryRowContext",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.nodes.Store.AllNodes",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.nodes.Store.AllNodes",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.store.Querier.Query",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.nodes.Store.FindNodeByID",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.store.Querier.QueryRow",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.nodes.Store.FindNodeByQN",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.store.Querier.QueryRow",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.nodes.Store.FindNodesByFile",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.nodes.Store.FindNodesByFile",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.store.Querier.Query",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.nodes.Store.FindNodesByFileOverlap",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.nodes.Store.FindNodesByFileOverlap",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.store.Querier.Query",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.nodes.Store.FindNodesByIDs",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.nodes.Store.FindNodesByIDs",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.store.Querier.Query",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.nodes.Store.FindNodesByLabel",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.nodes.Store.FindNodesByLabel",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.store.Querier.Query",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.nodes.Store.FindNodesByName",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.nodes.Store.FindNodesByName",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.store.Querier.Query",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.nodes.Store.FindNodesByProperty",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.nodes.Store.FindNodesByProperty",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.store.Querier.Query",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.nodes.Store.FindNodesByQNSuffix",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.nodes.Store.FindNodesByQNSuffix",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.store.Querier.Query",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.nodes.Store.UpsertNode",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.nodes.scanner.Scan",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.nodes.Store.UpsertNode",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.store.Querier.Exec",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.nodes.Store.UpsertNode",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.store.Querier.QueryRow",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.nodes.Store.upsertNodeChunk",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.auto_recovery.RecoveryEvent.String",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.nodes.Store.upsertNodeChunk",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.store.Querier.Exec",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.nodes.scanNode",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.nodes.scanner.Scan",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.projects.Store.UpsertProject",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.store.Querier.Exec",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.router.NewRouter",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.migrate.StoreRouter.migrate",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.router.StoreRouter.AllStores",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.store.Now",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.router.StoreRouter.DeleteProject",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.router.StoreRouter.ListProjects",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.router.StoreRouter.ListProjects",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.router.StoreRouter.evictIdle",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.router.StoreRouter.evictIdle",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.store.Now",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.router.StoreRouter.getOrOpenLocked",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.store.Now",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.search.Store.executeSearchQuery",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.search.Store.executeSearchQuery",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.nodes.scanner.Scan",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.search.Store.executeSearchQuery",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.store.Querier.Query",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.store.OpenPath",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.store.Store.initSchema",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.store.Store.BeginBulkWrite",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.store.Querier.ExecContext",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.store.Store.EndBulkWrite",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.store.Querier.ExecContext",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.store.Store.WithLargeCache",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.store.Querier.ExecContext",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.store.Store.restoreDefaultCache",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.store.Querier.ExecContext",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.traverse.Store.BFS",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.traverse.Store.BFS",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.nodes.scanner.Scan",
+          "CALLS"
+        ],
+        [
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.traverse.Store.BFS",
+          "c-Users-user-Documents-GitHub-code-graph-internal-store.store.Querier.Query",
+          "CALLS"
+        ]
+      ],
+      "fn_scoped_full": [],
+      "caller_kind_precision": {
+        "function-body": {
+          "tp": 272,
+          "fp": 12,
+          "precision": 0.9577,
+          "support": 284
+        },
+        "method-body": {
+          "tp": 1259,
+          "fp": 131,
+          "precision": 0.9058,
+          "support": 1390
+        },
+        "test-body": {
+          "tp": 1248,
+          "fp": 0,
+          "precision": 1.0,
+          "support": 1248
+        }
+      },
+      "pkg_block_caller_FP_rate": {
+        "value": 0.0,
+        "alarm": false,
+        "fp_count": 0,
+        "fp_total": 143
+      },
+      "caller_kind_complement_legitimacy": {
+        "value": 0.5729,
+        "legitimate_count": 1674,
+        "population_total": 2922
+      },
+      "modality_precision": {
+        "cross-package-unique-name": {
+          "tp": 1919,
+          "fp": 99,
+          "precision": 0.9509,
+          "support": 2018
+        },
+        "exact-qn-match": {
+          "tp": 593,
+          "fp": 0,
+          "precision": 1.0,
+          "support": 593
+        },
+        "same-package-shadow": {
+          "tp": 265,
+          "fp": 0,
+          "precision": 1.0,
+          "support": 265
+        }
+      },
+      "modality_mix_gini": {
+        "c-Users-user-Documents-GitHub-code-graph-internal-store": 0.6084,
+        "c-Users-user-Documents-GitHub-code-graph-internal-cypher": 0.4597,
+        "c-Users-user-Documents-GitHub-code-graph-internal-pipeline": 0.5463,
+        "c-Users-user-Documents-GitHub-code-graph-internal-tools": 0.4482,
+        "c-Users-user-Documents-GitHub-code-graph-internal-cbm": 0.1599
+      },
+      "caller_context_tuple_precision": {
+        "function-body|cross-package-imported": {
+          "caller_kind": "function-body",
+          "callee_package_relation": "cross-package-imported",
+          "tp": 70,
+          "fp": 10,
+          "precision": 0.875,
+          "support": 80
+        },
+        "function-body|same-package": {
+          "caller_kind": "function-body",
+          "callee_package_relation": "same-package",
+          "tp": 202,
+          "fp": 2,
+          "precision": 0.9902,
+          "support": 204
+        },
+        "method-body|cross-package-imported": {
+          "caller_kind": "method-body",
+          "callee_package_relation": "cross-package-imported",
+          "tp": 898,
+          "fp": 129,
+          "precision": 0.8744,
+          "support": 1027
+        },
+        "method-body|same-package": {
+          "caller_kind": "method-body",
+          "callee_package_relation": "same-package",
+          "tp": 361,
+          "fp": 2,
+          "precision": 0.9945,
+          "support": 363
+        },
+        "test-body|cross-package-imported": {
+          "caller_kind": "test-body",
+          "callee_package_relation": "cross-package-imported",
+          "tp": 857,
+          "fp": 0,
+          "precision": 1.0,
+          "support": 857
+        },
+        "test-body|same-package": {
+          "caller_kind": "test-body",
+          "callee_package_relation": "same-package",
+          "tp": 391,
+          "fp": 0,
+          "precision": 1.0,
+          "support": 391
+        }
+      },
+      "method_set_ambiguity_index": {
+        "c-Users-user-Documents-GitHub-code-graph-internal-store": {
+          "value": 0.1688,
+          "ambiguous_sites": 39,
+          "total_sites": 231
+        },
+        "c-Users-user-Documents-GitHub-code-graph-internal-cypher": {
+          "value": 0.0,
+          "ambiguous_sites": 0,
+          "total_sites": 133
+        },
+        "c-Users-user-Documents-GitHub-code-graph-internal-pipeline": {
+          "value": 0.006,
+          "ambiguous_sites": 3,
+          "total_sites": 496
+        },
+        "c-Users-user-Documents-GitHub-code-graph-internal-tools": {
+          "value": 0.0,
+          "ambiguous_sites": 0,
+          "total_sites": 200
+        },
+        "c-Users-user-Documents-GitHub-code-graph-internal-cbm": {
+          "value": 0.0,
+          "ambiguous_sites": 0,
+          "total_sites": 207
+        }
+      },
+      "janusian_site_precision_split": {
+        "ambiguous": {
+          "tp": 2,
+          "fp": 40,
+          "precision": 0.0476,
+          "support": 42
+        },
+        "unambiguous": {
+          "tp": 2777,
+          "fp": 103,
+          "precision": 0.9642,
+          "support": 2880
+        }
+      },
+      "janusian_precision_gap": 0.9166
+    },
+    "IMPORTS": {
+      "oracle": "go-ast (dropped)",
+      "oracle_count": 0,
+      "measured_count": 109,
+      "status": "known_limitation",
+      "note": "Go oracle drops IMPORTS until import-path -> internal-file-QN resolution is added."
+    }
+  }
+}

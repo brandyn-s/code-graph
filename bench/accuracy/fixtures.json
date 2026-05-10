@@ -5,70 +5,126 @@
     {
       "id": "mcp-servers",
       "path": "C:/Users/user/Documents/GitHub/mcp-servers",
-      "sha": "1f3438f471e69884e950ffb6bd10b77ab06bb58b",
-      "short_sha": "1f3438f",
-      "languages": ["python"],
-      "entry_points": ["claude-proxy/claude_proxy.py", "crowdstrike/proxy.py", "slack-connect/slack_connect_app.py"],
+      "sha": "76b08b11664030ce190ee2dbcf6e026dc0aeb1e3",
+      "short_sha": "76b08b1",
+      "languages": [
+        "python"
+      ],
+      "entry_points": [
+        "claude-proxy/claude_proxy.py",
+        "crowdstrike/proxy.py",
+        "slack-connect/slack_connect_app.py"
+      ],
       "notes": "Python-first fixture. Baseline: CALLS F1=0.981, IMPORTS F1=1.000 (scope-aligned).",
-      "edge_types_in_scope": ["CALLS", "IMPORTS", "HTTP_CALLS"]
+      "edge_types_in_scope": [
+        "CALLS",
+        "IMPORTS",
+        "HTTP_CALLS"
+      ]
     },
     {
       "id": "psm-rust",
       "path": "C:/Users/user/Documents/GitHub/psm",
       "sha": "aa4584e2af8e5451ce1d8f81db2323d0493a07eb",
       "short_sha": "aa4584e",
-      "languages": ["rust"],
-      "subset": ["canstatd", "calibration/calibd", "adsbd", "apid", "assetman"],
+      "languages": [
+        "rust"
+      ],
+      "subset": [
+        "canstatd",
+        "calibration/calibd",
+        "adsbd",
+        "apid",
+        "assetman"
+      ],
       "notes": "Rust fixture on real redacted monorepo. Subset picked for structural variance: tiny pure-logic (canstatd 88 LOC) -> small async (calibd 184 LOC) -> monolithic (adsbd 631 LOC) -> large async-heavy (apid 6649 LOC, 52 files) -> macro/trait-heavy largest (assetman 20022 LOC, 118 files). Read-only per feedback memory.",
-      "edge_types_in_scope": ["CALLS", "IMPORTS"]
+      "edge_types_in_scope": [
+        "CALLS",
+        "IMPORTS"
+      ]
     },
     {
       "id": "code-graph-go",
       "path": "C:/Users/user/Documents/GitHub/code-graph",
-      "sha": "bea418a05d3d361d5516667f3a036d06d8c8cbfd",
-      "short_sha": "bea418a",
-      "languages": ["go"],
-      "subset": ["internal/store", "internal/cypher", "internal/pipeline", "internal/tools", "internal/cbm"],
+      "sha": "1dab656f84135f8f6a448eb3066598c3f31f3fb5",
+      "short_sha": "1dab656",
+      "languages": [
+        "go"
+      ],
+      "subset": [
+        "internal/store",
+        "internal/cypher",
+        "internal/pipeline",
+        "internal/tools",
+        "internal/cbm"
+      ],
       "notes": "Self-hosting Go fixture on code-graph itself. Originally planned psm/auth-gateway but that module has sqlc-generated types that aren't checked in, so Go RTA fails type-checking. code-graph is a ~90% Go codebase that type-checks cleanly. Subset picked for variance: store (SQLite CRUD), cypher (parser+executor), pipeline (multi-pass orchestrator), tools (MCP handlers), cbm (CGO bridge).",
-      "edge_types_in_scope": ["CALLS", "IMPORTS"]
+      "edge_types_in_scope": [
+        "CALLS",
+        "IMPORTS"
+      ]
     },
     {
       "id": "cobra-go",
       "path": "C:/Users/user/Documents/bench-fixtures/cobra",
       "sha": "f2878bab8c96afd6e36968af96343b35dbb82a82",
       "short_sha": "f2878ba",
-      "languages": ["go"],
-      "subset": ["."],
-      "notes": "Non-self-hosting Go fixture (added 2026-05-02 per claude-knowledge-base PR #368 plateau-fix improvements). spf13/cobra at f2878ba — CLI-building library, ~10K LOC, 36 .go files, type-clean (no CGO, no generated code). Heavy receiver-method usage on the Command struct exercises Y.5 oracle resolver-method resolution. Self-hosting fixtures hit a ceiling where remaining residuals are oracle-specific limitations against the harness's own static analysis depth — adding a 2nd Go repo proves whether F1 generalizes outside the self-hosting case.",
-      "edge_types_in_scope": ["CALLS", "IMPORTS"]
+      "languages": [
+        "go"
+      ],
+      "subset": [
+        "."
+      ],
+      "notes": "Non-self-hosting Go fixture (added 2026-05-02 per claude-knowledge-base PR #368 plateau-fix improvements). spf13/cobra at f2878ba \u00e2\u20ac\u201d CLI-building library, ~10K LOC, 36 .go files, type-clean (no CGO, no generated code). Heavy receiver-method usage on the Command struct exercises Y.5 oracle resolver-method resolution. Self-hosting fixtures hit a ceiling where remaining residuals are oracle-specific limitations against the harness's own static analysis depth \u00e2\u20ac\u201d adding a 2nd Go repo proves whether F1 generalizes outside the self-hosting case.",
+      "edge_types_in_scope": [
+        "CALLS",
+        "IMPORTS"
+      ]
     },
     {
       "id": "flask-adversarial",
       "path": "C:/Users/user/Documents/bench-fixtures/flask",
       "sha": "2ac89889f4cc330eabd50f295dcef02828522c69",
       "short_sha": "2ac8988",
-      "languages": ["python"],
+      "languages": [
+        "python"
+      ],
       "notes": "Re-added 2026-05-06 to populate modality_precision per-rule data on a documented weak Python fixture (2026-04-24 baseline F1=0.54 pre-instrumentation). pallets/flask at 2ac8988. PyCG oracle cached at bench/accuracy/cache/pycg-flask-adversarial-2ac8988.json. The 2026-04-24 measurement predates the resolver_rule taxonomy (PR #129); this entry lets compare.py emit a current baseline so the per-rule cells on weak fixtures are no longer empty.",
-      "edge_types_in_scope": ["CALLS", "IMPORTS"]
+      "edge_types_in_scope": [
+        "CALLS",
+        "IMPORTS"
+      ]
     },
     {
       "id": "requests-adversarial",
       "path": "C:/Users/user/Documents/bench-fixtures/requests",
       "sha": "f43f750ee10addbaa13901c1017631b4d70fd6e3",
       "short_sha": "f43f750",
-      "languages": ["python"],
+      "languages": [
+        "python"
+      ],
       "notes": "Re-added 2026-05-06 to populate modality_precision (2026-04-24 baseline F1=0.57 pre-instrumentation). psf/requests at f43f750. PyCG oracle cached.",
-      "edge_types_in_scope": ["CALLS", "IMPORTS"]
+      "edge_types_in_scope": [
+        "CALLS",
+        "IMPORTS"
+      ]
     },
     {
       "id": "gin-adversarial",
       "path": "C:/Users/user/Documents/bench-fixtures/gin",
       "sha": "d3ffc9985281dcf4d3bef604cce4e662b1a327a6",
       "short_sha": "d3ffc99",
-      "languages": ["go"],
-      "subset": ["."],
-      "notes": "Re-added 2026-05-06 to populate modality_precision (2026-04-24 baseline F1=0.54 pre-instrumentation). gin-gonic/gin at d3ffc99. Go-AST oracle cache absent for this SHA — compare.py will generate one.",
-      "edge_types_in_scope": ["CALLS", "IMPORTS"]
+      "languages": [
+        "go"
+      ],
+      "subset": [
+        "."
+      ],
+      "notes": "Re-added 2026-05-06 to populate modality_precision (2026-04-24 baseline F1=0.54 pre-instrumentation). gin-gonic/gin at d3ffc99. Go-AST oracle cache absent for this SHA \u00e2\u20ac\u201d compare.py will generate one.",
+      "edge_types_in_scope": [
+        "CALLS",
+        "IMPORTS"
+      ]
     }
   ],
   "negative_fixtures": [
@@ -76,9 +132,11 @@
       "id": "rust-diesel-negative",
       "path": "bench/accuracy/synthetic/rust-diesel-negative",
       "kind": "negative",
-      "languages": ["rust"],
+      "languages": [
+        "rust"
+      ],
       "failure_class": "co-hallucination via cross-package-heuristic bare-name suffix-match",
-      "notes": "Hand-authored fixture per 2026-05-02 roundtable Recommendation #1. Exercises the Diesel-chain co-hallucination class observed on assetman: external trait methods (.get_result/.load/.execute) chained on a query builder share bare names with internal methods on AssetRepo + IntrospectService. Evaluated by check_negative_fixtures.py against forbidden_emitted_calls in its ground_truth.json. Baseline phantom_count: 1 (see baselines/2026-05-02-diesel-negative-baseline.md). No SHA pinning — fixture lives in this repo and version-tracks with code-graph.",
+      "notes": "Hand-authored fixture per 2026-05-02 roundtable Recommendation #1. Exercises the Diesel-chain co-hallucination class observed on assetman: external trait methods (.get_result/.load/.execute) chained on a query builder share bare names with internal methods on AssetRepo + IntrospectService. Evaluated by check_negative_fixtures.py against forbidden_emitted_calls in its ground_truth.json. Baseline phantom_count: 1 (see baselines/2026-05-02-diesel-negative-baseline.md). No SHA pinning \u00e2\u20ac\u201d fixture lives in this repo and version-tracks with code-graph.",
       "harness": "bench/accuracy/check_negative_fixtures.py rust-diesel-negative"
     }
   ]

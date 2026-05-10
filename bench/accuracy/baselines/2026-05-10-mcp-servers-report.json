@@ -1,0 +1,1490 @@
+{
+  "schema_version": 1,
+  "date": "2026-05-10",
+  "fixture": "mcp-servers",
+  "sha": "76b08b11664030ce190ee2dbcf6e026dc0aeb1e3",
+  "short_sha": "76b08b1",
+  "project_name": "c-Users-user-Documents-GitHub-mcp-servers",
+  "results": {
+    "CALLS": {
+      "oracle": "pycg",
+      "oracle_count": 371,
+      "measured_count": 511,
+      "oracle_caller_count": 184,
+      "exact": {
+        "tp": 364,
+        "fp": 147,
+        "fn": 7,
+        "precision": 0.7123,
+        "recall": 0.9811,
+        "f1": 0.8254
+      },
+      "suffix_3seg": {
+        "tp": 360,
+        "fp": 138,
+        "fn": 1,
+        "precision": 0.7229,
+        "recall": 0.9972,
+        "f1": 0.8382
+      },
+      "scope_aligned": {
+        "tp": 364,
+        "fp": 1,
+        "fn": 7,
+        "precision": 0.9973,
+        "recall": 0.9811,
+        "f1": 0.9891
+      },
+      "scope_aligned_high_confidence": {
+        "tp": 364,
+        "fp": 1,
+        "fn": 7,
+        "precision": 0.9973,
+        "recall": 0.9811,
+        "f1": 0.9891
+      },
+      "scope_impl_normalized": {
+        "tp": 364,
+        "fp": 1,
+        "fn": 7,
+        "precision": 0.9973,
+        "recall": 0.9811,
+        "f1": 0.9891
+      },
+      "scope_generic_normalized": {
+        "tp": 364,
+        "fp": 1,
+        "fn": 7,
+        "precision": 0.9973,
+        "recall": 0.9811,
+        "f1": 0.9891
+      },
+      "scope_canonical": {
+        "tp": 364,
+        "fp": 1,
+        "fn": 7,
+        "precision": 0.9973,
+        "recall": 0.9811,
+        "f1": 0.9891
+      },
+      "sample_fp_exact": [
+        [
+          "airlock.airlock_mcp_server._lifespan",
+          "security-remix.backend_pool.BackendPool.close",
+          "CALLS"
+        ],
+        [
+          "claude-proxy.claude_proxy.check_guardrails",
+          "confluence.confluence_fedramp_mcp.ConfluenceClient.search",
+          "CALLS"
+        ],
+        [
+          "claude-proxy.manage_guardrails",
+          "claude-proxy.manage_guardrails.main",
+          "CALLS"
+        ],
+        [
+          "claude-proxy.manage_guardrails.cmd_add",
+          "claude-proxy.manage_guardrails.format_rule",
+          "CALLS"
+        ],
+        [
+          "claude-proxy.manage_guardrails.cmd_add",
+          "claude-proxy.manage_guardrails.load_rules",
+          "CALLS"
+        ],
+        [
+          "claude-proxy.manage_guardrails.cmd_add",
+          "claude-proxy.manage_guardrails.save_rules",
+          "CALLS"
+        ],
+        [
+          "claude-proxy.manage_guardrails.cmd_edit",
+          "claude-proxy.manage_guardrails.load_rules",
+          "CALLS"
+        ],
+        [
+          "claude-proxy.manage_guardrails.cmd_edit",
+          "claude-proxy.manage_guardrails.save_rules",
+          "CALLS"
+        ],
+        [
+          "claude-proxy.manage_guardrails.cmd_edit",
+          "security-remix.evals.ab_metrics.ABTestRun.load",
+          "CALLS"
+        ],
+        [
+          "claude-proxy.manage_guardrails.cmd_list",
+          "claude-proxy.manage_guardrails.format_rule",
+          "CALLS"
+        ]
+      ],
+      "sample_fn_exact": [
+        [
+          "claude-proxy.claude_proxy.extract_scannable_text",
+          "claude-proxy.claude_proxy.extract_scannable_text.content.get",
+          "CALLS"
+        ],
+        [
+          "crowdstrike.proxy",
+          "shared.mcp_http._build_oauth._get_resource_url",
+          "CALLS"
+        ],
+        [
+          "crowdstrike.proxy",
+          "shared.mcp_http._build_oauth.get_middleware",
+          "CALLS"
+        ],
+        [
+          "crowdstrike.proxy",
+          "shared.mcp_http._build_oauth.get_routes",
+          "CALLS"
+        ],
+        [
+          "crowdstrike.proxy",
+          "shared.opa_middleware.OPAMiddleware",
+          "CALLS"
+        ],
+        [
+          "security-remix.security_remix_server",
+          "security-remix.backend_pool.BackendPool.__init__",
+          "CALLS"
+        ],
+        [
+          "security-remix.security_remix_server",
+          "security-remix.tool_index.ToolIndex.__init__",
+          "CALLS"
+        ]
+      ],
+      "sample_fp_scoped": [
+        [
+          "security-remix.backend_pool.BackendPool.call_tool",
+          "security-remix.backend_pool.BackendPool.call_tool",
+          "CALLS"
+        ]
+      ],
+      "sample_fn_scoped": [
+        [
+          "claude-proxy.claude_proxy.extract_scannable_text",
+          "claude-proxy.claude_proxy.extract_scannable_text.content.get",
+          "CALLS"
+        ],
+        [
+          "crowdstrike.proxy",
+          "shared.mcp_http._build_oauth._get_resource_url",
+          "CALLS"
+        ],
+        [
+          "crowdstrike.proxy",
+          "shared.mcp_http._build_oauth.get_middleware",
+          "CALLS"
+        ],
+        [
+          "crowdstrike.proxy",
+          "shared.mcp_http._build_oauth.get_routes",
+          "CALLS"
+        ],
+        [
+          "crowdstrike.proxy",
+          "shared.opa_middleware.OPAMiddleware",
+          "CALLS"
+        ],
+        [
+          "security-remix.security_remix_server",
+          "security-remix.backend_pool.BackendPool.__init__",
+          "CALLS"
+        ],
+        [
+          "security-remix.security_remix_server",
+          "security-remix.tool_index.ToolIndex.__init__",
+          "CALLS"
+        ]
+      ],
+      "fp_scoped_full": [
+        [
+          "security-remix.backend_pool.BackendPool.call_tool",
+          "security-remix.backend_pool.BackendPool.call_tool",
+          "CALLS"
+        ]
+      ],
+      "fn_scoped_full": [
+        [
+          "claude-proxy.claude_proxy.extract_scannable_text",
+          "claude-proxy.claude_proxy.extract_scannable_text.content.get",
+          "CALLS"
+        ],
+        [
+          "crowdstrike.proxy",
+          "shared.mcp_http._build_oauth._get_resource_url",
+          "CALLS"
+        ],
+        [
+          "crowdstrike.proxy",
+          "shared.mcp_http._build_oauth.get_middleware",
+          "CALLS"
+        ],
+        [
+          "crowdstrike.proxy",
+          "shared.mcp_http._build_oauth.get_routes",
+          "CALLS"
+        ],
+        [
+          "crowdstrike.proxy",
+          "shared.opa_middleware.OPAMiddleware",
+          "CALLS"
+        ],
+        [
+          "security-remix.security_remix_server",
+          "security-remix.backend_pool.BackendPool.__init__",
+          "CALLS"
+        ],
+        [
+          "security-remix.security_remix_server",
+          "security-remix.tool_index.ToolIndex.__init__",
+          "CALLS"
+        ]
+      ],
+      "caller_kind_precision": {
+        "function-body": {
+          "tp": 355,
+          "fp": 0,
+          "precision": 1.0,
+          "support": 355
+        }
+      },
+      "pkg_block_caller_FP_rate": {
+        "value": 0.0,
+        "alarm": false,
+        "fp_count": 0,
+        "fp_total": 1
+      },
+      "caller_kind_complement_legitimacy": {
+        "value": 0.9704,
+        "legitimate_count": 361,
+        "population_total": 372
+      },
+      "modality_precision": {
+        "same-package-shadow": {
+          "tp": 348,
+          "fp": 0,
+          "precision": 1.0,
+          "support": 348
+        }
+      },
+      "modality_mix_gini": {
+        "__all__": 0.7212
+      },
+      "caller_context_tuple_precision": {
+        "function-body|same-package": {
+          "caller_kind": "function-body",
+          "callee_package_relation": "same-package",
+          "tp": 346,
+          "fp": 0,
+          "precision": 1.0,
+          "support": 346
+        }
+      },
+      "method_set_ambiguity_index": {
+        "__all__": {
+          "value": 0.0055,
+          "ambiguous_sites": 1,
+          "total_sites": 183
+        }
+      },
+      "janusian_site_precision_split": {
+        "ambiguous": {
+          "tp": 1,
+          "fp": 0,
+          "precision": 1.0,
+          "support": 1
+        },
+        "unambiguous": {
+          "tp": 363,
+          "fp": 1,
+          "precision": 0.9973,
+          "support": 364
+        }
+      },
+      "janusian_precision_gap": -0.0027,
+      "modal_split": {
+        "real_only": {
+          "measured_count": 511,
+          "oracle_count": 371,
+          "oracle_caller_count": 184,
+          "exact": {
+            "tp": 364,
+            "fp": 147,
+            "fn": 7,
+            "precision": 0.7123,
+            "recall": 0.9811,
+            "f1": 0.8254
+          },
+          "suffix_3seg": {
+            "tp": 360,
+            "fp": 138,
+            "fn": 1,
+            "precision": 0.7229,
+            "recall": 0.9972,
+            "f1": 0.8382
+          },
+          "scope_aligned": {
+            "tp": 364,
+            "fp": 1,
+            "fn": 7,
+            "precision": 0.9973,
+            "recall": 0.9811,
+            "f1": 0.9891
+          },
+          "scope_aligned_high_confidence": {
+            "tp": 364,
+            "fp": 1,
+            "fn": 7,
+            "precision": 0.9973,
+            "recall": 0.9811,
+            "f1": 0.9891
+          },
+          "scope_impl_normalized": {
+            "tp": 364,
+            "fp": 1,
+            "fn": 7,
+            "precision": 0.9973,
+            "recall": 0.9811,
+            "f1": 0.9891
+          },
+          "scope_generic_normalized": {
+            "tp": 364,
+            "fp": 1,
+            "fn": 7,
+            "precision": 0.9973,
+            "recall": 0.9811,
+            "f1": 0.9891
+          },
+          "scope_canonical": {
+            "tp": 364,
+            "fp": 1,
+            "fn": 7,
+            "precision": 0.9973,
+            "recall": 0.9811,
+            "f1": 0.9891
+          },
+          "sample_fp_exact": [
+            [
+              "airlock.airlock_mcp_server._lifespan",
+              "security-remix.backend_pool.BackendPool.close",
+              "CALLS"
+            ],
+            [
+              "claude-proxy.claude_proxy.check_guardrails",
+              "confluence.confluence_fedramp_mcp.ConfluenceClient.search",
+              "CALLS"
+            ],
+            [
+              "claude-proxy.manage_guardrails",
+              "claude-proxy.manage_guardrails.main",
+              "CALLS"
+            ],
+            [
+              "claude-proxy.manage_guardrails.cmd_add",
+              "claude-proxy.manage_guardrails.format_rule",
+              "CALLS"
+            ],
+            [
+              "claude-proxy.manage_guardrails.cmd_add",
+              "claude-proxy.manage_guardrails.load_rules",
+              "CALLS"
+            ],
+            [
+              "claude-proxy.manage_guardrails.cmd_add",
+              "claude-proxy.manage_guardrails.save_rules",
+              "CALLS"
+            ],
+            [
+              "claude-proxy.manage_guardrails.cmd_edit",
+              "claude-proxy.manage_guardrails.load_rules",
+              "CALLS"
+            ],
+            [
+              "claude-proxy.manage_guardrails.cmd_edit",
+              "claude-proxy.manage_guardrails.save_rules",
+              "CALLS"
+            ],
+            [
+              "claude-proxy.manage_guardrails.cmd_edit",
+              "security-remix.evals.ab_metrics.ABTestRun.load",
+              "CALLS"
+            ],
+            [
+              "claude-proxy.manage_guardrails.cmd_list",
+              "claude-proxy.manage_guardrails.format_rule",
+              "CALLS"
+            ]
+          ],
+          "sample_fn_exact": [
+            [
+              "claude-proxy.claude_proxy.extract_scannable_text",
+              "claude-proxy.claude_proxy.extract_scannable_text.content.get",
+              "CALLS"
+            ],
+            [
+              "crowdstrike.proxy",
+              "shared.mcp_http._build_oauth._get_resource_url",
+              "CALLS"
+            ],
+            [
+              "crowdstrike.proxy",
+              "shared.mcp_http._build_oauth.get_middleware",
+              "CALLS"
+            ],
+            [
+              "crowdstrike.proxy",
+              "shared.mcp_http._build_oauth.get_routes",
+              "CALLS"
+            ],
+            [
+              "crowdstrike.proxy",
+              "shared.opa_middleware.OPAMiddleware",
+              "CALLS"
+            ],
+            [
+              "security-remix.security_remix_server",
+              "security-remix.backend_pool.BackendPool.__init__",
+              "CALLS"
+            ],
+            [
+              "security-remix.security_remix_server",
+              "security-remix.tool_index.ToolIndex.__init__",
+              "CALLS"
+            ]
+          ],
+          "sample_fp_scoped": [
+            [
+              "security-remix.backend_pool.BackendPool.call_tool",
+              "security-remix.backend_pool.BackendPool.call_tool",
+              "CALLS"
+            ]
+          ],
+          "sample_fn_scoped": [
+            [
+              "claude-proxy.claude_proxy.extract_scannable_text",
+              "claude-proxy.claude_proxy.extract_scannable_text.content.get",
+              "CALLS"
+            ],
+            [
+              "crowdstrike.proxy",
+              "shared.mcp_http._build_oauth._get_resource_url",
+              "CALLS"
+            ],
+            [
+              "crowdstrike.proxy",
+              "shared.mcp_http._build_oauth.get_middleware",
+              "CALLS"
+            ],
+            [
+              "crowdstrike.proxy",
+              "shared.mcp_http._build_oauth.get_routes",
+              "CALLS"
+            ],
+            [
+              "crowdstrike.proxy",
+              "shared.opa_middleware.OPAMiddleware",
+              "CALLS"
+            ],
+            [
+              "security-remix.security_remix_server",
+              "security-remix.backend_pool.BackendPool.__init__",
+              "CALLS"
+            ],
+            [
+              "security-remix.security_remix_server",
+              "security-remix.tool_index.ToolIndex.__init__",
+              "CALLS"
+            ]
+          ],
+          "fp_scoped_full": [
+            [
+              "security-remix.backend_pool.BackendPool.call_tool",
+              "security-remix.backend_pool.BackendPool.call_tool",
+              "CALLS"
+            ]
+          ],
+          "fn_scoped_full": [
+            [
+              "claude-proxy.claude_proxy.extract_scannable_text",
+              "claude-proxy.claude_proxy.extract_scannable_text.content.get",
+              "CALLS"
+            ],
+            [
+              "crowdstrike.proxy",
+              "shared.mcp_http._build_oauth._get_resource_url",
+              "CALLS"
+            ],
+            [
+              "crowdstrike.proxy",
+              "shared.mcp_http._build_oauth.get_middleware",
+              "CALLS"
+            ],
+            [
+              "crowdstrike.proxy",
+              "shared.mcp_http._build_oauth.get_routes",
+              "CALLS"
+            ],
+            [
+              "crowdstrike.proxy",
+              "shared.opa_middleware.OPAMiddleware",
+              "CALLS"
+            ],
+            [
+              "security-remix.security_remix_server",
+              "security-remix.backend_pool.BackendPool.__init__",
+              "CALLS"
+            ],
+            [
+              "security-remix.security_remix_server",
+              "security-remix.tool_index.ToolIndex.__init__",
+              "CALLS"
+            ]
+          ],
+          "caller_kind_precision": {},
+          "pkg_block_caller_FP_rate": {
+            "value": 0.0,
+            "alarm": false
+          },
+          "caller_kind_complement_legitimacy": {
+            "value": 0.0
+          },
+          "note": "caller_node_kind not yet emitted by the indexed binary; metrics skipped.",
+          "modality_precision": {},
+          "modality_mix_gini": {},
+          "caller_context_tuple_precision": {},
+          "modality_note": "resolver_rule not yet emitted by the indexed binary; metrics skipped.",
+          "method_set_ambiguity_index": {},
+          "janusian_site_precision_split": {},
+          "ambiguity_note": "candidate_set_size not yet emitted by the indexed binary; metrics skipped."
+        },
+        "real_plus_external": {
+          "measured_count": 511,
+          "oracle_count": 371,
+          "oracle_caller_count": 184,
+          "exact": {
+            "tp": 364,
+            "fp": 147,
+            "fn": 7,
+            "precision": 0.7123,
+            "recall": 0.9811,
+            "f1": 0.8254
+          },
+          "suffix_3seg": {
+            "tp": 360,
+            "fp": 138,
+            "fn": 1,
+            "precision": 0.7229,
+            "recall": 0.9972,
+            "f1": 0.8382
+          },
+          "scope_aligned": {
+            "tp": 364,
+            "fp": 1,
+            "fn": 7,
+            "precision": 0.9973,
+            "recall": 0.9811,
+            "f1": 0.9891
+          },
+          "scope_aligned_high_confidence": {
+            "tp": 364,
+            "fp": 1,
+            "fn": 7,
+            "precision": 0.9973,
+            "recall": 0.9811,
+            "f1": 0.9891
+          },
+          "scope_impl_normalized": {
+            "tp": 364,
+            "fp": 1,
+            "fn": 7,
+            "precision": 0.9973,
+            "recall": 0.9811,
+            "f1": 0.9891
+          },
+          "scope_generic_normalized": {
+            "tp": 364,
+            "fp": 1,
+            "fn": 7,
+            "precision": 0.9973,
+            "recall": 0.9811,
+            "f1": 0.9891
+          },
+          "scope_canonical": {
+            "tp": 364,
+            "fp": 1,
+            "fn": 7,
+            "precision": 0.9973,
+            "recall": 0.9811,
+            "f1": 0.9891
+          },
+          "sample_fp_exact": [
+            [
+              "airlock.airlock_mcp_server._lifespan",
+              "security-remix.backend_pool.BackendPool.close",
+              "CALLS"
+            ],
+            [
+              "claude-proxy.claude_proxy.check_guardrails",
+              "confluence.confluence_fedramp_mcp.ConfluenceClient.search",
+              "CALLS"
+            ],
+            [
+              "claude-proxy.manage_guardrails",
+              "claude-proxy.manage_guardrails.main",
+              "CALLS"
+            ],
+            [
+              "claude-proxy.manage_guardrails.cmd_add",
+              "claude-proxy.manage_guardrails.format_rule",
+              "CALLS"
+            ],
+            [
+              "claude-proxy.manage_guardrails.cmd_add",
+              "claude-proxy.manage_guardrails.load_rules",
+              "CALLS"
+            ],
+            [
+              "claude-proxy.manage_guardrails.cmd_add",
+              "claude-proxy.manage_guardrails.save_rules",
+              "CALLS"
+            ],
+            [
+              "claude-proxy.manage_guardrails.cmd_edit",
+              "claude-proxy.manage_guardrails.load_rules",
+              "CALLS"
+            ],
+            [
+              "claude-proxy.manage_guardrails.cmd_edit",
+              "claude-proxy.manage_guardrails.save_rules",
+              "CALLS"
+            ],
+            [
+              "claude-proxy.manage_guardrails.cmd_edit",
+              "security-remix.evals.ab_metrics.ABTestRun.load",
+              "CALLS"
+            ],
+            [
+              "claude-proxy.manage_guardrails.cmd_list",
+              "claude-proxy.manage_guardrails.format_rule",
+              "CALLS"
+            ]
+          ],
+          "sample_fn_exact": [
+            [
+              "claude-proxy.claude_proxy.extract_scannable_text",
+              "claude-proxy.claude_proxy.extract_scannable_text.content.get",
+              "CALLS"
+            ],
+            [
+              "crowdstrike.proxy",
+              "shared.mcp_http._build_oauth._get_resource_url",
+              "CALLS"
+            ],
+            [
+              "crowdstrike.proxy",
+              "shared.mcp_http._build_oauth.get_middleware",
+              "CALLS"
+            ],
+            [
+              "crowdstrike.proxy",
+              "shared.mcp_http._build_oauth.get_routes",
+              "CALLS"
+            ],
+            [
+              "crowdstrike.proxy",
+              "shared.opa_middleware.OPAMiddleware",
+              "CALLS"
+            ],
+            [
+              "security-remix.security_remix_server",
+              "security-remix.backend_pool.BackendPool.__init__",
+              "CALLS"
+            ],
+            [
+              "security-remix.security_remix_server",
+              "security-remix.tool_index.ToolIndex.__init__",
+              "CALLS"
+            ]
+          ],
+          "sample_fp_scoped": [
+            [
+              "security-remix.backend_pool.BackendPool.call_tool",
+              "security-remix.backend_pool.BackendPool.call_tool",
+              "CALLS"
+            ]
+          ],
+          "sample_fn_scoped": [
+            [
+              "claude-proxy.claude_proxy.extract_scannable_text",
+              "claude-proxy.claude_proxy.extract_scannable_text.content.get",
+              "CALLS"
+            ],
+            [
+              "crowdstrike.proxy",
+              "shared.mcp_http._build_oauth._get_resource_url",
+              "CALLS"
+            ],
+            [
+              "crowdstrike.proxy",
+              "shared.mcp_http._build_oauth.get_middleware",
+              "CALLS"
+            ],
+            [
+              "crowdstrike.proxy",
+              "shared.mcp_http._build_oauth.get_routes",
+              "CALLS"
+            ],
+            [
+              "crowdstrike.proxy",
+              "shared.opa_middleware.OPAMiddleware",
+              "CALLS"
+            ],
+            [
+              "security-remix.security_remix_server",
+              "security-remix.backend_pool.BackendPool.__init__",
+              "CALLS"
+            ],
+            [
+              "security-remix.security_remix_server",
+              "security-remix.tool_index.ToolIndex.__init__",
+              "CALLS"
+            ]
+          ],
+          "fp_scoped_full": [
+            [
+              "security-remix.backend_pool.BackendPool.call_tool",
+              "security-remix.backend_pool.BackendPool.call_tool",
+              "CALLS"
+            ]
+          ],
+          "fn_scoped_full": [
+            [
+              "claude-proxy.claude_proxy.extract_scannable_text",
+              "claude-proxy.claude_proxy.extract_scannable_text.content.get",
+              "CALLS"
+            ],
+            [
+              "crowdstrike.proxy",
+              "shared.mcp_http._build_oauth._get_resource_url",
+              "CALLS"
+            ],
+            [
+              "crowdstrike.proxy",
+              "shared.mcp_http._build_oauth.get_middleware",
+              "CALLS"
+            ],
+            [
+              "crowdstrike.proxy",
+              "shared.mcp_http._build_oauth.get_routes",
+              "CALLS"
+            ],
+            [
+              "crowdstrike.proxy",
+              "shared.opa_middleware.OPAMiddleware",
+              "CALLS"
+            ],
+            [
+              "security-remix.security_remix_server",
+              "security-remix.backend_pool.BackendPool.__init__",
+              "CALLS"
+            ],
+            [
+              "security-remix.security_remix_server",
+              "security-remix.tool_index.ToolIndex.__init__",
+              "CALLS"
+            ]
+          ],
+          "caller_kind_precision": {},
+          "pkg_block_caller_FP_rate": {
+            "value": 0.0,
+            "alarm": false
+          },
+          "caller_kind_complement_legitimacy": {
+            "value": 0.0
+          },
+          "note": "caller_node_kind not yet emitted by the indexed binary; metrics skipped.",
+          "modality_precision": {},
+          "modality_mix_gini": {},
+          "caller_context_tuple_precision": {},
+          "modality_note": "resolver_rule not yet emitted by the indexed binary; metrics skipped.",
+          "method_set_ambiguity_index": {},
+          "janusian_site_precision_split": {},
+          "ambiguity_note": "candidate_set_size not yet emitted by the indexed binary; metrics skipped."
+        },
+        "real_plus_pseudo": {
+          "measured_count": 511,
+          "oracle_count": 371,
+          "oracle_caller_count": 184,
+          "exact": {
+            "tp": 364,
+            "fp": 147,
+            "fn": 7,
+            "precision": 0.7123,
+            "recall": 0.9811,
+            "f1": 0.8254
+          },
+          "suffix_3seg": {
+            "tp": 360,
+            "fp": 138,
+            "fn": 1,
+            "precision": 0.7229,
+            "recall": 0.9972,
+            "f1": 0.8382
+          },
+          "scope_aligned": {
+            "tp": 364,
+            "fp": 1,
+            "fn": 7,
+            "precision": 0.9973,
+            "recall": 0.9811,
+            "f1": 0.9891
+          },
+          "scope_aligned_high_confidence": {
+            "tp": 364,
+            "fp": 1,
+            "fn": 7,
+            "precision": 0.9973,
+            "recall": 0.9811,
+            "f1": 0.9891
+          },
+          "scope_impl_normalized": {
+            "tp": 364,
+            "fp": 1,
+            "fn": 7,
+            "precision": 0.9973,
+            "recall": 0.9811,
+            "f1": 0.9891
+          },
+          "scope_generic_normalized": {
+            "tp": 364,
+            "fp": 1,
+            "fn": 7,
+            "precision": 0.9973,
+            "recall": 0.9811,
+            "f1": 0.9891
+          },
+          "scope_canonical": {
+            "tp": 364,
+            "fp": 1,
+            "fn": 7,
+            "precision": 0.9973,
+            "recall": 0.9811,
+            "f1": 0.9891
+          },
+          "sample_fp_exact": [
+            [
+              "airlock.airlock_mcp_server._lifespan",
+              "security-remix.backend_pool.BackendPool.close",
+              "CALLS"
+            ],
+            [
+              "claude-proxy.claude_proxy.check_guardrails",
+              "confluence.confluence_fedramp_mcp.ConfluenceClient.search",
+              "CALLS"
+            ],
+            [
+              "claude-proxy.manage_guardrails",
+              "claude-proxy.manage_guardrails.main",
+              "CALLS"
+            ],
+            [
+              "claude-proxy.manage_guardrails.cmd_add",
+              "claude-proxy.manage_guardrails.format_rule",
+              "CALLS"
+            ],
+            [
+              "claude-proxy.manage_guardrails.cmd_add",
+              "claude-proxy.manage_guardrails.load_rules",
+              "CALLS"
+            ],
+            [
+              "claude-proxy.manage_guardrails.cmd_add",
+              "claude-proxy.manage_guardrails.save_rules",
+              "CALLS"
+            ],
+            [
+              "claude-proxy.manage_guardrails.cmd_edit",
+              "claude-proxy.manage_guardrails.load_rules",
+              "CALLS"
+            ],
+            [
+              "claude-proxy.manage_guardrails.cmd_edit",
+              "claude-proxy.manage_guardrails.save_rules",
+              "CALLS"
+            ],
+            [
+              "claude-proxy.manage_guardrails.cmd_edit",
+              "security-remix.evals.ab_metrics.ABTestRun.load",
+              "CALLS"
+            ],
+            [
+              "claude-proxy.manage_guardrails.cmd_list",
+              "claude-proxy.manage_guardrails.format_rule",
+              "CALLS"
+            ]
+          ],
+          "sample_fn_exact": [
+            [
+              "claude-proxy.claude_proxy.extract_scannable_text",
+              "claude-proxy.claude_proxy.extract_scannable_text.content.get",
+              "CALLS"
+            ],
+            [
+              "crowdstrike.proxy",
+              "shared.mcp_http._build_oauth._get_resource_url",
+              "CALLS"
+            ],
+            [
+              "crowdstrike.proxy",
+              "shared.mcp_http._build_oauth.get_middleware",
+              "CALLS"
+            ],
+            [
+              "crowdstrike.proxy",
+              "shared.mcp_http._build_oauth.get_routes",
+              "CALLS"
+            ],
+            [
+              "crowdstrike.proxy",
+              "shared.opa_middleware.OPAMiddleware",
+              "CALLS"
+            ],
+            [
+              "security-remix.security_remix_server",
+              "security-remix.backend_pool.BackendPool.__init__",
+              "CALLS"
+            ],
+            [
+              "security-remix.security_remix_server",
+              "security-remix.tool_index.ToolIndex.__init__",
+              "CALLS"
+            ]
+          ],
+          "sample_fp_scoped": [
+            [
+              "security-remix.backend_pool.BackendPool.call_tool",
+              "security-remix.backend_pool.BackendPool.call_tool",
+              "CALLS"
+            ]
+          ],
+          "sample_fn_scoped": [
+            [
+              "claude-proxy.claude_proxy.extract_scannable_text",
+              "claude-proxy.claude_proxy.extract_scannable_text.content.get",
+              "CALLS"
+            ],
+            [
+              "crowdstrike.proxy",
+              "shared.mcp_http._build_oauth._get_resource_url",
+              "CALLS"
+            ],
+            [
+              "crowdstrike.proxy",
+              "shared.mcp_http._build_oauth.get_middleware",
+              "CALLS"
+            ],
+            [
+              "crowdstrike.proxy",
+              "shared.mcp_http._build_oauth.get_routes",
+              "CALLS"
+            ],
+            [
+              "crowdstrike.proxy",
+              "shared.opa_middleware.OPAMiddleware",
+              "CALLS"
+            ],
+            [
+              "security-remix.security_remix_server",
+              "security-remix.backend_pool.BackendPool.__init__",
+              "CALLS"
+            ],
+            [
+              "security-remix.security_remix_server",
+              "security-remix.tool_index.ToolIndex.__init__",
+              "CALLS"
+            ]
+          ],
+          "fp_scoped_full": [
+            [
+              "security-remix.backend_pool.BackendPool.call_tool",
+              "security-remix.backend_pool.BackendPool.call_tool",
+              "CALLS"
+            ]
+          ],
+          "fn_scoped_full": [
+            [
+              "claude-proxy.claude_proxy.extract_scannable_text",
+              "claude-proxy.claude_proxy.extract_scannable_text.content.get",
+              "CALLS"
+            ],
+            [
+              "crowdstrike.proxy",
+              "shared.mcp_http._build_oauth._get_resource_url",
+              "CALLS"
+            ],
+            [
+              "crowdstrike.proxy",
+              "shared.mcp_http._build_oauth.get_middleware",
+              "CALLS"
+            ],
+            [
+              "crowdstrike.proxy",
+              "shared.mcp_http._build_oauth.get_routes",
+              "CALLS"
+            ],
+            [
+              "crowdstrike.proxy",
+              "shared.opa_middleware.OPAMiddleware",
+              "CALLS"
+            ],
+            [
+              "security-remix.security_remix_server",
+              "security-remix.backend_pool.BackendPool.__init__",
+              "CALLS"
+            ],
+            [
+              "security-remix.security_remix_server",
+              "security-remix.tool_index.ToolIndex.__init__",
+              "CALLS"
+            ]
+          ],
+          "caller_kind_precision": {},
+          "pkg_block_caller_FP_rate": {
+            "value": 0.0,
+            "alarm": false
+          },
+          "caller_kind_complement_legitimacy": {
+            "value": 0.0
+          },
+          "note": "caller_node_kind not yet emitted by the indexed binary; metrics skipped.",
+          "modality_precision": {},
+          "modality_mix_gini": {},
+          "caller_context_tuple_precision": {},
+          "modality_note": "resolver_rule not yet emitted by the indexed binary; metrics skipped.",
+          "method_set_ambiguity_index": {},
+          "janusian_site_precision_split": {},
+          "ambiguity_note": "candidate_set_size not yet emitted by the indexed binary; metrics skipped."
+        },
+        "all_calls_family": {
+          "measured_count": 511,
+          "oracle_count": 371,
+          "oracle_caller_count": 184,
+          "exact": {
+            "tp": 364,
+            "fp": 147,
+            "fn": 7,
+            "precision": 0.7123,
+            "recall": 0.9811,
+            "f1": 0.8254
+          },
+          "suffix_3seg": {
+            "tp": 360,
+            "fp": 138,
+            "fn": 1,
+            "precision": 0.7229,
+            "recall": 0.9972,
+            "f1": 0.8382
+          },
+          "scope_aligned": {
+            "tp": 364,
+            "fp": 1,
+            "fn": 7,
+            "precision": 0.9973,
+            "recall": 0.9811,
+            "f1": 0.9891
+          },
+          "scope_aligned_high_confidence": {
+            "tp": 364,
+            "fp": 1,
+            "fn": 7,
+            "precision": 0.9973,
+            "recall": 0.9811,
+            "f1": 0.9891
+          },
+          "scope_impl_normalized": {
+            "tp": 364,
+            "fp": 1,
+            "fn": 7,
+            "precision": 0.9973,
+            "recall": 0.9811,
+            "f1": 0.9891
+          },
+          "scope_generic_normalized": {
+            "tp": 364,
+            "fp": 1,
+            "fn": 7,
+            "precision": 0.9973,
+            "recall": 0.9811,
+            "f1": 0.9891
+          },
+          "scope_canonical": {
+            "tp": 364,
+            "fp": 1,
+            "fn": 7,
+            "precision": 0.9973,
+            "recall": 0.9811,
+            "f1": 0.9891
+          },
+          "sample_fp_exact": [
+            [
+              "airlock.airlock_mcp_server._lifespan",
+              "security-remix.backend_pool.BackendPool.close",
+              "CALLS"
+            ],
+            [
+              "claude-proxy.claude_proxy.check_guardrails",
+              "confluence.confluence_fedramp_mcp.ConfluenceClient.search",
+              "CALLS"
+            ],
+            [
+              "claude-proxy.manage_guardrails",
+              "claude-proxy.manage_guardrails.main",
+              "CALLS"
+            ],
+            [
+              "claude-proxy.manage_guardrails.cmd_add",
+              "claude-proxy.manage_guardrails.format_rule",
+              "CALLS"
+            ],
+            [
+              "claude-proxy.manage_guardrails.cmd_add",
+              "claude-proxy.manage_guardrails.load_rules",
+              "CALLS"
+            ],
+            [
+              "claude-proxy.manage_guardrails.cmd_add",
+              "claude-proxy.manage_guardrails.save_rules",
+              "CALLS"
+            ],
+            [
+              "claude-proxy.manage_guardrails.cmd_edit",
+              "claude-proxy.manage_guardrails.load_rules",
+              "CALLS"
+            ],
+            [
+              "claude-proxy.manage_guardrails.cmd_edit",
+              "claude-proxy.manage_guardrails.save_rules",
+              "CALLS"
+            ],
+            [
+              "claude-proxy.manage_guardrails.cmd_edit",
+              "security-remix.evals.ab_metrics.ABTestRun.load",
+              "CALLS"
+            ],
+            [
+              "claude-proxy.manage_guardrails.cmd_list",
+              "claude-proxy.manage_guardrails.format_rule",
+              "CALLS"
+            ]
+          ],
+          "sample_fn_exact": [
+            [
+              "claude-proxy.claude_proxy.extract_scannable_text",
+              "claude-proxy.claude_proxy.extract_scannable_text.content.get",
+              "CALLS"
+            ],
+            [
+              "crowdstrike.proxy",
+              "shared.mcp_http._build_oauth._get_resource_url",
+              "CALLS"
+            ],
+            [
+              "crowdstrike.proxy",
+              "shared.mcp_http._build_oauth.get_middleware",
+              "CALLS"
+            ],
+            [
+              "crowdstrike.proxy",
+              "shared.mcp_http._build_oauth.get_routes",
+              "CALLS"
+            ],
+            [
+              "crowdstrike.proxy",
+              "shared.opa_middleware.OPAMiddleware",
+              "CALLS"
+            ],
+            [
+              "security-remix.security_remix_server",
+              "security-remix.backend_pool.BackendPool.__init__",
+              "CALLS"
+            ],
+            [
+              "security-remix.security_remix_server",
+              "security-remix.tool_index.ToolIndex.__init__",
+              "CALLS"
+            ]
+          ],
+          "sample_fp_scoped": [
+            [
+              "security-remix.backend_pool.BackendPool.call_tool",
+              "security-remix.backend_pool.BackendPool.call_tool",
+              "CALLS"
+            ]
+          ],
+          "sample_fn_scoped": [
+            [
+              "claude-proxy.claude_proxy.extract_scannable_text",
+              "claude-proxy.claude_proxy.extract_scannable_text.content.get",
+              "CALLS"
+            ],
+            [
+              "crowdstrike.proxy",
+              "shared.mcp_http._build_oauth._get_resource_url",
+              "CALLS"
+            ],
+            [
+              "crowdstrike.proxy",
+              "shared.mcp_http._build_oauth.get_middleware",
+              "CALLS"
+            ],
+            [
+              "crowdstrike.proxy",
+              "shared.mcp_http._build_oauth.get_routes",
+              "CALLS"
+            ],
+            [
+              "crowdstrike.proxy",
+              "shared.opa_middleware.OPAMiddleware",
+              "CALLS"
+            ],
+            [
+              "security-remix.security_remix_server",
+              "security-remix.backend_pool.BackendPool.__init__",
+              "CALLS"
+            ],
+            [
+              "security-remix.security_remix_server",
+              "security-remix.tool_index.ToolIndex.__init__",
+              "CALLS"
+            ]
+          ],
+          "fp_scoped_full": [
+            [
+              "security-remix.backend_pool.BackendPool.call_tool",
+              "security-remix.backend_pool.BackendPool.call_tool",
+              "CALLS"
+            ]
+          ],
+          "fn_scoped_full": [
+            [
+              "claude-proxy.claude_proxy.extract_scannable_text",
+              "claude-proxy.claude_proxy.extract_scannable_text.content.get",
+              "CALLS"
+            ],
+            [
+              "crowdstrike.proxy",
+              "shared.mcp_http._build_oauth._get_resource_url",
+              "CALLS"
+            ],
+            [
+              "crowdstrike.proxy",
+              "shared.mcp_http._build_oauth.get_middleware",
+              "CALLS"
+            ],
+            [
+              "crowdstrike.proxy",
+              "shared.mcp_http._build_oauth.get_routes",
+              "CALLS"
+            ],
+            [
+              "crowdstrike.proxy",
+              "shared.opa_middleware.OPAMiddleware",
+              "CALLS"
+            ],
+            [
+              "security-remix.security_remix_server",
+              "security-remix.backend_pool.BackendPool.__init__",
+              "CALLS"
+            ],
+            [
+              "security-remix.security_remix_server",
+              "security-remix.tool_index.ToolIndex.__init__",
+              "CALLS"
+            ]
+          ],
+          "caller_kind_precision": {},
+          "pkg_block_caller_FP_rate": {
+            "value": 0.0,
+            "alarm": false
+          },
+          "caller_kind_complement_legitimacy": {
+            "value": 0.0
+          },
+          "note": "caller_node_kind not yet emitted by the indexed binary; metrics skipped.",
+          "modality_precision": {},
+          "modality_mix_gini": {},
+          "caller_context_tuple_precision": {},
+          "modality_note": "resolver_rule not yet emitted by the indexed binary; metrics skipped.",
+          "method_set_ambiguity_index": {},
+          "janusian_site_precision_split": {},
+          "ambiguity_note": "candidate_set_size not yet emitted by the indexed binary; metrics skipped."
+        }
+      }
+    },
+    "IMPORTS": {
+      "oracle": "ast",
+      "oracle_count": 47,
+      "measured_count": 62,
+      "oracle_caller_count": 33,
+      "exact": {
+        "tp": 47,
+        "fp": 15,
+        "fn": 0,
+        "precision": 0.7581,
+        "recall": 1.0,
+        "f1": 0.8624
+      },
+      "suffix_3seg": {
+        "tp": 0,
+        "fp": 3,
+        "fn": 0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0
+      },
+      "scope_aligned": {
+        "tp": 47,
+        "fp": 2,
+        "fn": 0,
+        "precision": 0.9592,
+        "recall": 1.0,
+        "f1": 0.9792
+      },
+      "scope_aligned_high_confidence": {
+        "tp": 47,
+        "fp": 2,
+        "fn": 0,
+        "precision": 0.9592,
+        "recall": 1.0,
+        "f1": 0.9792
+      },
+      "scope_impl_normalized": {
+        "tp": 47,
+        "fp": 2,
+        "fn": 0,
+        "precision": 0.9592,
+        "recall": 1.0,
+        "f1": 0.9792
+      },
+      "scope_generic_normalized": {
+        "tp": 47,
+        "fp": 2,
+        "fn": 0,
+        "precision": 0.9592,
+        "recall": 1.0,
+        "f1": 0.9792
+      },
+      "scope_canonical": {
+        "tp": 47,
+        "fp": 2,
+        "fn": 0,
+        "precision": 0.9592,
+        "recall": 1.0,
+        "f1": 0.9792
+      },
+      "sample_fp_exact": [
+        [
+          "scripts.audit_msgraph_params",
+          "scripts.spec_utils",
+          "IMPORTS"
+        ],
+        [
+          "scripts.test_spec_utils",
+          "scripts.spec_utils",
+          "IMPORTS"
+        ],
+        [
+          "scripts.test_validate_catalog",
+          "scripts.validate_catalog",
+          "IMPORTS"
+        ],
+        [
+          "security-remix.evals.test_ab_discovery",
+          "security-remix.evals.ab_metrics",
+          "IMPORTS"
+        ],
+        [
+          "security-remix.evals.test_ab_discovery",
+          "security-remix.evals.augmented_backends",
+          "IMPORTS"
+        ],
+        [
+          "security-remix.evals.test_ab_discovery",
+          "security-remix.evals.test_scenarios",
+          "IMPORTS"
+        ],
+        [
+          "security-remix.evals.test_scenarios",
+          "security-remix.backend_pool",
+          "IMPORTS"
+        ],
+        [
+          "security-remix.evals.test_scenarios",
+          "security-remix.tool_index",
+          "IMPORTS"
+        ],
+        [
+          "security-remix.security_remix_server",
+          "security-remix.backend_pool",
+          "IMPORTS"
+        ],
+        [
+          "security-remix.security_remix_server",
+          "security-remix.tool_index",
+          "IMPORTS"
+        ]
+      ],
+      "sample_fn_exact": [],
+      "sample_fp_scoped": [
+        [
+          "security-remix.security_remix_server",
+          "security-remix.backend_pool",
+          "IMPORTS"
+        ],
+        [
+          "security-remix.security_remix_server",
+          "security-remix.tool_index",
+          "IMPORTS"
+        ]
+      ],
+      "sample_fn_scoped": [],
+      "fp_scoped_full": [
+        [
+          "security-remix.security_remix_server",
+          "security-remix.backend_pool",
+          "IMPORTS"
+        ],
+        [
+          "security-remix.security_remix_server",
+          "security-remix.tool_index",
+          "IMPORTS"
+        ]
+      ],
+      "fn_scoped_full": [],
+      "caller_kind_precision": {},
+      "pkg_block_caller_FP_rate": {
+        "value": 0.0,
+        "alarm": false
+      },
+      "caller_kind_complement_legitimacy": {
+        "value": 0.0
+      },
+      "note": "caller_node_kind not yet emitted by the indexed binary; metrics skipped.",
+      "modality_precision": {},
+      "modality_mix_gini": {},
+      "caller_context_tuple_precision": {},
+      "modality_note": "resolver_rule not yet emitted by the indexed binary; metrics skipped.",
+      "method_set_ambiguity_index": {},
+      "janusian_site_precision_split": {},
+      "ambiguity_note": "candidate_set_size not yet emitted by the indexed binary; metrics skipped."
+    },
+    "HTTP_CALLS": {
+      "oracle": "opus+sonnet (not yet run)",
+      "status": "pending"
+    }
+  }
+}

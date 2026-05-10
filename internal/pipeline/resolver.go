@@ -946,18 +946,25 @@ func (r *FunctionRegistry) FuzzyResolveCtx(ctx CallContext) (ResolutionResult, b
 	}
 
 	// Janusian-chain drop (knowledge-base PR #491 next-plan target):
-	// when CalleeName is a multi-segment chain (root + field(s) + method)
+	// when CalleeName is method-call shape (1+ dots, root+method min)
 	// AND ReceiverType is empty (Tier-2 couldn't fire) AND multiple Method
 	// candidates exist on distinct parent classes, the candidates are a
 	// classic Janusian co-hallucination — same method name on unrelated
 	// types, no way to disambiguate without receiver type. Empirically all
 	// 72 ambiguous fuzzy edges on PSM assetman fit this signature
-	// (knowledge-base PR #492 terminal doc). Drop rather than emit one at
-	// speculative confidence. Gated by RESOLVER_DROP_FUZZY_JANUSIAN_CHAINS
-	// for A/B comparison.
+	// (knowledge-base PR #492 terminal doc; PR #289 v1 with 2+ dots
+	// dropped 40/72; v2 relaxed to 1+ dots to catch closure-rooted
+	// 1-dot patterns like `|a| a.method()`).
+	//
+	// The distinct-parents condition is the key safety net: legitimate
+	// internal calls where the receiver was just missed by the extractor
+	// would have candidates with the SAME parent class (multiple methods
+	// on the same type), so the gate wouldn't fire on them.
+	//
+	// Gated by RESOLVER_DROP_FUZZY_JANUSIAN_CHAINS for A/B comparison.
 	if dropFuzzyJanusianChainsEnabled &&
 		ctx.ReceiverType == "" &&
-		strings.Count(ctx.CalleeName, ".") >= 2 &&
+		strings.Contains(ctx.CalleeName, ".") &&
 		len(candidates) >= 2 &&
 		r.allMethodsWithDistinctParents(candidates) {
 		return ResolutionResult{}, false

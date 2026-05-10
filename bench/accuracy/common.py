@@ -83,7 +83,8 @@ def verify_fixture_sha(fixture: dict[str, Any]) -> None:
             f"fixture {fixture['id']}: SHA drift.\n"
             f"  expected: {expected}\n"
             f"  actual:   {actual}\n"
-            f"  Reset the fixture or update fixtures.json."
+            f"  Reset the fixture, OR run `python bench/accuracy/regen_oracles.py "
+            f"--fixture {fixture['id']}` to bump fixtures.json + regenerate the oracle cache."
         )
 
     # Working-tree drift check. Only applies to fixtures with a subset list —

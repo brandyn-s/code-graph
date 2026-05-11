@@ -126,6 +126,60 @@ Idempotent — subsequent calls return the cached interpreter path.
 3. Re-run baseline. The compare tool reports `was X, now Y, delta Z` against the most recent baseline JSON.
 4. If numbers improved: commit the new baseline as the new reference. If they regressed: revert or fix.
 
+## Current-state snapshot (no re-baselining)
+
+`snapshot.py` re-formats the latest `baselines/*.json` per fixture into
+`CURRENT.md` with per-fixture freshness bands (FRESH / STALE / OLD /
+UNKNOWN) computed from baseline mtime vs binary mtime. It does **not**
+re-index, re-run oracles, or re-run compare — it's a pure re-formatter
+so a grader can see at-a-glance which on-disk metrics still reflect the
+current binary.
+
+```bash
+python bench/accuracy/snapshot.py             # writes bench/accuracy/CURRENT.md
+python bench/accuracy/snapshot.py --print     # stdout instead of file
+```
+
+When grading code-graph (or answering "what's the current accuracy
+state?"), read `CURRENT.md` FIRST; consult the leverage-doc
+(`baselines/YYYY-MM-DD-accuracy-gap-inventory.md`) only for "what's
+open after the latest fixes" — those two are different artifacts and
+go stale on different timelines.
+
+## PR checklist — when does a PR require re-baselining?
+
+PRs that touch accuracy-sensitive code MUST re-baseline at least one
+fixture per affected language before merging, and commit the updated
+`baselines/YYYY-MM-DD-<fixture>-report.{md,json}` files in the same PR.
+
+Trigger paths (any change under these directories REQUIRES a fresh baseline):
+
+- `internal/resolver/` — call-resolution rules, strategy selection,
+  precision gates
+- `internal/extractor/` — language-specific edge extractors
+- `internal/cbm/` — tree-sitter LSP-style type resolution
+- `internal/pipeline/` — multi-pass indexing, sequencing
+
+Minimum re-baseline scope per affected directory:
+
+| Touched | Re-baseline at least |
+|---|---|
+| Python parser/resolver | `mcp-servers` (production Python) + one adversarial Python fixture |
+| Rust parser/resolver | `psm-rust` (production Rust, all subsets) |
+| Go parser/resolver | `code-graph-go` (production Go) + `cobra-go` |
+| Pipeline / cross-cutting | All four production fixtures |
+
+Why this is mechanical, not nightly cron: the harness takes 10-30 min
+per fixture (re-index + oracle + compare). Authors who just modified
+the affected code already have the build hot; one re-baseline in their
+PR is cheap. A nightly cron over all fixtures would be hours of CI
+budget for marginal value (most days nothing accuracy-sensitive
+changes).
+
+Reviewer check: in PRs that touch the trigger paths, confirm
+`bench/accuracy/baselines/` has at least one new file dated within the
+last 24 hours. If absent, request re-baselining before approval.
+
 ## Metrics reported
 
 Per edge type, three metrics:

@@ -71,6 +71,14 @@ jobs:
       - name: Install Python deps
         run: pip install anthropic
 
+      - name: Drift gate — agent TOOL_SCHEMAS must match handler InputSchemas
+        run: |
+          # Re-run codegen in check-only mode. Non-zero exit if the
+          # committed _generated_tool_schemas.py differs from what the
+          # generator would produce from current internal/tools/*.go.
+          # Forces the contributor to re-run codegen + commit before merge.
+          python bench/research/agent-effectiveness/generate_schemas.py --check-only
+
       - name: Build code-graph binary
         run: |
           CGO_ENABLED=1 go build -o bin/codebase-memory-mcp ./cmd/codebase-memory-mcp/

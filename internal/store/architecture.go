@@ -8,7 +8,15 @@ import (
 )
 
 // ArchitectureInfo holds the result of a codebase architecture analysis.
+//
+// The summary fields (TotalNodes, TotalEdges, NodeLabels, EdgeTypes) populate
+// when the caller requests the "summary" aspect (default since 2026-05-12).
+// Detail aspects populate when requested individually or via "all".
 type ArchitectureInfo struct {
+	TotalNodes  int                `json:"total_nodes,omitempty"`
+	TotalEdges  int                `json:"total_edges,omitempty"`
+	NodeLabels  []LabelCount       `json:"node_labels,omitempty"`
+	EdgeTypes   []TypeCount        `json:"edge_types,omitempty"`
 	Languages   []LanguageCount    `json:"languages,omitempty"`
 	Packages    []PackageSummary   `json:"packages,omitempty"`
 	EntryPoints []EntryPointInfo   `json:"entry_points,omitempty"`
@@ -20,6 +28,8 @@ type ArchitectureInfo struct {
 	Clusters    []ClusterInfo      `json:"clusters,omitempty"`
 	FileTree    []FileTreeEntry    `json:"file_tree,omitempty"`
 }
+
+// LabelCount and TypeCount are defined in schema.go and reused here.
 
 // LanguageCount counts files per language.
 type LanguageCount struct {
@@ -97,16 +107,22 @@ type FileTreeEntry struct {
 }
 
 // buildAspectSet converts the aspects slice into a lookup set.
-// An empty list or a list containing "all" means every aspect is wanted.
+// An empty list defaults to the compact "summary" aspect only.
+// "all" means every aspect including summary.
+// Specific aspect names are passed through as-is.
 func buildAspectSet(aspects []string) map[string]bool {
 	set := make(map[string]bool, len(aspects))
 	for _, a := range aspects {
 		set[a] = true
 	}
-	if len(set) == 0 || set["all"] {
+	if len(set) == 0 {
+		set["summary"] = true
+		return set
+	}
+	if set["all"] {
 		for _, name := range []string{
-			"languages", "packages", "entry_points", "routes", "hotspots",
-			"boundaries", "services", "layers", "clusters", "file_tree",
+			"summary", "languages", "packages", "entry_points", "routes",
+			"hotspots", "boundaries", "services", "layers", "clusters", "file_tree",
 		} {
 			set[name] = true
 		}
@@ -121,6 +137,9 @@ func (s *Store) fetchAspects(project string, info *ArchitectureInfo, want map[st
 		fn   func() error
 	}
 	entries := []aspectEntry{
+		{"summary", func() error {
+			return s.archSummary(project, info)
+		}},
 		{"languages", func() error { var e error; info.Languages, e = s.archLanguages(project); return e }},
 		{"packages", func() error { var e error; info.Packages, e = s.archPackages(project); return e }},
 		{"entry_points", func() error { var e error; info.EntryPoints, e = s.archEntryPoints(project); return e }},
@@ -232,6 +251,63 @@ var extToLang = map[string]string{
 	".tf": "HCL", ".sql": "SQL", ".erl": "Erlang", ".swift": "Swift",
 	".dart": "Dart", ".groovy": "Groovy", ".pl": "Perl", ".r": "R",
 	".scss": "SCSS", ".vue": "Vue", ".svelte": "Svelte",
+}
+
+// archSummary populates the compact summary fields (totals + label / edge
+// histograms). Added 2026-05-12; the new default for get_architecture so the
+// agent gets a digestible structural overview without the 500KB verbose dump.
+func (s *Store) archSummary(project string, info *ArchitectureInfo) error {
+	// Total nodes
+	if err := s.q.QueryRow(
+		`SELECT COUNT(*) FROM nodes WHERE project=?`, project,
+	).Scan(&info.TotalNodes); err != nil {
+		return fmt.Errorf("count nodes: %w", err)
+	}
+	// Total edges
+	if err := s.q.QueryRow(
+		`SELECT COUNT(*) FROM edges WHERE project=?`, project,
+	).Scan(&info.TotalEdges); err != nil {
+		return fmt.Errorf("count edges: %w", err)
+	}
+	// Node-label histogram
+	rows, err := s.q.Query(
+		`SELECT label, COUNT(*) c FROM nodes WHERE project=? GROUP BY label ORDER BY c DESC`,
+		project,
+	)
+	if err != nil {
+		return fmt.Errorf("node labels: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var lc LabelCount
+		if err := rows.Scan(&lc.Label, &lc.Count); err != nil {
+			return fmt.Errorf("scan node label: %w", err)
+		}
+		info.NodeLabels = append(info.NodeLabels, lc)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("node labels rows: %w", err)
+	}
+	// Edge-type histogram
+	erows, err := s.q.Query(
+		`SELECT type, COUNT(*) c FROM edges WHERE project=? GROUP BY type ORDER BY c DESC`,
+		project,
+	)
+	if err != nil {
+		return fmt.Errorf("edge types: %w", err)
+	}
+	defer erows.Close()
+	for erows.Next() {
+		var et TypeCount
+		if err := erows.Scan(&et.Type, &et.Count); err != nil {
+			return fmt.Errorf("scan edge type: %w", err)
+		}
+		info.EdgeTypes = append(info.EdgeTypes, et)
+	}
+	if err := erows.Err(); err != nil {
+		return fmt.Errorf("edge types rows: %w", err)
+	}
+	return nil
 }
 
 func (s *Store) archLanguages(project string) ([]LanguageCount, error) {

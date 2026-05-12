@@ -12,10 +12,15 @@ import (
 )
 
 // validArchAspects lists all recognized aspect names.
+//
+// "summary" (added 2026-05-12) is the new default — emits compact totals
+// (node count, edge count, label histogram, edge-type histogram) without
+// the verbose entry_points / file_tree / hotspots arrays.
 var validArchAspects = map[string]bool{
-	"all": true, "languages": true, "packages": true, "entry_points": true,
-	"routes": true, "hotspots": true, "boundaries": true, "services": true,
-	"layers": true, "clusters": true, "file_tree": true, "adr": true,
+	"summary": true, "all": true, "languages": true, "packages": true,
+	"entry_points": true, "routes": true, "hotspots": true, "boundaries": true,
+	"services": true, "layers": true, "clusters": true, "file_tree": true,
+	"adr": true,
 }
 
 func (s *Server) handleGetArchitecture(_ context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -57,14 +62,24 @@ func (s *Server) handleGetArchitecture(_ context.Context, req *mcp.CallToolReque
 }
 
 // parseAspects extracts and validates the aspects array from tool arguments.
+//
+// Default (no aspects param) returns a compact "summary" aspect — totals plus
+// label/edge type counts — matching the digest shape that lets an LLM agent
+// form a query plan without drowning in 500KB of entry_points / file_tree /
+// hotspots. The agent can request specific aspects ("languages", "packages",
+// "routes", etc.) for detail, or "all" for the full legacy response.
+//
+// Pre-2026-05-12 default was "all"; that emitted ~500KB on PSM and contributed
+// to Q2 max_turns exhaustion (agent context blew up before it could plan).
+// See bench/accuracy/baselines/2026-05-12-psm-head-to-head.md.
 func parseAspects(args map[string]any) ([]string, error) {
 	rawAspects, ok := args["aspects"]
 	if !ok {
-		return []string{"all"}, nil
+		return []string{"summary"}, nil
 	}
 	arr, ok := rawAspects.([]any)
 	if !ok {
-		return []string{"all"}, nil
+		return []string{"summary"}, nil
 	}
 	var aspects []string
 	for _, a := range arr {
@@ -78,15 +93,32 @@ func parseAspects(args map[string]any) ([]string, error) {
 		aspects = append(aspects, str)
 	}
 	if len(aspects) == 0 {
-		return []string{"all"}, nil
+		return []string{"summary"}, nil
 	}
 	return aspects, nil
 }
 
 // buildArchResponse converts ArchitectureInfo fields into a response map,
 // including only non-nil aspects.
+//
+// The "summary" aspect (default since 2026-05-12) emits totals only; detailed
+// fields like entry_points / hotspots / file_tree are skipped unless the
+// caller explicitly requests them via aspects. This keeps the default
+// response under ~5KB on typical projects vs. ~500KB before.
 func buildArchResponse(projName string, info *store.ArchitectureInfo) map[string]any {
 	data := map[string]any{"project": projName}
+	if info.TotalNodes > 0 {
+		data["total_nodes"] = info.TotalNodes
+	}
+	if info.TotalEdges > 0 {
+		data["total_edges"] = info.TotalEdges
+	}
+	if info.NodeLabels != nil {
+		data["node_labels"] = info.NodeLabels
+	}
+	if info.EdgeTypes != nil {
+		data["edge_types"] = info.EdgeTypes
+	}
 	if info.Languages != nil {
 		data["languages"] = info.Languages
 	}

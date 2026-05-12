@@ -504,6 +504,7 @@ func (s *Server) registerTools() {
 	s.registerCodeLocalizeTool()
 	s.registerCodeLocalizeAgentTool()
 	s.registerDiffGraphTool()
+	s.registerDegreeFilterTool()
 }
 
 // registerFindRationaleTool surfaces the Rationale nodes produced by

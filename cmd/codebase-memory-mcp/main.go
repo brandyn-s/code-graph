@@ -446,10 +446,17 @@ func runCLI(args []string) int {
 		return 1
 	}
 
-	// Extract the text content
+	// Extract the text content. addUpdateNotice prepends an "⚡ Update
+	// available: ..." banner as Content[0] when a newer release exists,
+	// so a naive Content[0] read would return only the banner and drop
+	// the actual tool response. Skip banner-prefixed blocks and take
+	// the first real response.
 	var text string
 	for _, c := range result.Content {
 		if tc, ok := c.(*mcp.TextContent); ok {
+			if strings.HasPrefix(tc.Text, "⚡ Update available") {
+				continue
+			}
 			text = tc.Text
 			break
 		}

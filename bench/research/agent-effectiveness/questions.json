@@ -1,0 +1,390 @@
+{
+  "_doc": "Agent-effectiveness battery. 23 LLM-graded questions across 4 LLM categories (1=banner, 2=verbosity, 3=schema, 4=missing-surface) + 6 schema-validated direct-tool checks (category 6). Category 5 (CLI/MCP divergence) deferred to unit tests in internal/tools/.",
+  "categories": {
+    "1": "banner-interference",
+    "2": "verbosity-bloat",
+    "3": "schema-drift",
+    "4": "missing-surface",
+    "6": "output-shape-validation"
+  },
+  "questions": [
+    {
+      "id": 1,
+      "category": 1,
+      "kind": "llm",
+      "targets": [
+        "psm"
+      ],
+      "question": "Report the total number of nodes and edges in this codebase's graph. Just give me totals.",
+      "expected_first_tool": "get_graph_schema",
+      "scoring_criteria": "PASS if response contains accurate node and edge totals (e.g., '~80,000 nodes, ~206,000 edges' or specific). FAIL if response says 'update available' or is the literal banner text. FAIL if first tool response was empty/banner-only."
+    },
+    {
+      "id": 2,
+      "category": 1,
+      "kind": "llm",
+      "targets": [
+        "psm",
+        "ripgrep"
+      ],
+      "question": "What projects are currently indexed in the graph database?",
+      "expected_first_tool": "list_projects",
+      "scoring_criteria": "PASS if response lists \u22651 project with name. FAIL if response is the update banner."
+    },
+    {
+      "id": 3,
+      "category": 1,
+      "kind": "llm",
+      "targets": [
+        "psm"
+      ],
+      "question": "Give me a high-level architecture summary of this codebase.",
+      "expected_first_tool": "get_architecture",
+      "scoring_criteria": "PASS if response mentions specific architectural elements (services, languages, modules). FAIL if response is the update banner."
+    },
+    {
+      "id": 4,
+      "category": 1,
+      "kind": "llm",
+      "targets": [
+        "psm"
+      ],
+      "question": "Find the function called `main` in this codebase.",
+      "expected_first_tool": "search_graph",
+      "scoring_criteria": "PASS if response identifies one or more main functions with file location. FAIL if banner-only."
+    },
+    {
+      "id": 5,
+      "category": 1,
+      "kind": "llm",
+      "targets": [
+        "ripgrep"
+      ],
+      "question": "Show me the source code for one of the main functions you can find.",
+      "expected_first_tool": "search_graph or get_code_snippet",
+      "scoring_criteria": "PASS if actual Rust source code is returned. FAIL if banner-only."
+    },
+    {
+      "id": 6,
+      "category": 2,
+      "kind": "llm",
+      "targets": [
+        "psm"
+      ],
+      "question": "Show me a map of which services depend on which other services in this codebase. Then summarize: which service has the most inbound calls?",
+      "expected_first_tool": "service_map",
+      "scoring_criteria": "PASS if both halves answered (a service-dependency map + a top-inbound service named). FAIL if agent ran out of context after service_map's 46KB response. FAIL if stop_reason='max_turns_exhausted'."
+    },
+    {
+      "id": 7,
+      "category": 2,
+      "kind": "llm",
+      "targets": [
+        "psm"
+      ],
+      "question": "Find SAFETY / WHY annotations across the codebase. Then count how many are in the libcot crate specifically.",
+      "expected_first_tool": "find_rationale",
+      "scoring_criteria": "PASS if both annotations returned AND libcot count given. FAIL if context exhausted before agent could count."
+    },
+    {
+      "id": 8,
+      "category": 2,
+      "kind": "llm",
+      "targets": [
+        "psm"
+      ],
+      "question": "Detect circular dependencies in this codebase. Then tell me which two crates participate in the worst cycle.",
+      "expected_first_tool": "detect_cycles",
+      "scoring_criteria": "PASS if cycles enumerated AND worst-cycle named. FAIL if context exhausted."
+    },
+    {
+      "id": 9,
+      "category": 2,
+      "kind": "llm",
+      "targets": [
+        "psm",
+        "ripgrep"
+      ],
+      "question": "List the projects, then for the most recently indexed project tell me when it was last updated.",
+      "expected_first_tool": "list_projects",
+      "scoring_criteria": "PASS if project list returned AND most-recent indexed_at extracted. FAIL if 76KB list_projects burns the budget."
+    },
+    {
+      "id": 10,
+      "category": 2,
+      "kind": "llm",
+      "targets": [
+        "psm"
+      ],
+      "question": "What edge types exist in the graph and which is the most common? Then find an example node that has a CALLS edge.",
+      "expected_first_tool": "get_graph_schema",
+      "scoring_criteria": "PASS if edge-type histogram + most-common name + example node returned. FAIL if context exhausted."
+    },
+    {
+      "id": 11,
+      "category": 2,
+      "kind": "llm",
+      "targets": [
+        "psm"
+      ],
+      "question": "Find the architectural communities (clusters) in this codebase, then identify the largest two clusters by node count.",
+      "expected_first_tool": "get_architecture",
+      "scoring_criteria": "PASS if clusters retrieved AND largest two named. FAIL if blew up on aspects:['all'] verbosity."
+    },
+    {
+      "id": 12,
+      "category": 3,
+      "kind": "llm",
+      "targets": [
+        "psm"
+      ],
+      "question": "Find any Architecture Decision Records (ADRs) stored for this project. If there are none, that's a valid answer.",
+      "expected_first_tool": "manage_adr",
+      "scoring_criteria": "PASS if agent successfully calls manage_adr (regardless of result content). FAIL if agent's tool_call returned ok=False due to arg-validation error (means the schema is wrong)."
+    },
+    {
+      "id": 13,
+      "category": 3,
+      "kind": "llm",
+      "targets": [
+        "psm"
+      ],
+      "question": "Find all Rust files in the apid service. Use a file-pattern filter to scope the search.",
+      "expected_first_tool": "search_graph",
+      "scoring_criteria": "PASS if agent uses search_graph with file_pattern arg AND returns matching files. FAIL if agent can't find the file_pattern arg (because it's missing from the agent's schema)."
+    },
+    {
+      "id": 14,
+      "category": 3,
+      "kind": "llm",
+      "targets": [
+        "psm"
+      ],
+      "question": "Find functions with cyclomatic complexity \u2265 20 in this codebase.",
+      "expected_first_tool": "search_graph",
+      "scoring_criteria": "PASS if response lists \u22651 high-complexity function with name. FAIL if agent says 'no such filter available' (because min_complexity is missing from agent_runner.py)."
+    },
+    {
+      "id": 15,
+      "category": 3,
+      "kind": "llm",
+      "targets": [
+        "psm"
+      ],
+      "question": "Trace the call path from the function `authenticate` outbound to depth 3, but only show high-confidence edges.",
+      "expected_first_tool": "trace_call_path",
+      "scoring_criteria": "PASS if trace returned with confidence filter applied. FAIL if agent reports 'no confidence filter available' (min_confidence missing from agent schema)."
+    },
+    {
+      "id": 16,
+      "category": 3,
+      "kind": "llm",
+      "targets": [
+        "psm"
+      ],
+      "question": "Find functions in the namespace `c-Users-user-Documents-GitHub-psm.assetman` whose name matches `process_*`.",
+      "expected_first_tool": "search_graph",
+      "scoring_criteria": "PASS if agent uses qn_pattern to scope to the assetman namespace AND name_pattern for the process_ prefix. FAIL if agent can't combine qn_pattern + name_pattern (because qn_pattern is missing from agent schema)."
+    },
+    {
+      "id": 17,
+      "category": 3,
+      "kind": "llm",
+      "targets": [
+        "psm"
+      ],
+      "question": "What ADR sections are defined for this project's architecture record, if any are stored?",
+      "expected_first_tool": "manage_adr",
+      "scoring_criteria": "PASS if agent passes mode='get' (correct handler param) or correctly reports no ADR. FAIL if agent passes operation='get' (the stale arg name)."
+    },
+    {
+      "id": 18,
+      "category": 4,
+      "kind": "llm",
+      "targets": [
+        "psm"
+      ],
+      "question": "Find functions in this codebase that have exactly zero callers \u2014 i.e., orphans or entry points.",
+      "expected_first_tool": "degree_filter",
+      "scoring_criteria": "PASS if agent uses degree_filter with op=eq, value=0, direction=inbound AND returns count + examples. FAIL if agent thrashes via query_graph without converging."
+    },
+    {
+      "id": 19,
+      "category": 4,
+      "kind": "llm",
+      "targets": [
+        "psm"
+      ],
+      "question": "Find the top 10 functions in this codebase by inbound call count (most-called functions / hot fan-in).",
+      "expected_first_tool": "degree_filter or search_graph",
+      "scoring_criteria": "PASS if top-10 by inbound returned with degree counts. FAIL if max_turns_exhausted."
+    },
+    {
+      "id": 20,
+      "category": 4,
+      "kind": "llm",
+      "targets": [
+        "psm"
+      ],
+      "question": "Explain the `apid` service in this codebase: what it does, its main entry points, and its dependencies.",
+      "expected_first_tool": "explain_service",
+      "scoring_criteria": "PASS if structural overview of apid returned. FAIL if agent gives up (because explain_service is missing from the agent's tool list)."
+    },
+    {
+      "id": 21,
+      "category": 4,
+      "kind": "llm",
+      "targets": [
+        "psm"
+      ],
+      "question": "Explain the function `boat_tokenize` (or any boat-tokenizer entry point) \u2014 what does it do, who calls it, what does it call?",
+      "expected_first_tool": "explain_symbol",
+      "scoring_criteria": "PASS if function explained with callers/callees. FAIL if agent gives up (because explain_symbol is missing from the agent's tool list)."
+    },
+    {
+      "id": 22,
+      "category": 4,
+      "kind": "llm",
+      "targets": [
+        "psm"
+      ],
+      "question": "Find functions that read environment variables in this codebase.",
+      "expected_first_tool": "search_graph or query_graph",
+      "scoring_criteria": "PASS if response identifies env-var-reading functions with file locations. FAIL if max_turns_exhausted."
+    },
+    {
+      "id": 23,
+      "category": 4,
+      "kind": "llm",
+      "targets": [
+        "psm"
+      ],
+      "question": "Find functions related to authentication and their security role classifications (if any are tagged).",
+      "expected_first_tool": "query_security_surfaces",
+      "scoring_criteria": "PASS if response includes auth functions with security_role tags. FAIL if agent gives up (because query_security_surfaces is missing from the agent's tool list)."
+    },
+    {
+      "id": 30,
+      "category": 6,
+      "kind": "schema",
+      "targets": [
+        "psm",
+        "ripgrep"
+      ],
+      "tool": "get_graph_schema",
+      "args": {
+        "project": "c-Users-user-Documents-GitHub-psm"
+      },
+      "assert_shape": "object_with_keys",
+      "expected_keys": [
+        "projects"
+      ],
+      "scoring_criteria": "Direct schema validation: response must be a JSON object with `projects` array; each project entry must have `schema.node_labels` and `schema.edge_types`."
+    },
+    {
+      "id": 31,
+      "category": 6,
+      "kind": "schema",
+      "targets": [
+        "psm",
+        "ripgrep"
+      ],
+      "tool": "search_graph",
+      "args": {
+        "project": "c-Users-user-Documents-GitHub-psm",
+        "label": "Function",
+        "limit": 5
+      },
+      "assert_shape": "object_with_results_array",
+      "expected_keys": [
+        "results"
+      ],
+      "scoring_criteria": "Response must include a `results` array of \u22645 entries; each entry must have `name` and `label` fields."
+    },
+    {
+      "id": 32,
+      "category": 6,
+      "kind": "schema",
+      "targets": [
+        "psm",
+        "ripgrep"
+      ],
+      "tool": "degree_filter",
+      "args": {
+        "project": "c-Users-user-Documents-GitHub-psm",
+        "label": "Function",
+        "direction": "inbound",
+        "op": "eq",
+        "value": 0,
+        "limit": 3
+      },
+      "assert_shape": "object_with_count_examples",
+      "expected_keys": [
+        "count",
+        "examples"
+      ],
+      "scoring_criteria": "Response must include `count` (integer) and `examples` (array, max 3)."
+    },
+    {
+      "id": 33,
+      "category": 6,
+      "kind": "schema",
+      "targets": [
+        "psm",
+        "ripgrep"
+      ],
+      "tool": "get_architecture",
+      "args": {
+        "project": "c-Users-user-Documents-GitHub-psm"
+      },
+      "assert_shape": "compact_summary",
+      "expected_keys": [
+        "total_nodes",
+        "total_edges",
+        "node_labels",
+        "edge_types"
+      ],
+      "scoring_criteria": "Response must be the compact summary shape (post-2026-05-12 fix). MUST NOT contain `entry_points`, `hotspots`, `file_tree`, or `clusters` at the top level (those were the 500KB-bloat fields).",
+      "must_not_contain_keys": [
+        "entry_points",
+        "hotspots",
+        "file_tree",
+        "clusters",
+        "boundaries"
+      ]
+    },
+    {
+      "id": 34,
+      "category": 6,
+      "kind": "schema",
+      "targets": [
+        "psm",
+        "ripgrep"
+      ],
+      "tool": "list_projects",
+      "args": {},
+      "assert_shape": "top_level_array",
+      "scoring_criteria": "Response MUST be a top-level JSON array (not `{projects: [...]}`). Each entry must have `name` field."
+    },
+    {
+      "id": 35,
+      "category": 6,
+      "kind": "schema",
+      "targets": [
+        "psm",
+        "ripgrep"
+      ],
+      "tool": "get_code_snippet",
+      "args": {
+        "project": "c-Users-user-Documents-GitHub-psm",
+        "qualified_name": "main"
+      },
+      "assert_shape": "object_with_keys",
+      "expected_keys_either": [
+        ["name", "file_path"],
+        ["status", "suggestions"]
+      ],
+      "scoring_criteria": "Response must be a JSON object. Resolved match: has `name` + `file_path`. Ambiguous match: has `status` + `suggestions`. Either is a valid shape."
+    }
+  ]
+}

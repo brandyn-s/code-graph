@@ -1,0 +1,23 @@
+{
+  "_doc": "Target codebases for the agent-effectiveness battery. PSM is the primary realistic target. code-graph is a small reflexive target (tools used to inspect their own implementation). ripgrep is a small external target.",
+  "targets": [
+    {
+      "id": "psm",
+      "name": "psm",
+      "path": "C:/Users/user/Documents/GitHub/psm",
+      "project_id": "c-Users-user-Documents-GitHub-psm",
+      "size_class": "large",
+      "expected_nodes": 80436,
+      "expected_edges": 206446
+    },
+    {
+      "id": "ripgrep",
+      "name": "BurntSushi/ripgrep",
+      "path": "C:/Users/user/code/arxiv-bench-corpus/rust",
+      "project_id": "c-Users-user-code-arxiv-bench-corpus-rust",
+      "size_class": "small",
+      "expected_nodes": 4414,
+      "expected_edges": 16551
+    }
+  ]
+}

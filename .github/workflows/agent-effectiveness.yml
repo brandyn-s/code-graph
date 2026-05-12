@@ -1,0 +1,172 @@
+name: agent-effectiveness
+
+# Regression gate for the agent-as-end-user layer. Catches the 6 failure-mode
+# categories that the per-extractor accuracy-regression.yml does NOT see:
+#
+#   1. Banner / sidecar interference with CLI extraction
+#   2. Default-too-verbose responses bloating agent context
+#   3. Tool-schema drift (agent's declared schema != handler)
+#   4. Missing tool surface for a question class (max_turns_exhausted)
+#   5. CLI vs MCP transport divergence (offline unit tests, not this workflow)
+#   6. Output-shape regressions (schema-validated, no LLM cost)
+#
+# Triggered when PR touches the agent-effectiveness contract surface:
+# tool handlers, store, MCP server entry point, or the bench itself.
+#
+# Cost: category 6 (schema) = $0; category 1 on ripgrep (5 LLM questions) = ~$2.
+# Total <= $3/PR. PSM-scale tests (categories 2 and 4) are NOT runnable in CI
+# because PSM is a developer-local checkout — those run locally via:
+#   python bench/research/agent-effectiveness/run_battery.py
+#
+# Plan: ~/Documents/knowledge-base/plans/2026-05-12-agent-effectiveness-test-battery.md
+
+on:
+  pull_request:
+    paths:
+      - 'internal/tools/**'
+      - 'internal/store/**'
+      - 'cmd/codebase-memory-mcp/**'
+      - 'bench/research/agent-effectiveness/**'
+      - 'bench/research/arxiv-bench/**'
+      - '.github/workflows/agent-effectiveness.yml'
+  workflow_dispatch:
+    inputs:
+      filter_category:
+        description: 'Only run a single category (1=banner, 2=verbosity, 3=schema, 4=missing, 6=output-shape)'
+        required: false
+        default: ''
+      budget_usd:
+        description: 'Total cost cap; abort run when exceeded'
+        required: false
+        default: '5'
+
+permissions:
+  contents: read
+  pull-requests: write  # for posting the PR comment
+
+jobs:
+  agent-effectiveness:
+    if: github.repository_owner != 'redacted-brandyn'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version: '1.26'
+          cache: true
+
+      - name: Setup Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v6.0.0
+        with:
+          python-version: '3.13'
+
+      - name: Install Python deps
+        run: pip install anthropic
+
+      - name: Build code-graph binary
+        run: |
+          CGO_ENABLED=1 go build -o bin/codebase-memory-mcp ./cmd/codebase-memory-mcp/
+          chmod +x bin/codebase-memory-mcp
+
+      - name: Clone ripgrep fixture
+        run: |
+          mkdir -p $HOME/fixture
+          git clone --depth=1 https://github.com/BurntSushi/ripgrep.git $HOME/fixture/ripgrep
+
+      - name: Index ripgrep
+        env:
+          CODE_GRAPH_BIN: ${{ github.workspace }}/bin/codebase-memory-mcp
+        run: |
+          $CODE_GRAPH_BIN cli index_repository "{\"path\":\"$HOME/fixture/ripgrep\"}"
+
+      - name: Verify ANTHROPIC_API_KEY available
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "ANTHROPIC_API_KEY secret not configured for this repo. Skipping LLM categories."
+            echo "ANTHROPIC_SKIP=1" >> $GITHUB_ENV
+          else
+            echo "ANTHROPIC_API_KEY: SET (length: ${#ANTHROPIC_API_KEY})"
+          fi
+
+      - name: Run category 6 (schema validation; no API cost)
+        env:
+          CODE_GRAPH_BIN: ${{ github.workspace }}/bin/codebase-memory-mcp
+        run: |
+          cd bench/research/agent-effectiveness
+          # Schema questions are PSM-only by default; for CI, swap to ripgrep
+          # by passing --filter-target ripgrep. Tools without ripgrep-friendly
+          # args are skipped via the runner's target match.
+          python run_battery.py --filter-category 6 --filter-target ripgrep || true
+
+      - name: Run category 1 (banner; ~$2 on ripgrep)
+        if: env.ANTHROPIC_SKIP != '1'
+        env:
+          CODE_GRAPH_BIN: ${{ github.workspace }}/bin/codebase-memory-mcp
+        run: |
+          cd bench/research/agent-effectiveness
+          python run_battery.py --filter-category 1 --filter-target ripgrep --budget-usd ${{ github.event.inputs.budget_usd || '3' }}
+
+      - name: Run additional categories on manual dispatch
+        if: github.event_name == 'workflow_dispatch' && env.ANTHROPIC_SKIP != '1'
+        env:
+          CODE_GRAPH_BIN: ${{ github.workspace }}/bin/codebase-memory-mcp
+        run: |
+          cd bench/research/agent-effectiveness
+          CATEGORY_FILTER="${{ github.event.inputs.filter_category }}"
+          if [ -n "$CATEGORY_FILTER" ]; then
+            python run_battery.py --filter-category $CATEGORY_FILTER --filter-target ripgrep --budget-usd ${{ github.event.inputs.budget_usd || '5' }}
+          fi
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: agent-effectiveness-results
+          path: bench/research/agent-effectiveness/results.jsonl
+          if-no-files-found: warn
+
+      - name: Post summary to PR
+        if: github.event_name == 'pull_request' && always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          cd bench/research/agent-effectiveness
+          if [ ! -f results.jsonl ]; then
+            echo "No results.jsonl produced; skipping PR comment."
+            exit 0
+          fi
+          {
+            echo "## agent-effectiveness battery"
+            echo ""
+            echo "Per-category pass rate on \`ripgrep\` CI fixture:"
+            echo ""
+            python -c "
+          import json
+          from collections import defaultdict
+          rows = [json.loads(l) for l in open('results.jsonl') if l.strip()]
+          totals = defaultdict(int); sigs = defaultdict(int)
+          for r in rows:
+              c = r.get('category')
+              if c is None: continue
+              totals[c] += 1
+              if r.get('signal_caught') or r.get('category_signal_caught'):
+                  sigs[c] += 1
+          print('| Category | Questions | Pass | Signals |')
+          print('|---|---|---|---|')
+          for c in sorted(totals):
+              t = totals[c]; s = sigs[c]
+              print(f'| {c} | {t} | {t-s} | {s} |')
+          " || echo "summary computation failed"
+            echo ""
+            echo "_Detailed JSONL artifact uploaded as \`agent-effectiveness-results\`._"
+          } > comment.md
+          gh pr comment "$PR_NUMBER" --body-file comment.md

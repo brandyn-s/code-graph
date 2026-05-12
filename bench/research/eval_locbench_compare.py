@@ -63,6 +63,22 @@ DEFAULT_EVAL_BIN = REPO_ROOT / "bench/research/eval_rank_localize/eval.exe"
 DEFAULT_INDEX_BIN = REPO_ROOT / "bin/codebase-memory-mcp.exe"
 CACHE_DIR = Path.home() / ".cache" / "codebase-memory-mcp"
 
+# Stable snapshot cache for Loc-Bench instances (2026-05-12).
+# Motivated by the finding that 67 of 200 Loc-Bench instances are
+# permanently unreachable via live GitHub clone (PR base_commits
+# garbage-collected after PR closure). The cache stores tarballs of
+# successfully-cloned repos at SHA so future runs are reproducible
+# even if the source GitHub ref is gone.
+SNAPSHOT_CACHE_DIR = Path.home() / ".cache" / "locbench-snapshots"
+SWH_API_BASE = "https://archive.softwareheritage.org/api/1"
+
+# Module-level globals so worker subprocesses (which pickle the
+# function call site, not the args namespace) see the user's flag
+# choices for the snapshot-cache + SWH strategies. Set by main() after
+# argparse runs.
+_USE_SNAPSHOT_CACHE: bool = True
+_USE_SOFTWARE_HERITAGE: bool = False
+
 # SCORER_SCHEMA_VERSION — bump when score_entities changes shape or
 # semantics. Provenance comparison treats this as a hard equality
 # field: two reports with different scorer schemas cannot be compared.
@@ -336,24 +352,211 @@ def preflight_reachability(rows: list[dict], workers: int = 8) -> tuple[list[dic
     return reachable, unreachable
 
 
-def clone_repo(repo: str, base_commit: str, dest: Path, instance_id: str | None = None) -> bool:
+def _snapshot_tarball_path(repo: str, base_commit: str) -> Path:
+    """Local cache path for a (repo, base_commit) tarball.
+
+    Path A (2026-05-12) — stable-snapshot cache. Once we've successfully
+    cloned a repo at a given SHA, we tarball it here so future runs are
+    independent of live GitHub state. Filename format:
+        <org>__<name>__<sha>.tar.gz
+    Path-safe: the org__name pattern matches Loc-Bench's instance_id
+    convention so cache hits are findable by inspection.
+    """
+    safe = repo.replace("/", "__").replace("\\", "__")
+    return SNAPSHOT_CACHE_DIR / f"{safe}__{base_commit}.tar.gz"
+
+
+def _try_snapshot_cache(repo: str, base_commit: str, dest: Path) -> bool:
+    """Strategy 0 (Path A): extract from local snapshot cache if present.
+
+    The fastest possible clone — pure disk read, no network, no git
+    operations. Returns True if cache hit + extraction succeeded.
+    """
+    tarball = _snapshot_tarball_path(repo, base_commit)
+    if not tarball.exists():
+        return False
+    import tarfile
+    try:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        with tarfile.open(tarball, "r:gz") as tf:
+            tf.extractall(dest)
+        return dest.exists()
+    except (OSError, tarfile.TarError) as e:
+        print(f"  snapshot-cache extract failed: {e}")
+        shutil.rmtree(dest, ignore_errors=True)
+        return False
+
+
+def _save_snapshot_cache(repo: str, base_commit: str, src: Path) -> None:
+    """Save a successful clone to the snapshot cache so future runs reuse it.
+
+    Best-effort: failure to write the cache is non-fatal (eval still has
+    the working clone in src). Called after any successful clone via
+    strategies 1/2/3/4 — NOT when strategy 0 already hit.
+    """
+    tarball = _snapshot_tarball_path(repo, base_commit)
+    if tarball.exists():
+        return
+    import tarfile
+    try:
+        SNAPSHOT_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        # Write to .tmp first then rename for atomicity
+        tmp = tarball.with_suffix(".tar.gz.tmp")
+        with tarfile.open(tmp, "w:gz") as tf:
+            tf.add(src, arcname=".")
+        tmp.replace(tarball)
+        print(f"  snapshot saved: {tarball.name}")
+    except (OSError, tarfile.TarError) as e:
+        print(f"  snapshot save failed (non-fatal): {e}")
+
+
+def _try_software_heritage(repo: str, base_commit: str, dest: Path) -> bool:
+    """Strategy 4 (Path A): fetch via Software Heritage archive.
+
+    SWH archives every public GitHub commit. When live GitHub has GC'd
+    the ref, SWH may still have it. We use the vault API to request a
+    git-bare tarball.
+
+    SWH vault is async — initial request returns 200 with status, must
+    poll until status='done'. We do at most 6 poll attempts, 10s apart
+    (~60s wall max). If the vault prep takes longer or the revision
+    isn't archived, we give up and let the caller fall through.
+
+    Requires `urllib` (stdlib) and `tarfile` (stdlib). No third-party
+    deps. Returns True on successful extract.
+    """
+    import urllib.request
+    import urllib.error
+    import json as _json
+    import tarfile
+
+    swhid = f"swh:1:rev:{base_commit}"
+    vault_url = f"{SWH_API_BASE}/vault/git-bare/{swhid}/"
+
+    print(f"  trying Software Heritage vault: {swhid}")
+
+    # Step 1: kick off (or check existing) vault preparation
+    try:
+        # POST to start the cook; if already done, returns status=done
+        req = urllib.request.Request(vault_url, method="POST")
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            payload = _json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            print(f"  SWH: revision not archived ({e.code})")
+            return False
+        print(f"  SWH POST failed: HTTP {e.code}")
+        return False
+    except (urllib.error.URLError, OSError) as e:
+        print(f"  SWH POST failed: {e}")
+        return False
+
+    status = payload.get("status", "unknown")
+    fetch_url = payload.get("fetch_url")
+
+    # Step 2: poll until status=done (max ~60s)
+    for poll in range(6):
+        if status == "done" and fetch_url:
+            break
+        if status == "failed":
+            print(f"  SWH vault prep failed: {payload.get('progress_message', '')}")
+            return False
+        time.sleep(10)
+        try:
+            with urllib.request.urlopen(vault_url, timeout=30) as resp:
+                payload = _json.loads(resp.read().decode("utf-8"))
+            status = payload.get("status", "unknown")
+            fetch_url = payload.get("fetch_url")
+        except (urllib.error.URLError, urllib.error.HTTPError, OSError) as e:
+            print(f"  SWH poll #{poll+1} failed: {e}")
+            return False
+    if status != "done" or not fetch_url:
+        print(f"  SWH vault not ready after 60s (status={status}); giving up")
+        return False
+
+    # Step 3: download the git-bare tarball + extract
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    bare_tar = dest.parent / f".swh-{base_commit[:12]}.tar"
+    try:
+        with urllib.request.urlopen(fetch_url, timeout=300) as resp:
+            bare_tar.write_bytes(resp.read())
+        with tarfile.open(bare_tar, "r:*") as tf:
+            tf.extractall(dest.parent / f".swh-{base_commit[:12]}-bare")
+        bare_dir = dest.parent / f".swh-{base_commit[:12]}-bare"
+        # The bare dir layout is <root>/<sha>.git/ — find it
+        bare_subdirs = [d for d in bare_dir.iterdir() if d.is_dir() and d.name.endswith(".git")]
+        if not bare_subdirs:
+            print(f"  SWH tarball missing .git directory")
+            return False
+        bare_repo = bare_subdirs[0]
+        # Clone the bare repo into dest with checkout at the commit
+        subprocess.run(
+            ["git", "clone", "--quiet", str(bare_repo), str(dest)],
+            check=True, timeout=120,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        )
+        subprocess.run(
+            ["git", "-C", str(dest), "checkout", base_commit],
+            check=True, timeout=60,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        )
+        # Cleanup intermediate artifacts
+        bare_tar.unlink(missing_ok=True)
+        shutil.rmtree(bare_dir, ignore_errors=True)
+        return True
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired,
+            urllib.error.URLError, urllib.error.HTTPError,
+            tarfile.TarError, OSError) as e:
+        print(f"  SWH fetch/extract failed: {e}")
+        bare_tar.unlink(missing_ok=True)
+        shutil.rmtree(dest.parent / f".swh-{base_commit[:12]}-bare", ignore_errors=True)
+        shutil.rmtree(dest, ignore_errors=True)
+        return False
+
+
+def clone_repo(repo: str, base_commit: str, dest: Path,
+               instance_id: str | None = None,
+               use_snapshot_cache: bool = True,
+               use_software_heritage: bool = False) -> bool:
     """Clone {repo} at {base_commit} into {dest}.
 
-    Fix C (2026-05-12): wraps the 3-strategy attempt in a retry-once loop.
-    On first failure, sleep 30s and retry. Catches transient GitHub blips
-    (rate-limit, network jitter) that would otherwise become permanent
-    losses. After two full passes (each pass attempts strategies 1+2+3),
-    give up.
+    Strategy order (added 2026-05-12 — Path A stable-snapshot work):
+      0. Local snapshot cache hit → extract tarball (instant, no network)
+      1-3. _clone_repo_once: git fetch-by-sha → full clone → pull/N/head
+      4. (optional, --use-software-heritage) Software Heritage vault
+
+    Fix C (2026-05-12): wraps strategies 1-3 in a retry-once loop. On
+    failure, sleep 30s and retry. Catches transient GitHub blips.
+
+    On any successful non-cache clone, the result is saved to the
+    snapshot cache for future runs.
     """
     if dest.exists():
         return True
+
+    # Strategy 0: local snapshot cache
+    if use_snapshot_cache and _try_snapshot_cache(repo, base_commit, dest):
+        print(f"  clone: hit snapshot cache")
+        return True
+
+    # Strategies 1-3 via the existing retry-once wrapper
     for attempt in range(2):
         if attempt == 1:
             print(f"  clone: retrying after 30s (attempt 2 of 2)")
             time.sleep(30)
             shutil.rmtree(dest, ignore_errors=True)
         if _clone_repo_once(repo, base_commit, dest, instance_id):
+            if use_snapshot_cache:
+                _save_snapshot_cache(repo, base_commit, dest)
             return True
+
+    # Strategy 4: Software Heritage (only if explicitly enabled — slow async)
+    if use_software_heritage:
+        if _try_software_heritage(repo, base_commit, dest):
+            if use_snapshot_cache:
+                _save_snapshot_cache(repo, base_commit, dest)
+            return True
+
     return False
 
 
@@ -788,7 +991,14 @@ def evaluate_instance(
         res.cloned = True
     else:
         print("  clone: starting...")
-        if clone_repo(repo, row["base_commit"], repo_dir, instance_id=iid):
+        # Path A flags propagate via module-level globals (set in main()
+        # before the parallel pool spawns; pickled into workers).
+        if clone_repo(
+            repo, row["base_commit"], repo_dir,
+            instance_id=iid,
+            use_snapshot_cache=globals().get("_USE_SNAPSHOT_CACHE", True),
+            use_software_heritage=globals().get("_USE_SOFTWARE_HERITAGE", False),
+        ):
             res.cloned = True
             print("  clone: done")
         else:
@@ -1444,6 +1654,28 @@ def main() -> int:
              "Z agent_ran, F clone_failed` line every N completed "
              "instances. Default 10. Set to 0 to disable.",
     )
+    # ─── Path A: stable snapshot cache (2026-05-12) ────────────────────
+    # Motivated by the finding that 67/200 Loc-Bench instances are
+    # permanently unreachable via live GitHub clone (PRs closed, refs
+    # GC'd). Local cache + Software Heritage fallback give reproducible
+    # runs even after the live GitHub state decays.
+    ap.add_argument(
+        "--no-snapshot-cache", action="store_true",
+        help="Path A: disable the local snapshot cache (~/.cache/locbench-snapshots/). "
+             "By default the harness checks the cache before any clone "
+             "(strategy 0) and saves successful clones to it. Disable only "
+             "for debugging — the cache is the primary mechanism for "
+             "reproducibility across GitHub-decay events.",
+    )
+    ap.add_argument(
+        "--use-software-heritage", action="store_true",
+        help="Path A: enable Software Heritage vault fallback (strategy 4). "
+             "After all GitHub-based strategies (1-3) fail, query SWH for "
+             "an archived copy of the commit and fetch via the vault API. "
+             "Adds ~30-120s wait per fallback (vault prep is async). Off "
+             "by default to keep n=200 runs fast; turn on when re-baselining "
+             "and you want maximum coverage on hard-to-clone instances.",
+    )
     ap.add_argument(
         "--workers",
         type=int,
@@ -1522,6 +1754,23 @@ def main() -> int:
     )
 
     args = ap.parse_args()
+
+    # Path A: propagate snapshot-cache + SWH flags into module-level
+    # globals so worker subprocesses (which pickle the function call
+    # site, not the args namespace) can see the user's choices.
+    global _USE_SNAPSHOT_CACHE, _USE_SOFTWARE_HERITAGE
+    _USE_SNAPSHOT_CACHE = not getattr(args, "no_snapshot_cache", False)
+    _USE_SOFTWARE_HERITAGE = bool(getattr(args, "use_software_heritage", False))
+    if _USE_SNAPSHOT_CACHE:
+        SNAPSHOT_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        existing = list(SNAPSHOT_CACHE_DIR.glob("*.tar.gz"))
+        if existing:
+            print(f"[snapshot-cache] {len(existing)} cached tarball(s) "
+                  f"in {SNAPSHOT_CACHE_DIR} — strategy 0 will use these "
+                  f"before any live clone")
+    if _USE_SOFTWARE_HERITAGE:
+        print(f"[software-heritage] strategy 4 enabled — SWH vault fallback "
+              f"for GitHub-GC'd revisions")
 
     modes = [m.strip() for m in args.modes.split(",") if m.strip()]
     for m in modes:

@@ -264,8 +264,101 @@ def _instance_pr_number(instance_id: str) -> str | None:
     return m.group(1) if m else None
 
 
+def _check_reachable(repo: str, base_commit: str, timeout: int = 30) -> bool:
+    """Fix B helper: check if `git ls-remote --exit-code <url> <sha>` succeeds.
+
+    A successful exit means the SHA is reachable as a ref on the remote.
+    This catches the failure mode where a PR base_commit is no longer
+    referenceable (deleted PR branch, force-push, garbage-collected).
+
+    Returns True if reachable, False otherwise. Also returns True (safe
+    default) on unexpected errors so we don't pre-exclude on transient
+    network glitches.
+    """
+    url = f"https://github.com/{repo}.git"
+    try:
+        result = subprocess.run(
+            ["git", "ls-remote", "--exit-code", url, base_commit],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            timeout=timeout,
+        )
+        # exit 0 = found; exit 2 = not found; other = error (assume reachable)
+        if result.returncode == 2:
+            return False
+        return True
+    except subprocess.TimeoutExpired:
+        return True  # transient — let the clone retry handle it
+    except Exception:
+        return True
+
+
+def preflight_reachability(rows: list[dict], workers: int = 8) -> tuple[list[dict], list[dict]]:
+    """Fix B: parallel reachability check on every row's (repo, base_commit).
+
+    Returns (reachable, unreachable) row lists.
+
+    Wall: ~0.5s/row with workers=8 (network-bound). Costs zero in $ since
+    `git ls-remote` doesn't clone anything.
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed as _aw
+
+    print(f"[preflight-reachability] checking {len(rows)} instances...", flush=True)
+    t0 = time.time()
+    reachable: list[dict] = []
+    unreachable: list[dict] = []
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        future_to_row = {
+            ex.submit(_check_reachable, r["repo"], r["base_commit"]): r
+            for r in rows
+        }
+        for fut in _aw(future_to_row):
+            row = future_to_row[fut]
+            try:
+                ok = fut.result()
+            except Exception:
+                ok = True  # safe default
+            if ok:
+                reachable.append(row)
+            else:
+                unreachable.append(row)
+    elapsed = time.time() - t0
+    print(
+        f"[preflight-reachability] done in {elapsed:.1f}s — "
+        f"{len(reachable)} reachable, {len(unreachable)} unreachable",
+        flush=True,
+    )
+    if unreachable:
+        print("  unreachable instances (will be PRE-EXCLUDED):", flush=True)
+        for r in unreachable[:20]:
+            print(f"    - {r['instance_id']} ({r['repo']} @ {r['base_commit'][:8]})", flush=True)
+        if len(unreachable) > 20:
+            print(f"    ... and {len(unreachable) - 20} more", flush=True)
+    return reachable, unreachable
+
+
 def clone_repo(repo: str, base_commit: str, dest: Path, instance_id: str | None = None) -> bool:
     """Clone {repo} at {base_commit} into {dest}.
+
+    Fix C (2026-05-12): wraps the 3-strategy attempt in a retry-once loop.
+    On first failure, sleep 30s and retry. Catches transient GitHub blips
+    (rate-limit, network jitter) that would otherwise become permanent
+    losses. After two full passes (each pass attempts strategies 1+2+3),
+    give up.
+    """
+    if dest.exists():
+        return True
+    for attempt in range(2):
+        if attempt == 1:
+            print(f"  clone: retrying after 30s (attempt 2 of 2)")
+            time.sleep(30)
+            shutil.rmtree(dest, ignore_errors=True)
+        if _clone_repo_once(repo, base_commit, dest, instance_id):
+            return True
+    return False
+
+
+def _clone_repo_once(repo: str, base_commit: str, dest: Path, instance_id: str | None = None) -> bool:
+    """One full clone-attempt pass: strategies 1+2+3.
 
     Tries three strategies in order:
       1. init + fetch-by-sha (fast; needs uploadpack.allowAnySHA1InWant on
@@ -1324,6 +1417,33 @@ def main() -> int:
     ap.add_argument("--binary-label", default="current main", help="Label for the report")
     ap.add_argument("--keep-index", action="store_true", help="Don't delete DB after run")
     ap.add_argument("--keep-clone", action="store_true", help="Don't delete clone after run")
+    # ─── Fail-fast fixes (Fixes A+B+D, 2026-05-12) ─────────────────────
+    # Motivated by the 2026-05-11/12 re-baseline session where 143/200
+    # instances clone-failed silently in attempt 2 (50 min wasted before
+    # I noticed). These flags add real-time abort, pre-flight pruning,
+    # and progress-summary output so the failure mode surfaces immediately
+    # instead of after-the-fact in results.md.
+    ap.add_argument(
+        "--abort-on-clone-fail-rate", type=float, default=0.3,
+        help="Fix A: abort the run if clone-failure rate exceeds this "
+             "fraction after at least 10 instances have been attempted. "
+             "Default 0.3 (= 30%%). Set to 1.0 to disable. Aborts with "
+             "exit code 4 and prints rate + count to stderr.",
+    )
+    ap.add_argument(
+        "--preflight-reachability", action="store_true",
+        help="Fix B: before the main loop, parallel `git ls-remote "
+             "--exit-code <repo> <base_commit>` for every instance. "
+             "Mark unreachable instances as PRE-EXCLUDED and skip them; "
+             "report up-front. Adds ~0.5s/instance with workers=8. "
+             "Strongly recommended for n>=50.",
+    )
+    ap.add_argument(
+        "--progress-every", type=int, default=10,
+        help="Fix D: emit `[progress] M/N attempted, X cloned, Y indexed, "
+             "Z agent_ran, F clone_failed` line every N completed "
+             "instances. Default 10. Set to 0 to disable.",
+    )
     ap.add_argument(
         "--workers",
         type=int,
@@ -1426,6 +1546,24 @@ def main() -> int:
 
     rows = [row.to_dict() for _, row in selected.iterrows()]
 
+    # Fix B: pre-flight reachability check (2026-05-12).
+    # Strips instances whose base_commit can't be reached via git ls-remote
+    # BEFORE we spend wall time trying to clone them. The excluded rows
+    # are appended to results with note=PRE-EXCLUDED so the funnel reports
+    # them honestly.
+    preflight_excluded: list[InstanceResult] = []
+    if getattr(args, "preflight_reachability", False):
+        rows, unreachable = preflight_reachability(rows, workers=max(args.workers * 2, 8))
+        for ur in unreachable:
+            preflight_excluded.append(InstanceResult(
+                instance_id=ur["instance_id"],
+                repo=ur["repo"],
+                category=ur.get("category", "Unknown"),
+                base_commit=ur["base_commit"],
+                ground_truth=list(ur.get("edit_functions", [])),
+                note="PRE-EXCLUDED: base_commit unreachable via git ls-remote",
+            ))
+
     # Checkpointing: write the report after every instance completes,
     # not just at end-of-run. Long benchmarks (n=560 took >2 hours
     # before being killed) need progress preserved across kills. The
@@ -1488,6 +1626,10 @@ def main() -> int:
             )
             for row in rows
         ]
+        # Fixes A+D state (2026-05-12)
+        abort_threshold = float(args.abort_on_clone_fail_rate)
+        progress_every = int(args.progress_every)
+        aborted = False
         with ProcessPoolExecutor(max_workers=args.workers) as ex:
             futures = {ex.submit(_evaluate_one_worker, *a): a[0]["instance_id"] for a in worker_args}
             for fut in as_completed(futures):
@@ -1505,8 +1647,72 @@ def main() -> int:
                     )
                 results.append(res)
                 _checkpoint()
+
+                # Fix D: periodic progress summary line
+                if progress_every > 0 and (len(results) % progress_every == 0):
+                    n_done = len(results)
+                    n_cloned = sum(1 for r in results if r.cloned)
+                    n_indexed = sum(1 for r in results if r.indexed)
+                    n_agent = sum(
+                        1 for r in results
+                        if any(mr.mode == "hybrid-agent" for mr in r.mode_results)
+                    )
+                    n_clone_failed = sum(
+                        1 for r in results if "clone failed" in (r.note or "").lower()
+                    )
+                    fail_rate = n_clone_failed / n_done if n_done else 0.0
+                    print(
+                        f"[progress] {n_done}/{len(worker_args)} attempted, "
+                        f"{n_cloned} cloned, {n_indexed} indexed, "
+                        f"{n_agent} agent_ran, {n_clone_failed} clone_failed "
+                        f"(rate {fail_rate*100:.1f}%)",
+                        flush=True,
+                    )
+
+                # Fix A: real-time abort if clone-failure rate is too high
+                n_done = len(results)
+                if n_done >= 10 and abort_threshold < 1.0:
+                    n_clone_failed = sum(
+                        1 for r in results if "clone failed" in (r.note or "").lower()
+                    )
+                    fail_rate = n_clone_failed / n_done
+                    if fail_rate > abort_threshold:
+                        print(
+                            f"\n[FATAL] Fix A abort: clone-failure rate "
+                            f"{fail_rate*100:.1f}% ({n_clone_failed}/{n_done}) "
+                            f"exceeds --abort-on-clone-fail-rate threshold "
+                            f"{abort_threshold*100:.1f}%. "
+                            f"Cancelling remaining {len(worker_args)-n_done} workers. "
+                            f"Diagnose with `git ls-remote` on a sample failed instance, "
+                            f"check GitHub status, or re-run with "
+                            f"--abort-on-clone-fail-rate=1.0 to disable this gate.",
+                            file=sys.stderr,
+                            flush=True,
+                        )
+                        for f in futures:
+                            f.cancel()
+                        aborted = True
+                        break
+        # Merge any Fix-B pre-excluded rows in so the funnel reports them
+        if preflight_excluded:
+            results.extend(preflight_excluded)
         # Final sort (checkpoint already wrote sorted output)
         results.sort(key=lambda r: order.get(r.instance_id, 9999))
+
+        if aborted:
+            # Write whatever results we have so the user can see the funnel
+            write_report(
+                results, modes, args.output, args.binary_label, args.max_mb,
+                accept_non_monotone=args.accept_non_monotone,
+                allow_unexplained_cells=True,  # bypass refusal — this is an abort report
+                external_comparator=args.external_comparator,
+                metric_equivalence_note=args.metric_equivalence_note,
+                eval_bin=args.eval_bin,
+                index_bin=args.index_bin,
+                baseline_report=args.baseline_report,
+                accept_provenance_mismatch=args.accept_provenance_mismatch,
+            )
+            return 4
 
     write_report(
         results, modes, args.output, args.binary_label, args.max_mb,

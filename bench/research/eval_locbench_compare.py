@@ -45,6 +45,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -112,6 +113,110 @@ class InstanceResult:
     note: str = ""
 
 
+# ─── Fix 3: per-instance resumable checkpoint (added 2026-05-11) ────────
+# Persist InstanceResult to <workdir>/<iid>/.eval-checkpoint.json on
+# successful run; on next invocation, skip if the checkpoint shows the
+# instance already completed (i.e., at least one mode_result with non-empty
+# `mode`). Eliminates the $0.05 × N cost of re-running the agent on
+# instances that already succeeded in a prior attempt.
+CHECKPOINT_NAME = ".eval-checkpoint.json"
+
+
+def _result_to_json(res: "InstanceResult") -> dict:
+    return {
+        "schema_version": 1,
+        "instance_id": res.instance_id,
+        "repo": res.repo,
+        "category": res.category,
+        "base_commit": res.base_commit,
+        "ground_truth": list(res.ground_truth),
+        "cloned": res.cloned,
+        "indexed": res.indexed,
+        "repo_size_mb": res.repo_size_mb,
+        "note": res.note,
+        "mode_results": [
+            {
+                "mode": m.mode,
+                "file_hit": m.file_hit,
+                "class_hit": m.class_hit,
+                "func_hit": m.func_hit,
+                "rank_section": m.rank_section,
+                "duration_s": m.duration_s,
+                "note": m.note,
+                "turns": m.turns,
+                "input_tokens": m.input_tokens,
+                "output_tokens": m.output_tokens,
+                "cost_usd": m.cost_usd,
+            }
+            for m in res.mode_results
+        ],
+    }
+
+
+def _result_from_json(d: dict) -> "InstanceResult":
+    res = InstanceResult(
+        instance_id=d["instance_id"],
+        repo=d["repo"],
+        category=d.get("category", "Unknown"),
+        base_commit=d["base_commit"],
+        ground_truth=list(d.get("ground_truth", [])),
+        cloned=bool(d.get("cloned", False)),
+        indexed=bool(d.get("indexed", False)),
+        repo_size_mb=float(d.get("repo_size_mb", 0.0)),
+        note=str(d.get("note", "")),
+    )
+    for m in d.get("mode_results", []):
+        res.mode_results.append(ModeResult(
+            mode=m["mode"],
+            file_hit=bool(m.get("file_hit", False)),
+            class_hit=bool(m.get("class_hit", False)),
+            func_hit=bool(m.get("func_hit", False)),
+            rank_section=str(m.get("rank_section", "")),
+            duration_s=float(m.get("duration_s", 0.0)),
+            note=str(m.get("note", "")),
+            turns=int(m.get("turns", 0)),
+            input_tokens=int(m.get("input_tokens", 0)),
+            output_tokens=int(m.get("output_tokens", 0)),
+            cost_usd=float(m.get("cost_usd", 0.0)),
+        ))
+    return res
+
+
+def _load_checkpoint(repo_dir: Path, required_modes: list[str]) -> "InstanceResult | None":
+    """Return cached InstanceResult if checkpoint exists AND has results for
+    all required_modes. Returns None otherwise (run from scratch).
+    """
+    cp = repo_dir / CHECKPOINT_NAME
+    if not cp.exists():
+        return None
+    try:
+        d = json.loads(cp.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+    if d.get("schema_version") != 1:
+        return None
+    res = _result_from_json(d)
+    # Require all requested modes to be present in the checkpoint;
+    # otherwise re-run so partial state doesn't masquerade as complete.
+    present = {m.mode for m in res.mode_results}
+    if not all(m in present for m in required_modes):
+        return None
+    return res
+
+
+def _save_checkpoint(repo_dir: Path, res: "InstanceResult") -> None:
+    """Persist InstanceResult to <repo_dir>/.eval-checkpoint.json. Best-effort;
+    failures are logged but not raised (a missing checkpoint just means the
+    next run will redo this instance — no correctness impact).
+    """
+    cp = repo_dir / CHECKPOINT_NAME
+    try:
+        repo_dir.mkdir(parents=True, exist_ok=True)
+        cp.write_text(json.dumps(_result_to_json(res), indent=2), encoding="utf-8")
+    except OSError as e:
+        print(f"  checkpoint save failed (non-fatal): {e}")
+
+
 def to_windows_path(p: Path | str) -> str:
     s = str(p).replace("\\", "/")
     if len(s) >= 3 and s[0] == "/" and s[2] == "/" and s[1].isalpha():
@@ -145,16 +250,40 @@ def repo_size_mb(path: Path) -> float:
     return total / (1024 * 1024)
 
 
-def clone_repo(repo: str, base_commit: str, dest: Path) -> bool:
+_PR_NUMBER_RE = re.compile(r"-(\d+)$")
+
+
+def _instance_pr_number(instance_id: str) -> str | None:
+    """Extract PR number from a Loc-Bench instance ID.
+
+    Instance IDs follow the SWE-Bench convention: 'org__repo-NNNN' where
+    NNNN is the issue or PR number. Loc-Bench instances are PR-derived so
+    NNNN is typically a valid PR number on GitHub.
+    """
+    m = _PR_NUMBER_RE.search(instance_id)
+    return m.group(1) if m else None
+
+
+def clone_repo(repo: str, base_commit: str, dest: Path, instance_id: str | None = None) -> bool:
     """Clone {repo} at {base_commit} into {dest}.
 
-    Uses init + fetch-by-sha first (fast for repos that allow
-    uploadpack.allowAnySHA1InWant), falls back to full clone for repos
-    where the base_commit is on a feature branch only."""
+    Tries three strategies in order:
+      1. init + fetch-by-sha (fast; needs uploadpack.allowAnySHA1InWant on
+         the GitHub server side — works for most main-branch SHAs).
+      2. full clone of default branch + checkout base_commit.
+      3. (added 2026-05-11 after attempt-2 saw 143 'clone failed' on Feature
+         Request instances): when an instance_id is provided AND it ends in
+         '-NNNN', try `git fetch origin pull/NNNN/head` and then checkout
+         the base_commit. Many Loc-Bench Feature Request instances have
+         base_commits on PR branches GitHub no longer exposes for arbitrary
+         SHA fetch but DOES expose via the `pull/N/head` ref.
+    """
     if dest.exists():
         return True
     dest.parent.mkdir(parents=True, exist_ok=True)
     url = f"https://github.com/{repo}.git"
+    last_err = ""
+
     # Strategy 1: init + fetch-by-sha (fast)
     try:
         subprocess.run(
@@ -179,28 +308,71 @@ def clone_repo(repo: str, base_commit: str, dest: Path) -> bool:
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             )
             return True
-        except subprocess.CalledProcessError:
+        except subprocess.CalledProcessError as e:
+            last_err = "strategy1 fetch-by-sha: " + e.stderr.decode("utf-8", errors="replace")[:160]
             # Strategy 2: full clone, then checkout
             shutil.rmtree(dest, ignore_errors=True)
+            try:
+                subprocess.run(
+                    ["git", "clone", "--quiet", url, str(dest)],
+                    check=True, timeout=900,
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                )
+                subprocess.run(
+                    ["git", "-C", str(dest), "checkout", base_commit],
+                    check=True, timeout=120,
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                )
+                return True
+            except subprocess.CalledProcessError as e2:
+                last_err = "strategy2 full-clone-then-checkout: " + e2.stderr.decode("utf-8", errors="replace")[:160]
+
+    except subprocess.CalledProcessError as e:
+        last_err = "strategy1 init/remote: " + e.stderr.decode("utf-8", errors="replace")[:160]
+    except subprocess.TimeoutExpired:
+        last_err = "strategy1/2 timed out"
+        shutil.rmtree(dest, ignore_errors=True)
+
+    # Strategy 3: PR branch fetch (added 2026-05-11). Only fires when
+    # strategies 1+2 failed AND we can extract a PR number from instance_id.
+    pr_number = _instance_pr_number(instance_id) if instance_id else None
+    if pr_number:
+        shutil.rmtree(dest, ignore_errors=True)
+        try:
             subprocess.run(
-                ["git", "clone", "--quiet", url, str(dest)],
-                check=True, timeout=900,
+                ["git", "init", "--quiet", str(dest)],
+                check=True, timeout=30,
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             )
+            subprocess.run(
+                ["git", "-C", str(dest), "remote", "add", "origin", url],
+                check=True, timeout=30,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            )
+            subprocess.run(
+                ["git", "-C", str(dest), "fetch", "--quiet", "--depth=50",
+                 "origin", f"pull/{pr_number}/head:pr-{pr_number}"],
+                check=True, timeout=600,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            )
+            # The base_commit should now be reachable from the fetched PR ref
             subprocess.run(
                 ["git", "-C", str(dest), "checkout", base_commit],
                 check=True, timeout=120,
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             )
             return True
-    except subprocess.CalledProcessError as e:
-        print(f"  clone failed: {e.stderr.decode('utf-8', errors='replace')[:200]}")
-        shutil.rmtree(dest, ignore_errors=True)
-        return False
-    except subprocess.TimeoutExpired:
-        print("  clone timed out")
-        shutil.rmtree(dest, ignore_errors=True)
-        return False
+        except subprocess.CalledProcessError as e3:
+            last_err = (
+                "strategy3 pull/" + pr_number + "/head: "
+                + e3.stderr.decode("utf-8", errors="replace")[:160]
+            )
+        except subprocess.TimeoutExpired:
+            last_err = f"strategy3 pull/{pr_number}/head: timed out"
+
+    print(f"  clone failed: {last_err}")
+    shutil.rmtree(dest, ignore_errors=True)
+    return False
 
 
 def index_repo(path: Path, index_bin: Path) -> bool:
@@ -502,13 +674,28 @@ def evaluate_instance(
     repo_dir = workdir / iid
     db = db_path_for(repo_dir)
 
+    # Fix 3: resumable state — if a checkpoint exists and covers all
+    # requested modes, return it without re-running the agent.
+    if keep_clone or keep_index:
+        cached_res = _load_checkpoint(repo_dir, modes)
+        if cached_res is not None:
+            print(f"  CHECKPOINT HIT — skipping (cached {len(cached_res.mode_results)} mode result(s))")
+            for m in cached_res.mode_results:
+                print(
+                    f"  mode {m.mode}: file={'Y' if m.file_hit else 'N'} "
+                    f"class={'Y' if m.class_hit else 'N'} "
+                    f"func={'Y' if m.func_hit else 'N'} "
+                    f"({m.duration_s:.0f}s, cached)"
+                )
+            return cached_res
+
     # Step 1: clone (skip if cached + flag set)
     if repo_dir.exists() and keep_clone:
         print(f"  clone: cached at {repo_dir}")
         res.cloned = True
     else:
         print("  clone: starting...")
-        if clone_repo(repo, row["base_commit"], repo_dir):
+        if clone_repo(repo, row["base_commit"], repo_dir, instance_id=iid):
             res.cloned = True
             print("  clone: done")
         else:
@@ -555,6 +742,12 @@ def evaluate_instance(
             + (f", note={m.note}" if m.note else "")
             + ")"
         )
+
+    # Fix 3: save checkpoint after successful mode runs. We only persist
+    # when keep_clone is True — if the user wants ephemeral clones, there's
+    # nowhere stable to put the checkpoint.
+    if keep_clone and res.mode_results:
+        _save_checkpoint(repo_dir, res)
 
     # Cleanup if not keeping
     if not keep_index:
@@ -997,6 +1190,96 @@ def write_report(
             f"${agg['cost']:.2f} |"
         )
     lines.append("")
+
+    # Fix 5: stratified failure reporting (added 2026-05-11).
+    # Surfaces clone/index/agent funnel and per-category failure breakdown
+    # so a reader can distinguish "57 instances cloned successfully then
+    # ran cleanly" from "143 didn't clone, 57 of the rest ran cleanly" —
+    # the second framing was hidden behind generic "Indexed: 57" before.
+    n_cloned = sum(1 for r in results if r.cloned)
+    n_attempted = len(results)
+    n_agent_ran = sum(
+        1 for r in results
+        if any(mr.mode == "hybrid-agent" for mr in r.mode_results)
+    )
+
+    # Categorize note strings into failure buckets
+    fail_buckets: dict[str, list[InstanceResult]] = {
+        "clone failed": [],
+        "too large": [],
+        "index failed": [],
+        "worker exception": [],
+        "other": [],
+    }
+    for r in results:
+        if r.cloned and r.indexed and r.mode_results:
+            continue  # success
+        note = (r.note or "").lower()
+        if "clone failed" in note:
+            fail_buckets["clone failed"].append(r)
+        elif "too large" in note:
+            fail_buckets["too large"].append(r)
+        elif "index failed" in note or "db not at" in note:
+            fail_buckets["index failed"].append(r)
+        elif "worker exception" in note:
+            fail_buckets["worker exception"].append(r)
+        else:
+            fail_buckets["other"].append(r)
+
+    lines.append("## Funnel (Fix 5: stratified failure reporting)")
+    lines.append("")
+    lines.append("| Stage | n | % of attempted |")
+    lines.append("|---|---:|---:|")
+    pct = lambda n: f"{100*n/n_attempted:.1f}%" if n_attempted else "—"
+    lines.append(f"| Attempted | {n_attempted} | 100.0% |")
+    lines.append(f"| Cloned | {n_cloned} | {pct(n_cloned)} |")
+    lines.append(f"| Indexed | {n_indexed} | {pct(n_indexed)} |")
+    lines.append(f"| Agent ran | {n_agent_ran} | {pct(n_agent_ran)} |")
+    lines.append("")
+
+    total_failures = sum(len(v) for v in fail_buckets.values())
+    if total_failures:
+        lines.append("### Failure breakdown by stage")
+        lines.append("")
+        lines.append("| Failure mode | n |")
+        lines.append("|---|---:|")
+        for bucket, items in fail_buckets.items():
+            if items:
+                lines.append(f"| {bucket} | {len(items)} |")
+        lines.append("")
+
+        # Per-category failure breakdown — catches "all FR clone-fail" pattern
+        # that was the 2026-05-11 attempt-2 finding.
+        cat_failure: dict[str, dict[str, int]] = {}
+        for bucket, items in fail_buckets.items():
+            for r in items:
+                cat = r.category or "Unknown"
+                cat_failure.setdefault(cat, {})
+                cat_failure[cat][bucket] = cat_failure[cat].get(bucket, 0) + 1
+        if cat_failure:
+            lines.append("### Failure breakdown by category × stage")
+            lines.append("")
+            buckets_present = sorted({b for cf in cat_failure.values() for b in cf})
+            lines.append("| Category | " + " | ".join(buckets_present) + " |")
+            lines.append("|" + "|".join(["---"] + ["---:"] * len(buckets_present)) + "|")
+            for cat in sorted(cat_failure):
+                row = [cat]
+                for b in buckets_present:
+                    row.append(str(cat_failure[cat].get(b, 0)))
+                lines.append("| " + " | ".join(row) + " |")
+            lines.append("")
+
+    # Methodology caveat when stage-attrition is high.
+    indexed_pct = (n_indexed / n_attempted) if n_attempted else 1.0
+    if indexed_pct < 0.9:
+        lines.append("> **Methodology caveat**: n_indexed / n_attempted = "
+                     f"{n_indexed}/{n_attempted} ({indexed_pct*100:.0f}%). "
+                     "Aggregate hit-rates above are computed against the "
+                     "indexed subset, NOT the attempted set. Results are "
+                     "NOT directly comparable to baselines where indexed == "
+                     "attempted unless the missing instances are random "
+                     "wrt difficulty. See failure breakdown above to assess.")
+        lines.append("")
 
     lines.append("## Per-instance details")
     lines.append("")

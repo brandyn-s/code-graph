@@ -128,12 +128,23 @@ func (s *Server) handleChangeCoupling(_ context.Context, req *mcp.CallToolReques
 		})
 	}
 
-	// Sort: accidental first, then by score descending
+	// Sort: accidental first, then by score desc, then by (File1, File2) for
+	// determinism. Without the file-pair tiebreaker, couplings sharing
+	// (Category, Score) — common when scores are integer co-change counts —
+	// land in undefined relative order, so identical inputs produce different
+	// output orderings across runs. See PR #306 for the parent fix in
+	// relevant_context.go.
 	sort.Slice(couplings, func(i, j int) bool {
 		if couplings[i].Category != couplings[j].Category {
 			return couplings[i].Category == "accidental"
 		}
-		return couplings[i].Score > couplings[j].Score
+		if couplings[i].Score != couplings[j].Score {
+			return couplings[i].Score > couplings[j].Score
+		}
+		if couplings[i].File1 != couplings[j].File1 {
+			return couplings[i].File1 < couplings[j].File1
+		}
+		return couplings[i].File2 < couplings[j].File2
 	})
 
 	if len(couplings) > limit {
@@ -168,8 +179,13 @@ func (s *Server) handleChangeCoupling(_ context.Context, req *mcp.CallToolReques
 	for pair, count := range cratePairs {
 		pairSummary = append(pairSummary, cratePairSummary{Pair: pair, Count: count})
 	}
+	// Count + Pair name; Pair is the canonical "crateA <-> crateB" string
+	// (a `map[string]int` key upstream), so it's a strict total order.
 	sort.Slice(pairSummary, func(i, j int) bool {
-		return pairSummary[i].Count > pairSummary[j].Count
+		if pairSummary[i].Count != pairSummary[j].Count {
+			return pairSummary[i].Count > pairSummary[j].Count
+		}
+		return pairSummary[i].Pair < pairSummary[j].Pair
 	})
 
 	responseData := map[string]any{

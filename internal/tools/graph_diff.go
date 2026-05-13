@@ -133,9 +133,14 @@ func (s *Server) handleDiffGraph(_ context.Context, req *mcp.CallToolRequest) (*
 
 	// Sort files by the number of symbols they touch, desc. High-impact
 	// files bubble to the top so a reviewer sees the interesting part of
-	// the commit range first.
+	// the commit range first. Path as the deterministic tiebreaker — files
+	// with equal symbol counts otherwise land in random order across runs,
+	// breaking reproducibility for change-impact reporting.
 	sort.Slice(out.Files, func(i, j int) bool {
-		return len(out.Files[i].Symbols) > len(out.Files[j].Symbols)
+		if len(out.Files[i].Symbols) != len(out.Files[j].Symbols) {
+			return len(out.Files[i].Symbols) > len(out.Files[j].Symbols)
+		}
+		return out.Files[i].Path < out.Files[j].Path
 	})
 
 	if out.SymbolCount == 0 {

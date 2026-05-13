@@ -125,8 +125,15 @@ func (s *Server) handleVisualize(_ context.Context, req *mcp.CallToolRequest) (*
 			in, _ := st.FindEdgesByTarget(n.ID)
 			degrees[n.ID] = len(out) + len(in)
 		}
+		// Degree desc, then ID asc as the deterministic tiebreaker. Two
+		// nodes with equal degree would otherwise compete for the
+		// maxNodes cap in random order, so identical inputs could exclude
+		// different nodes from the visualization across runs.
 		sort.Slice(filtered, func(i, j int) bool {
-			return degrees[filtered[i].ID] > degrees[filtered[j].ID]
+			if degrees[filtered[i].ID] != degrees[filtered[j].ID] {
+				return degrees[filtered[i].ID] > degrees[filtered[j].ID]
+			}
+			return filtered[i].ID < filtered[j].ID
 		})
 		filtered = filtered[:maxNodes]
 	}

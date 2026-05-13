@@ -283,8 +283,15 @@ func buildReviewMarkdown(
 		b.WriteString("### Test Coverage\n")
 		sorted := make([]testCoverageInfo, len(testCov))
 		copy(sorted, testCov)
+		// TestCount asc, then SymbolName asc. Untested symbols bubble to
+		// the top by intent; SymbolName is the deterministic tiebreaker so
+		// the listing of untested-or-equal-coverage symbols is stable
+		// across runs.
 		sort.Slice(sorted, func(i, j int) bool {
-			return sorted[i].TestCount < sorted[j].TestCount
+			if sorted[i].TestCount != sorted[j].TestCount {
+				return sorted[i].TestCount < sorted[j].TestCount
+			}
+			return sorted[i].SymbolName < sorted[j].SymbolName
 		})
 		hasGaps := false
 		for _, tc := range sorted {

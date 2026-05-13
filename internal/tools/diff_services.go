@@ -147,8 +147,15 @@ func (s *Server) handleDiffServices(_ context.Context, req *mcp.CallToolRequest)
 	for _, sd := range serviceChanges {
 		sorted = append(sorted, *sd)
 	}
+	// FilesChanged desc, then Name asc. Service Name is the upstream
+	// `serviceChanges map[string]*serviceDiff` key, so it's a strict total
+	// order. Without the tiebreaker, services with equal change counts
+	// (very common) land in random order across runs.
 	sort.Slice(sorted, func(i, j int) bool {
-		return sorted[i].FilesChanged > sorted[j].FilesChanged
+		if sorted[i].FilesChanged != sorted[j].FilesChanged {
+			return sorted[i].FilesChanged > sorted[j].FilesChanged
+		}
+		return sorted[i].Name < sorted[j].Name
 	})
 
 	for i := range sorted {

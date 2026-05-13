@@ -276,6 +276,80 @@ func TestRelevantContextRespectsTokenBudget(t *testing.T) {
 	}
 }
 
+// TestSortContextFilesDeterministicOnTies pins the fix for the
+// 2026-05-12 non-determinism surfaced by bench/research/transport-diff
+// (PR #305 first run). The upstream slice is built from map iteration,
+// so without a strict-total-order tiebreaker the sort produces different
+// output orders across identical inputs. Asserts the file-path tiebreaker
+// makes the order fully deterministic.
+func TestSortContextFilesDeterministicOnTies(t *testing.T) {
+	// All entries tied on (Priority, TokenEst). With the bug, sort order
+	// would vary across runs because the initial slice ordering came from
+	// map iteration. With the tiebreaker, every run produces the same
+	// alphabetical-by-File order.
+	files := []string{
+		"src/zeta.rs",
+		"src/alpha.rs",
+		"src/mu.rs",
+		"src/beta.rs",
+		"src/yankee.rs",
+	}
+
+	want := []string{
+		"src/alpha.rs",
+		"src/beta.rs",
+		"src/mu.rs",
+		"src/yankee.rs",
+		"src/zeta.rs",
+	}
+
+	// Run the sort N times. The "input from map iteration" property is
+	// simulated by shuffling: we don't need the map itself — only the
+	// invariant that initial order is arbitrary.
+	for run := 0; run < 100; run++ {
+		// Rotate the input slice each run to vary initial order.
+		rotated := make([]*contextFile, len(files))
+		for i, f := range files {
+			rotated[(i+run)%len(files)] = &contextFile{
+				File: f, Relationship: "callee", Priority: 2, TokenEst: 100,
+			}
+		}
+
+		sortContextFiles(rotated)
+
+		for i, want := range want {
+			if rotated[i].File != want {
+				t.Errorf("run=%d pos=%d: got %q, want %q", run, i, rotated[i].File, want)
+				break
+			}
+		}
+	}
+}
+
+// TestSortContextFilesPrimaryKeysWin verifies the tiebreaker only fires
+// at the very end — Priority and TokenEst still dominate.
+func TestSortContextFilesPrimaryKeysWin(t *testing.T) {
+	// Higher-priority file with worse alphabetical order should still
+	// sort before lower-priority files.
+	result := []*contextFile{
+		{File: "z_low_priority.rs", Priority: 5, TokenEst: 10},
+		{File: "a_target.rs", Priority: 1, TokenEst: 9999},
+		{File: "m_caller.rs", Priority: 2, TokenEst: 50},
+	}
+
+	sortContextFiles(result)
+
+	if result[0].File != "a_target.rs" {
+		t.Errorf("pos 0: got %q, want a_target.rs (Priority=1)", result[0].File)
+	}
+	if result[1].File != "m_caller.rs" {
+		t.Errorf("pos 1: got %q, want m_caller.rs (Priority=2)", result[1].File)
+	}
+	if result[2].File != "z_low_priority.rs" {
+		t.Errorf("pos 2: got %q, want z_low_priority.rs (Priority=5)", result[2].File)
+	}
+}
+
 func TestGetStringSliceArg(t *testing.T) {
 	args := map[string]any{
 		"files":   []any{"src/auth.rs", "src/handler.rs"},

@@ -208,17 +208,11 @@ func (s *Server) handleRelevantContext(_ context.Context, req *mcp.CallToolReque
 
 	addNodesAsFiles(st, transitiveIDs, fileScores, 5, files)
 
-	// Sort by priority, then by token estimate (smaller first within same priority)
 	result := make([]*contextFile, 0, len(fileScores))
 	for _, cf := range fileScores {
 		result = append(result, cf)
 	}
-	sort.Slice(result, func(i, j int) bool {
-		if result[i].Priority != result[j].Priority {
-			return result[i].Priority < result[j].Priority
-		}
-		return result[i].TokenEst < result[j].TokenEst
-	})
+	sortContextFiles(result)
 
 	// Apply token budget
 	var selected []*contextFile
@@ -271,6 +265,33 @@ func (s *Server) handleRelevantContext(_ context.Context, req *mcp.CallToolReque
 		),
 		"_metadata": s.stdReadGraphMetadata(projName),
 	}), nil
+}
+
+// sortContextFiles orders context files for response stability.
+//
+// Sort key: (Priority asc, TokenEst asc, File asc). The File-path tiebreaker
+// is required because the upstream slice is built from a `map[string]
+// *contextFile` whose iteration order is randomized by the Go runtime — so
+// without a unique terminal key, ties on (Priority, TokenEst) leave the
+// final order dependent on map iteration. That non-determinism surfaced
+// through bench/research/transport-diff (PR #305 first run): identical
+// calls produced different files at the same rank across runs, breaking
+// reproducibility for downstream agents.
+//
+// Path uniqueness: contextFile.File is the canonical repo-relative path,
+// keyed in the upstream `fileScores` map by the same string. Two entries
+// with the same File would be coalesced upstream, so the tiebreaker is a
+// strict total order.
+func sortContextFiles(result []*contextFile) {
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].Priority != result[j].Priority {
+			return result[i].Priority < result[j].Priority
+		}
+		if result[i].TokenEst != result[j].TokenEst {
+			return result[i].TokenEst < result[j].TokenEst
+		}
+		return result[i].File < result[j].File
+	})
 }
 
 // addNodesAsFiles resolves node IDs to files and adds them to the fileScores map.

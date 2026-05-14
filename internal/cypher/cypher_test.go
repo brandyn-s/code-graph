@@ -490,6 +490,68 @@ func TestExecuteWhereContainsOnFilePath(t *testing.T) {
 	}
 }
 
+// TestExecuteWhereContainsOnArrayProperty pins the array-element-of
+// semantics for CONTAINS introduced 2026-05-13. Pre-fix behavior: when
+// the operand was an array (e.g., `decorator_tags []string`), the
+// in-memory CONTAINS evaluator's type assertion to string failed and
+// returned (false, nil) silently. Queries like
+// `WHERE n.decorator_tags CONTAINS 'derive'` returned 0 rows despite the
+// tag being present. Post-fix: CONTAINS on an array is element-of.
+func TestExecuteWhereContainsOnArrayProperty(t *testing.T) {
+	s, err := store.OpenMemory()
+	if err != nil {
+		t.Fatalf("open memory store: %v", err)
+	}
+	defer s.Close()
+	if err := s.UpsertProject("test", "/tmp/test"); err != nil {
+		t.Fatalf("upsert project: %v", err)
+	}
+
+	// Three Class nodes with different decorator_tags arrays
+	_, _ = s.UpsertNode(&store.Node{
+		Project: "test", Label: "Class", Name: "WithDerive",
+		QualifiedName: "test.m.WithDerive", FilePath: "m.rs",
+		Properties: map[string]any{"decorator_tags": []string{"derive", "test"}},
+	})
+	_, _ = s.UpsertNode(&store.Node{
+		Project: "test", Label: "Class", Name: "WithoutDerive",
+		QualifiedName: "test.m.WithoutDerive", FilePath: "m.rs",
+		Properties: map[string]any{"decorator_tags": []string{"test"}},
+	})
+	_, _ = s.UpsertNode(&store.Node{
+		Project: "test", Label: "Class", Name: "NoTags",
+		QualifiedName: "test.m.NoTags", FilePath: "m.rs",
+	})
+
+	exec := &Executor{Store: s}
+	result, err := exec.Execute(`MATCH (n:Class) WHERE n.decorator_tags CONTAINS "derive" RETURN n.name`)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if len(result.Rows) != 1 {
+		t.Fatalf("expected 1 row (WithDerive), got %d: %+v", len(result.Rows), result.Rows)
+	}
+	if result.Rows[0]["n.name"] != "WithDerive" {
+		t.Errorf("expected WithDerive, got %v", result.Rows[0]["n.name"])
+	}
+}
+
+// SAFETY: existing string CONTAINS callers must keep working. This test
+// guards against accidentally breaking the string code path in the array fix.
+func TestExecuteWhereContainsOnStringPropertyStillWorks(t *testing.T) {
+	s := setupTestStore(t)
+	defer s.Close()
+	exec := &Executor{Store: s}
+	result, err := exec.Execute(`MATCH (f:Function) WHERE f.name CONTAINS "Order" RETURN f.name`)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	// Same expectation as TestExecuteWhereContains — 3 functions match
+	if len(result.Rows) != 3 {
+		t.Errorf("expected 3 rows, got %d", len(result.Rows))
+	}
+}
+
 func TestExecuteWhereRegexOnFilePath(t *testing.T) {
 	s := setupTestStore(t)
 	defer s.Close()

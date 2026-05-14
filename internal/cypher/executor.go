@@ -1074,11 +1074,33 @@ func (e *Executor) evaluateCondition(b binding, c Condition) (bool, error) {
 		}
 		return re.MatchString(s), nil
 	case "CONTAINS":
-		s, ok := actual.(string)
-		if !ok {
-			return false, nil
+		// String operand: substring match (standard Cypher semantics).
+		if s, ok := actual.(string); ok {
+			return strings.Contains(s, c.Value), nil
 		}
-		return strings.Contains(s, c.Value), nil
+		// Array operand: element-of match. The Cypher standard uses
+		// `X IN array_prop` for this, but this engine's parser doesn't
+		// accept a value on the LHS of IN (only `n.prop IN [list]` form),
+		// so CONTAINS on an array property is the affordance for
+		// "does this list include this element". Pre-fix behavior was
+		// a silent no-match, which made array-typed properties like
+		// `decorator_tags` un-queryable for tag presence. See test
+		// TestEvalCondition_ContainsOnArrayProperty.
+		switch arr := actual.(type) {
+		case []string:
+			for _, str := range arr {
+				if str == c.Value {
+					return true, nil
+				}
+			}
+		case []any:
+			for _, item := range arr {
+				if str, ok := item.(string); ok && str == c.Value {
+					return true, nil
+				}
+			}
+		}
+		return false, nil
 	case "STARTS WITH":
 		s, ok := actual.(string)
 		if !ok {

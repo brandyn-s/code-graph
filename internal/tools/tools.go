@@ -183,8 +183,16 @@ func (s *Server) detectSessionRoot(ctx context.Context, session *mcp.ServerSessi
 		}
 	}
 
-	// 2. Fall back to process working directory
-	if cwd, err := os.Getwd(); err == nil && cwd != "/" && cwd != os.Getenv("HOME") {
+	// 2. Fall back to process working directory.
+	// Refuse to register the home directory, drive root, or common
+	// system/cache dirs as a project root — this would trigger an
+	// unbounded full-index walk (~/.cache, AppData, etc.) and wedge
+	// the server. The previous guard used os.Getenv("HOME"), which
+	// returns empty on Windows (Windows uses USERPROFILE), so the
+	// check was non-functional on Windows. isForbiddenSessionRoot
+	// uses os.UserHomeDir() for cross-platform correctness and adds
+	// drive-root + system-dir checks.
+	if cwd, err := os.Getwd(); err == nil && !isForbiddenSessionRoot(cwd) {
 		slog.Info("session.root.from_cwd", "path", cwd)
 		return cwd
 	}
@@ -212,6 +220,83 @@ func parseFileURI(uri string) (string, bool) {
 		path = path[1:]
 	}
 	return filepath.FromSlash(path), true
+}
+
+// isForbiddenSessionRoot returns true if `path` should NOT be registered as a
+// project root via CWD fallback. Catches the failure mode where Claude Code
+// spawns the MCP server with CWD = user's home directory (Windows shell
+// default), which would otherwise trigger an unbounded full-index walk of
+// the home tree (~/.cache, AppData, Documents, …) and wedge the server.
+//
+// Two-tier check:
+//   - Exact-match forbidden: drive root, POSIX root, user home, parent of
+//     home (e.g., C:\Users). Subdirectories of home are NOT rejected here —
+//     ~/Documents/GitHub/foo is a legitimate project.
+//   - Scope-anywhere forbidden: anything under ~/.cache, ~/AppData,
+//     ~/.npm, ~/.cargo, /etc, /var, /usr, /opt, C:\Windows, C:\Program
+//     Files (x86?), C:\ProgramData.
+//
+// Cross-platform note: pre-fix code used os.Getenv("HOME"), which returns
+// empty on Windows (Windows uses USERPROFILE). os.UserHomeDir() resolves
+// the home correctly on all platforms.
+func isForbiddenSessionRoot(path string) bool {
+	if path == "" {
+		return true
+	}
+	clean := filepath.Clean(path)
+	cleanLower := strings.ToLower(clean)
+
+	// POSIX root
+	if clean == "/" || clean == `\` {
+		return true
+	}
+	// Windows drive root variants:
+	//   "C:\"  -> clean stays "C:\"
+	//   "C:/"  -> clean becomes "C:\"
+	//   "C:"   -> clean becomes "C:." on Windows (drive-relative current dir)
+	//   "C:."  -> clean stays "C:."
+	if len(clean) >= 2 && clean[1] == ':' {
+		rest := clean[2:]
+		if rest == "" || rest == `\` || rest == "/" || rest == "." {
+			return true
+		}
+	}
+
+	// Home and parent-of-home exact-match
+	home, _ := os.UserHomeDir()
+	if home != "" {
+		cleanHome := filepath.Clean(home)
+		if strings.EqualFold(clean, cleanHome) {
+			return true
+		}
+		if strings.EqualFold(clean, filepath.Dir(cleanHome)) {
+			return true
+		}
+	}
+
+	// Scope-anywhere forbidden roots
+	var scopes []string
+	if home != "" {
+		cleanHome := filepath.Clean(home)
+		for _, sub := range []string{".cache", "AppData", ".npm", ".cargo"} {
+			scopes = append(scopes, filepath.Join(cleanHome, sub))
+		}
+	}
+	scopes = append(scopes,
+		`C:\Windows`,
+		`C:\Program Files`,
+		`C:\Program Files (x86)`,
+		`C:\ProgramData`,
+		"/etc", "/var", "/usr", "/opt", "/sys", "/proc",
+	)
+	sepStr := string(filepath.Separator)
+	for _, bad := range scopes {
+		cleanBad := strings.ToLower(filepath.Clean(bad))
+		if cleanLower == cleanBad || strings.HasPrefix(cleanLower, cleanBad+sepStr) {
+			return true
+		}
+	}
+	return false
 }
 
 // defaultAutoIndexLimit is the maximum number of source files that auto-index

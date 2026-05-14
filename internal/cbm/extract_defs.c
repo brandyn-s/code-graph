@@ -2063,6 +2063,147 @@ static void walk_variables_rec(CBMExtractCtx* ctx, TSNode node, const CBMLangSpe
     }
 }
 
+// Nix-specific: walk the AST emitting Option-labeled definitions for
+// `name = mkOption { ... };` bindings inside NixOS modules. The 2026-05-13
+// PSM tool-comparison battery surfaced that NixOS option declarations
+// (100+ on PSM in nix/modules/) were invisible to code-graph — Nix
+// bindings weren't extracted via the standard variable path, and even
+// when they were, mkOption-shaped bindings need a distinct label
+// because they're a different conceptual node (config option, not
+// a regular variable).
+//
+// AST shape (tree-sitter Nix):
+//   binding
+//     attrpath: (attrpath (identifier "enable"))
+//     "="
+//     expression: (apply_expression
+//       function: (variable_expression (identifier "mkOption"))
+//       argument: (attrset_expression { ... }))
+//     ";"
+static int nix_apply_expression_is_mkoption(TSNode expr, const char* source) {
+    if (ts_node_is_null(expr)) return 0;
+    if (strcmp(ts_node_type(expr), "apply_expression") != 0) return 0;
+    TSNode func = ts_node_child_by_field_name(expr, "function", 8);
+    if (ts_node_is_null(func)) {
+        uint32_t nc = ts_node_named_child_count(expr);
+        if (nc > 0) func = ts_node_named_child(expr, 0);
+    }
+    if (ts_node_is_null(func)) return 0;
+    // The function may be bare `mkOption` or qualified `lib.mkOption`.
+    // Walk down to the rightmost identifier and compare its text.
+    for (int safety = 0; safety < 10; safety++) {
+        const char* fk = ts_node_type(func);
+        if (strcmp(fk, "variable_expression") == 0) {
+            uint32_t nc = ts_node_named_child_count(func);
+            if (nc > 0) {
+                func = ts_node_named_child(func, 0);
+                continue;
+            }
+        }
+        if (strcmp(fk, "select_expression") == 0) {
+            uint32_t nc = ts_node_named_child_count(func);
+            if (nc > 0) {
+                func = ts_node_named_child(func, nc - 1);
+                continue;
+            }
+        }
+        if (strcmp(fk, "attrpath") == 0) {
+            uint32_t nc = ts_node_named_child_count(func);
+            if (nc > 0) {
+                func = ts_node_named_child(func, nc - 1);
+                continue;
+            }
+        }
+        break;
+    }
+    const char* fk = ts_node_type(func);
+    if (strcmp(fk, "identifier") != 0) return 0;
+    uint32_t start = ts_node_start_byte(func);
+    uint32_t end = ts_node_end_byte(func);
+    size_t len = (size_t)(end - start);
+    if (len == 8 && strncmp(source + start, "mkOption", 8) == 0) return 1;
+    return 0;
+}
+
+static char* nix_binding_attrpath_name(CBMArena* a, TSNode binding, const char* source) {
+    TSNode attrpath = ts_node_child_by_field_name(binding, "attrpath", 8);
+    if (ts_node_is_null(attrpath)) {
+        uint32_t nc = ts_node_named_child_count(binding);
+        for (uint32_t i = 0; i < nc; i++) {
+            TSNode c = ts_node_named_child(binding, i);
+            if (strcmp(ts_node_type(c), "attrpath") == 0) {
+                attrpath = c;
+                break;
+            }
+        }
+    }
+    if (ts_node_is_null(attrpath)) return NULL;
+    // attrpath holds 1+ identifier nodes; for dotted paths like
+    // `services.foo.enable`, the last identifier is the leaf option
+    // name (mirrors NixOS option-tree convention).
+    uint32_t nc = ts_node_named_child_count(attrpath);
+    TSNode last_id = {0};
+    int found = 0;
+    for (uint32_t i = 0; i < nc; i++) {
+        TSNode c = ts_node_named_child(attrpath, i);
+        if (strcmp(ts_node_type(c), "identifier") == 0) {
+            last_id = c;
+            found = 1;
+        }
+    }
+    if (!found) return NULL;
+    return cbm_node_text(a, last_id, source);
+}
+
+static void walk_nix_mkoption_bindings(CBMExtractCtx* ctx, TSNode node, int depth) {
+    if (depth > 50) return;
+    const char* kind = ts_node_type(node);
+    if (strcmp(kind, "binding") == 0) {
+        TSNode expr = ts_node_child_by_field_name(node, "expression", 10);
+        if (ts_node_is_null(expr)) {
+            // Fallback: find the last non-attrpath named child.
+            uint32_t nc = ts_node_named_child_count(node);
+            for (uint32_t i = 0; i < nc; i++) {
+                TSNode c = ts_node_named_child(node, i);
+                if (strcmp(ts_node_type(c), "attrpath") != 0) {
+                    expr = c;
+                }
+            }
+        }
+        if (!ts_node_is_null(expr) && nix_apply_expression_is_mkoption(expr, ctx->source)) {
+            char* opt_name = nix_binding_attrpath_name(ctx->arena, node, ctx->source);
+            if (opt_name && opt_name[0]) {
+                CBMDefinition def;
+                memset(&def, 0, sizeof(def));
+                def.name = opt_name;
+                def.qualified_name = cbm_fqn_compute(
+                    ctx->arena, ctx->project, ctx->rel_path, opt_name);
+                def.label = "Option";
+                def.file_path = ctx->rel_path;
+                def.start_line = ts_node_start_point(node).row + 1;
+                def.end_line = ts_node_end_point(node).row + 1;
+                def.is_exported = true;
+                const char** decorators = (const char**)cbm_arena_alloc(
+                    ctx->arena, 2 * sizeof(const char*));
+                if (decorators) {
+                    decorators[0] = "mkOption";
+                    decorators[1] = NULL;
+                    def.decorators = decorators;
+                }
+                cbm_defs_push(&ctx->result->defs, ctx->arena, def);
+            }
+        }
+        // Continue recursion — submodule { options = {...}; } may have
+        // nested mkOption bindings within the attrset_expression.
+    }
+    uint32_t n = ts_node_child_count(node);
+    for (uint32_t i = 0; i < n; i++) {
+        TSNode child = ts_node_child(node, i);
+        if (ts_node_is_null(child)) continue;
+        walk_nix_mkoption_bindings(ctx, child, depth + 1);
+    }
+}
+
 // Rust-specific: walk the AST emitting Variable definitions for `defvar!`
 // macro invocations. PSM's defvar! macro declares a typed env-var-backed
 // constant; the 2026-05-13 PSM tool-comparison battery surfaced that
@@ -2195,6 +2336,17 @@ static void extract_variables(CBMExtractCtx* ctx, TSNode root, const CBMLangSpec
     if (ctx->language == CBM_LANG_RUST) {
         walk_rust_defvar_macros(ctx, root, 0);
         // Fall through to the static/const pass below.
+    }
+
+    // Nix: walk for `name = mkOption {...};` bindings. PSM has 100+ such
+    // bindings in nix/modules/; they declare NixOS module options and
+    // are conceptually distinct from regular bindings (different label).
+    // See walk_nix_mkoption_bindings above for AST shape + rationale.
+    if (ctx->language == CBM_LANG_NIX) {
+        walk_nix_mkoption_bindings(ctx, root, 0);
+        // Fall through — the existing binding pass (if reached) emits
+        // Variable defs for non-mkOption bindings via the default case
+        // in extract_var_names.
     }
 
     uint32_t count = ts_node_child_count(root);

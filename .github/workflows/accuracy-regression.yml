@@ -17,6 +17,7 @@ on:
       - 'internal/pipeline/**'
       - 'internal/store/**'
       - 'internal/cypher/**'
+      - 'internal/tools/**'
       - 'bench/accuracy/**'
       - '.github/workflows/accuracy-regression.yml'
   push:
@@ -26,6 +27,7 @@ on:
       - 'internal/pipeline/**'
       - 'internal/store/**'
       - 'internal/cypher/**'
+      - 'internal/tools/**'
       - 'bench/accuracy/**'
   workflow_dispatch:
 
@@ -71,6 +73,16 @@ jobs:
           # breaks resolveViaSameModule for every same-package callee.
           # Closes the last gap in Family A coverage from PR #182.
           go test ./internal/cbm/ -run TestCBMResolverQNContract -v
+
+      - name: Run internal/tools tests (scope guards, ambiguity, security surfaces)
+        run: |
+          # Covers internal/tools/* unit tests including scope_guards_test.go
+          # (degree_filter exclude_entry_points + trace_call_path ambiguity).
+          # Without this step, tools-only PRs land without exercising tests
+          # in the same package — surfaced 2026-05-14 when PR #310's
+          # scope_guards tests passed locally but accuracy-regression
+          # didn't fire because internal/tools wasn't in the path filter.
+          go test ./internal/tools/ -count=1
 
       - name: Install Python test deps
         run: |

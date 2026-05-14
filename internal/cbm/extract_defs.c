@@ -2063,6 +2063,121 @@ static void walk_variables_rec(CBMExtractCtx* ctx, TSNode node, const CBMLangSpe
     }
 }
 
+// Rust-specific: walk the AST emitting Variable definitions for `defvar!`
+// macro invocations. PSM's defvar! macro declares a typed env-var-backed
+// constant; the 2026-05-13 PSM tool-comparison battery surfaced that
+// these were invisible to code-graph because macro_invocation nodes are
+// extracted only as CALLS edges, not as Definition nodes. With this
+// pass, `defvar!(NAME: T = default, or try ...)` emits a Variable named
+// `NAME` with file_path/start_line/decorators=["defvar"].
+//
+// AST shape (tree-sitter Rust):
+//   (macro_invocation
+//     macro: (identifier "defvar")
+//     bang: "!"
+//     arguments: (token_tree
+//       "("
+//       (identifier "NAME")        <- what we extract
+//       ":" (type ...) "=" (expr ...) ","
+//       ... rest of token_tree
+//       ")")
+//   )
+//
+// Falls back to iterating named children when the `macro` /
+// `arguments` field-name lookup returns null on this grammar version.
+static void walk_rust_defvar_macros(CBMExtractCtx* ctx, TSNode node, int depth) {
+    if (depth > 50) return;  // safety bound
+    const char* kind = ts_node_type(node);
+    if (strcmp(kind, "macro_invocation") == 0) {
+        TSNode macro_name = ts_node_child_by_field_name(node, "macro", 5);
+        if (ts_node_is_null(macro_name)) {
+            // Fallback: first named child is typically the identifier
+            uint32_t nc = ts_node_named_child_count(node);
+            if (nc > 0) {
+                macro_name = ts_node_named_child(node, 0);
+            }
+        }
+        if (!ts_node_is_null(macro_name)) {
+            const char* mn_kind = ts_node_type(macro_name);
+            // Accept identifier or scoped_identifier (e.g. some_crate::defvar)
+            if (strcmp(mn_kind, "identifier") == 0 ||
+                strcmp(mn_kind, "scoped_identifier") == 0) {
+                char* mn_text = cbm_node_text(ctx->arena, macro_name, ctx->source);
+                // Check if the name is "defvar" or ends with "::defvar".
+                int is_defvar = 0;
+                if (mn_text && mn_text[0]) {
+                    size_t len = strlen(mn_text);
+                    if (len == 6 && strcmp(mn_text, "defvar") == 0) {
+                        is_defvar = 1;
+                    } else if (len > 6 &&
+                               strcmp(mn_text + len - 6, "defvar") == 0 &&
+                               mn_text[len - 7] == ':') {
+                        is_defvar = 1;
+                    }
+                }
+                if (is_defvar) {
+                    // Locate token_tree (arguments field). First identifier
+                    // inside is the variable name.
+                    TSNode args = ts_node_child_by_field_name(node, "arguments", 9);
+                    if (ts_node_is_null(args)) {
+                        uint32_t nc = ts_node_named_child_count(node);
+                        for (uint32_t i = 0; i < nc; i++) {
+                            TSNode c = ts_node_named_child(node, i);
+                            if (strcmp(ts_node_type(c), "token_tree") == 0) {
+                                args = c;
+                                break;
+                            }
+                        }
+                    }
+                    if (!ts_node_is_null(args)) {
+                        uint32_t ac = ts_node_child_count(args);
+                        for (uint32_t i = 0; i < ac; i++) {
+                            TSNode c = ts_node_child(args, i);
+                            if (strcmp(ts_node_type(c), "identifier") == 0) {
+                                char* var_name = cbm_node_text(ctx->arena, c, ctx->source);
+                                if (var_name && var_name[0] && strcmp(var_name, "_") != 0) {
+                                    CBMDefinition def;
+                                    memset(&def, 0, sizeof(def));
+                                    def.name = var_name;
+                                    def.qualified_name = cbm_fqn_compute(
+                                        ctx->arena, ctx->project, ctx->rel_path, var_name);
+                                    def.label = "Variable";
+                                    def.file_path = ctx->rel_path;
+                                    def.start_line = ts_node_start_point(node).row + 1;
+                                    def.end_line = ts_node_end_point(node).row + 1;
+                                    def.is_exported = cbm_is_exported(var_name, ctx->language);
+                                    // Decorators array: ["defvar", NULL].
+                                    // Tag lets callers query for defvar-emitted
+                                    // Variables without changing the label.
+                                    const char** decorators = (const char**)cbm_arena_alloc(
+                                        ctx->arena, 2 * sizeof(const char*));
+                                    if (decorators) {
+                                        decorators[0] = "defvar";
+                                        decorators[1] = NULL;
+                                        def.decorators = decorators;
+                                    }
+                                    cbm_defs_push(&ctx->result->defs, ctx->arena, def);
+                                }
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // Don't recurse INTO the macro_invocation token_tree — its contents
+        // are token-list tokens, not legitimate macro_invocation nodes we
+        // want to extract from.
+        return;
+    }
+    uint32_t n = ts_node_child_count(node);
+    for (uint32_t i = 0; i < n; i++) {
+        TSNode child = ts_node_child(node, i);
+        if (ts_node_is_null(child)) continue;
+        walk_rust_defvar_macros(ctx, child, depth + 1);
+    }
+}
+
 static void extract_variables(CBMExtractCtx* ctx, TSNode root, const CBMLangSpec* spec) {
     if (!spec->variable_node_types || !spec->variable_node_types[0]) return;
 
@@ -2071,6 +2186,15 @@ static void extract_variables(CBMExtractCtx* ctx, TSNode root, const CBMLangSpec
         ctx->language == CBM_LANG_INI || ctx->language == CBM_LANG_JSON) {
         walk_variables_rec(ctx, root, spec, 0);
         return;
+    }
+
+    // Rust: walk for defvar! macro invocations BEFORE the static/const pass.
+    // PSM has 50+ sites where defvar! declares env-var-backed configuration
+    // constants invisible to the standard variable extractor. See
+    // walk_rust_defvar_macros above for AST shape + rationale.
+    if (ctx->language == CBM_LANG_RUST) {
+        walk_rust_defvar_macros(ctx, root, 0);
+        // Fall through to the static/const pass below.
     }
 
     uint32_t count = ts_node_child_count(root);

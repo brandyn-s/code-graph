@@ -255,3 +255,106 @@ func TestTypeStaticDispatch_ModuleSiblingClassDistinction(t *testing.T) {
 		t.Fatalf("expected empty (Class needs import even from sibling module), got %q", result.QualifiedName)
 	}
 }
+
+func TestTypeStaticDispatch_EnumVariantOptInEmitsToEnum(t *testing.T) {
+	// Phase A''''-2 (2026-05-14, OPT-IN): Rust enum-variant constructors
+	// (`PostReloadResult::Rejected`) are extracted as CALLS sites but
+	// the CBM extractor doesn't emit individual EnumVariant nodes —
+	// so the variant-child QN doesn't exist in r.exact, and pre-fix
+	// the resolver dropped the call. When
+	// RESOLVER_EMIT_ENUM_VARIANT_AS_PARENT=1, the resolver emits an
+	// edge to the Enum's own QN.
+	t.Setenv("RESOLVER_EMIT_ENUM_VARIANT_AS_PARENT", "1")
+	r := NewFunctionRegistry()
+	r.Register("PostReloadResult", "proj.src.foo.PostReloadResult", "Enum")
+	// Note: NO `.Rejected` child is registered (matches the actual
+	// extractor behavior on Rust enums).
+
+	ctx := CallContext{
+		CalleeName: "PostReloadResult::Rejected",
+		CallerQN:   "proj.src.main.run",
+		ModuleQN:   "proj.src.main",
+		ImportBindings: map[string]string{
+			"PostReloadResult": "crate::foo::PostReloadResult",
+		},
+	}
+	result := r.ResolveCtx(ctx)
+	if result.QualifiedName != "proj.src.foo.PostReloadResult" {
+		t.Fatalf("expected proj.src.foo.PostReloadResult (enum itself), "+
+			"got %q (strategy=%q)",
+			result.QualifiedName, result.Strategy)
+	}
+	if result.Strategy != "type_static_dispatch" {
+		t.Errorf("expected strategy=type_static_dispatch, got %q",
+			result.Strategy)
+	}
+}
+
+func TestTypeStaticDispatch_EnumVariantDefaultOffDrops(t *testing.T) {
+	// Without RESOLVER_EMIT_ENUM_VARIANT_AS_PARENT set, the fallback
+	// MUST NOT fire — preserves pre-Phase-A''''-2 behavior.
+	t.Setenv("RESOLVER_EMIT_ENUM_VARIANT_AS_PARENT", "")
+	r := NewFunctionRegistry()
+	r.Register("PostReloadResult", "proj.src.foo.PostReloadResult", "Enum")
+
+	ctx := CallContext{
+		CalleeName: "PostReloadResult::Rejected",
+		CallerQN:   "proj.src.main.run",
+		ModuleQN:   "proj.src.main",
+		ImportBindings: map[string]string{
+			"PostReloadResult": "crate::foo::PostReloadResult",
+		},
+	}
+	result := r.ResolveCtx(ctx)
+	if result.QualifiedName != "" {
+		t.Fatalf("expected empty (env var off; default behavior), "+
+			"got %q", result.QualifiedName)
+	}
+}
+
+func TestTypeStaticDispatch_ClassVariantWithChildStillRequiresChild(t *testing.T) {
+	// Phase A''''-2 (2026-05-14) safety net: the Enum-variant fallback
+	// fires ONLY for label=Enum, even with env-var enabled. For Struct/
+	// Class, missing-child still drops (preserves prior precision).
+	t.Setenv("RESOLVER_EMIT_ENUM_VARIANT_AS_PARENT", "1")
+	r := NewFunctionRegistry()
+	r.Register("Foo", "proj.src.foo.Foo", "Struct")
+	// No `.bar` child registered.
+
+	ctx := CallContext{
+		CalleeName:     "Foo::bar",
+		CallerQN:       "proj.src.main.run",
+		ModuleQN:       "proj.src.main",
+		ImportBindings: map[string]string{"Foo": "crate::foo::Foo"},
+	}
+	result := r.ResolveCtx(ctx)
+	if result.QualifiedName != "" {
+		t.Fatalf("expected empty (Struct without child should drop), "+
+			"got %q (strategy=%q)",
+			result.QualifiedName, result.Strategy)
+	}
+}
+
+func TestTypeStaticDispatch_EnumNestedVariantDoesNotMatch(t *testing.T) {
+	// Phase A''''-2 (2026-05-14) safety: the fallback only fires for
+	// single-segment remainders. `Enum::A::B` shape should NOT match
+	// (we'd be guessing too much).
+	t.Setenv("RESOLVER_EMIT_ENUM_VARIANT_AS_PARENT", "1")
+	r := NewFunctionRegistry()
+	r.Register("MyEnum", "proj.src.foo.MyEnum", "Enum")
+
+	ctx := CallContext{
+		CalleeName: "MyEnum::Outer::Inner",
+		CallerQN:   "proj.src.main.run",
+		ModuleQN:   "proj.src.main",
+		ImportBindings: map[string]string{
+			"MyEnum": "crate::foo::MyEnum",
+		},
+	}
+	result := r.ResolveCtx(ctx)
+	if result.QualifiedName != "" {
+		t.Fatalf("expected empty (nested variant should drop), got %q "+
+			"(strategy=%q)",
+			result.QualifiedName, result.Strategy)
+	}
+}

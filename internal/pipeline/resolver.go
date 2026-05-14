@@ -481,7 +481,32 @@ func (r *FunctionRegistry) resolveViaTypeStaticDispatch(ctx CallContext) Resolut
 			continue
 		}
 		candidate := classQN + "." + remainder
-		if _, exists := r.exact[candidate]; !exists {
+		exists := false
+		if _, ok := r.exact[candidate]; ok {
+			exists = true
+		}
+		// Phase A''''-2 (2026-05-14, OPT-IN): Rust enum-variant dispatch.
+		// `PostReloadResult::Rejected` is extracted as a CALLS site even
+		// when the variant isn't registered as a child node (the C
+		// extractor doesn't emit individual EnumVariant nodes). When the
+		// parent label is Enum and the variant-child doesn't exist,
+		// emit an edge to the Enum itself.
+		//
+		// OPT-IN via RESOLVER_EMIT_ENUM_VARIANT_AS_PARENT=1 because the
+		// emission target is the Enum's QN (not the variant's QN). Whether
+		// this improves F1 against the syn oracle depends on whether the
+		// compare.py normalization passes accept the parent-QN form as a
+		// match — open question pending PSM Rust bootstrap CI. Default
+		// off preserves pre-Phase-A''''-2 behavior; future measurement
+		// determines whether to flip the default. See knowledge-base
+		// `plans/2026-05-14-code-stack-future-arcs-abc-phase-a-pppp-2-terminal.md`.
+		if !exists && label == "Enum" &&
+			!strings.Contains(remainder, ".") &&
+			os.Getenv("RESOLVER_EMIT_ENUM_VARIANT_AS_PARENT") != "" {
+			candidate = classQN
+			exists = true
+		}
+		if !exists {
 			continue
 		}
 		// Class reachability: same-module OR explicit import. Sibling

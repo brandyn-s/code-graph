@@ -2328,9 +2328,50 @@ func resolvePythonRelativeImport(targetQN, moduleQN, localName string) string {
 	return parent + "." + rest
 }
 
+// normalizePythonRelativeImports rewrites relative-import paths (`.util`,
+// `..pkg`, etc.) in p.importMaps and p.importBindings to absolute QNs
+// rooted at the importing module's parent package.
+//
+// Before this normalization (Phase B 2026-05-14), Python relative imports
+// only got resolved when building IMPORTS edges in passImports. The
+// resolver consulted the still-raw maps in passCalls, where leading-dot
+// paths never matched any registered QN. applyImportBindingFilter would
+// then misclassify the bare-name call as external and drop the call
+// entirely — producing the requests-adversarial recall floor (5 of 10
+// sampled FNs were `from .X import Y` cross-module calls per plan #523).
+//
+// The mutation is safe to call on absolute imports too:
+// resolvePythonRelativeImport returns the input unchanged when no
+// leading dot is present.
+func (p *Pipeline) normalizePythonRelativeImports() {
+	for moduleQN, importMap := range p.importMaps {
+		for localName, targetQN := range importMap {
+			resolved := resolvePythonRelativeImport(targetQN, moduleQN, localName)
+			if resolved != targetQN {
+				importMap[localName] = resolved
+			}
+		}
+		bindings, ok := p.importBindings[moduleQN]
+		if !ok {
+			continue
+		}
+		for bareName, targetQN := range bindings {
+			resolved := resolvePythonRelativeImport(targetQN, moduleQN, bareName)
+			if resolved != targetQN {
+				bindings[bareName] = resolved
+			}
+		}
+	}
+}
+
 // passImports creates IMPORTS edges from the import maps built during pass 2.
 func (p *Pipeline) passImports() {
 	slog.Info("pass2b.imports")
+	// Resolve Python relative imports (`.util` -> `<parent_pkg>.util`)
+	// in p.importMaps and p.importBindings before any consumer reads
+	// them. Without this, the resolver's applyImportBindingFilter sees
+	// raw leading-dot paths and drops Python `from .X import Y` calls.
+	p.normalizePythonRelativeImports()
 	count := 0
 	suffixHits := 0
 	for moduleQN, importMap := range p.importMaps {
@@ -2339,14 +2380,10 @@ func (p *Pipeline) passImports() {
 			continue
 		}
 		for localName, targetQN := range importMap {
-			// CG-3: Python relative imports (`from . import X`,
-			// `from .sub import Y`, `from ..top import Z`). CBM
-			// preserves the dot prefix from tree-sitter's
-			// relative_import node; rewrite to a concrete package QN
-			// before lookup. mcp-servers IMPORTS F1 0.979 confirms
-			// the existing path works for absolute imports; this
-			// handles the Python idioms flask uses heavily that
-			// scored 0.038 F1 pre-fix.
+			// CG-3 normalization above mutated importMap in place;
+			// this call is a no-op when targetQN has no leading dot.
+			// Kept as defensive belt-and-suspenders for any code path
+			// that bypasses normalizePythonRelativeImports.
 			targetQN = resolvePythonRelativeImport(targetQN, moduleQN, localName)
 			// Try to find the target as a Module node first
 			targetNode, _ := p.findNodeByQN(p.ProjectName, targetQN)

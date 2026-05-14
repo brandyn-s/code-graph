@@ -17,7 +17,7 @@ Two operating points are reported because the resolver emits Janusian-ambiguous 
 
 | Edge type | Oracle | Oracle / Measured | Exact P/R/F1 | Scope-aligned P/R/F1 (all) | Scope-aligned P/R/F1 (high-conf) | Impl-normalized P/R/F1 |
 |---|---|---|---|---|---|---|
-| CALLS | pycg | 194 / 176 | 0.295 / 0.268 / 0.281 | 0.743 / 0.268 / 0.394 | 0.743 / 0.268 / 0.394 | 0.743 / 0.268 / 0.394 |
+| CALLS | pycg | 194 / 235 | 0.404 / 0.490 / 0.443 | 0.841 / 0.490 / 0.619 | 0.841 / 0.490 / 0.619 | 0.841 / 0.490 / 0.619 |
 | IMPORTS | ast | 55 / 151 | 0.086 / 0.236 / 0.126 | 0.106 / 0.236 / 0.146 | 0.106 / 0.236 / 0.146 | 0.106 / 0.236 / 0.146 |
 | HTTP_CALLS | opus+sonnet (not yet run) | — / — | — (pending) | — | — |
 
@@ -29,11 +29,11 @@ Each CALLS edge is tagged with the AST scope of its caller (`function-body`, `me
 
 | Kind | TP | FP | Precision | Support |
 |---|---:|---:|---:|---:|
-| `method-body` | 44 | 14 | 0.759 | 58 |
+| `method-body` | 86 | 14 | 0.860 | 100 |
 
 **Package-block caller FP rate**: 0.0000 (0 of 18 FPs)
 
-**Caller-kind complement legitimacy** (function/method-body share of all scope-aligned edges): 0.3302 (70 of 212)
+**Caller-kind complement legitimacy** (function/method-body share of all scope-aligned edges): 0.5330 (113 of 212)
 
 ### IMPORTS
 
@@ -50,16 +50,16 @@ Each CALLS edge carries the resolver's pre-tie-break candidate cardinality (`can
 
 | Project | Ambiguous sites | Total sites | Index |
 |---|---:|---:|---:|
-| __all__ | 7 | 42 | 0.1667 |
+| __all__ | 7 | 53 | 0.1321 |
 
 **janusian_site_precision_split** — precision conditional on call-site ambiguity:
 
 | Bucket | TP | FP | Precision | Support |
 |---|---:|---:|---:|---:|
 | `ambiguous` | 0 | 7 | 0.0000 | 7 |
-| `unambiguous` | 52 | 11 | 0.8254 | 63 |
+| `unambiguous` | 95 | 11 | 0.8962 | 106 |
 
-**janusian_precision_gap** (unambiguous − ambiguous precision): +0.8254. Positive = unambiguous sites resolve more accurately, consistent with Step 2's prediction. Negative or near-zero = ambiguity is not the dominant FP driver.
+**janusian_precision_gap** (unambiguous − ambiguous precision): +0.8962. Positive = unambiguous sites resolve more accurately, consistent with Step 2's prediction. Negative or near-zero = ambiguity is not the dominant FP driver.
 
 
 ## CALLS modal split — by edge-kind union
@@ -75,10 +75,10 @@ Headline `results.CALLS` is the `real_only` row.
 
 | Union | Measured | Exact P/R/F1 | Suffix-3 P/R/F1 | Scope-aligned P/R/F1 |
 |---|---|---|---|---|
-| real_only | 176 | 0.295 / 0.268 / 0.281 | 0.299 / 0.268 / 0.283 | 0.743 / 0.268 / 0.394 |
-| real_plus_external | 176 | 0.295 / 0.268 / 0.281 | 0.299 / 0.268 / 0.283 | 0.743 / 0.268 / 0.394 |
-| real_plus_pseudo | 176 | 0.295 / 0.268 / 0.281 | 0.299 / 0.268 / 0.283 | 0.743 / 0.268 / 0.394 |
-| all_calls_family | 176 | 0.295 / 0.268 / 0.281 | 0.299 / 0.268 / 0.283 | 0.743 / 0.268 / 0.394 |
+| real_only | 235 | 0.404 / 0.490 / 0.443 | 0.408 / 0.490 / 0.445 | 0.841 / 0.490 / 0.619 |
+| real_plus_external | 235 | 0.404 / 0.490 / 0.443 | 0.408 / 0.490 / 0.445 | 0.841 / 0.490 / 0.619 |
+| real_plus_pseudo | 235 | 0.404 / 0.490 / 0.443 | 0.408 / 0.490 / 0.445 | 0.841 / 0.490 / 0.619 |
+| all_calls_family | 235 | 0.404 / 0.490 / 0.443 | 0.408 / 0.490 / 0.445 | 0.841 / 0.490 / 0.619 |
 
 Diverging rows expose how each non-real population dilutes the aggregate. Most accuracy regressions live in `real_only`; the other rows are diagnostic.
 
@@ -90,30 +90,30 @@ Oracle analyzed callers: 58
 
 **Scope-aligned false positives** (code-graph edge from a PyCG-analyzed caller to a callee PyCG did not record):
 ```
-  src.requests.api.request --> src.requests.api.request
+  src.requests.api.request --> src.requests.sessions.Session.request
   src.requests.models.PreparedRequest.prepare_auth --> src.requests.cookies.RequestsCookieJar.update
   src.requests.models.PreparedRequest.prepare_content_length --> src.requests.api.get
   src.requests.models.PreparedRequest.prepare_headers --> src.requests.cookies.RequestsCookieJar.items
   src.requests.models.Request.__init__ --> src.requests.cookies.RequestsCookieJar.items
   src.requests.models.Response.links --> src.requests.api.get
   src.requests.sessions.Session.get_adapter --> src.requests.cookies.RequestsCookieJar.items
+  src.requests.sessions.Session.merge_environment_settings --> src.requests.cookies.RequestsCookieJar.get
   src.requests.sessions.Session.merge_environment_settings --> src.requests.cookies.RequestsCookieJar.items
-  src.requests.sessions.Session.merge_environment_settings --> src.requests.sessions.Session.get
   src.requests.sessions.Session.request --> src.requests.cookies.RequestsCookieJar.update
 ```
 
 **Scope-aligned false negatives** (oracle recorded, code-graph did NOT):
 ```
   src.requests.api.request --> src.requests.sessions.Session
-  src.requests.models.PreparedRequest.__init__ --> src.requests.hooks.default_hooks
-  src.requests.models.PreparedRequest.copy --> src.requests.cookies._copy_cookie_jar
   src.requests.models.PreparedRequest.copy --> src.requests.models.PreparedRequest.__init__
   src.requests.models.PreparedRequest.copy --> src.requests.structures.CaseInsensitiveDict.copy
   src.requests.models.PreparedRequest.prepare_auth --> src.requests.auth.HTTPBasicAuth
-  src.requests.models.PreparedRequest.prepare_auth --> src.requests.utils.get_auth_from_url
   src.requests.models.PreparedRequest.prepare_body --> src.requests._internal_utils.to_native_string.encode
   src.requests.models.PreparedRequest.prepare_body --> src.requests._internal_utils.to_native_string.encode.tell
   src.requests.models.PreparedRequest.prepare_body --> src.requests._internal_utils.to_native_string.tell
+  src.requests.models.PreparedRequest.prepare_body --> src.requests.compat.builtin_str
+  src.requests.models.PreparedRequest.prepare_body --> src.requests.compat.json.dumps
+  src.requests.models.PreparedRequest.prepare_body --> src.requests.compat.json.dumps.encode
 ```
 
 **Raw-exact false positives (may include out-of-scope callers)**:
@@ -124,24 +124,24 @@ Oracle analyzed callers: 58
   src.requests.adapters.HTTPAdapter.__setstate__ --> src.requests.adapters.HTTPAdapter.init_poolmanager
   src.requests.adapters.HTTPAdapter.__setstate__ --> src.requests.cookies.RequestsCookieJar.items
   src.requests.adapters.HTTPAdapter.build_connection_pool_key_attributes --> src.requests.adapters._urllib3_request_context
+  src.requests.adapters.HTTPAdapter.build_response --> src.requests.cookies.extract_cookies_to_jar
+  src.requests.adapters.HTTPAdapter.build_response --> src.requests.utils.get_encoding_from_headers
   src.requests.adapters.HTTPAdapter.close --> src.requests.cookies.RequestsCookieJar.values
   src.requests.adapters.HTTPAdapter.get_connection --> src.requests.adapters.HTTPAdapter.proxy_manager_for
-  src.requests.adapters.HTTPAdapter.get_connection_with_tls_context --> src.requests.adapters.HTTPAdapter.build_connection_pool_key_attributes
-  src.requests.adapters.HTTPAdapter.get_connection_with_tls_context --> src.requests.adapters.HTTPAdapter.proxy_manager_for
 ```
 
 **Raw-exact false negatives**:
 ```
   src.requests.api.request --> src.requests.sessions.Session
-  src.requests.models.PreparedRequest.__init__ --> src.requests.hooks.default_hooks
-  src.requests.models.PreparedRequest.copy --> src.requests.cookies._copy_cookie_jar
   src.requests.models.PreparedRequest.copy --> src.requests.models.PreparedRequest.__init__
   src.requests.models.PreparedRequest.copy --> src.requests.structures.CaseInsensitiveDict.copy
   src.requests.models.PreparedRequest.prepare_auth --> src.requests.auth.HTTPBasicAuth
-  src.requests.models.PreparedRequest.prepare_auth --> src.requests.utils.get_auth_from_url
   src.requests.models.PreparedRequest.prepare_body --> src.requests._internal_utils.to_native_string.encode
   src.requests.models.PreparedRequest.prepare_body --> src.requests._internal_utils.to_native_string.encode.tell
   src.requests.models.PreparedRequest.prepare_body --> src.requests._internal_utils.to_native_string.tell
+  src.requests.models.PreparedRequest.prepare_body --> src.requests.compat.builtin_str
+  src.requests.models.PreparedRequest.prepare_body --> src.requests.compat.json.dumps
+  src.requests.models.PreparedRequest.prepare_body --> src.requests.compat.json.dumps.encode
 ```
 
 ### IMPORTS

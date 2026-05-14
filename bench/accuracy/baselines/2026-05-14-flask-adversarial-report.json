@@ -9,68 +9,73 @@
     "CALLS": {
       "oracle": "pycg",
       "oracle_count": 93,
-      "measured_count": 245,
+      "measured_count": 266,
       "oracle_caller_count": 46,
       "exact": {
-        "tp": 44,
-        "fp": 201,
-        "fn": 49,
-        "precision": 0.1796,
-        "recall": 0.4731,
-        "f1": 0.2604
+        "tp": 51,
+        "fp": 215,
+        "fn": 42,
+        "precision": 0.1917,
+        "recall": 0.5484,
+        "f1": 0.2841
       },
       "suffix_3seg": {
-        "tp": 44,
-        "fp": 201,
-        "fn": 49,
-        "precision": 0.1796,
-        "recall": 0.4731,
-        "f1": 0.2604
+        "tp": 51,
+        "fp": 215,
+        "fn": 42,
+        "precision": 0.1917,
+        "recall": 0.5484,
+        "f1": 0.2841
       },
       "scope_aligned": {
-        "tp": 44,
+        "tp": 51,
         "fp": 34,
-        "fn": 49,
-        "precision": 0.5641,
-        "recall": 0.4731,
-        "f1": 0.5146
+        "fn": 42,
+        "precision": 0.6,
+        "recall": 0.5484,
+        "f1": 0.573
       },
       "scope_aligned_high_confidence": {
-        "tp": 44,
+        "tp": 51,
         "fp": 34,
-        "fn": 49,
-        "precision": 0.5641,
-        "recall": 0.4731,
-        "f1": 0.5146
+        "fn": 42,
+        "precision": 0.6,
+        "recall": 0.5484,
+        "f1": 0.573
       },
       "scope_impl_normalized": {
-        "tp": 44,
+        "tp": 51,
         "fp": 34,
-        "fn": 49,
-        "precision": 0.5641,
-        "recall": 0.4731,
-        "f1": 0.5146
+        "fn": 42,
+        "precision": 0.6,
+        "recall": 0.5484,
+        "f1": 0.573
       },
       "scope_generic_normalized": {
-        "tp": 44,
+        "tp": 51,
         "fp": 34,
-        "fn": 49,
-        "precision": 0.5641,
-        "recall": 0.4731,
-        "f1": 0.5146
+        "fn": 42,
+        "precision": 0.6,
+        "recall": 0.5484,
+        "f1": 0.573
       },
       "scope_canonical": {
-        "tp": 44,
+        "tp": 51,
         "fp": 34,
-        "fn": 49,
-        "precision": 0.5641,
-        "recall": 0.4731,
-        "f1": 0.5146
+        "fn": 42,
+        "precision": 0.6,
+        "recall": 0.5484,
+        "f1": 0.573
       },
       "sample_fp_exact": [
         [
           "examples.celery.src.task_app.create_app",
           "examples.celery.src.task_app.celery_init_app",
+          "CALLS"
+        ],
+        [
+          "src.flask.__main__",
+          "src.flask.cli.main",
           "CALLS"
         ],
         [
@@ -111,11 +116,6 @@
         [
           "src.flask.app.Flask.make_shell_context",
           "examples.tutorial.flaskr.blog.update",
-          "CALLS"
-        ],
-        [
-          "src.flask.app.Flask.open_instance_resource",
-          "src.flask.testing.FlaskClient.open",
           "CALLS"
         ]
       ],
@@ -540,22 +540,7 @@
         ],
         [
           "src.flask.app.Flask.run",
-          "src.flask.helpers.get_debug_flag",
-          "CALLS"
-        ],
-        [
-          "src.flask.app.Flask.run",
-          "src.flask.helpers.get_load_dotenv",
-          "CALLS"
-        ],
-        [
-          "src.flask.app.Flask.run",
           "src.flask.typing.cast",
-          "CALLS"
-        ],
-        [
-          "src.flask.app.Flask.send_static_file",
-          "src.flask.helpers.send_from_directory",
           "CALLS"
         ],
         [
@@ -620,11 +605,6 @@
         ],
         [
           "src.flask.blueprints.Blueprint.send_static_file",
-          "src.flask.helpers.send_from_directory",
-          "CALLS"
-        ],
-        [
-          "src.flask.blueprints.Blueprint.send_static_file",
           "src.flask.typing.cast",
           "CALLS"
         ],
@@ -669,23 +649,8 @@
           "CALLS"
         ],
         [
-          "src.flask.cli.ScriptInfo.__init__",
-          "src.flask.helpers.get_load_dotenv",
-          "CALLS"
-        ],
-        [
-          "src.flask.cli.ScriptInfo.load_app",
-          "src.flask.helpers.get_debug_flag",
-          "CALLS"
-        ],
-        [
           "src.flask.cli.routes_command",
           "src.flask.globals.current_app.url_map.iter_rules",
-          "CALLS"
-        ],
-        [
-          "src.flask.cli.run_command",
-          "src.flask.helpers.get_debug_flag",
           "CALLS"
         ],
         [
@@ -696,10 +661,10 @@
       ],
       "caller_kind_precision": {
         "method-body": {
-          "tp": 37,
+          "tp": 43,
           "fp": 28,
-          "precision": 0.5692,
-          "support": 65
+          "precision": 0.6056,
+          "support": 71
         }
       },
       "pkg_block_caller_FP_rate": {
@@ -709,22 +674,22 @@
         "fp_total": 34
       },
       "caller_kind_complement_legitimacy": {
-        "value": 0.5984,
-        "legitimate_count": 76,
+        "value": 0.6535,
+        "legitimate_count": 83,
         "population_total": 127
       },
       "modality_precision": {},
       "modality_mix_gini": {
-        "__all__": 0.3526
+        "__all__": 0.3576
       },
       "caller_context_tuple_precision": {
         "method-body|cross-package-imported": {
           "caller_kind": "method-body",
           "callee_package_relation": "cross-package-imported",
-          "tp": 7,
+          "tp": 13,
           "fp": 24,
-          "precision": 0.2258,
-          "support": 31
+          "precision": 0.3514,
+          "support": 37
         },
         "method-body|same-package": {
           "caller_kind": "method-body",
@@ -737,9 +702,9 @@
       },
       "method_set_ambiguity_index": {
         "__all__": {
-          "value": 0.0857,
+          "value": 0.0833,
           "ambiguous_sites": 3,
-          "total_sites": 35
+          "total_sites": 36
         }
       },
       "janusian_site_precision_split": {
@@ -750,78 +715,83 @@
           "support": 3
         },
         "unambiguous": {
-          "tp": 44,
+          "tp": 51,
           "fp": 31,
-          "precision": 0.5867,
-          "support": 75
+          "precision": 0.622,
+          "support": 82
         }
       },
-      "janusian_precision_gap": 0.5867,
+      "janusian_precision_gap": 0.622,
       "modal_split": {
         "real_only": {
-          "measured_count": 245,
+          "measured_count": 266,
           "oracle_count": 93,
           "oracle_caller_count": 46,
           "exact": {
-            "tp": 44,
-            "fp": 201,
-            "fn": 49,
-            "precision": 0.1796,
-            "recall": 0.4731,
-            "f1": 0.2604
+            "tp": 51,
+            "fp": 215,
+            "fn": 42,
+            "precision": 0.1917,
+            "recall": 0.5484,
+            "f1": 0.2841
           },
           "suffix_3seg": {
-            "tp": 44,
-            "fp": 201,
-            "fn": 49,
-            "precision": 0.1796,
-            "recall": 0.4731,
-            "f1": 0.2604
+            "tp": 51,
+            "fp": 215,
+            "fn": 42,
+            "precision": 0.1917,
+            "recall": 0.5484,
+            "f1": 0.2841
           },
           "scope_aligned": {
-            "tp": 44,
+            "tp": 51,
             "fp": 34,
-            "fn": 49,
-            "precision": 0.5641,
-            "recall": 0.4731,
-            "f1": 0.5146
+            "fn": 42,
+            "precision": 0.6,
+            "recall": 0.5484,
+            "f1": 0.573
           },
           "scope_aligned_high_confidence": {
-            "tp": 44,
+            "tp": 51,
             "fp": 34,
-            "fn": 49,
-            "precision": 0.5641,
-            "recall": 0.4731,
-            "f1": 0.5146
+            "fn": 42,
+            "precision": 0.6,
+            "recall": 0.5484,
+            "f1": 0.573
           },
           "scope_impl_normalized": {
-            "tp": 44,
+            "tp": 51,
             "fp": 34,
-            "fn": 49,
-            "precision": 0.5641,
-            "recall": 0.4731,
-            "f1": 0.5146
+            "fn": 42,
+            "precision": 0.6,
+            "recall": 0.5484,
+            "f1": 0.573
           },
           "scope_generic_normalized": {
-            "tp": 44,
+            "tp": 51,
             "fp": 34,
-            "fn": 49,
-            "precision": 0.5641,
-            "recall": 0.4731,
-            "f1": 0.5146
+            "fn": 42,
+            "precision": 0.6,
+            "recall": 0.5484,
+            "f1": 0.573
           },
           "scope_canonical": {
-            "tp": 44,
+            "tp": 51,
             "fp": 34,
-            "fn": 49,
-            "precision": 0.5641,
-            "recall": 0.4731,
-            "f1": 0.5146
+            "fn": 42,
+            "precision": 0.6,
+            "recall": 0.5484,
+            "f1": 0.573
           },
           "sample_fp_exact": [
             [
               "examples.celery.src.task_app.create_app",
               "examples.celery.src.task_app.celery_init_app",
+              "CALLS"
+            ],
+            [
+              "src.flask.__main__",
+              "src.flask.cli.main",
               "CALLS"
             ],
             [
@@ -862,11 +832,6 @@
             [
               "src.flask.app.Flask.make_shell_context",
               "examples.tutorial.flaskr.blog.update",
-              "CALLS"
-            ],
-            [
-              "src.flask.app.Flask.open_instance_resource",
-              "src.flask.testing.FlaskClient.open",
               "CALLS"
             ]
           ],
@@ -1291,22 +1256,7 @@
             ],
             [
               "src.flask.app.Flask.run",
-              "src.flask.helpers.get_debug_flag",
-              "CALLS"
-            ],
-            [
-              "src.flask.app.Flask.run",
-              "src.flask.helpers.get_load_dotenv",
-              "CALLS"
-            ],
-            [
-              "src.flask.app.Flask.run",
               "src.flask.typing.cast",
-              "CALLS"
-            ],
-            [
-              "src.flask.app.Flask.send_static_file",
-              "src.flask.helpers.send_from_directory",
               "CALLS"
             ],
             [
@@ -1371,11 +1321,6 @@
             ],
             [
               "src.flask.blueprints.Blueprint.send_static_file",
-              "src.flask.helpers.send_from_directory",
-              "CALLS"
-            ],
-            [
-              "src.flask.blueprints.Blueprint.send_static_file",
               "src.flask.typing.cast",
               "CALLS"
             ],
@@ -1420,23 +1365,8 @@
               "CALLS"
             ],
             [
-              "src.flask.cli.ScriptInfo.__init__",
-              "src.flask.helpers.get_load_dotenv",
-              "CALLS"
-            ],
-            [
-              "src.flask.cli.ScriptInfo.load_app",
-              "src.flask.helpers.get_debug_flag",
-              "CALLS"
-            ],
-            [
               "src.flask.cli.routes_command",
               "src.flask.globals.current_app.url_map.iter_rules",
-              "CALLS"
-            ],
-            [
-              "src.flask.cli.run_command",
-              "src.flask.helpers.get_debug_flag",
               "CALLS"
             ],
             [
@@ -1463,69 +1393,74 @@
           "ambiguity_note": "candidate_set_size not yet emitted by the indexed binary; metrics skipped."
         },
         "real_plus_external": {
-          "measured_count": 245,
+          "measured_count": 266,
           "oracle_count": 93,
           "oracle_caller_count": 46,
           "exact": {
-            "tp": 44,
-            "fp": 201,
-            "fn": 49,
-            "precision": 0.1796,
-            "recall": 0.4731,
-            "f1": 0.2604
+            "tp": 51,
+            "fp": 215,
+            "fn": 42,
+            "precision": 0.1917,
+            "recall": 0.5484,
+            "f1": 0.2841
           },
           "suffix_3seg": {
-            "tp": 44,
-            "fp": 201,
-            "fn": 49,
-            "precision": 0.1796,
-            "recall": 0.4731,
-            "f1": 0.2604
+            "tp": 51,
+            "fp": 215,
+            "fn": 42,
+            "precision": 0.1917,
+            "recall": 0.5484,
+            "f1": 0.2841
           },
           "scope_aligned": {
-            "tp": 44,
+            "tp": 51,
             "fp": 34,
-            "fn": 49,
-            "precision": 0.5641,
-            "recall": 0.4731,
-            "f1": 0.5146
+            "fn": 42,
+            "precision": 0.6,
+            "recall": 0.5484,
+            "f1": 0.573
           },
           "scope_aligned_high_confidence": {
-            "tp": 44,
+            "tp": 51,
             "fp": 34,
-            "fn": 49,
-            "precision": 0.5641,
-            "recall": 0.4731,
-            "f1": 0.5146
+            "fn": 42,
+            "precision": 0.6,
+            "recall": 0.5484,
+            "f1": 0.573
           },
           "scope_impl_normalized": {
-            "tp": 44,
+            "tp": 51,
             "fp": 34,
-            "fn": 49,
-            "precision": 0.5641,
-            "recall": 0.4731,
-            "f1": 0.5146
+            "fn": 42,
+            "precision": 0.6,
+            "recall": 0.5484,
+            "f1": 0.573
           },
           "scope_generic_normalized": {
-            "tp": 44,
+            "tp": 51,
             "fp": 34,
-            "fn": 49,
-            "precision": 0.5641,
-            "recall": 0.4731,
-            "f1": 0.5146
+            "fn": 42,
+            "precision": 0.6,
+            "recall": 0.5484,
+            "f1": 0.573
           },
           "scope_canonical": {
-            "tp": 44,
+            "tp": 51,
             "fp": 34,
-            "fn": 49,
-            "precision": 0.5641,
-            "recall": 0.4731,
-            "f1": 0.5146
+            "fn": 42,
+            "precision": 0.6,
+            "recall": 0.5484,
+            "f1": 0.573
           },
           "sample_fp_exact": [
             [
               "examples.celery.src.task_app.create_app",
               "examples.celery.src.task_app.celery_init_app",
+              "CALLS"
+            ],
+            [
+              "src.flask.__main__",
+              "src.flask.cli.main",
               "CALLS"
             ],
             [
@@ -1566,11 +1501,6 @@
             [
               "src.flask.app.Flask.make_shell_context",
               "examples.tutorial.flaskr.blog.update",
-              "CALLS"
-            ],
-            [
-              "src.flask.app.Flask.open_instance_resource",
-              "src.flask.testing.FlaskClient.open",
               "CALLS"
             ]
           ],
@@ -1995,22 +1925,7 @@
             ],
             [
               "src.flask.app.Flask.run",
-              "src.flask.helpers.get_debug_flag",
-              "CALLS"
-            ],
-            [
-              "src.flask.app.Flask.run",
-              "src.flask.helpers.get_load_dotenv",
-              "CALLS"
-            ],
-            [
-              "src.flask.app.Flask.run",
               "src.flask.typing.cast",
-              "CALLS"
-            ],
-            [
-              "src.flask.app.Flask.send_static_file",
-              "src.flask.helpers.send_from_directory",
               "CALLS"
             ],
             [
@@ -2075,11 +1990,6 @@
             ],
             [
               "src.flask.blueprints.Blueprint.send_static_file",
-              "src.flask.helpers.send_from_directory",
-              "CALLS"
-            ],
-            [
-              "src.flask.blueprints.Blueprint.send_static_file",
               "src.flask.typing.cast",
               "CALLS"
             ],
@@ -2124,23 +2034,8 @@
               "CALLS"
             ],
             [
-              "src.flask.cli.ScriptInfo.__init__",
-              "src.flask.helpers.get_load_dotenv",
-              "CALLS"
-            ],
-            [
-              "src.flask.cli.ScriptInfo.load_app",
-              "src.flask.helpers.get_debug_flag",
-              "CALLS"
-            ],
-            [
               "src.flask.cli.routes_command",
               "src.flask.globals.current_app.url_map.iter_rules",
-              "CALLS"
-            ],
-            [
-              "src.flask.cli.run_command",
-              "src.flask.helpers.get_debug_flag",
               "CALLS"
             ],
             [
@@ -2167,69 +2062,74 @@
           "ambiguity_note": "candidate_set_size not yet emitted by the indexed binary; metrics skipped."
         },
         "real_plus_pseudo": {
-          "measured_count": 245,
+          "measured_count": 266,
           "oracle_count": 93,
           "oracle_caller_count": 46,
           "exact": {
-            "tp": 44,
-            "fp": 201,
-            "fn": 49,
-            "precision": 0.1796,
-            "recall": 0.4731,
-            "f1": 0.2604
+            "tp": 51,
+            "fp": 215,
+            "fn": 42,
+            "precision": 0.1917,
+            "recall": 0.5484,
+            "f1": 0.2841
           },
           "suffix_3seg": {
-            "tp": 44,
-            "fp": 201,
-            "fn": 49,
-            "precision": 0.1796,
-            "recall": 0.4731,
-            "f1": 0.2604
+            "tp": 51,
+            "fp": 215,
+            "fn": 42,
+            "precision": 0.1917,
+            "recall": 0.5484,
+            "f1": 0.2841
           },
           "scope_aligned": {
-            "tp": 44,
+            "tp": 51,
             "fp": 34,
-            "fn": 49,
-            "precision": 0.5641,
-            "recall": 0.4731,
-            "f1": 0.5146
+            "fn": 42,
+            "precision": 0.6,
+            "recall": 0.5484,
+            "f1": 0.573
           },
           "scope_aligned_high_confidence": {
-            "tp": 44,
+            "tp": 51,
             "fp": 34,
-            "fn": 49,
-            "precision": 0.5641,
-            "recall": 0.4731,
-            "f1": 0.5146
+            "fn": 42,
+            "precision": 0.6,
+            "recall": 0.5484,
+            "f1": 0.573
           },
           "scope_impl_normalized": {
-            "tp": 44,
+            "tp": 51,
             "fp": 34,
-            "fn": 49,
-            "precision": 0.5641,
-            "recall": 0.4731,
-            "f1": 0.5146
+            "fn": 42,
+            "precision": 0.6,
+            "recall": 0.5484,
+            "f1": 0.573
           },
           "scope_generic_normalized": {
-            "tp": 44,
+            "tp": 51,
             "fp": 34,
-            "fn": 49,
-            "precision": 0.5641,
-            "recall": 0.4731,
-            "f1": 0.5146
+            "fn": 42,
+            "precision": 0.6,
+            "recall": 0.5484,
+            "f1": 0.573
           },
           "scope_canonical": {
-            "tp": 44,
+            "tp": 51,
             "fp": 34,
-            "fn": 49,
-            "precision": 0.5641,
-            "recall": 0.4731,
-            "f1": 0.5146
+            "fn": 42,
+            "precision": 0.6,
+            "recall": 0.5484,
+            "f1": 0.573
           },
           "sample_fp_exact": [
             [
               "examples.celery.src.task_app.create_app",
               "examples.celery.src.task_app.celery_init_app",
+              "CALLS"
+            ],
+            [
+              "src.flask.__main__",
+              "src.flask.cli.main",
               "CALLS"
             ],
             [
@@ -2270,11 +2170,6 @@
             [
               "src.flask.app.Flask.make_shell_context",
               "examples.tutorial.flaskr.blog.update",
-              "CALLS"
-            ],
-            [
-              "src.flask.app.Flask.open_instance_resource",
-              "src.flask.testing.FlaskClient.open",
               "CALLS"
             ]
           ],
@@ -2699,22 +2594,7 @@
             ],
             [
               "src.flask.app.Flask.run",
-              "src.flask.helpers.get_debug_flag",
-              "CALLS"
-            ],
-            [
-              "src.flask.app.Flask.run",
-              "src.flask.helpers.get_load_dotenv",
-              "CALLS"
-            ],
-            [
-              "src.flask.app.Flask.run",
               "src.flask.typing.cast",
-              "CALLS"
-            ],
-            [
-              "src.flask.app.Flask.send_static_file",
-              "src.flask.helpers.send_from_directory",
               "CALLS"
             ],
             [
@@ -2779,11 +2659,6 @@
             ],
             [
               "src.flask.blueprints.Blueprint.send_static_file",
-              "src.flask.helpers.send_from_directory",
-              "CALLS"
-            ],
-            [
-              "src.flask.blueprints.Blueprint.send_static_file",
               "src.flask.typing.cast",
               "CALLS"
             ],
@@ -2828,23 +2703,8 @@
               "CALLS"
             ],
             [
-              "src.flask.cli.ScriptInfo.__init__",
-              "src.flask.helpers.get_load_dotenv",
-              "CALLS"
-            ],
-            [
-              "src.flask.cli.ScriptInfo.load_app",
-              "src.flask.helpers.get_debug_flag",
-              "CALLS"
-            ],
-            [
               "src.flask.cli.routes_command",
               "src.flask.globals.current_app.url_map.iter_rules",
-              "CALLS"
-            ],
-            [
-              "src.flask.cli.run_command",
-              "src.flask.helpers.get_debug_flag",
               "CALLS"
             ],
             [
@@ -2871,69 +2731,74 @@
           "ambiguity_note": "candidate_set_size not yet emitted by the indexed binary; metrics skipped."
         },
         "all_calls_family": {
-          "measured_count": 245,
+          "measured_count": 266,
           "oracle_count": 93,
           "oracle_caller_count": 46,
           "exact": {
-            "tp": 44,
-            "fp": 201,
-            "fn": 49,
-            "precision": 0.1796,
-            "recall": 0.4731,
-            "f1": 0.2604
+            "tp": 51,
+            "fp": 215,
+            "fn": 42,
+            "precision": 0.1917,
+            "recall": 0.5484,
+            "f1": 0.2841
           },
           "suffix_3seg": {
-            "tp": 44,
-            "fp": 201,
-            "fn": 49,
-            "precision": 0.1796,
-            "recall": 0.4731,
-            "f1": 0.2604
+            "tp": 51,
+            "fp": 215,
+            "fn": 42,
+            "precision": 0.1917,
+            "recall": 0.5484,
+            "f1": 0.2841
           },
           "scope_aligned": {
-            "tp": 44,
+            "tp": 51,
             "fp": 34,
-            "fn": 49,
-            "precision": 0.5641,
-            "recall": 0.4731,
-            "f1": 0.5146
+            "fn": 42,
+            "precision": 0.6,
+            "recall": 0.5484,
+            "f1": 0.573
           },
           "scope_aligned_high_confidence": {
-            "tp": 44,
+            "tp": 51,
             "fp": 34,
-            "fn": 49,
-            "precision": 0.5641,
-            "recall": 0.4731,
-            "f1": 0.5146
+            "fn": 42,
+            "precision": 0.6,
+            "recall": 0.5484,
+            "f1": 0.573
           },
           "scope_impl_normalized": {
-            "tp": 44,
+            "tp": 51,
             "fp": 34,
-            "fn": 49,
-            "precision": 0.5641,
-            "recall": 0.4731,
-            "f1": 0.5146
+            "fn": 42,
+            "precision": 0.6,
+            "recall": 0.5484,
+            "f1": 0.573
           },
           "scope_generic_normalized": {
-            "tp": 44,
+            "tp": 51,
             "fp": 34,
-            "fn": 49,
-            "precision": 0.5641,
-            "recall": 0.4731,
-            "f1": 0.5146
+            "fn": 42,
+            "precision": 0.6,
+            "recall": 0.5484,
+            "f1": 0.573
           },
           "scope_canonical": {
-            "tp": 44,
+            "tp": 51,
             "fp": 34,
-            "fn": 49,
-            "precision": 0.5641,
-            "recall": 0.4731,
-            "f1": 0.5146
+            "fn": 42,
+            "precision": 0.6,
+            "recall": 0.5484,
+            "f1": 0.573
           },
           "sample_fp_exact": [
             [
               "examples.celery.src.task_app.create_app",
               "examples.celery.src.task_app.celery_init_app",
+              "CALLS"
+            ],
+            [
+              "src.flask.__main__",
+              "src.flask.cli.main",
               "CALLS"
             ],
             [
@@ -2974,11 +2839,6 @@
             [
               "src.flask.app.Flask.make_shell_context",
               "examples.tutorial.flaskr.blog.update",
-              "CALLS"
-            ],
-            [
-              "src.flask.app.Flask.open_instance_resource",
-              "src.flask.testing.FlaskClient.open",
               "CALLS"
             ]
           ],
@@ -3403,22 +3263,7 @@
             ],
             [
               "src.flask.app.Flask.run",
-              "src.flask.helpers.get_debug_flag",
-              "CALLS"
-            ],
-            [
-              "src.flask.app.Flask.run",
-              "src.flask.helpers.get_load_dotenv",
-              "CALLS"
-            ],
-            [
-              "src.flask.app.Flask.run",
               "src.flask.typing.cast",
-              "CALLS"
-            ],
-            [
-              "src.flask.app.Flask.send_static_file",
-              "src.flask.helpers.send_from_directory",
               "CALLS"
             ],
             [
@@ -3483,11 +3328,6 @@
             ],
             [
               "src.flask.blueprints.Blueprint.send_static_file",
-              "src.flask.helpers.send_from_directory",
-              "CALLS"
-            ],
-            [
-              "src.flask.blueprints.Blueprint.send_static_file",
               "src.flask.typing.cast",
               "CALLS"
             ],
@@ -3532,23 +3372,8 @@
               "CALLS"
             ],
             [
-              "src.flask.cli.ScriptInfo.__init__",
-              "src.flask.helpers.get_load_dotenv",
-              "CALLS"
-            ],
-            [
-              "src.flask.cli.ScriptInfo.load_app",
-              "src.flask.helpers.get_debug_flag",
-              "CALLS"
-            ],
-            [
               "src.flask.cli.routes_command",
               "src.flask.globals.current_app.url_map.iter_rules",
-              "CALLS"
-            ],
-            [
-              "src.flask.cli.run_command",
-              "src.flask.helpers.get_debug_flag",
               "CALLS"
             ],
             [

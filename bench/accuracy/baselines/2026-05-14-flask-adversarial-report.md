@@ -17,7 +17,7 @@ Two operating points are reported because the resolver emits Janusian-ambiguous 
 
 | Edge type | Oracle | Oracle / Measured | Exact P/R/F1 | Scope-aligned P/R/F1 (all) | Scope-aligned P/R/F1 (high-conf) | Impl-normalized P/R/F1 |
 |---|---|---|---|---|---|---|
-| CALLS | pycg | 93 / 245 | 0.180 / 0.473 / 0.260 | 0.564 / 0.473 / 0.515 | 0.564 / 0.473 / 0.515 | 0.564 / 0.473 / 0.515 |
+| CALLS | pycg | 93 / 266 | 0.192 / 0.548 / 0.284 | 0.600 / 0.548 / 0.573 | 0.600 / 0.548 / 0.573 | 0.600 / 0.548 / 0.573 |
 | IMPORTS | ast | 97 / 219 | 0.055 / 0.124 / 0.076 | 0.089 / 0.124 / 0.103 | 0.089 / 0.124 / 0.103 | 0.089 / 0.124 / 0.103 |
 | HTTP_CALLS | opus+sonnet (not yet run) | — / — | — (pending) | — | — |
 
@@ -29,11 +29,11 @@ Each CALLS edge is tagged with the AST scope of its caller (`function-body`, `me
 
 | Kind | TP | FP | Precision | Support |
 |---|---:|---:|---:|---:|
-| `method-body` | 37 | 28 | 0.569 | 65 |
+| `method-body` | 43 | 28 | 0.606 | 71 |
 
 **Package-block caller FP rate**: 0.0294 (1 of 34 FPs)
 
-**Caller-kind complement legitimacy** (function/method-body share of all scope-aligned edges): 0.5984 (76 of 127)
+**Caller-kind complement legitimacy** (function/method-body share of all scope-aligned edges): 0.6535 (83 of 127)
 
 ### IMPORTS
 
@@ -50,16 +50,16 @@ Each CALLS edge carries the resolver's pre-tie-break candidate cardinality (`can
 
 | Project | Ambiguous sites | Total sites | Index |
 |---|---:|---:|---:|
-| __all__ | 3 | 35 | 0.0857 |
+| __all__ | 3 | 36 | 0.0833 |
 
 **janusian_site_precision_split** — precision conditional on call-site ambiguity:
 
 | Bucket | TP | FP | Precision | Support |
 |---|---:|---:|---:|---:|
 | `ambiguous` | 0 | 3 | 0.0000 | 3 |
-| `unambiguous` | 44 | 31 | 0.5867 | 75 |
+| `unambiguous` | 51 | 31 | 0.6220 | 82 |
 
-**janusian_precision_gap** (unambiguous − ambiguous precision): +0.5867. Positive = unambiguous sites resolve more accurately, consistent with Step 2's prediction. Negative or near-zero = ambiguity is not the dominant FP driver.
+**janusian_precision_gap** (unambiguous − ambiguous precision): +0.6220. Positive = unambiguous sites resolve more accurately, consistent with Step 2's prediction. Negative or near-zero = ambiguity is not the dominant FP driver.
 
 
 ## CALLS modal split — by edge-kind union
@@ -75,10 +75,10 @@ Headline `results.CALLS` is the `real_only` row.
 
 | Union | Measured | Exact P/R/F1 | Suffix-3 P/R/F1 | Scope-aligned P/R/F1 |
 |---|---|---|---|---|
-| real_only | 245 | 0.180 / 0.473 / 0.260 | 0.180 / 0.473 / 0.260 | 0.564 / 0.473 / 0.515 |
-| real_plus_external | 245 | 0.180 / 0.473 / 0.260 | 0.180 / 0.473 / 0.260 | 0.564 / 0.473 / 0.515 |
-| real_plus_pseudo | 245 | 0.180 / 0.473 / 0.260 | 0.180 / 0.473 / 0.260 | 0.564 / 0.473 / 0.515 |
-| all_calls_family | 245 | 0.180 / 0.473 / 0.260 | 0.180 / 0.473 / 0.260 | 0.564 / 0.473 / 0.515 |
+| real_only | 266 | 0.192 / 0.548 / 0.284 | 0.192 / 0.548 / 0.284 | 0.600 / 0.548 / 0.573 |
+| real_plus_external | 266 | 0.192 / 0.548 / 0.284 | 0.192 / 0.548 / 0.284 | 0.600 / 0.548 / 0.573 |
+| real_plus_pseudo | 266 | 0.192 / 0.548 / 0.284 | 0.192 / 0.548 / 0.284 | 0.600 / 0.548 / 0.573 |
+| all_calls_family | 266 | 0.192 / 0.548 / 0.284 | 0.192 / 0.548 / 0.284 | 0.600 / 0.548 / 0.573 |
 
 Diverging rows expose how each non-real population dilutes the aggregate. Most accuracy regressions live in `real_only`; the other rows are diagnostic.
 
@@ -119,6 +119,7 @@ Oracle analyzed callers: 46
 **Raw-exact false positives (may include out-of-scope callers)**:
 ```
   examples.celery.src.task_app.create_app --> examples.celery.src.task_app.celery_init_app
+  src.flask.__main__ --> src.flask.cli.main
   src.flask.app.Flask.create_jinja_environment --> examples.tutorial.flaskr.blog.update
   src.flask.app.Flask.handle_exception --> src.flask.sansio.app.App._find_error_handler
   src.flask.app.Flask.handle_http_exception --> src.flask.sansio.app.App._find_error_handler
@@ -127,7 +128,6 @@ Oracle analyzed callers: 46
   src.flask.app.Flask.make_default_options_response --> examples.tutorial.flaskr.blog.update
   src.flask.app.Flask.make_response --> examples.tutorial.flaskr.blog.update
   src.flask.app.Flask.make_shell_context --> examples.tutorial.flaskr.blog.update
-  src.flask.app.Flask.open_instance_resource --> src.flask.testing.FlaskClient.open
 ```
 
 **Raw-exact false negatives**:

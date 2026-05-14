@@ -292,3 +292,98 @@ def run():
 		}
 	}
 }
+
+// TestPythonImports_RelativeImport_BareNameCallResolves — Phase B
+// (2026-05-14, grade-lift roadmap). When a module does
+// `from .util import default_hooks` and then calls bare-name
+// `default_hooks()`, a CALLS edge must be emitted to the imported
+// function.
+//
+// Pre-fix bug: passImports applied resolvePythonRelativeImport only
+// when building IMPORTS edges. The raw `.util.default_hooks` path
+// stayed in p.importMaps and p.importBindings, where the resolver
+// consulted it during passCalls. applyImportBindingFilter saw the
+// leading-dot target, found no matching candidate, and dropped the
+// call as external. Per requests-adversarial baseline analysis, this
+// was responsible for 5 of 10 sampled FN edges (50% of the recall
+// gap on requests, per knowledge-base plan #523).
+//
+// Post-fix: normalizePythonRelativeImports rewrites the maps before
+// passCalls runs, so the resolver sees absolute QNs and the
+// import-binding filter matches the candidate correctly.
+func TestPythonImports_RelativeImport_BareNameCallResolves(t *testing.T) {
+	dir, err := os.MkdirTemp("", "cgm-py-relimp-call-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+
+	pkgDir := filepath.Join(dir, "pkg")
+	if err := os.MkdirAll(pkgDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(pkgDir, "__init__.py"), "")
+	writeFile(t, filepath.Join(pkgDir, "util.py"), `
+def default_hooks():
+    return {}
+`)
+	writeFile(t, filepath.Join(pkgDir, "model.py"), `
+from .util import default_hooks
+
+
+class Model:
+    def __init__(self):
+        self.hooks = default_hooks()
+
+
+def top_caller():
+    return default_hooks()
+`)
+
+	s, err := store.OpenMemory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+
+	p := New(context.Background(), s, dir, discover.ModeFull)
+	if err := p.Run(); err != nil {
+		t.Fatalf("Pipeline.Run: %v", err)
+	}
+
+	targetQN := p.ProjectName + ".pkg.util.default_hooks"
+	target, _ := s.FindNodeByQN(p.ProjectName, targetQN)
+	if target == nil {
+		t.Fatalf("util.default_hooks node missing")
+	}
+
+	// Both callers (the __init__ method AND the top-level function)
+	// must emit CALLS edges to default_hooks.
+	for _, callerQN := range []string{
+		p.ProjectName + ".pkg.model.Model.__init__",
+		p.ProjectName + ".pkg.model.top_caller",
+	} {
+		caller, _ := s.FindNodeByQN(p.ProjectName, callerQN)
+		if caller == nil {
+			t.Errorf("caller %s missing from store", callerQN)
+			continue
+		}
+		edges, _ := s.FindEdgesBySourceAndType(caller.ID, "CALLS")
+		found := false
+		for _, e := range edges {
+			if e.TargetID == target.ID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("expected CALLS edge %s -> %s; got %d CALLS:",
+				callerQN, targetQN, len(edges))
+			for _, e := range edges {
+				if tgt, _ := s.FindNodeByID(e.TargetID); tgt != nil {
+					t.Logf("  -> %s", tgt.QualifiedName)
+				}
+			}
+		}
+	}
+}

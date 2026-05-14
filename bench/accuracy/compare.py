@@ -41,9 +41,25 @@ from common import (  # noqa: E402
 )
 
 
-CODE_GRAPH_BINARY = (
-    Path(__file__).resolve().parents[2] / "bin" / "codebase-memory-mcp.exe"
-)
+def _resolve_code_graph_binary() -> Path:
+    """Locate the code-graph binary across Windows (.exe) and Linux/macOS.
+
+    Local-dev builds emit `bin/codebase-memory-mcp.exe`; the CI workflow
+    builds `bin/codebase-memory-mcp` (no extension). Try the .exe form
+    first to preserve historical local-dev behavior, then fall back to
+    the no-extension form for CI / Linux / macOS.
+    """
+    bin_dir = Path(__file__).resolve().parents[2] / "bin"
+    for name in ("codebase-memory-mcp.exe", "codebase-memory-mcp"):
+        candidate = bin_dir / name
+        if candidate.exists():
+            return candidate
+    # Default to .exe so error messages match historical expectations
+    # for the platform that ships the binary as such.
+    return bin_dir / "codebase-memory-mcp.exe"
+
+
+CODE_GRAPH_BINARY = _resolve_code_graph_binary()
 
 
 def check_index_freshness(projects: list[str]) -> list[str]:

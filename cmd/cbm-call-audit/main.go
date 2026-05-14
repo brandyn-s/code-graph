@@ -50,14 +50,23 @@ type funcRow struct {
 	CallsPerLine float64 `json:"calls_per_line"`
 }
 
+// callRow is emitted per CBMCall when --detail=true. Phase A''''
+// (2026-05-14) uses this to classify each extracted call as
+// emitted (in DB) / unemitted-external / unemitted-internal-suspect.
+type callRow struct {
+	EnclosingFuncQN string `json:"enclosing_func_qn"`
+	CalleeName      string `json:"callee_name"`
+}
+
 type fileReport struct {
 	File      string    `json:"file"`
 	ModuleQN  string    `json:"module_qn"`
 	Functions []funcRow `json:"functions"`
+	Calls     []callRow `json:"calls,omitempty"`
 	Skipped   string    `json:"skipped,omitempty"`
 }
 
-func auditFile(project, relPath, absPath string) fileReport {
+func auditFile(project, relPath, absPath string, detail bool) fileReport {
 	report := fileReport{File: relPath}
 	source, err := os.ReadFile(absPath)
 	if err != nil {
@@ -101,6 +110,18 @@ func auditFile(project, relPath, absPath string) fileReport {
 			CallsPerLine: density,
 		})
 	}
+
+	// Detail mode (Phase A''''): emit every CBMCall with its
+	// enclosing_func_qn + callee_name. Downstream classifier joins
+	// against DB edges to surface dropped-but-internal-looking calls.
+	if detail {
+		for _, c := range result.Calls {
+			report.Calls = append(report.Calls, callRow{
+				EnclosingFuncQN: c.EnclosingFuncQN,
+				CalleeName:      c.CalleeName,
+			})
+		}
+	}
 	return report
 }
 
@@ -108,6 +129,10 @@ func main() {
 	project := flag.String("project", "", "Project name (used for QN computation)")
 	dir := flag.String("dir", "", "Directory of Rust files to audit")
 	files := flag.String("files", "", "Comma-separated list of files to audit")
+	detail := flag.Bool("detail", false,
+		"Emit per-call (enclosing_func_qn, callee_name) rows under "+
+			"`calls`. Used by Phase A'''' classifier to surface dropped "+
+			"CBMCalls (extracted but missing from indexed DB edges).")
 	flag.Parse()
 
 	if *project == "" {
@@ -154,7 +179,7 @@ func main() {
 				rel = filepath.ToSlash(r)
 			}
 		}
-		report := auditFile(*project, rel, p)
+		report := auditFile(*project, rel, p, *detail)
 		if err := enc.Encode(report); err != nil {
 			log.Fatalf("encode error: %v", err)
 		}

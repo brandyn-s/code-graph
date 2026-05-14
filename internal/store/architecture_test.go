@@ -372,6 +372,192 @@ func TestArchBoundaries(t *testing.T) {
 	}
 }
 
+// TestArchPackagesPopulatesFanInFanOut pins the F5 fix: before 2026-05-14,
+// archPackages assigned only Name + NodeCount, leaving FanIn/FanOut at the
+// zero value. With the file-path-prefix-match fan tally, cross-package
+// CALLS edges populate both fields.
+//
+// Fixture (from setupArchTestStore):
+//   - Package "cmd" (file_path="cmd") contains main (cmd/server/main.go)
+//   - Package "handler" (file_path="internal/handler") contains
+//     HandleRequest + TestHandleRequest
+//   - Package "service" (file_path="internal/service") contains
+//     ProcessOrder, ValidateOrder, formatDate
+//
+// Cross-package CALLS edges:
+//   - main → HandleRequest        (cmd → handler)
+//   - HandleRequest → ProcessOrder (handler → service)
+//
+// Intra-package CALLS (must be excluded from fan counts):
+//   - ProcessOrder → ValidateOrder (service → service)
+//   - ProcessOrder → formatDate    (service → service)
+//   - TestHandleRequest → HandleRequest (handler → handler)
+func TestArchPackagesPopulatesFanInFanOut(t *testing.T) {
+	s := setupArchTestStore(t)
+	defer s.Close()
+
+	pkgs, err := s.archPackages("test")
+	if err != nil {
+		t.Fatalf("archPackages: %v", err)
+	}
+
+	pkgMap := map[string]PackageSummary{}
+	for _, p := range pkgs {
+		pkgMap[p.Name] = p
+	}
+
+	cmd, ok := pkgMap["cmd"]
+	if !ok {
+		t.Fatalf("expected 'cmd' package; got %v", pkgMap)
+	}
+	if cmd.FanOut != 1 {
+		t.Errorf("cmd.FanOut = %d, want 1 (main → HandleRequest)", cmd.FanOut)
+	}
+	if cmd.FanIn != 0 {
+		t.Errorf("cmd.FanIn = %d, want 0", cmd.FanIn)
+	}
+
+	handler, ok := pkgMap["handler"]
+	if !ok {
+		t.Fatalf("expected 'handler' package; got %v", pkgMap)
+	}
+	if handler.FanOut != 1 {
+		t.Errorf("handler.FanOut = %d, want 1 (HandleRequest → ProcessOrder)", handler.FanOut)
+	}
+	if handler.FanIn != 1 {
+		t.Errorf("handler.FanIn = %d, want 1 (main → HandleRequest)", handler.FanIn)
+	}
+
+	service, ok := pkgMap["service"]
+	if !ok {
+		t.Fatalf("expected 'service' package; got %v", pkgMap)
+	}
+	if service.FanIn != 1 {
+		t.Errorf("service.FanIn = %d, want 1 (HandleRequest → ProcessOrder)", service.FanIn)
+	}
+	if service.FanOut != 0 {
+		t.Errorf("service.FanOut = %d, want 0 (only intra-package calls)", service.FanOut)
+	}
+}
+
+// TestArchPackagesIntraPackageCallsExcluded verifies that calls within the
+// same package don't contribute to fan-in or fan-out. ProcessOrder calls
+// ValidateOrder and formatDate (both in 'service'); these must not show
+// up as service.FanIn or service.FanOut.
+func TestArchPackagesIntraPackageCallsExcluded(t *testing.T) {
+	s := setupArchTestStore(t)
+	defer s.Close()
+
+	pkgs, err := s.archPackages("test")
+	if err != nil {
+		t.Fatalf("archPackages: %v", err)
+	}
+
+	for _, p := range pkgs {
+		if p.Name == "service" {
+			// service has 2 intra-package calls (Process→Validate, Process→formatDate)
+			// + 1 inbound from handler. fan_out must stay 0.
+			if p.FanOut != 0 {
+				t.Errorf("service.FanOut = %d, want 0 — intra-package calls leaked", p.FanOut)
+			}
+			return
+		}
+	}
+	t.Fatal("expected 'service' package in result")
+}
+
+// TestArchPackagesByQNPopulatesFanInFanOut covers the fallback path where
+// no Package nodes exist and we group by qnToPackage. Setup mirrors the
+// boundaries test logic: server → handler → service via QN prefixes.
+func TestArchPackagesByQNPopulatesFanInFanOut(t *testing.T) {
+	s, err := OpenMemory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if err := s.UpsertProject("qn-test", "/tmp/qn-test"); err != nil {
+		t.Fatal(err)
+	}
+
+	// NO Package nodes — forces the qnToPackage fallback path.
+	idMain, _ := s.UpsertNode(&Node{
+		Project: "qn-test", Label: "Function", Name: "main",
+		QualifiedName: "qn-test.cmd.server.main",
+	})
+	idHandler, _ := s.UpsertNode(&Node{
+		Project: "qn-test", Label: "Function", Name: "HandleRequest",
+		QualifiedName: "qn-test.internal.handler.HandleRequest",
+	})
+	idService, _ := s.UpsertNode(&Node{
+		Project: "qn-test", Label: "Function", Name: "ProcessOrder",
+		QualifiedName: "qn-test.internal.service.ProcessOrder",
+	})
+
+	// Cross-package: server → handler → service
+	_, _ = s.InsertEdge(&Edge{Project: "qn-test", SourceID: idMain, TargetID: idHandler, Type: "CALLS"})
+	_, _ = s.InsertEdge(&Edge{Project: "qn-test", SourceID: idHandler, TargetID: idService, Type: "CALLS"})
+
+	pkgs, err := s.archPackages("qn-test") // routes through archPackagesByQN
+	if err != nil {
+		t.Fatalf("archPackages: %v", err)
+	}
+
+	pkgMap := map[string]PackageSummary{}
+	for _, p := range pkgs {
+		pkgMap[p.Name] = p
+	}
+
+	// qnToPackage on "qn-test.cmd.server.main" → "server"
+	server := pkgMap["server"]
+	if server.FanOut != 1 || server.FanIn != 0 {
+		t.Errorf("server fan: in=%d out=%d, want in=0 out=1", server.FanIn, server.FanOut)
+	}
+	// qnToPackage on "qn-test.internal.handler.HandleRequest" → "handler"
+	handler := pkgMap["handler"]
+	if handler.FanIn != 1 || handler.FanOut != 1 {
+		t.Errorf("handler fan: in=%d out=%d, want in=1 out=1", handler.FanIn, handler.FanOut)
+	}
+	// qnToPackage on "qn-test.internal.service.ProcessOrder" → "service"
+	service := pkgMap["service"]
+	if service.FanIn != 1 || service.FanOut != 0 {
+		t.Errorf("service fan: in=%d out=%d, want in=1 out=0", service.FanIn, service.FanOut)
+	}
+}
+
+// TestArchPackagesNoEdgesZeroFan verifies that packages with no CALLS
+// edges have FanIn=0 and FanOut=0 (not a misleading non-zero value).
+func TestArchPackagesNoEdgesZeroFan(t *testing.T) {
+	s, err := OpenMemory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if err := s.UpsertProject("noedge", "/tmp/noedge"); err != nil {
+		t.Fatal(err)
+	}
+
+	// One package with one function, no CALLS edges.
+	_, _ = s.UpsertNode(&Node{
+		Project: "noedge", Label: "Package", Name: "lonely",
+		QualifiedName: "noedge.lonely", FilePath: "lonely",
+	})
+	_, _ = s.UpsertNode(&Node{
+		Project: "noedge", Label: "Function", Name: "alone",
+		QualifiedName: "noedge.lonely.alone", FilePath: "lonely/alone.go",
+	})
+
+	pkgs, err := s.archPackages("noedge")
+	if err != nil {
+		t.Fatalf("archPackages: %v", err)
+	}
+	if len(pkgs) != 1 {
+		t.Fatalf("expected 1 package, got %d", len(pkgs))
+	}
+	if pkgs[0].FanIn != 0 || pkgs[0].FanOut != 0 {
+		t.Errorf("isolated package fan: in=%d out=%d, want 0/0", pkgs[0].FanIn, pkgs[0].FanOut)
+	}
+}
+
 // --- Case-insensitive search tests ---
 
 // TestSearchComplexityFilter covers min/max_complexity filtering.

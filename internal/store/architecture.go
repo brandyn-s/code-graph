@@ -389,25 +389,109 @@ func (s *Store) archPackages(project string) ([]PackageSummary, error) {
 		return s.archPackagesByQN(project)
 	}
 
+	// Compute fan-in/fan-out by associating Function/Method/Class nodes
+	// to Package nodes via file_path prefix matching, then scanning
+	// cross-package CALLS edges. Before 2026-05-14, FanIn/FanOut were
+	// always 0 (struct fields existed but were never assigned).
+	fanIn, fanOut, err := s.archPackageFanCountsByFilePath(project)
+	if err != nil {
+		return nil, err
+	}
+
 	result := make([]PackageSummary, len(pkgs))
 	for i, p := range pkgs {
-		result[i] = PackageSummary{Name: p.name, NodeCount: p.count}
+		result[i] = PackageSummary{
+			Name:      p.name,
+			NodeCount: p.count,
+			FanIn:     fanIn[p.name],
+			FanOut:    fanOut[p.name],
+		}
 	}
 	return result, nil
 }
 
+// archPackageFanCountsByFilePath computes per-package fan-in/fan-out by
+// associating Function/Method/Class nodes to Package nodes via longest
+// file_path prefix match, then aggregating cross-package CALLS edges.
+//
+// Intra-package calls are excluded so the metric reflects connectivity
+// to OTHER packages, matching archBoundaries's notion of a boundary.
+func (s *Store) archPackageFanCountsByFilePath(project string) (map[string]int, map[string]int, error) {
+	pkgRows, err := s.q.Query(
+		`SELECT name, file_path FROM nodes WHERE project=? AND label='Package' AND file_path != ''`,
+		project,
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer pkgRows.Close()
+
+	type pkgPath struct {
+		name string
+		path string
+	}
+	var pkgPaths []pkgPath
+	for pkgRows.Next() {
+		var pp pkgPath
+		if err := pkgRows.Scan(&pp.name, &pp.path); err != nil {
+			return nil, nil, err
+		}
+		pkgPaths = append(pkgPaths, pp)
+	}
+	if err := pkgRows.Err(); err != nil {
+		return nil, nil, err
+	}
+
+	// Longest-prefix wins: nested packages must match before parents.
+	sort.Slice(pkgPaths, func(i, j int) bool {
+		return len(pkgPaths[i].path) > len(pkgPaths[j].path)
+	})
+
+	nodeRows, err := s.q.Query(
+		`SELECT id, file_path FROM nodes
+		 WHERE project=? AND label IN ('Function','Method','Class') AND file_path != ''`,
+		project,
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer nodeRows.Close()
+
+	nodePkg := map[int64]string{}
+	for nodeRows.Next() {
+		var id int64
+		var fp string
+		if err := nodeRows.Scan(&id, &fp); err != nil {
+			return nil, nil, err
+		}
+		for _, pp := range pkgPaths {
+			if fp == pp.path || strings.HasPrefix(fp, pp.path+"/") {
+				nodePkg[id] = pp.name
+				break
+			}
+		}
+	}
+	if err := nodeRows.Err(); err != nil {
+		return nil, nil, err
+	}
+
+	return tallyCrossPackageCalls(s.q, project, nodePkg)
+}
+
 // archPackagesByQN groups nodes by the sub-package segment of their qualified name.
 func (s *Store) archPackagesByQN(project string) ([]PackageSummary, error) {
-	rows, err := s.q.Query(`SELECT qualified_name FROM nodes WHERE project=? AND label IN ('Function','Method','Class')`, project)
+	rows, err := s.q.Query(`SELECT id, qualified_name FROM nodes WHERE project=? AND label IN ('Function','Method','Class')`, project)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
 	counts := map[string]int{}
+	nodePkg := map[int64]string{}
 	for rows.Next() {
+		var id int64
 		var qn string
-		if err := rows.Scan(&qn); err != nil {
+		if err := rows.Scan(&id, &qn); err != nil {
 			return nil, err
 		}
 		pkg := qnToPackage(qn)
@@ -415,20 +499,61 @@ func (s *Store) archPackagesByQN(project string) ([]PackageSummary, error) {
 			continue
 		}
 		counts[pkg]++
+		nodePkg[id] = pkg
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 
+	fanIn, fanOut, err := tallyCrossPackageCalls(s.q, project, nodePkg)
+	if err != nil {
+		return nil, err
+	}
+
 	result := make([]PackageSummary, 0, len(counts))
 	for name, cnt := range counts {
-		result = append(result, PackageSummary{Name: name, NodeCount: cnt})
+		result = append(result, PackageSummary{
+			Name:      name,
+			NodeCount: cnt,
+			FanIn:     fanIn[name],
+			FanOut:    fanOut[name],
+		})
 	}
 	sort.Slice(result, func(i, j int) bool { return result[i].NodeCount > result[j].NodeCount })
 	if len(result) > 15 {
 		result = result[:15]
 	}
 	return result, nil
+}
+
+// tallyCrossPackageCalls scans CALLS edges and counts cross-package
+// edges as fan-out for the source pkg and fan-in for the target pkg.
+// Takes a Querier so it works under both *sql.DB and *sql.Tx.
+func tallyCrossPackageCalls(q Querier, project string, nodePkg map[int64]string) (map[string]int, map[string]int, error) {
+	edgeRows, err := q.Query(
+		`SELECT source_id, target_id FROM edges WHERE project=? AND type='CALLS'`,
+		project,
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer edgeRows.Close()
+
+	fanIn := map[string]int{}
+	fanOut := map[string]int{}
+	for edgeRows.Next() {
+		var srcID, tgtID int64
+		if err := edgeRows.Scan(&srcID, &tgtID); err != nil {
+			return nil, nil, err
+		}
+		src := nodePkg[srcID]
+		tgt := nodePkg[tgtID]
+		if src != "" && tgt != "" && src != tgt {
+			fanOut[src]++
+			fanIn[tgt]++
+		}
+	}
+	return fanIn, fanOut, edgeRows.Err()
 }
 
 func (s *Store) archEntryPoints(project string) ([]EntryPointInfo, error) {

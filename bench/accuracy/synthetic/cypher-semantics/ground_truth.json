@@ -1,0 +1,7 @@
+{
+  "_description": "Ground truth for cypher-semantics regression fixture. Floors are minimum acceptable values; the extractor may add to these. See README.md and check_cypher_semantics.py for the assertions.",
+  "_note_on_param_types": "param_types is not exercised here because the Rust extractor only emits it for path-qualified types (e.g. iroh::Endpoint, Arc<T>). Bare primitives like String do not trigger param_types emission. The element-of CONTAINS operator on array properties is sufficiently covered by `decorators` and `return_types` below.",
+  "expected_decorators_test_min": 3,
+  "expected_return_types_vec_min": 1,
+  "expected_return_types_result_min": 1
+}

@@ -186,6 +186,18 @@ jobs:
           # Authored 2026-05-02 per roundtable Recommendation #1.
           python bench/accuracy/check_negative_fixtures.py --regression-gate
 
+      - name: Run cypher-semantics regression gate (PR #308 CONTAINS-on-array)
+        run: |
+          # Pins PR #308's element-of semantics for CONTAINS on []string and
+          # []any node properties (decorators, return_types). Without this
+          # gate, a future refactor of the Cypher executor's CONTAINS branch
+          # could silently regress array operands back to substring-on-string
+          # semantics (the pre-PR-#308 shape), and every query of the form
+          # `WHERE x.decorators CONTAINS '<element>'` would return 0 rows.
+          # Surfaced by the 2026-05-13 PSM tool-comparison battery as a
+          # deployed-but-undetected regression for ~24 hours post-merge.
+          python bench/accuracy/check_cypher_semantics.py
+
       - name: Self-host Go baseline (code-graph indexing code-graph)
         run: |
           # Index one subset (internal/store) and assert edge count is within

@@ -17,13 +17,34 @@ import (
 var tier2DebugEnabled = os.Getenv("RESOLVER_TIER2_DEBUG") != ""
 
 // dropFuzzyJanusianChainsEnabled gates the Janusian-chain drop in
-// FuzzyResolveCtx (knowledge-base PR #492 next-plan target). When set, fuzzy
-// emissions are dropped when the call shape is a multi-segment chain
-// (root.field.method) AND receiver type is empty AND multiple Method
-// candidates exist on distinct parent classes. This is the empirical
-// signature of the 72 ambiguous fuzzy edges on PSM assetman. Default off
-// for A/B validation against the production fixture set.
-var dropFuzzyJanusianChainsEnabled = os.Getenv("RESOLVER_DROP_FUZZY_JANUSIAN_CHAINS") != ""
+// FuzzyResolveCtx. When enabled, fuzzy emissions are dropped when the call
+// shape is a multi-segment chain (root.field.method) AND receiver type is
+// empty AND multiple Method candidates exist on distinct parent classes.
+//
+// Default ON since 2026-05-14 (Phase A of the grade-lift roadmap). The
+// 2026-05-10 flask-adversarial baseline classified 100% of the 11
+// Janusian-ambiguous FPs as fuzzy + cand>=2 emissions at the speculative
+// confidence band; the precision split showed 0/11 (TP/FP) — there are no
+// legitimate TPs in this bucket on either flask or PSM assetman.
+//
+// Opt-out: set RESOLVER_DROP_FUZZY_JANUSIAN_CHAINS=0 (or any value
+// starting with "0", "f", "F", "n", "N") to revert to legacy behavior.
+var dropFuzzyJanusianChainsEnabled = parseEnvBool("RESOLVER_DROP_FUZZY_JANUSIAN_CHAINS", true)
+
+// parseEnvBool reads an env var as a boolean with a configurable default.
+// Treats "", "1", "true", "yes" (case-insensitive) as true; "0", "false",
+// "no", "off" as false. Falls back to `defaultVal` when the var is unset.
+func parseEnvBool(name string, defaultVal bool) bool {
+	v := os.Getenv(name)
+	if v == "" {
+		return defaultVal
+	}
+	switch v[0] {
+	case '0', 'f', 'F', 'n', 'N':
+		return false
+	}
+	return true
+}
 
 // allMethodsWithDistinctParents returns true when every candidate is
 // labeled "Method" AND the candidates' parent classes (the QN segment
@@ -961,7 +982,8 @@ func (r *FunctionRegistry) FuzzyResolveCtx(ctx CallContext) (ResolutionResult, b
 	// would have candidates with the SAME parent class (multiple methods
 	// on the same type), so the gate wouldn't fire on them.
 	//
-	// Gated by RESOLVER_DROP_FUZZY_JANUSIAN_CHAINS for A/B comparison.
+	// Gated by RESOLVER_DROP_FUZZY_JANUSIAN_CHAINS (default-on since
+	// 2026-05-14). Set the env to "0" / "false" to opt out.
 	if dropFuzzyJanusianChainsEnabled &&
 		ctx.ReceiverType == "" &&
 		strings.Contains(ctx.CalleeName, ".") &&

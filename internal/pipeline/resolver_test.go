@@ -752,3 +752,38 @@ func TestApplyReceiverTypeFilter_DebugLogging(t *testing.T) {
 		}
 	})
 }
+
+func TestParseEnvBool(t *testing.T) {
+	t.Setenv("TEST_TRUE_BY_DEFAULT", "")
+	if got := parseEnvBool("TEST_TRUE_BY_DEFAULT", true); got != true {
+		t.Errorf("unset with default=true: got %v want true", got)
+	}
+	if got := parseEnvBool("TEST_TRUE_BY_DEFAULT", false); got != false {
+		t.Errorf("unset with default=false: got %v want false", got)
+	}
+
+	for _, v := range []string{"0", "f", "false", "F", "FALSE", "n", "no", "N", "NO"} {
+		t.Setenv("TEST_FALSY", v)
+		if got := parseEnvBool("TEST_FALSY", true); got != false {
+			t.Errorf("value %q with default=true: got %v want false", v, got)
+		}
+	}
+
+	for _, v := range []string{"1", "true", "yes", "TRUE", "True", "on"} {
+		t.Setenv("TEST_TRUTHY", v)
+		if got := parseEnvBool("TEST_TRUTHY", false); got != true {
+			t.Errorf("value %q with default=false: got %v want true", v, got)
+		}
+	}
+}
+
+func TestDropFuzzyJanusianChainsDefaultOn(t *testing.T) {
+	// Sanity check: package-init binding reads OS env. With env unset (test
+	// runners typically have no value), the default-on flip should produce
+	// dropFuzzyJanusianChainsEnabled=true.
+	v := parseEnvBool("RESOLVER_DROP_FUZZY_JANUSIAN_CHAINS", true)
+	if !v {
+		t.Errorf("default-on flip broken: parseEnvBool returned false with default=true")
+	}
+}
+

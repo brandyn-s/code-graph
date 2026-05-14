@@ -1,0 +1,749 @@
+{
+  "schema_version": 1,
+  "edges": [
+    {
+      "from_qn": "src.flask.app",
+      "to_qn": "src.flask.typing.TypeVar",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.app.add_ctx.wrapper",
+      "to_qn": "src.flask.globals.app_ctx._get_current_object",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.app.Flask",
+      "to_qn": "src.flask.sessions.SecureCookieSessionInterface",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.app.Flask.__init_subclass__",
+      "to_qn": "src.flask.app.add_ctx",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.app.Flask.__init_subclass__",
+      "to_qn": "src.flask.app.remove_ctx",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.app.Flask.__init__",
+      "to_qn": "src.flask.cli.AppGroup.AppGroup",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.app.Flask.send_static_file",
+      "to_qn": "src.flask.typing.cast",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.app.Flask.send_static_file",
+      "to_qn": "src.flask.helpers.send_from_directory",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.app.Flask.send_static_file",
+      "to_qn": "src.flask.app.Flask.get_send_file_max_age",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.app.Flask.raise_routing_exception",
+      "to_qn": "src.flask.debughelpers.FormDataRoutingRedirect",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.app.Flask.update_template_context",
+      "to_qn": "src.flask.app.Flask.ensure_sync",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.app.Flask.ensure_sync",
+      "to_qn": "src.flask.app.Flask.async_to_sync",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.app.Flask.run",
+      "to_qn": "src.flask.typing.cast",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.app.Flask.run",
+      "to_qn": "src.flask.helpers.get_load_dotenv",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.app.Flask.run",
+      "to_qn": "src.flask.cli.AppGroup.show_server_banner",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.app.Flask.run",
+      "to_qn": "src.flask.cli.AppGroup.load_dotenv",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.app.Flask.run",
+      "to_qn": "src.flask.helpers.get_debug_flag",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.app.Flask.test_client",
+      "to_qn": "src.flask.testing.FlaskClient",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.app.Flask.test_cli_runner",
+      "to_qn": "src.flask.testing.FlaskCliRunner",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.app.Flask.handle_http_exception",
+      "to_qn": "src.flask.app.Flask.ensure_sync",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.app.Flask.handle_user_exception",
+      "to_qn": "src.flask.app.Flask.ensure_sync",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.app.Flask.handle_user_exception",
+      "to_qn": "src.flask.app.Flask.handle_http_exception",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.app.Flask.handle_exception",
+      "to_qn": "src.flask.app.Flask.log_exception",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.app.Flask.handle_exception",
+      "to_qn": "src.flask.app.Flask.ensure_sync",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.app.Flask.handle_exception",
+      "to_qn": "src.flask.app.Flask.finalize_request",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.app.Flask.handle_exception",
+      "to_qn": "src.flask.signals.got_request_exception.send",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.app.Flask.finalize_request",
+      "to_qn": "src.flask.app.Flask.process_response",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.app.Flask.finalize_request",
+      "to_qn": "src.flask.app.Flask.make_response",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.app.Flask.finalize_request",
+      "to_qn": "src.flask.signals.request_finished.send",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.app.Flask.dispatch_request",
+      "to_qn": "src.flask.app.Flask.ensure_sync",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.app.Flask.dispatch_request",
+      "to_qn": "src.flask.app.Flask.raise_routing_exception",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.app.Flask.dispatch_request",
+      "to_qn": "src.flask.app.Flask.make_default_options_response",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.app.Flask.make_default_options_response",
+      "to_qn": "src.flask.ctx.AppContext.from_environ.url_adapter.allowed_methods",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.app.Flask.full_dispatch_request",
+      "to_qn": "src.flask.app.Flask.dispatch_request",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.app.Flask.full_dispatch_request",
+      "to_qn": "src.flask.app.Flask.finalize_request",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.app.Flask.full_dispatch_request",
+      "to_qn": "src.flask.signals.request_started.send",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.app.Flask.full_dispatch_request",
+      "to_qn": "src.flask.app.Flask.handle_user_exception",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.app.Flask.full_dispatch_request",
+      "to_qn": "src.flask.app.Flask.preprocess_request",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.app.Flask.preprocess_request",
+      "to_qn": "src.flask.app.Flask.ensure_sync",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.app.Flask.make_response",
+      "to_qn": "src.flask.typing.cast",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.app.Flask.make_response",
+      "to_qn": "src.flask.typing.cast.headers.update",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.app.Flask.process_response",
+      "to_qn": "src.flask.app.Flask.ensure_sync",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.app.Flask.process_response",
+      "to_qn": "src.flask.ctx.AppContext.from_environ._get_session",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.app.Flask.url_for",
+      "to_qn": "src.flask.globals._cv_app.get",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.app.Flask.do_teardown_request",
+      "to_qn": "src.flask.app.Flask.ensure_sync",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.app.Flask.do_teardown_request",
+      "to_qn": "src.flask.helpers._CollectErrors",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.app.Flask.do_teardown_request",
+      "to_qn": "src.flask.signals.request_tearing_down.send",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.app.Flask.do_teardown_request",
+      "to_qn": "src.flask.helpers._CollectErrors.raise_any",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.app.Flask.do_teardown_appcontext",
+      "to_qn": "src.flask.app.Flask.ensure_sync",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.app.Flask.do_teardown_appcontext",
+      "to_qn": "src.flask.helpers._CollectErrors",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.app.Flask.do_teardown_appcontext",
+      "to_qn": "src.flask.signals.appcontext_tearing_down.send",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.app.Flask.do_teardown_appcontext",
+      "to_qn": "src.flask.helpers._CollectErrors.raise_any",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.app.Flask.app_context",
+      "to_qn": "src.flask.ctx.AppContext",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.app.Flask.request_context",
+      "to_qn": "src.flask.ctx.AppContext.from_environ",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.app.Flask.test_request_context",
+      "to_qn": "src.flask.testing.EnvironBuilder",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.app.Flask.test_request_context",
+      "to_qn": "src.flask.testing.EnvironBuilder.close",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.app.Flask.test_request_context",
+      "to_qn": "src.flask.testing.EnvironBuilder.get_environ",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.app.Flask.test_request_context",
+      "to_qn": "src.flask.app.Flask.request_context",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.app.Flask.wsgi_app",
+      "to_qn": "src.flask.typing.cast",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.app.Flask.wsgi_app",
+      "to_qn": "src.flask.app.Flask.full_dispatch_request",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.app.Flask.wsgi_app",
+      "to_qn": "src.flask.app.Flask.handle_exception",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.app.Flask.wsgi_app",
+      "to_qn": "src.flask.ctx.AppContext.from_environ.push",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.app.Flask.wsgi_app",
+      "to_qn": "src.flask.ctx.AppContext.from_environ.pop",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.app.Flask.wsgi_app",
+      "to_qn": "src.flask.app.Flask.request_context",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.app.Flask.__call__",
+      "to_qn": "src.flask.app.Flask.wsgi_app",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.blueprints.Blueprint.__init__",
+      "to_qn": "src.flask.cli.AppGroup",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.blueprints.Blueprint.send_static_file",
+      "to_qn": "src.flask.typing.cast",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.blueprints.Blueprint.send_static_file",
+      "to_qn": "src.flask.blueprints.Blueprint.get_send_file_max_age",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.blueprints.Blueprint.send_static_file",
+      "to_qn": "src.flask.helpers.send_from_directory",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.cli",
+      "to_qn": "src.flask.typing.overload",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.cli",
+      "to_qn": "src.flask.cli.FlaskGroup.__init__",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.cli",
+      "to_qn": "src.flask.cli.with_appcontext",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.cli",
+      "to_qn": "src.flask.cli.CertParamType.__init__",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.cli",
+      "to_qn": "src.flask.typing.TypeVar",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.cli",
+      "to_qn": "src.flask.cli.main",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.cli.find_best_app",
+      "to_qn": "src.flask.cli._called_with_wrong_args",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.cli.find_app_by_string",
+      "to_qn": "src.flask.cli._called_with_wrong_args",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.cli.locate_app",
+      "to_qn": "src.flask.cli.find_best_app",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.cli.locate_app",
+      "to_qn": "src.flask.cli.find_app_by_string",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.cli.ScriptInfo.__init__",
+      "to_qn": "src.flask.helpers.get_load_dotenv",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.cli.ScriptInfo.load_app",
+      "to_qn": "src.flask.helpers.get_debug_flag",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.cli.ScriptInfo.load_app",
+      "to_qn": "src.flask.cli.prepare_import",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.cli.ScriptInfo.load_app",
+      "to_qn": "src.flask.cli.locate_app",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.cli.AppGroup.command.decorator",
+      "to_qn": "src.flask.cli.with_appcontext",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.cli._env_file_callback",
+      "to_qn": "src.flask.cli.load_dotenv",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.cli.FlaskGroup.get_command",
+      "to_qn": "src.flask.cli.FlaskGroup._load_plugin_commands",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.cli.FlaskGroup.get_command",
+      "to_qn": "src.flask.globals.current_app._get_current_object",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.cli.FlaskGroup.list_commands",
+      "to_qn": "src.flask.cli.FlaskGroup._load_plugin_commands",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.cli.FlaskGroup.make_context",
+      "to_qn": "src.flask.cli.ScriptInfo.__init__",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.cli.run_command",
+      "to_qn": "src.flask.cli.show_server_banner",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.cli.run_command",
+      "to_qn": "src.flask.helpers.get_debug_flag",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.cli.shell_command",
+      "to_qn": "src.flask.globals.current_app.make_shell_context",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.flask.cli.routes_command",
+      "to_qn": "src.flask.globals.current_app.url_map.iter_rules",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    }
+  ]
+}

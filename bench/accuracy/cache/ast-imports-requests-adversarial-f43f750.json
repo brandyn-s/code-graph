@@ -1,0 +1,445 @@
+{
+  "schema_version": 1,
+  "edges": [
+    {
+      "from_qn": "src.requests.adapters",
+      "to_qn": "src.requests.auth",
+      "type": "IMPORTS",
+      "file": "src\\requests\\adapters.py",
+      "line": 33,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.requests.adapters",
+      "to_qn": "src.requests.compat",
+      "type": "IMPORTS",
+      "file": "src\\requests\\adapters.py",
+      "line": 34,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.requests.adapters",
+      "to_qn": "src.requests.cookies",
+      "type": "IMPORTS",
+      "file": "src\\requests\\adapters.py",
+      "line": 35,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.requests.adapters",
+      "to_qn": "src.requests.exceptions",
+      "type": "IMPORTS",
+      "file": "src\\requests\\adapters.py",
+      "line": 36,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.requests.adapters",
+      "to_qn": "src.requests.models",
+      "type": "IMPORTS",
+      "file": "src\\requests\\adapters.py",
+      "line": 48,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.requests.adapters",
+      "to_qn": "src.requests.structures",
+      "type": "IMPORTS",
+      "file": "src\\requests\\adapters.py",
+      "line": 49,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.requests.adapters",
+      "to_qn": "src.requests.utils",
+      "type": "IMPORTS",
+      "file": "src\\requests\\adapters.py",
+      "line": 50,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.requests.api",
+      "to_qn": "src.requests",
+      "type": "IMPORTS",
+      "file": "src\\requests\\api.py",
+      "line": 11,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.requests.auth",
+      "to_qn": "src.requests._internal_utils",
+      "type": "IMPORTS",
+      "file": "src\\requests\\auth.py",
+      "line": 16,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.requests.auth",
+      "to_qn": "src.requests.compat",
+      "type": "IMPORTS",
+      "file": "src\\requests\\auth.py",
+      "line": 17,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.requests.auth",
+      "to_qn": "src.requests.cookies",
+      "type": "IMPORTS",
+      "file": "src\\requests\\auth.py",
+      "line": 18,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.requests.auth",
+      "to_qn": "src.requests.utils",
+      "type": "IMPORTS",
+      "file": "src\\requests\\auth.py",
+      "line": 19,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.requests.cookies",
+      "to_qn": "src.requests._internal_utils",
+      "type": "IMPORTS",
+      "file": "src\\requests\\cookies.py",
+      "line": 14,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.requests.cookies",
+      "to_qn": "src.requests.compat",
+      "type": "IMPORTS",
+      "file": "src\\requests\\cookies.py",
+      "line": 15,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.requests.exceptions",
+      "to_qn": "src.requests.compat",
+      "type": "IMPORTS",
+      "file": "src\\requests\\exceptions.py",
+      "line": 10,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.requests.help",
+      "to_qn": "src.requests",
+      "type": "IMPORTS",
+      "file": "src\\requests\\help.py",
+      "line": 11,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.requests.models",
+      "to_qn": "src.requests._internal_utils",
+      "type": "IMPORTS",
+      "file": "src\\requests\\models.py",
+      "line": 27,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.requests.models",
+      "to_qn": "src.requests.auth",
+      "type": "IMPORTS",
+      "file": "src\\requests\\models.py",
+      "line": 28,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.requests.models",
+      "to_qn": "src.requests.compat",
+      "type": "IMPORTS",
+      "file": "src\\requests\\models.py",
+      "line": 29,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.requests.models",
+      "to_qn": "src.requests.cookies",
+      "type": "IMPORTS",
+      "file": "src\\requests\\models.py",
+      "line": 42,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.requests.models",
+      "to_qn": "src.requests.exceptions",
+      "type": "IMPORTS",
+      "file": "src\\requests\\models.py",
+      "line": 43,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.requests.models",
+      "to_qn": "src.requests.hooks",
+      "type": "IMPORTS",
+      "file": "src\\requests\\models.py",
+      "line": 55,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.requests.models",
+      "to_qn": "src.requests.status_codes",
+      "type": "IMPORTS",
+      "file": "src\\requests\\models.py",
+      "line": 56,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.requests.models",
+      "to_qn": "src.requests.structures",
+      "type": "IMPORTS",
+      "file": "src\\requests\\models.py",
+      "line": 57,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.requests.models",
+      "to_qn": "src.requests.utils",
+      "type": "IMPORTS",
+      "file": "src\\requests\\models.py",
+      "line": 58,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.requests.packages",
+      "to_qn": "src.requests.compat",
+      "type": "IMPORTS",
+      "file": "src\\requests\\packages.py",
+      "line": 3,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.requests.sessions",
+      "to_qn": "src.requests._internal_utils",
+      "type": "IMPORTS",
+      "file": "src\\requests\\sessions.py",
+      "line": 15,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.requests.sessions",
+      "to_qn": "src.requests.adapters",
+      "type": "IMPORTS",
+      "file": "src\\requests\\sessions.py",
+      "line": 16,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.requests.sessions",
+      "to_qn": "src.requests.auth",
+      "type": "IMPORTS",
+      "file": "src\\requests\\sessions.py",
+      "line": 17,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.requests.sessions",
+      "to_qn": "src.requests.compat",
+      "type": "IMPORTS",
+      "file": "src\\requests\\sessions.py",
+      "line": 18,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.requests.sessions",
+      "to_qn": "src.requests.cookies",
+      "type": "IMPORTS",
+      "file": "src\\requests\\sessions.py",
+      "line": 19,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.requests.sessions",
+      "to_qn": "src.requests.exceptions",
+      "type": "IMPORTS",
+      "file": "src\\requests\\sessions.py",
+      "line": 25,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.requests.sessions",
+      "to_qn": "src.requests.hooks",
+      "type": "IMPORTS",
+      "file": "src\\requests\\sessions.py",
+      "line": 31,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.requests.sessions",
+      "to_qn": "src.requests.models",
+      "type": "IMPORTS",
+      "file": "src\\requests\\sessions.py",
+      "line": 34,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.requests.sessions",
+      "to_qn": "src.requests.status_codes",
+      "type": "IMPORTS",
+      "file": "src\\requests\\sessions.py",
+      "line": 40,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.requests.sessions",
+      "to_qn": "src.requests.structures",
+      "type": "IMPORTS",
+      "file": "src\\requests\\sessions.py",
+      "line": 41,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.requests.sessions",
+      "to_qn": "src.requests.utils",
+      "type": "IMPORTS",
+      "file": "src\\requests\\sessions.py",
+      "line": 42,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.requests.status_codes",
+      "to_qn": "src.requests.structures",
+      "type": "IMPORTS",
+      "file": "src\\requests\\status_codes.py",
+      "line": 21,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.requests.structures",
+      "to_qn": "src.requests.compat",
+      "type": "IMPORTS",
+      "file": "src\\requests\\structures.py",
+      "line": 10,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.requests.utils",
+      "to_qn": "src.requests",
+      "type": "IMPORTS",
+      "file": "src\\requests\\utils.py",
+      "line": 24,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.requests.utils",
+      "to_qn": "src.requests.__version__",
+      "type": "IMPORTS",
+      "file": "src\\requests\\utils.py",
+      "line": 25,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.requests.utils",
+      "to_qn": "src.requests._internal_utils",
+      "type": "IMPORTS",
+      "file": "src\\requests\\utils.py",
+      "line": 28,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.requests.utils",
+      "to_qn": "src.requests.compat",
+      "type": "IMPORTS",
+      "file": "src\\requests\\utils.py",
+      "line": 34,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.requests.utils",
+      "to_qn": "src.requests.cookies",
+      "type": "IMPORTS",
+      "file": "src\\requests\\utils.py",
+      "line": 51,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.requests.utils",
+      "to_qn": "src.requests.exceptions",
+      "type": "IMPORTS",
+      "file": "src\\requests\\utils.py",
+      "line": 52,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.requests.utils",
+      "to_qn": "src.requests.structures",
+      "type": "IMPORTS",
+      "file": "src\\requests\\utils.py",
+      "line": 58,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.requests._internal_utils",
+      "to_qn": "src.requests.compat",
+      "type": "IMPORTS",
+      "file": "src\\requests\\_internal_utils.py",
+      "line": 11,
+      "source": "ast"
+    },
+    {
+      "from_qn": "tests.test_lowlevel",
+      "to_qn": "tests.testserver.server",
+      "type": "IMPORTS",
+      "file": "tests\\test_lowlevel.py",
+      "line": 7,
+      "source": "ast"
+    },
+    {
+      "from_qn": "tests.test_lowlevel",
+      "to_qn": "tests.utils",
+      "type": "IMPORTS",
+      "file": "tests\\test_lowlevel.py",
+      "line": 9,
+      "source": "ast"
+    },
+    {
+      "from_qn": "tests.test_requests",
+      "to_qn": "tests",
+      "type": "IMPORTS",
+      "file": "tests\\test_requests.py",
+      "line": 57,
+      "source": "ast"
+    },
+    {
+      "from_qn": "tests.test_requests",
+      "to_qn": "tests.compat",
+      "type": "IMPORTS",
+      "file": "tests\\test_requests.py",
+      "line": 58,
+      "source": "ast"
+    },
+    {
+      "from_qn": "tests.test_requests",
+      "to_qn": "tests.testserver.server",
+      "type": "IMPORTS",
+      "file": "tests\\test_requests.py",
+      "line": 59,
+      "source": "ast"
+    },
+    {
+      "from_qn": "tests.test_requests",
+      "to_qn": "tests.utils",
+      "type": "IMPORTS",
+      "file": "tests\\test_requests.py",
+      "line": 60,
+      "source": "ast"
+    },
+    {
+      "from_qn": "tests.test_testserver",
+      "to_qn": "tests.testserver.server",
+      "type": "IMPORTS",
+      "file": "tests\\test_testserver.py",
+      "line": 8,
+      "source": "ast"
+    },
+    {
+      "from_qn": "tests.test_utils",
+      "to_qn": "tests.compat",
+      "type": "IMPORTS",
+      "file": "tests\\test_utils.py",
+      "line": 47,
+      "source": "ast"
+    }
+  ]
+}

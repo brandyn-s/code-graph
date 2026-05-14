@@ -1,0 +1,14 @@
+{
+  "fixture": "flask-adversarial",
+  "sha": "2ac89889f4cc330eabd50f295dcef02828522c69",
+  "elapsed_seconds": 3.6,
+  "services_run": [
+    "airlock",
+    "claude-proxy",
+    "crowdstrike",
+    "security-remix",
+    "slack-connect"
+  ],
+  "errors": [],
+  "edge_count": 93
+}

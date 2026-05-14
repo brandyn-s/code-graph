@@ -1,0 +1,14 @@
+{
+  "fixture": "requests-adversarial",
+  "sha": "f43f750ee10addbaa13901c1017631b4d70fd6e3",
+  "elapsed_seconds": 31.0,
+  "services_run": [
+    "airlock",
+    "claude-proxy",
+    "crowdstrike",
+    "security-remix",
+    "slack-connect"
+  ],
+  "errors": [],
+  "edge_count": 194
+}

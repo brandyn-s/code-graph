@@ -1,0 +1,781 @@
+{
+  "schema_version": 1,
+  "edges": [
+    {
+      "from_qn": "examples.tutorial.flaskr.auth",
+      "to_qn": "examples.tutorial.flaskr.db",
+      "type": "IMPORTS",
+      "file": "examples\\tutorial\\flaskr\\auth.py",
+      "line": 14,
+      "source": "ast"
+    },
+    {
+      "from_qn": "examples.tutorial.flaskr.blog",
+      "to_qn": "examples.tutorial.flaskr.auth",
+      "type": "IMPORTS",
+      "file": "examples\\tutorial\\flaskr\\blog.py",
+      "line": 10,
+      "source": "ast"
+    },
+    {
+      "from_qn": "examples.tutorial.flaskr.blog",
+      "to_qn": "examples.tutorial.flaskr.db",
+      "type": "IMPORTS",
+      "file": "examples\\tutorial\\flaskr\\blog.py",
+      "line": 11,
+      "source": "ast"
+    },
+    {
+      "from_qn": "examples.javascript.js_example.views",
+      "to_qn": "examples.javascript.js_example",
+      "type": "IMPORTS",
+      "file": "examples\\javascript\\js_example\\views.py",
+      "line": 5,
+      "source": "ast"
+    },
+    {
+      "from_qn": "examples.celery.src.task_app.views",
+      "to_qn": "examples.celery.src.task_app",
+      "type": "IMPORTS",
+      "file": "examples\\celery\\src\\task_app\\views.py",
+      "line": 5,
+      "source": "ast"
+    },
+    {
+      "from_qn": "examples.celery.src.task_app.views",
+      "to_qn": "examples.celery.src.task_app.tasks",
+      "type": "IMPORTS",
+      "file": "examples\\celery\\src\\task_app\\views.py",
+      "line": 5,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.app",
+      "to_qn": "src.flask",
+      "type": "IMPORTS",
+      "file": "src\\flask\\app.py",
+      "line": 31,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.app",
+      "to_qn": "src.flask.cli",
+      "type": "IMPORTS",
+      "file": "src\\flask\\app.py",
+      "line": 31,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.app",
+      "to_qn": "src.flask.typing",
+      "type": "IMPORTS",
+      "file": "src\\flask\\app.py",
+      "line": 32,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.app",
+      "to_qn": "src.flask.ctx",
+      "type": "IMPORTS",
+      "file": "src\\flask\\app.py",
+      "line": 33,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.app",
+      "to_qn": "src.flask.globals",
+      "type": "IMPORTS",
+      "file": "src\\flask\\app.py",
+      "line": 34,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.app",
+      "to_qn": "src.flask.helpers",
+      "type": "IMPORTS",
+      "file": "src\\flask\\app.py",
+      "line": 39,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.app",
+      "to_qn": "src.flask.sansio.app",
+      "type": "IMPORTS",
+      "file": "src\\flask\\app.py",
+      "line": 44,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.app",
+      "to_qn": "src.flask.sessions",
+      "type": "IMPORTS",
+      "file": "src\\flask\\app.py",
+      "line": 45,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.app",
+      "to_qn": "src.flask.signals",
+      "type": "IMPORTS",
+      "file": "src\\flask\\app.py",
+      "line": 47,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.app",
+      "to_qn": "src.flask.templating",
+      "type": "IMPORTS",
+      "file": "src\\flask\\app.py",
+      "line": 52,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.app",
+      "to_qn": "src.flask.wrappers",
+      "type": "IMPORTS",
+      "file": "src\\flask\\app.py",
+      "line": 53,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.app",
+      "to_qn": "src.flask.testing",
+      "type": "IMPORTS",
+      "file": "src\\flask\\app.py",
+      "line": 60,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.app",
+      "to_qn": "src.flask.debughelpers",
+      "type": "IMPORTS",
+      "file": "src\\flask\\app.py",
+      "line": 586,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.blueprints",
+      "to_qn": "src.flask.cli",
+      "type": "IMPORTS",
+      "file": "src\\flask\\blueprints.py",
+      "line": 7,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.blueprints",
+      "to_qn": "src.flask.globals",
+      "type": "IMPORTS",
+      "file": "src\\flask\\blueprints.py",
+      "line": 8,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.blueprints",
+      "to_qn": "src.flask.helpers",
+      "type": "IMPORTS",
+      "file": "src\\flask\\blueprints.py",
+      "line": 9,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.blueprints",
+      "to_qn": "src.flask.sansio.blueprints",
+      "type": "IMPORTS",
+      "file": "src\\flask\\blueprints.py",
+      "line": 10,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.blueprints",
+      "to_qn": "src.flask.sansio.scaffold",
+      "type": "IMPORTS",
+      "file": "src\\flask\\blueprints.py",
+      "line": 12,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.blueprints",
+      "to_qn": "src.flask.wrappers",
+      "type": "IMPORTS",
+      "file": "src\\flask\\blueprints.py",
+      "line": 15,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.cli",
+      "to_qn": "src.flask.globals",
+      "type": "IMPORTS",
+      "file": "src\\flask\\cli.py",
+      "line": 23,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.cli",
+      "to_qn": "src.flask.helpers",
+      "type": "IMPORTS",
+      "file": "src\\flask\\cli.py",
+      "line": 24,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.cli",
+      "to_qn": "src.flask.app",
+      "type": "IMPORTS",
+      "file": "src\\flask\\cli.py",
+      "line": 34,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.cli",
+      "to_qn": "src.flask",
+      "type": "IMPORTS",
+      "file": "src\\flask\\cli.py",
+      "line": 45,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.config",
+      "to_qn": "src.flask.sansio.app",
+      "type": "IMPORTS",
+      "file": "src\\flask\\config.py",
+      "line": 14,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.ctx",
+      "to_qn": "src.flask",
+      "type": "IMPORTS",
+      "file": "src\\flask\\ctx.py",
+      "line": 11,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.ctx",
+      "to_qn": "src.flask.typing",
+      "type": "IMPORTS",
+      "file": "src\\flask\\ctx.py",
+      "line": 11,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.ctx",
+      "to_qn": "src.flask.globals",
+      "type": "IMPORTS",
+      "file": "src\\flask\\ctx.py",
+      "line": 12,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.ctx",
+      "to_qn": "src.flask.helpers",
+      "type": "IMPORTS",
+      "file": "src\\flask\\ctx.py",
+      "line": 13,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.ctx",
+      "to_qn": "src.flask.signals",
+      "type": "IMPORTS",
+      "file": "src\\flask\\ctx.py",
+      "line": 14,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.ctx",
+      "to_qn": "src.flask.app",
+      "type": "IMPORTS",
+      "file": "src\\flask\\ctx.py",
+      "line": 21,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.ctx",
+      "to_qn": "src.flask.sessions",
+      "type": "IMPORTS",
+      "file": "src\\flask\\ctx.py",
+      "line": 22,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.ctx",
+      "to_qn": "src.flask.wrappers",
+      "type": "IMPORTS",
+      "file": "src\\flask\\ctx.py",
+      "line": 23,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.debughelpers",
+      "to_qn": "src.flask.blueprints",
+      "type": "IMPORTS",
+      "file": "src\\flask\\debughelpers.py",
+      "line": 8,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.debughelpers",
+      "to_qn": "src.flask.globals",
+      "type": "IMPORTS",
+      "file": "src\\flask\\debughelpers.py",
+      "line": 9,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.debughelpers",
+      "to_qn": "src.flask.sansio.app",
+      "type": "IMPORTS",
+      "file": "src\\flask\\debughelpers.py",
+      "line": 10,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.debughelpers",
+      "to_qn": "src.flask.sansio.scaffold",
+      "type": "IMPORTS",
+      "file": "src\\flask\\debughelpers.py",
+      "line": 13,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.debughelpers",
+      "to_qn": "src.flask.wrappers",
+      "type": "IMPORTS",
+      "file": "src\\flask\\debughelpers.py",
+      "line": 14,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.globals",
+      "to_qn": "src.flask.app",
+      "type": "IMPORTS",
+      "file": "src\\flask\\globals.py",
+      "line": 9,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.globals",
+      "to_qn": "src.flask.ctx",
+      "type": "IMPORTS",
+      "file": "src\\flask\\globals.py",
+      "line": 10,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.globals",
+      "to_qn": "src.flask.sessions",
+      "type": "IMPORTS",
+      "file": "src\\flask\\globals.py",
+      "line": 12,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.globals",
+      "to_qn": "src.flask.wrappers",
+      "type": "IMPORTS",
+      "file": "src\\flask\\globals.py",
+      "line": 13,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.helpers",
+      "to_qn": "src.flask.globals",
+      "type": "IMPORTS",
+      "file": "src\\flask\\helpers.py",
+      "line": 17,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.helpers",
+      "to_qn": "src.flask.signals",
+      "type": "IMPORTS",
+      "file": "src\\flask\\helpers.py",
+      "line": 22,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.helpers",
+      "to_qn": "src.flask.wrappers",
+      "type": "IMPORTS",
+      "file": "src\\flask\\helpers.py",
+      "line": 25,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.logging",
+      "to_qn": "src.flask.globals",
+      "type": "IMPORTS",
+      "file": "src\\flask\\logging.py",
+      "line": 9,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.logging",
+      "to_qn": "src.flask.sansio.app",
+      "type": "IMPORTS",
+      "file": "src\\flask\\logging.py",
+      "line": 12,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.sessions",
+      "to_qn": "src.flask.json.tag",
+      "type": "IMPORTS",
+      "file": "src\\flask\\sessions.py",
+      "line": 14,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.sessions",
+      "to_qn": "src.flask.app",
+      "type": "IMPORTS",
+      "file": "src\\flask\\sessions.py",
+      "line": 19,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.sessions",
+      "to_qn": "src.flask.wrappers",
+      "type": "IMPORTS",
+      "file": "src\\flask\\sessions.py",
+      "line": 20,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.templating",
+      "to_qn": "src.flask.ctx",
+      "type": "IMPORTS",
+      "file": "src\\flask\\templating.py",
+      "line": 10,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.templating",
+      "to_qn": "src.flask.globals",
+      "type": "IMPORTS",
+      "file": "src\\flask\\templating.py",
+      "line": 11,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.templating",
+      "to_qn": "src.flask.helpers",
+      "type": "IMPORTS",
+      "file": "src\\flask\\templating.py",
+      "line": 12,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.templating",
+      "to_qn": "src.flask.signals",
+      "type": "IMPORTS",
+      "file": "src\\flask\\templating.py",
+      "line": 13,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.templating",
+      "to_qn": "src.flask.sansio.app",
+      "type": "IMPORTS",
+      "file": "src\\flask\\templating.py",
+      "line": 17,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.templating",
+      "to_qn": "src.flask.sansio.scaffold",
+      "type": "IMPORTS",
+      "file": "src\\flask\\templating.py",
+      "line": 18,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.templating",
+      "to_qn": "src.flask.debughelpers",
+      "type": "IMPORTS",
+      "file": "src\\flask\\templating.py",
+      "line": 80,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.testing",
+      "to_qn": "src.flask.cli",
+      "type": "IMPORTS",
+      "file": "src\\flask\\testing.py",
+      "line": 17,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.testing",
+      "to_qn": "src.flask.sessions",
+      "type": "IMPORTS",
+      "file": "src\\flask\\testing.py",
+      "line": 18,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.testing",
+      "to_qn": "src.flask.app",
+      "type": "IMPORTS",
+      "file": "src\\flask\\testing.py",
+      "line": 24,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.views",
+      "to_qn": "src.flask",
+      "type": "IMPORTS",
+      "file": "src\\flask\\views.py",
+      "line": 5,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.views",
+      "to_qn": "src.flask.typing",
+      "type": "IMPORTS",
+      "file": "src\\flask\\views.py",
+      "line": 5,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.views",
+      "to_qn": "src.flask.globals",
+      "type": "IMPORTS",
+      "file": "src\\flask\\views.py",
+      "line": 6,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.wrappers",
+      "to_qn": "src.flask",
+      "type": "IMPORTS",
+      "file": "src\\flask\\wrappers.py",
+      "line": 10,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.wrappers",
+      "to_qn": "src.flask.json",
+      "type": "IMPORTS",
+      "file": "src\\flask\\wrappers.py",
+      "line": 10,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.wrappers",
+      "to_qn": "src.flask.globals",
+      "type": "IMPORTS",
+      "file": "src\\flask\\wrappers.py",
+      "line": 11,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.wrappers",
+      "to_qn": "src.flask.helpers",
+      "type": "IMPORTS",
+      "file": "src\\flask\\wrappers.py",
+      "line": 12,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.wrappers",
+      "to_qn": "src.flask.debughelpers",
+      "type": "IMPORTS",
+      "file": "src\\flask\\wrappers.py",
+      "line": 208,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.__main__",
+      "to_qn": "src.flask.cli",
+      "type": "IMPORTS",
+      "file": "src\\flask\\__main__.py",
+      "line": 1,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.json.provider",
+      "to_qn": "src.flask.sansio.app",
+      "type": "IMPORTS",
+      "file": "src\\flask\\json\\provider.py",
+      "line": 16,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.json.tag",
+      "to_qn": "src.flask.json",
+      "type": "IMPORTS",
+      "file": "src\\flask\\json\\tag.py",
+      "line": 56,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.json",
+      "to_qn": "src.flask.provider",
+      "type": "IMPORTS",
+      "file": "src\\flask\\json\\__init__.py",
+      "line": 7,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.sansio.app",
+      "to_qn": "src.flask",
+      "type": "IMPORTS",
+      "file": "src\\flask\\sansio\\app.py",
+      "line": 20,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.sansio.app",
+      "to_qn": "src.flask.typing",
+      "type": "IMPORTS",
+      "file": "src\\flask\\sansio\\app.py",
+      "line": 20,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.sansio.app",
+      "to_qn": "src.flask.config",
+      "type": "IMPORTS",
+      "file": "src\\flask\\sansio\\app.py",
+      "line": 21,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.sansio.app",
+      "to_qn": "src.flask.ctx",
+      "type": "IMPORTS",
+      "file": "src\\flask\\sansio\\app.py",
+      "line": 23,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.sansio.app",
+      "to_qn": "src.flask.helpers",
+      "type": "IMPORTS",
+      "file": "src\\flask\\sansio\\app.py",
+      "line": 24,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.sansio.app",
+      "to_qn": "src.flask.json.provider",
+      "type": "IMPORTS",
+      "file": "src\\flask\\sansio\\app.py",
+      "line": 26,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.sansio.app",
+      "to_qn": "src.flask.logging",
+      "type": "IMPORTS",
+      "file": "src\\flask\\sansio\\app.py",
+      "line": 28,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.sansio.app",
+      "to_qn": "src.flask.templating",
+      "type": "IMPORTS",
+      "file": "src\\flask\\sansio\\app.py",
+      "line": 29,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.sansio.app",
+      "to_qn": "src.flask.sansio.scaffold",
+      "type": "IMPORTS",
+      "file": "src\\flask\\sansio\\app.py",
+      "line": 31,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.sansio.app",
+      "to_qn": "src.flask.testing",
+      "type": "IMPORTS",
+      "file": "src\\flask\\sansio\\app.py",
+      "line": 39,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.sansio.app",
+      "to_qn": "src.flask.sansio.blueprints",
+      "type": "IMPORTS",
+      "file": "src\\flask\\sansio\\app.py",
+      "line": 41,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.sansio.blueprints",
+      "to_qn": "src.flask",
+      "type": "IMPORTS",
+      "file": "src\\flask\\sansio\\blueprints.py",
+      "line": 8,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.sansio.blueprints",
+      "to_qn": "src.flask.typing",
+      "type": "IMPORTS",
+      "file": "src\\flask\\sansio\\blueprints.py",
+      "line": 8,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.sansio.blueprints",
+      "to_qn": "src.flask.sansio.scaffold",
+      "type": "IMPORTS",
+      "file": "src\\flask\\sansio\\blueprints.py",
+      "line": 9,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.sansio.blueprints",
+      "to_qn": "src.flask.sansio.app",
+      "type": "IMPORTS",
+      "file": "src\\flask\\sansio\\blueprints.py",
+      "line": 15,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.sansio.scaffold",
+      "to_qn": "src.flask",
+      "type": "IMPORTS",
+      "file": "src\\flask\\sansio\\scaffold.py",
+      "line": 17,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.sansio.scaffold",
+      "to_qn": "src.flask.typing",
+      "type": "IMPORTS",
+      "file": "src\\flask\\sansio\\scaffold.py",
+      "line": 17,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.sansio.scaffold",
+      "to_qn": "src.flask.helpers",
+      "type": "IMPORTS",
+      "file": "src\\flask\\sansio\\scaffold.py",
+      "line": 18,
+      "source": "ast"
+    },
+    {
+      "from_qn": "src.flask.sansio.scaffold",
+      "to_qn": "src.flask.templating",
+      "type": "IMPORTS",
+      "file": "src\\flask\\sansio\\scaffold.py",
+      "line": 19,
+      "source": "ast"
+    },
+    {
+      "from_qn": "tests.test_json",
+      "to_qn": "src.flask.json",
+      "type": "IMPORTS",
+      "file": "tests\\test_json.py",
+      "line": 10,
+      "source": "ast"
+    }
+  ]
+}

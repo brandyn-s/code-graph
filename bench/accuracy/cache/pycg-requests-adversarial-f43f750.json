@@ -1,0 +1,1557 @@
+{
+  "schema_version": 1,
+  "edges": [
+    {
+      "from_qn": "src.requests.api.request",
+      "to_qn": "src.requests.sessions.Session",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.api.get",
+      "to_qn": "src.requests.api.request",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.api.options",
+      "to_qn": "src.requests.api.request",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.api.head",
+      "to_qn": "src.requests.api.request",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.api.post",
+      "to_qn": "src.requests.api.request",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.api.put",
+      "to_qn": "src.requests.api.request",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.api.patch",
+      "to_qn": "src.requests.api.request",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.api.delete",
+      "to_qn": "src.requests.api.request",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.merge_setting",
+      "to_qn": "src.requests.structures.CaseInsensitiveDict",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.merge_setting",
+      "to_qn": "src.requests.utils.to_key_val_list",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.merge_hooks",
+      "to_qn": "src.requests.models.Request.hooks.get",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.merge_hooks",
+      "to_qn": "src.requests.hooks.default_hooks.get",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.merge_hooks",
+      "to_qn": "src.requests.sessions.merge_setting",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.SessionRedirectMixin.get_redirect_target",
+      "to_qn": "src.requests._internal_utils.to_native_string",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.SessionRedirectMixin.should_strip_auth",
+      "to_qn": "src.requests.compat.urlparse",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.SessionRedirectMixin.should_strip_auth",
+      "to_qn": "src.requests.utils.DEFAULT_PORTS.get",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.SessionRedirectMixin.resolve_redirects",
+      "to_qn": "src.requests.hooks.dispatch_hook.close",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.SessionRedirectMixin.resolve_redirects",
+      "to_qn": "src.requests.cookies.extract_cookies_to_jar",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.SessionRedirectMixin.resolve_redirects",
+      "to_qn": "src.requests.utils.requote_uri.startswith",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.SessionRedirectMixin.resolve_redirects",
+      "to_qn": "src.requests.models.PreparedRequest.copy.prepare_cookies",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.SessionRedirectMixin.resolve_redirects",
+      "to_qn": "src.requests.exceptions.TooManyRedirects",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.SessionRedirectMixin.resolve_redirects",
+      "to_qn": "src.requests.sessions.Session.send",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.SessionRedirectMixin.resolve_redirects",
+      "to_qn": "src.requests.compat.urljoin",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.SessionRedirectMixin.resolve_redirects",
+      "to_qn": "src.requests.sessions.SessionRedirectMixin.rebuild_proxies",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.SessionRedirectMixin.resolve_redirects",
+      "to_qn": "src.requests.utils.requote_uri",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.SessionRedirectMixin.resolve_redirects",
+      "to_qn": "src.requests.utils.rewind_body",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.SessionRedirectMixin.resolve_redirects",
+      "to_qn": "src.requests.hooks.dispatch_hook.raw.read",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.SessionRedirectMixin.resolve_redirects",
+      "to_qn": "src.requests.sessions.SessionRedirectMixin.get_redirect_target",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.SessionRedirectMixin.resolve_redirects",
+      "to_qn": "src.requests.sessions.SessionRedirectMixin.rebuild_method",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.SessionRedirectMixin.resolve_redirects",
+      "to_qn": "src.requests.cookies.merge_cookies",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.SessionRedirectMixin.resolve_redirects",
+      "to_qn": "src.requests.compat.urlparse._replace",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.SessionRedirectMixin.resolve_redirects",
+      "to_qn": "src.requests.sessions.SessionRedirectMixin.rebuild_auth",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.SessionRedirectMixin.resolve_redirects",
+      "to_qn": "src.requests.compat.urlparse.geturl",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.SessionRedirectMixin.resolve_redirects",
+      "to_qn": "src.requests.compat.urlparse.geturl.startswith",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.SessionRedirectMixin.resolve_redirects",
+      "to_qn": "src.requests.models.PreparedRequest.copy.headers.pop",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.SessionRedirectMixin.resolve_redirects",
+      "to_qn": "src.requests.compat.urljoin.startswith",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.SessionRedirectMixin.resolve_redirects",
+      "to_qn": "src.requests._internal_utils.to_native_string.startswith",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.SessionRedirectMixin.resolve_redirects",
+      "to_qn": "src.requests.models.PreparedRequest.copy",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.SessionRedirectMixin.resolve_redirects",
+      "to_qn": "src.requests.compat.urlparse._replace.geturl.startswith",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.SessionRedirectMixin.resolve_redirects",
+      "to_qn": "src.requests.compat.urlparse",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.SessionRedirectMixin.resolve_redirects",
+      "to_qn": "src.requests._internal_utils.to_native_string",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.SessionRedirectMixin.resolve_redirects",
+      "to_qn": "src.requests.compat.urlparse._replace.geturl",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.SessionRedirectMixin.rebuild_proxies",
+      "to_qn": "src.requests.compat.urlparse.scheme.startswith",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.SessionRedirectMixin.rebuild_proxies",
+      "to_qn": "src.requests.auth._basic_auth_str",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.SessionRedirectMixin.rebuild_proxies",
+      "to_qn": "src.requests.utils.resolve_proxies",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.SessionRedirectMixin.rebuild_proxies",
+      "to_qn": "src.requests.compat.urlparse",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.SessionRedirectMixin.rebuild_proxies",
+      "to_qn": "src.requests.utils.get_auth_from_url",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.SessionRedirectMixin.rebuild_auth",
+      "to_qn": "src.requests.sessions.SessionRedirectMixin.should_strip_auth",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.SessionRedirectMixin.rebuild_auth",
+      "to_qn": "src.requests.models.PreparedRequest.copy.prepare_auth",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.SessionRedirectMixin.rebuild_auth",
+      "to_qn": "src.requests.utils.get_netrc_auth",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.Session.send",
+      "to_qn": "src.requests.cookies.extract_cookies_to_jar",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.Session.send",
+      "to_qn": "src.requests.hooks.dispatch_hook",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.Session.send",
+      "to_qn": "src.requests.utils.resolve_proxies",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.Session.send",
+      "to_qn": "src.requests.sessions.Session.get_adapter",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.Session.send",
+      "to_qn": "src.requests.sessions.SessionRedirectMixin.resolve_redirects",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.Session.__init__",
+      "to_qn": "src.requests.sessions.Session.mount",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.Session.__init__",
+      "to_qn": "src.requests.cookies.cookiejar_from_dict",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.Session.__init__",
+      "to_qn": "src.requests.adapters.HTTPAdapter",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.Session.__init__",
+      "to_qn": "src.requests.hooks.default_hooks",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.Session.__init__",
+      "to_qn": "src.requests.utils.default_headers",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.Session.__exit__",
+      "to_qn": "src.requests.sessions.Session.close",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.Session.prepare_request",
+      "to_qn": "src.requests.models.PreparedRequest",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.Session.prepare_request",
+      "to_qn": "src.requests.models.Request.method.upper",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.Session.prepare_request",
+      "to_qn": "src.requests.models.PreparedRequest.prepare",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.Session.prepare_request",
+      "to_qn": "src.requests.sessions.merge_hooks",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.Session.prepare_request",
+      "to_qn": "src.requests.utils.get_netrc_auth",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.Session.prepare_request",
+      "to_qn": "src.requests.cookies.cookiejar_from_dict",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.Session.prepare_request",
+      "to_qn": "src.requests.sessions.merge_setting",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.Session.prepare_request",
+      "to_qn": "src.requests.cookies.merge_cookies",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.Session.prepare_request",
+      "to_qn": "src.requests.cookies.RequestsCookieJar",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.Session.request",
+      "to_qn": "src.requests.sessions.Session.send",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.Session.request",
+      "to_qn": "src.requests.models.Request",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.Session.request",
+      "to_qn": "src.requests.sessions.Session.prepare_request",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.Session.request",
+      "to_qn": "src.requests.sessions.Session.merge_environment_settings",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.Session.merge_environment_settings",
+      "to_qn": "src.requests.models.Request.headers.get",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.Session.merge_environment_settings",
+      "to_qn": "src.requests.utils.get_environ_proxies",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.Session.merge_environment_settings",
+      "to_qn": "src.requests.utils.default_headers.setdefault",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.Session.merge_environment_settings",
+      "to_qn": "src.requests.hooks.default_hooks.setdefault",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.Session.merge_environment_settings",
+      "to_qn": "src.requests.utils.default_headers.get",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.Session.merge_environment_settings",
+      "to_qn": "src.requests.utils.get_environ_proxies.items",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.Session.merge_environment_settings",
+      "to_qn": "src.requests.models.Request.hooks.get",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.Session.merge_environment_settings",
+      "to_qn": "src.requests.models.Request.auth.setdefault",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.Session.merge_environment_settings",
+      "to_qn": "src.requests.models.Request.auth.get",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.Session.merge_environment_settings",
+      "to_qn": "src.requests.models.Request.params.setdefault",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.Session.merge_environment_settings",
+      "to_qn": "src.requests.hooks.default_hooks.get",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.Session.merge_environment_settings",
+      "to_qn": "src.requests.sessions.merge_setting",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.Session.merge_environment_settings",
+      "to_qn": "src.requests.models.Request.params.get",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.Session.merge_environment_settings",
+      "to_qn": "src.requests.utils.get_netrc_auth.setdefault",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.Session.merge_environment_settings",
+      "to_qn": "src.requests.models.Request.headers.setdefault",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.Session.merge_environment_settings",
+      "to_qn": "src.requests.models.Request.hooks.setdefault",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.Session.get",
+      "to_qn": "src.requests.sessions.Session.request",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.Session.options",
+      "to_qn": "src.requests.sessions.Session.request",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.Session.head",
+      "to_qn": "src.requests.sessions.Session.request",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.Session.post",
+      "to_qn": "src.requests.sessions.Session.request",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.Session.put",
+      "to_qn": "src.requests.sessions.Session.request",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.Session.patch",
+      "to_qn": "src.requests.sessions.Session.request",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.Session.delete",
+      "to_qn": "src.requests.sessions.Session.request",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.Session.get_adapter",
+      "to_qn": "src.requests.exceptions.InvalidSchema",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.sessions.session",
+      "to_qn": "src.requests.sessions.Session.__init__",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.RequestEncodingMixin.path_url",
+      "to_qn": "src.requests.compat.urlsplit",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.RequestEncodingMixin._encode_params",
+      "to_qn": "src.requests.utils.to_key_val_list",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.RequestEncodingMixin._encode_params",
+      "to_qn": "src.requests.compat.urlencode",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.RequestEncodingMixin._encode_files",
+      "to_qn": "src.requests.utils.to_key_val_list",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.RequestEncodingMixin._encode_files",
+      "to_qn": "src.requests.utils.guess_filename",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.Request.__init__",
+      "to_qn": "src.requests.models.RequestHooksMixin.register_hook",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.Request.__init__",
+      "to_qn": "src.requests.hooks.default_hooks",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.Request.prepare",
+      "to_qn": "src.requests.models.PreparedRequest.prepare",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.Request.prepare",
+      "to_qn": "src.requests.models.PreparedRequest.__init__",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.PreparedRequest.__init__",
+      "to_qn": "src.requests.hooks.default_hooks",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.PreparedRequest.prepare",
+      "to_qn": "src.requests.models.PreparedRequest.prepare_method",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.PreparedRequest.prepare",
+      "to_qn": "src.requests.models.PreparedRequest.prepare_body",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.PreparedRequest.prepare",
+      "to_qn": "src.requests.models.PreparedRequest.prepare_cookies",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.PreparedRequest.prepare",
+      "to_qn": "src.requests.models.PreparedRequest.prepare_headers",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.PreparedRequest.prepare",
+      "to_qn": "src.requests.models.PreparedRequest.prepare_url",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.PreparedRequest.prepare",
+      "to_qn": "src.requests.models.PreparedRequest.prepare_auth",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.PreparedRequest.prepare",
+      "to_qn": "src.requests.models.PreparedRequest.prepare_hooks",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.PreparedRequest.prepare_method",
+      "to_qn": "src.requests._internal_utils.to_native_string.upper",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.PreparedRequest.prepare_method",
+      "to_qn": "src.requests._internal_utils.to_native_string",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.PreparedRequest.prepare_url",
+      "to_qn": "src.requests.models.PreparedRequest._get_idna_encoded_host",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.PreparedRequest.prepare_url",
+      "to_qn": "src.requests.utils.requote_uri",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.PreparedRequest.prepare_url",
+      "to_qn": "src.requests.utils.requote_uri.lstrip.lower.startswith",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.PreparedRequest.prepare_url",
+      "to_qn": "src.requests.compat.urlunparse",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.PreparedRequest.prepare_url",
+      "to_qn": "src.requests._internal_utils.to_native_string",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.PreparedRequest.prepare_url",
+      "to_qn": "src.requests.utils.requote_uri.decode.lower",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.PreparedRequest.prepare_url",
+      "to_qn": "src.requests.utils.requote_uri.lstrip.decode.lower",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.PreparedRequest.prepare_url",
+      "to_qn": "src.requests.utils.requote_uri.lower",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.PreparedRequest.prepare_url",
+      "to_qn": "src.requests._internal_utils.unicode_is_ascii",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.PreparedRequest.prepare_url",
+      "to_qn": "src.requests.utils.requote_uri.lower.startswith",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.PreparedRequest.prepare_url",
+      "to_qn": "src.requests.exceptions.InvalidURL",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.PreparedRequest.prepare_url",
+      "to_qn": "src.requests.utils.requote_uri.lstrip.lower",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.PreparedRequest.prepare_url",
+      "to_qn": "src.requests.exceptions.MissingSchema",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.PreparedRequest.prepare_url",
+      "to_qn": "src.requests.utils.requote_uri.lstrip",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.PreparedRequest.prepare_url",
+      "to_qn": "src.requests.models.RequestEncodingMixin._encode_params",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.PreparedRequest.prepare_url",
+      "to_qn": "src.requests.utils.requote_uri.decode",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.PreparedRequest.prepare_url",
+      "to_qn": "src.requests.utils.requote_uri.decode.lstrip",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.PreparedRequest.prepare_url",
+      "to_qn": "src.requests.utils.requote_uri.lstrip.decode",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.PreparedRequest.prepare_url",
+      "to_qn": "src.requests.utils.requote_uri.decode.lower.startswith",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.PreparedRequest.prepare_url",
+      "to_qn": "src.requests.utils.requote_uri.decode.lstrip.lower",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.PreparedRequest.prepare_headers",
+      "to_qn": "src.requests.utils.check_header_validity",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.PreparedRequest.prepare_headers",
+      "to_qn": "src.requests._internal_utils.to_native_string",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.PreparedRequest.prepare_headers",
+      "to_qn": "src.requests.structures.CaseInsensitiveDict",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.PreparedRequest.prepare_cookies",
+      "to_qn": "src.requests.cookies.get_cookie_header",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.PreparedRequest.prepare_cookies",
+      "to_qn": "src.requests.cookies.cookiejar_from_dict",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.PreparedRequest.prepare_body",
+      "to_qn": "src.requests.compat.json.dumps.encode.tell",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.PreparedRequest.prepare_body",
+      "to_qn": "src.requests.compat.urlencode.tell",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.PreparedRequest.prepare_body",
+      "to_qn": "src.requests._internal_utils.to_native_string.encode.tell",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.PreparedRequest.prepare_body",
+      "to_qn": "src.requests.models.PreparedRequest.prepare_content_length",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.PreparedRequest.prepare_body",
+      "to_qn": "src.requests._internal_utils.to_native_string.tell",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.PreparedRequest.prepare_body",
+      "to_qn": "src.requests.compat.json.dumps.encode",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.PreparedRequest.prepare_body",
+      "to_qn": "src.requests.models.RequestEncodingMixin._encode_params",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.PreparedRequest.prepare_body",
+      "to_qn": "src.requests.models.RequestEncodingMixin._encode_files",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.PreparedRequest.prepare_body",
+      "to_qn": "src.requests.compat.json.dumps.tell",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.PreparedRequest.prepare_body",
+      "to_qn": "src.requests.exceptions.InvalidJSONError",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.PreparedRequest.prepare_body",
+      "to_qn": "src.requests.compat.builtin_str",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.PreparedRequest.prepare_body",
+      "to_qn": "src.requests._internal_utils.to_native_string.encode",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.PreparedRequest.prepare_body",
+      "to_qn": "src.requests.utils.super_len",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.PreparedRequest.prepare_body",
+      "to_qn": "src.requests.compat.json.dumps",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.PreparedRequest.prepare_auth",
+      "to_qn": "src.requests.models.PreparedRequest.prepare_content_length",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.PreparedRequest.prepare_auth",
+      "to_qn": "src.requests.utils.get_auth_from_url",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.PreparedRequest.prepare_auth",
+      "to_qn": "src.requests.auth.HTTPBasicAuth",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.PreparedRequest.prepare_hooks",
+      "to_qn": "src.requests.models.RequestHooksMixin.register_hook",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.PreparedRequest.copy",
+      "to_qn": "src.requests.cookies._copy_cookie_jar",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.PreparedRequest.copy",
+      "to_qn": "src.requests.structures.CaseInsensitiveDict.copy",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.PreparedRequest.copy",
+      "to_qn": "src.requests.models.PreparedRequest.__init__",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.PreparedRequest.prepare_content_length",
+      "to_qn": "src.requests.structures.CaseInsensitiveDict.get",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.PreparedRequest.prepare_content_length",
+      "to_qn": "src.requests.compat.builtin_str",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.PreparedRequest.prepare_content_length",
+      "to_qn": "src.requests.utils.super_len",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.Response.__init__",
+      "to_qn": "src.requests.cookies.cookiejar_from_dict",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.Response.__init__",
+      "to_qn": "src.requests.structures.CaseInsensitiveDict",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.Response.__exit__",
+      "to_qn": "src.requests.models.Response.close",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.Response.__iter__",
+      "to_qn": "src.requests.models.Response.iter_content",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.Response.iter_content",
+      "to_qn": "src.requests.utils.stream_decode_response_unicode",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.Response.iter_content",
+      "to_qn": "src.requests.models.Response.iter_content.generate",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.Response.iter_content",
+      "to_qn": "src.requests.utils.iter_slices",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.Response.iter_content",
+      "to_qn": "src.requests.exceptions.StreamConsumedError",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.Response.ok",
+      "to_qn": "src.requests.models.Response.raise_for_status",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.Response.raise_for_status",
+      "to_qn": "src.requests.exceptions.HTTPError",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.Response.apparent_encoding",
+      "to_qn": "src.requests.compat.chardet.detect",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.Response.iter_content.generate",
+      "to_qn": "src.requests.exceptions.ChunkedEncodingError",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.Response.iter_content.generate",
+      "to_qn": "src.requests.exceptions.ConnectionError",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.Response.iter_content.generate",
+      "to_qn": "src.requests.exceptions.ContentDecodingError",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.Response.iter_content.generate",
+      "to_qn": "src.requests.exceptions.SSLError",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.Response.iter_lines",
+      "to_qn": "src.requests.utils.stream_decode_response_unicode.split",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.Response.iter_lines",
+      "to_qn": "src.requests.utils.stream_decode_response_unicode.splitlines",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.Response.iter_lines",
+      "to_qn": "src.requests.models.Response.iter_content",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.Response.iter_lines",
+      "to_qn": "src.requests.utils.stream_decode_response_unicode.split.pop",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.Response.iter_lines",
+      "to_qn": "src.requests.utils.stream_decode_response_unicode.splitlines.pop",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.Response.content",
+      "to_qn": "src.requests.models.Response.iter_content",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.Response.json",
+      "to_qn": "src.requests.exceptions.JSONDecodeError",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.Response.json",
+      "to_qn": "src.requests.compat.json.loads",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.Response.json",
+      "to_qn": "src.requests.utils.guess_json_utf",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.Response.links",
+      "to_qn": "src.requests.structures.CaseInsensitiveDict.get",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.Response.links",
+      "to_qn": "src.requests.utils.parse_header_links",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    },
+    {
+      "from_qn": "src.requests.models.Response.links",
+      "to_qn": "src.requests.utils.parse_header_links.get",
+      "type": "CALLS",
+      "file": "",
+      "line": 0,
+      "source": "pycg"
+    }
+  ]
+}

@@ -116,6 +116,7 @@ def classify(
     callee_name: str,
     emitted_callee_names: set[str],
     internal_crates: set[str],
+    internal_type_names: set[str],
 ) -> str:
     if callee_name in emitted_callee_names:
         return "emitted"
@@ -126,6 +127,13 @@ def classify(
         return "unemitted_external"
     if head in STDLIB_TYPES:
         return "unemitted_external"
+    # Phase A''''' refinement: only classify as internal if head matches
+    # an actual project-internal Type/Class/Struct/Enum definition. This
+    # tightens the heuristic that previously over-counted (capitalized
+    # type names not in any known external set were flagged internal
+    # regardless of whether the project actually defined them).
+    if head in internal_type_names:
+        return "unemitted_internal"
     if head in internal_crates:
         return "unemitted_internal"
     # Last . segment (method-on-receiver shape after :: -> . normalization
@@ -136,10 +144,13 @@ def classify(
         # almost always external; resolver correctly drops.
         return "unemitted_external"
 
-    # "Type::method" shape with capitalized type that ISN'T in our
-    # external set or internal-crates list — likely internal.
+    # "Type::method" shape with capitalized type that ISN'T any of: known
+    # external crate prefix, known stdlib type, internal type definition,
+    # internal crate name. Conservative bucket — likely external library
+    # type we haven't listed; class as external to avoid false-internal
+    # inflation.
     if "::" in callee_name and PARENT_QN_RE.match(head):
-        return "unemitted_internal"
+        return "unemitted_external"
 
     # "obj.method" shape with non-builtin method name — probably
     # internal dispatch we can't resolve here.
@@ -179,6 +190,19 @@ def main() -> int:
         WHERE e.type = 'CALLS'
     """)
     emitted_full = {row[0] for row in cur.fetchall()}
+
+    # Phase A''''' refinement: load internal Type/Class/Struct/Enum/Trait
+    # definitions from the indexed DB. Their SIMPLE names (last QN segment)
+    # are the set of project-defined types — only callees whose `head`
+    # segment is in this set should be classified internal-suspect.
+    cur.execute("""
+        SELECT n.name
+        FROM nodes n
+        WHERE n.label IN ('Class','Struct','Type','Enum','Interface','Trait')
+    """)
+    internal_type_names = {row[0] for row in cur.fetchall() if row[0]}
+    print(f"Loaded {len(internal_type_names)} internal type names from DB",
+          flush=True)
     # The CBMCall.callee_name is the raw extracted text (e.g.
     # `ReloaddClient::new` or `self.foo.bar`). We can't precisely
     # invert the resolver's QN normalization, so for the "emitted"
@@ -228,7 +252,7 @@ def main() -> int:
             if not is_emitted and callee in emitted_last_segs:
                 is_emitted = True
             cls = "emitted" if is_emitted else classify(
-                callee, set(), internal_crates)
+                callee, set(), internal_crates, internal_type_names)
             by_class[cls].append({
                 "callee_name": callee,
                 "enclosing_func_qn": enclosing,

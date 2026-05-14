@@ -47,7 +47,7 @@ func (s *Server) registerDegreeFilterTool() {
 			OpenWorldHint:   boolPtr(false),
 			DestructiveHint: boolPtr(false),
 		},
-		Description: "Find nodes whose in-degree or out-degree on a given edge type matches a predicate. Use this for: dead-code detection (functions with zero callers — direction=inbound, op=eq, value=0); entry-point discovery; high-fan-in hubs (op=ge, value=20); leaf functions (direction=outbound, op=eq, value=0). Returns total count plus up to `limit` examples with degree. Far faster than Cypher for degree-aggregate queries on large graphs (both codebase-memory engines hit max_turns trying to plan this via query_graph).",
+		Description: "Find nodes whose in-degree or out-degree on a given edge type matches a predicate. Use this for: dead-code detection (functions with zero callers — direction=inbound, op=eq, value=0, exclude_entry_points=true); entry-point discovery; high-fan-in hubs (op=ge, value=20); leaf functions (direction=outbound, op=eq, value=0). Returns total count plus up to `limit` examples with degree. For dead-code detection, set `exclude_entry_points=true` to filter route handlers, framework-registered functions, and main() — otherwise the count is dominated by these (5,335 zero-caller functions on PSM without the filter; the meaningful subset is much smaller). Far faster than Cypher for degree-aggregate queries on large graphs (both codebase-memory engines hit max_turns trying to plan this via query_graph).",
 		InputSchema: json.RawMessage(`{
 			"type": "object",
 			"properties": {
@@ -57,7 +57,8 @@ func (s *Server) registerDegreeFilterTool() {
 				"edge_type": {"type": "string", "description": "Edge type to count. Default CALLS. Other useful types: IMPORTS, DEFINES, IMPLEMENTS, OVERRIDE."},
 				"op":        {"type": "string", "enum": ["eq", "lt", "le", "gt", "ge"], "description": "Comparison: eq (=), lt (<), le (<=), gt (>), ge (>=). Required."},
 				"value":     {"type": "integer", "description": "Threshold to compare degree against. 0 for no-edge cases. Required."},
-				"limit":     {"type": "integer", "description": "Max example nodes to return (1-200, default 20)"}
+				"limit":     {"type": "integer", "description": "Max example nodes to return (1-200, default 20)"},
+				"exclude_entry_points": {"type": "boolean", "description": "When true, exclude nodes whose is_entry_point property is true (route handlers, framework-registered functions, main()). Essential for dead-code detection — without this, the count is dominated by entry points the framework calls but no internal code references."}
 			},
 			"required": ["label", "direction", "op", "value"]
 		}`),
@@ -77,6 +78,7 @@ func (s *Server) handleDegreeFilter(_ context.Context, req *mcp.CallToolRequest)
 	op := getStringArg(args, "op")
 	value := getIntArg(args, "value", -1)
 	limit := getIntArg(args, "limit", 20)
+	excludeEntryPoints := getBoolArg(args, "exclude_entry_points")
 
 	if label == "" {
 		return errResult("label is required"), nil
@@ -115,6 +117,18 @@ func (s *Server) handleDegreeFilter(_ context.Context, req *mcp.CallToolRequest)
 	// SQL: count edges per node, filter by op + value, return matching nodes.
 	// inbound = COUNT incoming edges where target_id = nodes.id
 	// outbound = COUNT outgoing edges where source_id = nodes.id
+	//
+	// When exclude_entry_points=true, an additional WHERE clause filters out
+	// nodes whose JSON `properties.is_entry_point = 1`. This is essential for
+	// dead-code detection on web frameworks (axum, actix-web, fastapi) where
+	// hundreds of route handlers have zero internal CALLS edges by design —
+	// the framework registers them at runtime, the graph extractor sees no
+	// caller, and they dominate the count if not filtered.
+	entryPointFilter := ""
+	if excludeEntryPoints {
+		entryPointFilter = " AND COALESCE(json_extract(n.properties, '$.is_entry_point'), 0) != 1"
+	}
+
 	var sqlQuery string
 	switch direction {
 	case "inbound":
@@ -129,7 +143,7 @@ func (s *Server) handleDegreeFilter(_ context.Context, req *mcp.CallToolRequest)
 					WHERE project = ? AND type = ?
 					GROUP BY target_id
 				) d ON d.target_id = n.id
-				WHERE n.project = ? AND n.label = ?
+				WHERE n.project = ? AND n.label = ?` + entryPointFilter + `
 			)
 			SELECT node_id, name, qualified_name, file_path, deg
 			FROM degree
@@ -147,7 +161,7 @@ func (s *Server) handleDegreeFilter(_ context.Context, req *mcp.CallToolRequest)
 					WHERE project = ? AND type = ?
 					GROUP BY source_id
 				) d ON d.source_id = n.id
-				WHERE n.project = ? AND n.label = ?
+				WHERE n.project = ? AND n.label = ?` + entryPointFilter + `
 			)
 			SELECT node_id, name, qualified_name, file_path, deg
 			FROM degree
@@ -197,14 +211,15 @@ func (s *Server) handleDegreeFilter(_ context.Context, req *mcp.CallToolRequest)
 	}
 
 	response := map[string]any{
-		"project":   projName,
-		"label":     label,
-		"direction": direction,
-		"edge_type": edgeType,
-		"op":        op,
-		"value":     value,
-		"count":     count,
-		"examples":  examples,
+		"project":              projName,
+		"label":                label,
+		"direction":            direction,
+		"edge_type":            edgeType,
+		"op":                   op,
+		"value":                value,
+		"count":                count,
+		"examples":             examples,
+		"exclude_entry_points": excludeEntryPoints,
 	}
 	result := jsonResult(response)
 	s.addUpdateNotice(result)

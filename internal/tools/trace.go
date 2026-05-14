@@ -47,6 +47,37 @@ func (s *Server) handleTraceCallPath(_ context.Context, req *mcp.CallToolRequest
 	project := getStringArg(args, "project")
 	effectiveProject := s.resolveProjectName(project)
 
+	// Ambiguity guard: if function_name is a bare name (no qualifier separator)
+	// AND multiple nodes share that exact name, return a structured ambiguous
+	// response instead of silently picking the first match. This was the F8
+	// failure mode surfaced by the 2026-05-13 PSM tool-comparison battery:
+	// trace_call_path("ControlProto::new") resolved to AssetSN::new in a
+	// different file because findNodeAcrossProjects walked the projects list
+	// and took nodes[0]. With this guard, the caller gets the candidate QNs
+	// and can retry with a fully-qualified name to disambiguate. A "bare name"
+	// is recognized as a string with no `.` — code-graph QNs use dot separators
+	// (e.g. `<project>.<module>.<Type>.new`). Type-style `Type::method` strings
+	// are also ambiguous by construction and reach this branch.
+	if !strings.Contains(funcName, ".") {
+		ambig := s.findAmbiguousNodesByName(funcName, effectiveProject, 5)
+		if len(ambig) > 1 {
+			suggList := make([]map[string]string, len(ambig))
+			for i, n := range ambig {
+				suggList[i] = map[string]string{
+					"name":           n.Name,
+					"qualified_name": n.QualifiedName,
+					"label":          n.Label,
+					"file_path":      n.FilePath,
+				}
+			}
+			return jsonResult(map[string]any{
+				"status":      "ambiguous",
+				"message":     fmt.Sprintf("function name %q matches %d nodes; re-call trace_call_path with a fully-qualified name from the suggestions below to disambiguate", funcName, len(ambig)),
+				"suggestions": suggList,
+			}), nil
+		}
+	}
+
 	// Find the function node
 	rootNode, foundProject, findErr := s.findNodeAcrossProjects(funcName, effectiveProject)
 	if findErr != nil && !strings.HasPrefix(findErr.Error(), "node not found") {
@@ -416,6 +447,48 @@ func buildHopsWithRisk(visited []*store.NodeHop) []hopEntry {
 		}
 	}
 	return hops
+}
+
+// findAmbiguousNodesByName returns all nodes whose exact Name equals the
+// input. Returns at most `limit` results. Used by handleTraceCallPath to
+// detect bare-name ambiguity (multiple `new` methods on different types,
+// multiple `Default` impls, etc.) so the tool can return a structured
+// ambiguous response instead of silently picking nodes[0]. Differs from
+// findSimilarNodes (substring match) in that this requires exact equality
+// — only nodes whose Name field is exactly the input are returned.
+func (s *Server) findAmbiguousNodesByName(name, project string, limit int) []*store.Node {
+	effectiveProject := s.resolveProjectName(project)
+	if effectiveProject == "" {
+		return nil
+	}
+	if !s.router.HasProject(effectiveProject) {
+		return nil
+	}
+	st, err := s.router.ForProject(effectiveProject)
+	if err != nil {
+		return nil
+	}
+	return findAmbiguousNodesByNameInStore(st, name, limit)
+}
+
+// findAmbiguousNodesByNameInStore is the testable inner of
+// findAmbiguousNodesByName: given a store, return up to `limit` nodes whose
+// exact Name equals the input. Exported only for unit tests that supply a
+// store directly without going through s.router.
+func findAmbiguousNodesByNameInStore(st *store.Store, name string, limit int) []*store.Node {
+	projects, _ := st.ListProjects()
+	if len(projects) == 0 {
+		return nil
+	}
+	projName := projects[0].Name
+	all, findErr := st.FindNodesByName(projName, name)
+	if findErr != nil {
+		return nil
+	}
+	if len(all) > limit {
+		all = all[:limit]
+	}
+	return all
 }
 
 // findSimilarNodes searches for nodes whose name contains the input string (case-insensitive).

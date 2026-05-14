@@ -6,9 +6,15 @@ name: accuracy-regression
 # prove-the-instrument fixtures) and fails the job if F1 regresses more
 # than 5pp on any of them.
 #
-# Fixtures that depend on external local paths (mcp-servers, flask,
-# psm) are NOT runnable in CI. Those are developer-
-# local fixtures; CI covers the subset that's self-contained.
+# Phase C of the 2026-05-14 grade-lift roadmap added two adversarial-F1
+# floor gates (flask-adversarial, requests-adversarial). Those fixtures
+# are pulled via actions/checkout at the SHA pinned in fixtures.json,
+# then check_adversarial_f1.py asserts scope-aligned F1 >= floor. Locks
+# in the Phase A+B gains (flask 0.492 -> 0.573, requests 0.394 -> 0.619).
+#
+# Fixtures still runnable LOCALLY only (developer-local paths in
+# fixtures.json): mcp-servers, psm. CI doesn't gate
+# those — large diffs against PSM should be measured manually before merge.
 
 on:
   pull_request:
@@ -224,6 +230,53 @@ jobs:
           # exact count check as a smoke test rather than an exact assertion.
           # The hard gate is on synthetic fixtures where counts are stable.)
           echo 'self-host index completed'
+
+      # ---------------------------------------------------------------
+      # Adversarial-F1 regression gates (Phase C, 2026-05-14)
+      #
+      # Fetch flask + requests at the pinned SHAs from fixtures.json,
+      # then run compare.py and assert scope-aligned CALLS F1 floors.
+      # Pins the gains from Phase A (fuzzy-Janusian drop default-on,
+      # PR #315) and Phase B (Python relative-import resolution,
+      # PR #316). Catches accidental rollbacks of either at PR time.
+      #
+      # Floors set ~2-3pp below 2026-05-14 measurement to absorb
+      # runner-noise without masking real regressions:
+      #   flask:    measured 0.573 -> floor 0.55
+      #   requests: measured 0.619 -> floor 0.60
+      # ---------------------------------------------------------------
+
+      - name: Fetch flask fixture (pinned SHA from fixtures.json)
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: pallets/flask
+          ref: 2ac89889f4cc330eabd50f295dcef02828522c69
+          path: _fixtures/flask
+          persist-credentials: false
+
+      - name: Fetch requests fixture (pinned SHA from fixtures.json)
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: psf/requests
+          ref: f43f750ee10addbaa13901c1017631b4d70fd6e3
+          path: _fixtures/requests
+          persist-credentials: false
+
+      - name: Run flask-adversarial F1 regression gate
+        env:
+          CODE_GRAPH_FIXTURE_PATH_FLASK_ADVERSARIAL: ${{ github.workspace }}/_fixtures/flask
+        run: |
+          python bench/accuracy/check_adversarial_f1.py \
+            --fixture flask-adversarial \
+            --min-f1 0.55
+
+      - name: Run requests-adversarial F1 regression gate
+        env:
+          CODE_GRAPH_FIXTURE_PATH_REQUESTS_ADVERSARIAL: ${{ github.workspace }}/_fixtures/requests
+        run: |
+          python bench/accuracy/check_adversarial_f1.py \
+            --fixture requests-adversarial \
+            --min-f1 0.60
 
       - name: Summary
         if: always()

@@ -1,5 +1,20 @@
 # Per-machine cache — rebuilt from sources, not committed.
-cache/
+# Pattern is `cache/*` rather than `cache/` so the `!` re-includes
+# below actually fire (Git can't un-ignore files inside an ignored
+# directory, but it CAN re-include files inside a directory whose
+# contents are ignored by a `*` pattern).
+cache/*
+# EXCEPT: oracle caches for the CI adversarial-F1 gate (flask, requests)
+# are checked in so .github/workflows/accuracy-regression.yml doesn't
+# need to install pycg + run oracle generation. The caches are SHA-keyed
+# (`<oracle>-<fixture>-<short-sha>.json`); a fixture-SHA bump in
+# fixtures.json must be accompanied by a regenerated cache commit.
+!cache/pycg-flask-adversarial-*.json
+!cache/pycg-flask-adversarial-*.meta.json
+!cache/ast-imports-flask-adversarial-*.json
+!cache/pycg-requests-adversarial-*.json
+!cache/pycg-requests-adversarial-*.meta.json
+!cache/ast-imports-requests-adversarial-*.json
 
 # Python bytecode
 __pycache__/

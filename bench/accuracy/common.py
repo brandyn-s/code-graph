@@ -47,9 +47,31 @@ def load_fixtures() -> list[dict[str, Any]]:
         return json.load(f)["fixtures"]
 
 
+def _fixture_path_env_var(fixture_id: str) -> str:
+    """Map fixture id to its CI path-override env var name.
+
+    Example: `flask-adversarial` -> `CODE_GRAPH_FIXTURE_PATH_FLASK_ADVERSARIAL`.
+    Used by accuracy-regression.yml to point compare.py at CI-checked-out
+    fixture directories without committing CI-specific paths to fixtures.json.
+    """
+    return "CODE_GRAPH_FIXTURE_PATH_" + fixture_id.upper().replace("-", "_")
+
+
 def get_fixture(fixture_id: str) -> dict[str, Any]:
     for f in load_fixtures():
         if f["id"] == fixture_id:
+            # CI override: when CODE_GRAPH_FIXTURE_PATH_<id> is set, the
+            # local-developer path baked into fixtures.json is replaced.
+            # actions/checkout in accuracy-regression.yml clones the
+            # upstream fixture at the pinned SHA into a CI-local path,
+            # then sets this env var so compare.py uses it. Local
+            # developers don't set the env var and continue to use the
+            # fixtures.json path as before. The SHA-verification gate
+            # still runs against the env-pointed dir.
+            override = os.environ.get(_fixture_path_env_var(fixture_id))
+            if override:
+                f = dict(f)
+                f["path"] = override
             return f
     raise KeyError(f"fixture {fixture_id!r} not found in {FIXTURES_PATH}")
 

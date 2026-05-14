@@ -16,34 +16,47 @@ import (
 // plan (knowledge-base PR #491) to classify the 72 ambiguous fuzzy edges.
 var tier2DebugEnabled = os.Getenv("RESOLVER_TIER2_DEBUG") != ""
 
-// dropFuzzyJanusianChainsEnabled gates the Janusian-chain drop in
-// FuzzyResolveCtx. When enabled, fuzzy emissions are dropped when the call
-// shape is a multi-segment chain (root.field.method) AND receiver type is
-// empty AND multiple Method candidates exist on distinct parent classes.
-//
-// Default ON since 2026-05-14 (Phase A of the grade-lift roadmap). The
-// 2026-05-10 flask-adversarial baseline classified 100% of the 11
-// Janusian-ambiguous FPs as fuzzy + cand>=2 emissions at the speculative
-// confidence band; the precision split showed 0/11 (TP/FP) — there are no
-// legitimate TPs in this bucket on either flask or PSM assetman.
-//
-// Opt-out: set RESOLVER_DROP_FUZZY_JANUSIAN_CHAINS=0 (or any value
-// starting with "0", "f", "F", "n", "N") to revert to legacy behavior.
-var dropFuzzyJanusianChainsEnabled = parseEnvBool("RESOLVER_DROP_FUZZY_JANUSIAN_CHAINS", true)
+// envPolicy classifies the RESOLVER_DROP_FUZZY_JANUSIAN_CHAINS env state.
+// Phase E (2026-05-14) split the policy into three states so the default
+// can be language-scoped (Python-only) while still honoring explicit
+// forcing in either direction via the env var.
+type envPolicy int
 
-// parseEnvBool reads an env var as a boolean with a configurable default.
-// Treats "", "1", "true", "yes" (case-insensitive) as true; "0", "false",
-// "no", "off" as false. Falls back to `defaultVal` when the var is unset.
-func parseEnvBool(name string, defaultVal bool) bool {
+const (
+	envPolicyUnset    envPolicy = iota // language scoping decides
+	envPolicyForceOn                   // gate fires for every language
+	envPolicyForceOff                  // gate disabled for every language
+)
+
+// fuzzyJanusianChainEnvPolicy is the parsed RESOLVER_DROP_FUZZY_JANUSIAN_CHAINS
+// state. Read once at process start; consulted by shouldDropFuzzyJanusianChains
+// which combines it with the call site's language to produce the per-call
+// drop decision.
+//
+// Phase A (PR #315) made this gate default-on globally. Phase E (this file)
+// scoped the default to Python only after PSM Rust assetman regressed
+// -2.2pp F1 under global default-on. The env var now overrides the
+// language scoping in either direction:
+//
+//	unset           → Python only (Phase E default)
+//	"1"/"true"/...  → on for every language (Phase A legacy behavior)
+//	"0"/"false"/... → off for every language (full opt-out)
+var fuzzyJanusianChainEnvPolicy = parseEnvPolicy("RESOLVER_DROP_FUZZY_JANUSIAN_CHAINS")
+
+// parseEnvPolicy reads an env var as a tri-state policy. Returns
+// envPolicyUnset when the var is unset (empty string), envPolicyForceOff
+// for values starting with "0", "f", "F", "n", or "N", and
+// envPolicyForceOn for anything else.
+func parseEnvPolicy(name string) envPolicy {
 	v := os.Getenv(name)
 	if v == "" {
-		return defaultVal
+		return envPolicyUnset
 	}
 	switch v[0] {
 	case '0', 'f', 'F', 'n', 'N':
-		return false
+		return envPolicyForceOff
 	}
-	return true
+	return envPolicyForceOn
 }
 
 // allMethodsWithDistinctParents returns true when every candidate is
@@ -139,6 +152,27 @@ type CallContext struct {
 // Go and Rust score 0.85-0.95 on the same bucket. See
 // `bench/accuracy/baselines/2026-05-06-adversarial-rerun-finding.md`.
 func shouldDropCrossPackageSuffix(language lang.Language) bool {
+	return language == lang.Python
+}
+
+// shouldDropFuzzyJanusianChains returns true when the FuzzyResolveCtx
+// Janusian-chain drop should fire for this language. Phase E (2026-05-14)
+// scoped the Phase A default-on flip to Python only after the 2026-05-14
+// PSM Rust re-baseline showed assetman -2.2pp F1 from the gate killing
+// legitimate Rust trait dispatches. The env var
+// RESOLVER_DROP_FUZZY_JANUSIAN_CHAINS=1 forces ON for all languages
+// (preserves opt-in experimentation on Rust/Go), and =0 forces OFF.
+func shouldDropFuzzyJanusianChains(language lang.Language) bool {
+	// Env override beats language scoping in both directions:
+	//   unset → Python only (default policy)
+	//   "1"/"true"/... → ON for every language (legacy global behavior)
+	//   "0"/"false"/... → OFF for every language (full opt-out)
+	switch fuzzyJanusianChainEnvPolicy {
+	case envPolicyForceOn:
+		return true
+	case envPolicyForceOff:
+		return false
+	}
 	return language == lang.Python
 }
 
@@ -971,20 +1005,25 @@ func (r *FunctionRegistry) FuzzyResolveCtx(ctx CallContext) (ResolutionResult, b
 	// AND ReceiverType is empty (Tier-2 couldn't fire) AND multiple Method
 	// candidates exist on distinct parent classes, the candidates are a
 	// classic Janusian co-hallucination — same method name on unrelated
-	// types, no way to disambiguate without receiver type. Empirically all
-	// 72 ambiguous fuzzy edges on PSM assetman fit this signature
-	// (knowledge-base PR #492 terminal doc; PR #289 v1 with 2+ dots
-	// dropped 40/72; v2 relaxed to 1+ dots to catch closure-rooted
-	// 1-dot patterns like `|a| a.method()`).
+	// types, no way to disambiguate without receiver type.
 	//
 	// The distinct-parents condition is the key safety net: legitimate
 	// internal calls where the receiver was just missed by the extractor
 	// would have candidates with the SAME parent class (multiple methods
 	// on the same type), so the gate wouldn't fire on them.
 	//
-	// Gated by RESOLVER_DROP_FUZZY_JANUSIAN_CHAINS (default-on since
-	// 2026-05-14). Set the env to "0" / "false" to opt out.
-	if dropFuzzyJanusianChainsEnabled &&
+	// Language scope (Phase E, 2026-05-14): Python ONLY by default.
+	// Phase A (PR #315) flipped this gate default-on globally. The 2026-
+	// 05-14 PSM Rust re-baseline showed assetman regressed -2.2pp F1
+	// (0.877 → 0.855) because Rust trait dispatch genuinely produces
+	// distinct-parent candidate sets where the fuzzy resolver guesses
+	// correctly ~70% of the time. The gate killed 29 TPs (trait dispatches
+	// to `get_result`, `run_effect`, etc.) while only dropping 18 FPs —
+	// net loss on Rust. On Python adversarial fixtures the ambiguous
+	// fuzzy bucket has precision 0.00 (0/11 on flask), so the gate is
+	// pure-win there. RESOLVER_DROP_FUZZY_JANUSIAN_CHAINS=1 forces ON
+	// for non-Python languages (preserves opt-in for Rust experimentation).
+	if shouldDropFuzzyJanusianChains(ctx.Language) &&
 		ctx.ReceiverType == "" &&
 		strings.Contains(ctx.CalleeName, ".") &&
 		len(candidates) >= 2 &&

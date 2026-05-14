@@ -6,6 +6,8 @@ import (
 	"math"
 	"strings"
 	"testing"
+
+	"github.com/DeusData/codebase-memory-mcp/internal/lang"
 )
 
 func TestFuzzyResolve_SingleCandidate(t *testing.T) {
@@ -753,37 +755,65 @@ func TestApplyReceiverTypeFilter_DebugLogging(t *testing.T) {
 	})
 }
 
-func TestParseEnvBool(t *testing.T) {
-	t.Setenv("TEST_TRUE_BY_DEFAULT", "")
-	if got := parseEnvBool("TEST_TRUE_BY_DEFAULT", true); got != true {
-		t.Errorf("unset with default=true: got %v want true", got)
+func TestParseEnvPolicy(t *testing.T) {
+	t.Setenv("TEST_POLICY_UNSET", "")
+	if got := parseEnvPolicy("TEST_POLICY_UNSET"); got != envPolicyUnset {
+		t.Errorf("empty env: got %v want envPolicyUnset", got)
 	}
-	if got := parseEnvBool("TEST_TRUE_BY_DEFAULT", false); got != false {
-		t.Errorf("unset with default=false: got %v want false", got)
-	}
-
 	for _, v := range []string{"0", "f", "false", "F", "FALSE", "n", "no", "N", "NO"} {
-		t.Setenv("TEST_FALSY", v)
-		if got := parseEnvBool("TEST_FALSY", true); got != false {
-			t.Errorf("value %q with default=true: got %v want false", v, got)
+		t.Setenv("TEST_POLICY_FALSY", v)
+		if got := parseEnvPolicy("TEST_POLICY_FALSY"); got != envPolicyForceOff {
+			t.Errorf("value %q: got %v want envPolicyForceOff", v, got)
 		}
 	}
-
 	for _, v := range []string{"1", "true", "yes", "TRUE", "True", "on"} {
-		t.Setenv("TEST_TRUTHY", v)
-		if got := parseEnvBool("TEST_TRUTHY", false); got != true {
-			t.Errorf("value %q with default=false: got %v want true", v, got)
+		t.Setenv("TEST_POLICY_TRUTHY", v)
+		if got := parseEnvPolicy("TEST_POLICY_TRUTHY"); got != envPolicyForceOn {
+			t.Errorf("value %q: got %v want envPolicyForceOn", v, got)
 		}
 	}
 }
 
-func TestDropFuzzyJanusianChainsDefaultOn(t *testing.T) {
-	// Sanity check: package-init binding reads OS env. With env unset (test
-	// runners typically have no value), the default-on flip should produce
-	// dropFuzzyJanusianChainsEnabled=true.
-	v := parseEnvBool("RESOLVER_DROP_FUZZY_JANUSIAN_CHAINS", true)
-	if !v {
-		t.Errorf("default-on flip broken: parseEnvBool returned false with default=true")
+func TestShouldDropFuzzyJanusianChains_DefaultPythonOnly(t *testing.T) {
+	// Phase E (2026-05-14): default policy is Python only. With env unset,
+	// shouldDropFuzzyJanusianChains returns true for Python and false for
+	// every other language. Save + restore the package-level policy so the
+	// test doesn't leak state to other tests in this package.
+	prev := fuzzyJanusianChainEnvPolicy
+	fuzzyJanusianChainEnvPolicy = envPolicyUnset
+	t.Cleanup(func() { fuzzyJanusianChainEnvPolicy = prev })
+
+	if !shouldDropFuzzyJanusianChains(lang.Python) {
+		t.Errorf("Python under default policy: expected gate ON")
+	}
+	for _, l := range []lang.Language{lang.Rust, lang.Go, lang.JavaScript, lang.TypeScript, lang.Java} {
+		if shouldDropFuzzyJanusianChains(l) {
+			t.Errorf("%v under default policy: expected gate OFF (Phase E scoped Python only)", l)
+		}
+	}
+}
+
+func TestShouldDropFuzzyJanusianChains_EnvForceOnOverridesLanguage(t *testing.T) {
+	prev := fuzzyJanusianChainEnvPolicy
+	fuzzyJanusianChainEnvPolicy = envPolicyForceOn
+	t.Cleanup(func() { fuzzyJanusianChainEnvPolicy = prev })
+
+	for _, l := range []lang.Language{lang.Python, lang.Rust, lang.Go, lang.JavaScript} {
+		if !shouldDropFuzzyJanusianChains(l) {
+			t.Errorf("%v under forceOn: expected gate ON", l)
+		}
+	}
+}
+
+func TestShouldDropFuzzyJanusianChains_EnvForceOffOverridesLanguage(t *testing.T) {
+	prev := fuzzyJanusianChainEnvPolicy
+	fuzzyJanusianChainEnvPolicy = envPolicyForceOff
+	t.Cleanup(func() { fuzzyJanusianChainEnvPolicy = prev })
+
+	for _, l := range []lang.Language{lang.Python, lang.Rust, lang.Go, lang.JavaScript} {
+		if shouldDropFuzzyJanusianChains(l) {
+			t.Errorf("%v under forceOff: expected gate OFF", l)
+		}
 	}
 }
 

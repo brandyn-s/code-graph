@@ -9,63 +9,63 @@
     "CALLS": {
       "oracle": "pycg",
       "oracle_count": 93,
-      "measured_count": 266,
+      "measured_count": 288,
       "oracle_caller_count": 46,
       "exact": {
-        "tp": 51,
-        "fp": 215,
-        "fn": 42,
-        "precision": 0.1917,
-        "recall": 0.5484,
-        "f1": 0.2841
+        "tp": 57,
+        "fp": 231,
+        "fn": 36,
+        "precision": 0.1979,
+        "recall": 0.6129,
+        "f1": 0.2992
       },
       "suffix_3seg": {
-        "tp": 51,
-        "fp": 215,
-        "fn": 42,
-        "precision": 0.1917,
-        "recall": 0.5484,
-        "f1": 0.2841
+        "tp": 57,
+        "fp": 231,
+        "fn": 36,
+        "precision": 0.1979,
+        "recall": 0.6129,
+        "f1": 0.2992
       },
       "scope_aligned": {
-        "tp": 51,
-        "fp": 34,
-        "fn": 42,
-        "precision": 0.6,
-        "recall": 0.5484,
-        "f1": 0.573
+        "tp": 57,
+        "fp": 44,
+        "fn": 36,
+        "precision": 0.5644,
+        "recall": 0.6129,
+        "f1": 0.5876
       },
       "scope_aligned_high_confidence": {
-        "tp": 51,
-        "fp": 34,
-        "fn": 42,
-        "precision": 0.6,
-        "recall": 0.5484,
-        "f1": 0.573
+        "tp": 57,
+        "fp": 44,
+        "fn": 36,
+        "precision": 0.5644,
+        "recall": 0.6129,
+        "f1": 0.5876
       },
       "scope_impl_normalized": {
-        "tp": 51,
-        "fp": 34,
-        "fn": 42,
-        "precision": 0.6,
-        "recall": 0.5484,
-        "f1": 0.573
+        "tp": 57,
+        "fp": 44,
+        "fn": 36,
+        "precision": 0.5644,
+        "recall": 0.6129,
+        "f1": 0.5876
       },
       "scope_generic_normalized": {
-        "tp": 51,
-        "fp": 34,
-        "fn": 42,
-        "precision": 0.6,
-        "recall": 0.5484,
-        "f1": 0.573
+        "tp": 57,
+        "fp": 44,
+        "fn": 36,
+        "precision": 0.5644,
+        "recall": 0.6129,
+        "f1": 0.5876
       },
       "scope_canonical": {
-        "tp": 51,
-        "fp": 34,
-        "fn": 42,
-        "precision": 0.6,
-        "recall": 0.5484,
-        "f1": 0.573
+        "tp": 57,
+        "fp": 44,
+        "fn": 36,
+        "precision": 0.5644,
+        "recall": 0.6129,
+        "f1": 0.5876
       },
       "sample_fp_exact": [
         [
@@ -76,6 +76,16 @@
         [
           "src.flask.__main__",
           "src.flask.cli.main",
+          "CALLS"
+        ],
+        [
+          "src.flask.app",
+          "src.flask.sessions.SecureCookieSessionInterface",
+          "CALLS"
+        ],
+        [
+          "src.flask.app.Flask.__init__",
+          "src.flask.cli.AppGroup",
           "CALLS"
         ],
         [
@@ -107,16 +117,6 @@
           "src.flask.app.Flask.make_default_options_response",
           "examples.tutorial.flaskr.blog.update",
           "CALLS"
-        ],
-        [
-          "src.flask.app.Flask.make_response",
-          "examples.tutorial.flaskr.blog.update",
-          "CALLS"
-        ],
-        [
-          "src.flask.app.Flask.make_shell_context",
-          "examples.tutorial.flaskr.blog.update",
-          "CALLS"
         ]
       ],
       "sample_fn_exact": [
@@ -136,23 +136,8 @@
           "CALLS"
         ],
         [
-          "src.flask.app.Flask.app_context",
-          "src.flask.ctx.AppContext",
-          "CALLS"
-        ],
-        [
-          "src.flask.app.Flask.do_teardown_appcontext",
-          "src.flask.helpers._CollectErrors",
-          "CALLS"
-        ],
-        [
           "src.flask.app.Flask.do_teardown_appcontext",
           "src.flask.signals.appcontext_tearing_down.send",
-          "CALLS"
-        ],
-        [
-          "src.flask.app.Flask.do_teardown_request",
-          "src.flask.helpers._CollectErrors",
           "CALLS"
         ],
         [
@@ -169,9 +154,34 @@
           "src.flask.app.Flask.full_dispatch_request",
           "src.flask.signals.request_started.send",
           "CALLS"
+        ],
+        [
+          "src.flask.app.Flask.handle_exception",
+          "src.flask.signals.got_request_exception.send",
+          "CALLS"
+        ],
+        [
+          "src.flask.app.Flask.make_default_options_response",
+          "src.flask.ctx.AppContext.from_environ.url_adapter.allowed_methods",
+          "CALLS"
+        ],
+        [
+          "src.flask.app.Flask.make_response",
+          "src.flask.typing.cast",
+          "CALLS"
         ]
       ],
       "sample_fp_scoped": [
+        [
+          "src.flask.app",
+          "src.flask.sessions.SecureCookieSessionInterface",
+          "CALLS"
+        ],
+        [
+          "src.flask.app.Flask.__init__",
+          "src.flask.cli.AppGroup",
+          "CALLS"
+        ],
         [
           "src.flask.app.Flask.handle_exception",
           "src.flask.sansio.app.App._find_error_handler",
@@ -211,16 +221,6 @@
           "src.flask.app.Flask.process_response",
           "src.flask.sessions.SessionInterface.is_null_session",
           "CALLS"
-        ],
-        [
-          "src.flask.app.Flask.run",
-          "src.flask.cli.load_dotenv",
-          "CALLS"
-        ],
-        [
-          "src.flask.app.Flask.run",
-          "src.flask.cli.show_server_banner",
-          "CALLS"
         ]
       ],
       "sample_fn_scoped": [
@@ -240,23 +240,8 @@
           "CALLS"
         ],
         [
-          "src.flask.app.Flask.app_context",
-          "src.flask.ctx.AppContext",
-          "CALLS"
-        ],
-        [
-          "src.flask.app.Flask.do_teardown_appcontext",
-          "src.flask.helpers._CollectErrors",
-          "CALLS"
-        ],
-        [
           "src.flask.app.Flask.do_teardown_appcontext",
           "src.flask.signals.appcontext_tearing_down.send",
-          "CALLS"
-        ],
-        [
-          "src.flask.app.Flask.do_teardown_request",
-          "src.flask.helpers._CollectErrors",
           "CALLS"
         ],
         [
@@ -273,9 +258,34 @@
           "src.flask.app.Flask.full_dispatch_request",
           "src.flask.signals.request_started.send",
           "CALLS"
+        ],
+        [
+          "src.flask.app.Flask.handle_exception",
+          "src.flask.signals.got_request_exception.send",
+          "CALLS"
+        ],
+        [
+          "src.flask.app.Flask.make_default_options_response",
+          "src.flask.ctx.AppContext.from_environ.url_adapter.allowed_methods",
+          "CALLS"
+        ],
+        [
+          "src.flask.app.Flask.make_response",
+          "src.flask.typing.cast",
+          "CALLS"
         ]
       ],
       "fp_scoped_full": [
+        [
+          "src.flask.app",
+          "src.flask.sessions.SecureCookieSessionInterface",
+          "CALLS"
+        ],
+        [
+          "src.flask.app.Flask.__init__",
+          "src.flask.cli.AppGroup",
+          "CALLS"
+        ],
         [
           "src.flask.app.Flask.handle_exception",
           "src.flask.sansio.app.App._find_error_handler",
@@ -377,6 +387,21 @@
           "CALLS"
         ],
         [
+          "src.flask.cli",
+          "src.flask.cli.CertParamType",
+          "CALLS"
+        ],
+        [
+          "src.flask.cli",
+          "src.flask.cli.FlaskGroup",
+          "CALLS"
+        ],
+        [
+          "src.flask.cli",
+          "src.flask.cli.SeparatedPathType",
+          "CALLS"
+        ],
+        [
           "src.flask.cli.FlaskGroup.get_command",
           "src.flask.app.Flask.app_context",
           "CALLS"
@@ -417,8 +442,33 @@
           "CALLS"
         ],
         [
+          "src.flask.cli.FlaskGroup.make_context",
+          "src.flask.cli.ScriptInfo",
+          "CALLS"
+        ],
+        [
           "src.flask.cli.ScriptInfo.load_app",
           "examples.celery.src.task_app.create_app",
+          "CALLS"
+        ],
+        [
+          "src.flask.cli.ScriptInfo.load_app",
+          "src.flask.cli.NoAppException",
+          "CALLS"
+        ],
+        [
+          "src.flask.cli.find_app_by_string",
+          "src.flask.cli.NoAppException",
+          "CALLS"
+        ],
+        [
+          "src.flask.cli.find_best_app",
+          "src.flask.cli.NoAppException",
+          "CALLS"
+        ],
+        [
+          "src.flask.cli.locate_app",
+          "src.flask.cli.NoAppException",
           "CALLS"
         ],
         [
@@ -464,23 +514,8 @@
           "CALLS"
         ],
         [
-          "src.flask.app.Flask.app_context",
-          "src.flask.ctx.AppContext",
-          "CALLS"
-        ],
-        [
-          "src.flask.app.Flask.do_teardown_appcontext",
-          "src.flask.helpers._CollectErrors",
-          "CALLS"
-        ],
-        [
           "src.flask.app.Flask.do_teardown_appcontext",
           "src.flask.signals.appcontext_tearing_down.send",
-          "CALLS"
-        ],
-        [
-          "src.flask.app.Flask.do_teardown_request",
-          "src.flask.helpers._CollectErrors",
           "CALLS"
         ],
         [
@@ -524,11 +559,6 @@
           "CALLS"
         ],
         [
-          "src.flask.app.Flask.raise_routing_exception",
-          "src.flask.debughelpers.FormDataRoutingRedirect",
-          "CALLS"
-        ],
-        [
           "src.flask.app.Flask.run",
           "src.flask.cli.AppGroup.load_dotenv",
           "CALLS"
@@ -556,11 +586,6 @@
         [
           "src.flask.app.Flask.test_client",
           "src.flask.testing.FlaskClient",
-          "CALLS"
-        ],
-        [
-          "src.flask.app.Flask.test_request_context",
-          "src.flask.testing.EnvironBuilder",
           "CALLS"
         ],
         [
@@ -596,11 +621,6 @@
         [
           "src.flask.app.add_ctx.wrapper",
           "src.flask.globals.app_ctx._get_current_object",
-          "CALLS"
-        ],
-        [
-          "src.flask.blueprints.Blueprint.__init__",
-          "src.flask.cli.AppGroup",
           "CALLS"
         ],
         [
@@ -661,35 +681,35 @@
       ],
       "caller_kind_precision": {
         "method-body": {
-          "tp": 43,
-          "fp": 28,
-          "precision": 0.6056,
-          "support": 71
+          "tp": 49,
+          "fp": 31,
+          "precision": 0.6125,
+          "support": 80
         }
       },
       "pkg_block_caller_FP_rate": {
-        "value": 0.0294,
-        "alarm": false,
-        "fp_count": 1,
-        "fp_total": 34
+        "value": 0.1136,
+        "alarm": true,
+        "fp_count": 5,
+        "fp_total": 44
       },
       "caller_kind_complement_legitimacy": {
-        "value": 0.6535,
-        "legitimate_count": 83,
-        "population_total": 127
+        "value": 0.6934,
+        "legitimate_count": 95,
+        "population_total": 137
       },
       "modality_precision": {},
       "modality_mix_gini": {
-        "__all__": 0.3576
+        "__all__": 0.2693
       },
       "caller_context_tuple_precision": {
         "method-body|cross-package-imported": {
           "caller_kind": "method-body",
           "callee_package_relation": "cross-package-imported",
-          "tp": 13,
-          "fp": 24,
-          "precision": 0.3514,
-          "support": 37
+          "tp": 19,
+          "fp": 27,
+          "precision": 0.413,
+          "support": 46
         },
         "method-body|same-package": {
           "caller_kind": "method-body",
@@ -702,9 +722,9 @@
       },
       "method_set_ambiguity_index": {
         "__all__": {
-          "value": 0.0833,
+          "value": 0.0732,
           "ambiguous_sites": 3,
-          "total_sites": 36
+          "total_sites": 41
         }
       },
       "janusian_site_precision_split": {
@@ -715,73 +735,73 @@
           "support": 3
         },
         "unambiguous": {
-          "tp": 51,
-          "fp": 31,
-          "precision": 0.622,
-          "support": 82
+          "tp": 57,
+          "fp": 41,
+          "precision": 0.5816,
+          "support": 98
         }
       },
-      "janusian_precision_gap": 0.622,
+      "janusian_precision_gap": 0.5816,
       "modal_split": {
         "real_only": {
-          "measured_count": 266,
+          "measured_count": 288,
           "oracle_count": 93,
           "oracle_caller_count": 46,
           "exact": {
-            "tp": 51,
-            "fp": 215,
-            "fn": 42,
-            "precision": 0.1917,
-            "recall": 0.5484,
-            "f1": 0.2841
+            "tp": 57,
+            "fp": 231,
+            "fn": 36,
+            "precision": 0.1979,
+            "recall": 0.6129,
+            "f1": 0.2992
           },
           "suffix_3seg": {
-            "tp": 51,
-            "fp": 215,
-            "fn": 42,
-            "precision": 0.1917,
-            "recall": 0.5484,
-            "f1": 0.2841
+            "tp": 57,
+            "fp": 231,
+            "fn": 36,
+            "precision": 0.1979,
+            "recall": 0.6129,
+            "f1": 0.2992
           },
           "scope_aligned": {
-            "tp": 51,
-            "fp": 34,
-            "fn": 42,
-            "precision": 0.6,
-            "recall": 0.5484,
-            "f1": 0.573
+            "tp": 57,
+            "fp": 44,
+            "fn": 36,
+            "precision": 0.5644,
+            "recall": 0.6129,
+            "f1": 0.5876
           },
           "scope_aligned_high_confidence": {
-            "tp": 51,
-            "fp": 34,
-            "fn": 42,
-            "precision": 0.6,
-            "recall": 0.5484,
-            "f1": 0.573
+            "tp": 57,
+            "fp": 44,
+            "fn": 36,
+            "precision": 0.5644,
+            "recall": 0.6129,
+            "f1": 0.5876
           },
           "scope_impl_normalized": {
-            "tp": 51,
-            "fp": 34,
-            "fn": 42,
-            "precision": 0.6,
-            "recall": 0.5484,
-            "f1": 0.573
+            "tp": 57,
+            "fp": 44,
+            "fn": 36,
+            "precision": 0.5644,
+            "recall": 0.6129,
+            "f1": 0.5876
           },
           "scope_generic_normalized": {
-            "tp": 51,
-            "fp": 34,
-            "fn": 42,
-            "precision": 0.6,
-            "recall": 0.5484,
-            "f1": 0.573
+            "tp": 57,
+            "fp": 44,
+            "fn": 36,
+            "precision": 0.5644,
+            "recall": 0.6129,
+            "f1": 0.5876
           },
           "scope_canonical": {
-            "tp": 51,
-            "fp": 34,
-            "fn": 42,
-            "precision": 0.6,
-            "recall": 0.5484,
-            "f1": 0.573
+            "tp": 57,
+            "fp": 44,
+            "fn": 36,
+            "precision": 0.5644,
+            "recall": 0.6129,
+            "f1": 0.5876
           },
           "sample_fp_exact": [
             [
@@ -792,6 +812,16 @@
             [
               "src.flask.__main__",
               "src.flask.cli.main",
+              "CALLS"
+            ],
+            [
+              "src.flask.app",
+              "src.flask.sessions.SecureCookieSessionInterface",
+              "CALLS"
+            ],
+            [
+              "src.flask.app.Flask.__init__",
+              "src.flask.cli.AppGroup",
               "CALLS"
             ],
             [
@@ -823,16 +853,6 @@
               "src.flask.app.Flask.make_default_options_response",
               "examples.tutorial.flaskr.blog.update",
               "CALLS"
-            ],
-            [
-              "src.flask.app.Flask.make_response",
-              "examples.tutorial.flaskr.blog.update",
-              "CALLS"
-            ],
-            [
-              "src.flask.app.Flask.make_shell_context",
-              "examples.tutorial.flaskr.blog.update",
-              "CALLS"
             ]
           ],
           "sample_fn_exact": [
@@ -852,23 +872,8 @@
               "CALLS"
             ],
             [
-              "src.flask.app.Flask.app_context",
-              "src.flask.ctx.AppContext",
-              "CALLS"
-            ],
-            [
-              "src.flask.app.Flask.do_teardown_appcontext",
-              "src.flask.helpers._CollectErrors",
-              "CALLS"
-            ],
-            [
               "src.flask.app.Flask.do_teardown_appcontext",
               "src.flask.signals.appcontext_tearing_down.send",
-              "CALLS"
-            ],
-            [
-              "src.flask.app.Flask.do_teardown_request",
-              "src.flask.helpers._CollectErrors",
               "CALLS"
             ],
             [
@@ -885,9 +890,34 @@
               "src.flask.app.Flask.full_dispatch_request",
               "src.flask.signals.request_started.send",
               "CALLS"
+            ],
+            [
+              "src.flask.app.Flask.handle_exception",
+              "src.flask.signals.got_request_exception.send",
+              "CALLS"
+            ],
+            [
+              "src.flask.app.Flask.make_default_options_response",
+              "src.flask.ctx.AppContext.from_environ.url_adapter.allowed_methods",
+              "CALLS"
+            ],
+            [
+              "src.flask.app.Flask.make_response",
+              "src.flask.typing.cast",
+              "CALLS"
             ]
           ],
           "sample_fp_scoped": [
+            [
+              "src.flask.app",
+              "src.flask.sessions.SecureCookieSessionInterface",
+              "CALLS"
+            ],
+            [
+              "src.flask.app.Flask.__init__",
+              "src.flask.cli.AppGroup",
+              "CALLS"
+            ],
             [
               "src.flask.app.Flask.handle_exception",
               "src.flask.sansio.app.App._find_error_handler",
@@ -927,16 +957,6 @@
               "src.flask.app.Flask.process_response",
               "src.flask.sessions.SessionInterface.is_null_session",
               "CALLS"
-            ],
-            [
-              "src.flask.app.Flask.run",
-              "src.flask.cli.load_dotenv",
-              "CALLS"
-            ],
-            [
-              "src.flask.app.Flask.run",
-              "src.flask.cli.show_server_banner",
-              "CALLS"
             ]
           ],
           "sample_fn_scoped": [
@@ -956,23 +976,8 @@
               "CALLS"
             ],
             [
-              "src.flask.app.Flask.app_context",
-              "src.flask.ctx.AppContext",
-              "CALLS"
-            ],
-            [
-              "src.flask.app.Flask.do_teardown_appcontext",
-              "src.flask.helpers._CollectErrors",
-              "CALLS"
-            ],
-            [
               "src.flask.app.Flask.do_teardown_appcontext",
               "src.flask.signals.appcontext_tearing_down.send",
-              "CALLS"
-            ],
-            [
-              "src.flask.app.Flask.do_teardown_request",
-              "src.flask.helpers._CollectErrors",
               "CALLS"
             ],
             [
@@ -989,9 +994,34 @@
               "src.flask.app.Flask.full_dispatch_request",
               "src.flask.signals.request_started.send",
               "CALLS"
+            ],
+            [
+              "src.flask.app.Flask.handle_exception",
+              "src.flask.signals.got_request_exception.send",
+              "CALLS"
+            ],
+            [
+              "src.flask.app.Flask.make_default_options_response",
+              "src.flask.ctx.AppContext.from_environ.url_adapter.allowed_methods",
+              "CALLS"
+            ],
+            [
+              "src.flask.app.Flask.make_response",
+              "src.flask.typing.cast",
+              "CALLS"
             ]
           ],
           "fp_scoped_full": [
+            [
+              "src.flask.app",
+              "src.flask.sessions.SecureCookieSessionInterface",
+              "CALLS"
+            ],
+            [
+              "src.flask.app.Flask.__init__",
+              "src.flask.cli.AppGroup",
+              "CALLS"
+            ],
             [
               "src.flask.app.Flask.handle_exception",
               "src.flask.sansio.app.App._find_error_handler",
@@ -1093,6 +1123,21 @@
               "CALLS"
             ],
             [
+              "src.flask.cli",
+              "src.flask.cli.CertParamType",
+              "CALLS"
+            ],
+            [
+              "src.flask.cli",
+              "src.flask.cli.FlaskGroup",
+              "CALLS"
+            ],
+            [
+              "src.flask.cli",
+              "src.flask.cli.SeparatedPathType",
+              "CALLS"
+            ],
+            [
               "src.flask.cli.FlaskGroup.get_command",
               "src.flask.app.Flask.app_context",
               "CALLS"
@@ -1133,8 +1178,33 @@
               "CALLS"
             ],
             [
+              "src.flask.cli.FlaskGroup.make_context",
+              "src.flask.cli.ScriptInfo",
+              "CALLS"
+            ],
+            [
               "src.flask.cli.ScriptInfo.load_app",
               "examples.celery.src.task_app.create_app",
+              "CALLS"
+            ],
+            [
+              "src.flask.cli.ScriptInfo.load_app",
+              "src.flask.cli.NoAppException",
+              "CALLS"
+            ],
+            [
+              "src.flask.cli.find_app_by_string",
+              "src.flask.cli.NoAppException",
+              "CALLS"
+            ],
+            [
+              "src.flask.cli.find_best_app",
+              "src.flask.cli.NoAppException",
+              "CALLS"
+            ],
+            [
+              "src.flask.cli.locate_app",
+              "src.flask.cli.NoAppException",
               "CALLS"
             ],
             [
@@ -1180,23 +1250,8 @@
               "CALLS"
             ],
             [
-              "src.flask.app.Flask.app_context",
-              "src.flask.ctx.AppContext",
-              "CALLS"
-            ],
-            [
-              "src.flask.app.Flask.do_teardown_appcontext",
-              "src.flask.helpers._CollectErrors",
-              "CALLS"
-            ],
-            [
               "src.flask.app.Flask.do_teardown_appcontext",
               "src.flask.signals.appcontext_tearing_down.send",
-              "CALLS"
-            ],
-            [
-              "src.flask.app.Flask.do_teardown_request",
-              "src.flask.helpers._CollectErrors",
               "CALLS"
             ],
             [
@@ -1240,11 +1295,6 @@
               "CALLS"
             ],
             [
-              "src.flask.app.Flask.raise_routing_exception",
-              "src.flask.debughelpers.FormDataRoutingRedirect",
-              "CALLS"
-            ],
-            [
               "src.flask.app.Flask.run",
               "src.flask.cli.AppGroup.load_dotenv",
               "CALLS"
@@ -1272,11 +1322,6 @@
             [
               "src.flask.app.Flask.test_client",
               "src.flask.testing.FlaskClient",
-              "CALLS"
-            ],
-            [
-              "src.flask.app.Flask.test_request_context",
-              "src.flask.testing.EnvironBuilder",
               "CALLS"
             ],
             [
@@ -1312,11 +1357,6 @@
             [
               "src.flask.app.add_ctx.wrapper",
               "src.flask.globals.app_ctx._get_current_object",
-              "CALLS"
-            ],
-            [
-              "src.flask.blueprints.Blueprint.__init__",
-              "src.flask.cli.AppGroup",
               "CALLS"
             ],
             [
@@ -1393,64 +1433,64 @@
           "ambiguity_note": "candidate_set_size not yet emitted by the indexed binary; metrics skipped."
         },
         "real_plus_external": {
-          "measured_count": 266,
+          "measured_count": 288,
           "oracle_count": 93,
           "oracle_caller_count": 46,
           "exact": {
-            "tp": 51,
-            "fp": 215,
-            "fn": 42,
-            "precision": 0.1917,
-            "recall": 0.5484,
-            "f1": 0.2841
+            "tp": 57,
+            "fp": 231,
+            "fn": 36,
+            "precision": 0.1979,
+            "recall": 0.6129,
+            "f1": 0.2992
           },
           "suffix_3seg": {
-            "tp": 51,
-            "fp": 215,
-            "fn": 42,
-            "precision": 0.1917,
-            "recall": 0.5484,
-            "f1": 0.2841
+            "tp": 57,
+            "fp": 231,
+            "fn": 36,
+            "precision": 0.1979,
+            "recall": 0.6129,
+            "f1": 0.2992
           },
           "scope_aligned": {
-            "tp": 51,
-            "fp": 34,
-            "fn": 42,
-            "precision": 0.6,
-            "recall": 0.5484,
-            "f1": 0.573
+            "tp": 57,
+            "fp": 44,
+            "fn": 36,
+            "precision": 0.5644,
+            "recall": 0.6129,
+            "f1": 0.5876
           },
           "scope_aligned_high_confidence": {
-            "tp": 51,
-            "fp": 34,
-            "fn": 42,
-            "precision": 0.6,
-            "recall": 0.5484,
-            "f1": 0.573
+            "tp": 57,
+            "fp": 44,
+            "fn": 36,
+            "precision": 0.5644,
+            "recall": 0.6129,
+            "f1": 0.5876
           },
           "scope_impl_normalized": {
-            "tp": 51,
-            "fp": 34,
-            "fn": 42,
-            "precision": 0.6,
-            "recall": 0.5484,
-            "f1": 0.573
+            "tp": 57,
+            "fp": 44,
+            "fn": 36,
+            "precision": 0.5644,
+            "recall": 0.6129,
+            "f1": 0.5876
           },
           "scope_generic_normalized": {
-            "tp": 51,
-            "fp": 34,
-            "fn": 42,
-            "precision": 0.6,
-            "recall": 0.5484,
-            "f1": 0.573
+            "tp": 57,
+            "fp": 44,
+            "fn": 36,
+            "precision": 0.5644,
+            "recall": 0.6129,
+            "f1": 0.5876
           },
           "scope_canonical": {
-            "tp": 51,
-            "fp": 34,
-            "fn": 42,
-            "precision": 0.6,
-            "recall": 0.5484,
-            "f1": 0.573
+            "tp": 57,
+            "fp": 44,
+            "fn": 36,
+            "precision": 0.5644,
+            "recall": 0.6129,
+            "f1": 0.5876
           },
           "sample_fp_exact": [
             [
@@ -1461,6 +1501,16 @@
             [
               "src.flask.__main__",
               "src.flask.cli.main",
+              "CALLS"
+            ],
+            [
+              "src.flask.app",
+              "src.flask.sessions.SecureCookieSessionInterface",
+              "CALLS"
+            ],
+            [
+              "src.flask.app.Flask.__init__",
+              "src.flask.cli.AppGroup",
               "CALLS"
             ],
             [
@@ -1492,16 +1542,6 @@
               "src.flask.app.Flask.make_default_options_response",
               "examples.tutorial.flaskr.blog.update",
               "CALLS"
-            ],
-            [
-              "src.flask.app.Flask.make_response",
-              "examples.tutorial.flaskr.blog.update",
-              "CALLS"
-            ],
-            [
-              "src.flask.app.Flask.make_shell_context",
-              "examples.tutorial.flaskr.blog.update",
-              "CALLS"
             ]
           ],
           "sample_fn_exact": [
@@ -1521,23 +1561,8 @@
               "CALLS"
             ],
             [
-              "src.flask.app.Flask.app_context",
-              "src.flask.ctx.AppContext",
-              "CALLS"
-            ],
-            [
-              "src.flask.app.Flask.do_teardown_appcontext",
-              "src.flask.helpers._CollectErrors",
-              "CALLS"
-            ],
-            [
               "src.flask.app.Flask.do_teardown_appcontext",
               "src.flask.signals.appcontext_tearing_down.send",
-              "CALLS"
-            ],
-            [
-              "src.flask.app.Flask.do_teardown_request",
-              "src.flask.helpers._CollectErrors",
               "CALLS"
             ],
             [
@@ -1554,9 +1579,34 @@
               "src.flask.app.Flask.full_dispatch_request",
               "src.flask.signals.request_started.send",
               "CALLS"
+            ],
+            [
+              "src.flask.app.Flask.handle_exception",
+              "src.flask.signals.got_request_exception.send",
+              "CALLS"
+            ],
+            [
+              "src.flask.app.Flask.make_default_options_response",
+              "src.flask.ctx.AppContext.from_environ.url_adapter.allowed_methods",
+              "CALLS"
+            ],
+            [
+              "src.flask.app.Flask.make_response",
+              "src.flask.typing.cast",
+              "CALLS"
             ]
           ],
           "sample_fp_scoped": [
+            [
+              "src.flask.app",
+              "src.flask.sessions.SecureCookieSessionInterface",
+              "CALLS"
+            ],
+            [
+              "src.flask.app.Flask.__init__",
+              "src.flask.cli.AppGroup",
+              "CALLS"
+            ],
             [
               "src.flask.app.Flask.handle_exception",
               "src.flask.sansio.app.App._find_error_handler",
@@ -1596,16 +1646,6 @@
               "src.flask.app.Flask.process_response",
               "src.flask.sessions.SessionInterface.is_null_session",
               "CALLS"
-            ],
-            [
-              "src.flask.app.Flask.run",
-              "src.flask.cli.load_dotenv",
-              "CALLS"
-            ],
-            [
-              "src.flask.app.Flask.run",
-              "src.flask.cli.show_server_banner",
-              "CALLS"
             ]
           ],
           "sample_fn_scoped": [
@@ -1625,23 +1665,8 @@
               "CALLS"
             ],
             [
-              "src.flask.app.Flask.app_context",
-              "src.flask.ctx.AppContext",
-              "CALLS"
-            ],
-            [
-              "src.flask.app.Flask.do_teardown_appcontext",
-              "src.flask.helpers._CollectErrors",
-              "CALLS"
-            ],
-            [
               "src.flask.app.Flask.do_teardown_appcontext",
               "src.flask.signals.appcontext_tearing_down.send",
-              "CALLS"
-            ],
-            [
-              "src.flask.app.Flask.do_teardown_request",
-              "src.flask.helpers._CollectErrors",
               "CALLS"
             ],
             [
@@ -1658,9 +1683,34 @@
               "src.flask.app.Flask.full_dispatch_request",
               "src.flask.signals.request_started.send",
               "CALLS"
+            ],
+            [
+              "src.flask.app.Flask.handle_exception",
+              "src.flask.signals.got_request_exception.send",
+              "CALLS"
+            ],
+            [
+              "src.flask.app.Flask.make_default_options_response",
+              "src.flask.ctx.AppContext.from_environ.url_adapter.allowed_methods",
+              "CALLS"
+            ],
+            [
+              "src.flask.app.Flask.make_response",
+              "src.flask.typing.cast",
+              "CALLS"
             ]
           ],
           "fp_scoped_full": [
+            [
+              "src.flask.app",
+              "src.flask.sessions.SecureCookieSessionInterface",
+              "CALLS"
+            ],
+            [
+              "src.flask.app.Flask.__init__",
+              "src.flask.cli.AppGroup",
+              "CALLS"
+            ],
             [
               "src.flask.app.Flask.handle_exception",
               "src.flask.sansio.app.App._find_error_handler",
@@ -1762,6 +1812,21 @@
               "CALLS"
             ],
             [
+              "src.flask.cli",
+              "src.flask.cli.CertParamType",
+              "CALLS"
+            ],
+            [
+              "src.flask.cli",
+              "src.flask.cli.FlaskGroup",
+              "CALLS"
+            ],
+            [
+              "src.flask.cli",
+              "src.flask.cli.SeparatedPathType",
+              "CALLS"
+            ],
+            [
               "src.flask.cli.FlaskGroup.get_command",
               "src.flask.app.Flask.app_context",
               "CALLS"
@@ -1802,8 +1867,33 @@
               "CALLS"
             ],
             [
+              "src.flask.cli.FlaskGroup.make_context",
+              "src.flask.cli.ScriptInfo",
+              "CALLS"
+            ],
+            [
               "src.flask.cli.ScriptInfo.load_app",
               "examples.celery.src.task_app.create_app",
+              "CALLS"
+            ],
+            [
+              "src.flask.cli.ScriptInfo.load_app",
+              "src.flask.cli.NoAppException",
+              "CALLS"
+            ],
+            [
+              "src.flask.cli.find_app_by_string",
+              "src.flask.cli.NoAppException",
+              "CALLS"
+            ],
+            [
+              "src.flask.cli.find_best_app",
+              "src.flask.cli.NoAppException",
+              "CALLS"
+            ],
+            [
+              "src.flask.cli.locate_app",
+              "src.flask.cli.NoAppException",
               "CALLS"
             ],
             [
@@ -1849,23 +1939,8 @@
               "CALLS"
             ],
             [
-              "src.flask.app.Flask.app_context",
-              "src.flask.ctx.AppContext",
-              "CALLS"
-            ],
-            [
-              "src.flask.app.Flask.do_teardown_appcontext",
-              "src.flask.helpers._CollectErrors",
-              "CALLS"
-            ],
-            [
               "src.flask.app.Flask.do_teardown_appcontext",
               "src.flask.signals.appcontext_tearing_down.send",
-              "CALLS"
-            ],
-            [
-              "src.flask.app.Flask.do_teardown_request",
-              "src.flask.helpers._CollectErrors",
               "CALLS"
             ],
             [
@@ -1909,11 +1984,6 @@
               "CALLS"
             ],
             [
-              "src.flask.app.Flask.raise_routing_exception",
-              "src.flask.debughelpers.FormDataRoutingRedirect",
-              "CALLS"
-            ],
-            [
               "src.flask.app.Flask.run",
               "src.flask.cli.AppGroup.load_dotenv",
               "CALLS"
@@ -1941,11 +2011,6 @@
             [
               "src.flask.app.Flask.test_client",
               "src.flask.testing.FlaskClient",
-              "CALLS"
-            ],
-            [
-              "src.flask.app.Flask.test_request_context",
-              "src.flask.testing.EnvironBuilder",
               "CALLS"
             ],
             [
@@ -1981,11 +2046,6 @@
             [
               "src.flask.app.add_ctx.wrapper",
               "src.flask.globals.app_ctx._get_current_object",
-              "CALLS"
-            ],
-            [
-              "src.flask.blueprints.Blueprint.__init__",
-              "src.flask.cli.AppGroup",
               "CALLS"
             ],
             [
@@ -2062,64 +2122,64 @@
           "ambiguity_note": "candidate_set_size not yet emitted by the indexed binary; metrics skipped."
         },
         "real_plus_pseudo": {
-          "measured_count": 266,
+          "measured_count": 288,
           "oracle_count": 93,
           "oracle_caller_count": 46,
           "exact": {
-            "tp": 51,
-            "fp": 215,
-            "fn": 42,
-            "precision": 0.1917,
-            "recall": 0.5484,
-            "f1": 0.2841
+            "tp": 57,
+            "fp": 231,
+            "fn": 36,
+            "precision": 0.1979,
+            "recall": 0.6129,
+            "f1": 0.2992
           },
           "suffix_3seg": {
-            "tp": 51,
-            "fp": 215,
-            "fn": 42,
-            "precision": 0.1917,
-            "recall": 0.5484,
-            "f1": 0.2841
+            "tp": 57,
+            "fp": 231,
+            "fn": 36,
+            "precision": 0.1979,
+            "recall": 0.6129,
+            "f1": 0.2992
           },
           "scope_aligned": {
-            "tp": 51,
-            "fp": 34,
-            "fn": 42,
-            "precision": 0.6,
-            "recall": 0.5484,
-            "f1": 0.573
+            "tp": 57,
+            "fp": 44,
+            "fn": 36,
+            "precision": 0.5644,
+            "recall": 0.6129,
+            "f1": 0.5876
           },
           "scope_aligned_high_confidence": {
-            "tp": 51,
-            "fp": 34,
-            "fn": 42,
-            "precision": 0.6,
-            "recall": 0.5484,
-            "f1": 0.573
+            "tp": 57,
+            "fp": 44,
+            "fn": 36,
+            "precision": 0.5644,
+            "recall": 0.6129,
+            "f1": 0.5876
           },
           "scope_impl_normalized": {
-            "tp": 51,
-            "fp": 34,
-            "fn": 42,
-            "precision": 0.6,
-            "recall": 0.5484,
-            "f1": 0.573
+            "tp": 57,
+            "fp": 44,
+            "fn": 36,
+            "precision": 0.5644,
+            "recall": 0.6129,
+            "f1": 0.5876
           },
           "scope_generic_normalized": {
-            "tp": 51,
-            "fp": 34,
-            "fn": 42,
-            "precision": 0.6,
-            "recall": 0.5484,
-            "f1": 0.573
+            "tp": 57,
+            "fp": 44,
+            "fn": 36,
+            "precision": 0.5644,
+            "recall": 0.6129,
+            "f1": 0.5876
           },
           "scope_canonical": {
-            "tp": 51,
-            "fp": 34,
-            "fn": 42,
-            "precision": 0.6,
-            "recall": 0.5484,
-            "f1": 0.573
+            "tp": 57,
+            "fp": 44,
+            "fn": 36,
+            "precision": 0.5644,
+            "recall": 0.6129,
+            "f1": 0.5876
           },
           "sample_fp_exact": [
             [
@@ -2130,6 +2190,16 @@
             [
               "src.flask.__main__",
               "src.flask.cli.main",
+              "CALLS"
+            ],
+            [
+              "src.flask.app",
+              "src.flask.sessions.SecureCookieSessionInterface",
+              "CALLS"
+            ],
+            [
+              "src.flask.app.Flask.__init__",
+              "src.flask.cli.AppGroup",
               "CALLS"
             ],
             [
@@ -2161,16 +2231,6 @@
               "src.flask.app.Flask.make_default_options_response",
               "examples.tutorial.flaskr.blog.update",
               "CALLS"
-            ],
-            [
-              "src.flask.app.Flask.make_response",
-              "examples.tutorial.flaskr.blog.update",
-              "CALLS"
-            ],
-            [
-              "src.flask.app.Flask.make_shell_context",
-              "examples.tutorial.flaskr.blog.update",
-              "CALLS"
             ]
           ],
           "sample_fn_exact": [
@@ -2190,23 +2250,8 @@
               "CALLS"
             ],
             [
-              "src.flask.app.Flask.app_context",
-              "src.flask.ctx.AppContext",
-              "CALLS"
-            ],
-            [
-              "src.flask.app.Flask.do_teardown_appcontext",
-              "src.flask.helpers._CollectErrors",
-              "CALLS"
-            ],
-            [
               "src.flask.app.Flask.do_teardown_appcontext",
               "src.flask.signals.appcontext_tearing_down.send",
-              "CALLS"
-            ],
-            [
-              "src.flask.app.Flask.do_teardown_request",
-              "src.flask.helpers._CollectErrors",
               "CALLS"
             ],
             [
@@ -2223,9 +2268,34 @@
               "src.flask.app.Flask.full_dispatch_request",
               "src.flask.signals.request_started.send",
               "CALLS"
+            ],
+            [
+              "src.flask.app.Flask.handle_exception",
+              "src.flask.signals.got_request_exception.send",
+              "CALLS"
+            ],
+            [
+              "src.flask.app.Flask.make_default_options_response",
+              "src.flask.ctx.AppContext.from_environ.url_adapter.allowed_methods",
+              "CALLS"
+            ],
+            [
+              "src.flask.app.Flask.make_response",
+              "src.flask.typing.cast",
+              "CALLS"
             ]
           ],
           "sample_fp_scoped": [
+            [
+              "src.flask.app",
+              "src.flask.sessions.SecureCookieSessionInterface",
+              "CALLS"
+            ],
+            [
+              "src.flask.app.Flask.__init__",
+              "src.flask.cli.AppGroup",
+              "CALLS"
+            ],
             [
               "src.flask.app.Flask.handle_exception",
               "src.flask.sansio.app.App._find_error_handler",
@@ -2265,16 +2335,6 @@
               "src.flask.app.Flask.process_response",
               "src.flask.sessions.SessionInterface.is_null_session",
               "CALLS"
-            ],
-            [
-              "src.flask.app.Flask.run",
-              "src.flask.cli.load_dotenv",
-              "CALLS"
-            ],
-            [
-              "src.flask.app.Flask.run",
-              "src.flask.cli.show_server_banner",
-              "CALLS"
             ]
           ],
           "sample_fn_scoped": [
@@ -2294,23 +2354,8 @@
               "CALLS"
             ],
             [
-              "src.flask.app.Flask.app_context",
-              "src.flask.ctx.AppContext",
-              "CALLS"
-            ],
-            [
-              "src.flask.app.Flask.do_teardown_appcontext",
-              "src.flask.helpers._CollectErrors",
-              "CALLS"
-            ],
-            [
               "src.flask.app.Flask.do_teardown_appcontext",
               "src.flask.signals.appcontext_tearing_down.send",
-              "CALLS"
-            ],
-            [
-              "src.flask.app.Flask.do_teardown_request",
-              "src.flask.helpers._CollectErrors",
               "CALLS"
             ],
             [
@@ -2327,9 +2372,34 @@
               "src.flask.app.Flask.full_dispatch_request",
               "src.flask.signals.request_started.send",
               "CALLS"
+            ],
+            [
+              "src.flask.app.Flask.handle_exception",
+              "src.flask.signals.got_request_exception.send",
+              "CALLS"
+            ],
+            [
+              "src.flask.app.Flask.make_default_options_response",
+              "src.flask.ctx.AppContext.from_environ.url_adapter.allowed_methods",
+              "CALLS"
+            ],
+            [
+              "src.flask.app.Flask.make_response",
+              "src.flask.typing.cast",
+              "CALLS"
             ]
           ],
           "fp_scoped_full": [
+            [
+              "src.flask.app",
+              "src.flask.sessions.SecureCookieSessionInterface",
+              "CALLS"
+            ],
+            [
+              "src.flask.app.Flask.__init__",
+              "src.flask.cli.AppGroup",
+              "CALLS"
+            ],
             [
               "src.flask.app.Flask.handle_exception",
               "src.flask.sansio.app.App._find_error_handler",
@@ -2431,6 +2501,21 @@
               "CALLS"
             ],
             [
+              "src.flask.cli",
+              "src.flask.cli.CertParamType",
+              "CALLS"
+            ],
+            [
+              "src.flask.cli",
+              "src.flask.cli.FlaskGroup",
+              "CALLS"
+            ],
+            [
+              "src.flask.cli",
+              "src.flask.cli.SeparatedPathType",
+              "CALLS"
+            ],
+            [
               "src.flask.cli.FlaskGroup.get_command",
               "src.flask.app.Flask.app_context",
               "CALLS"
@@ -2471,8 +2556,33 @@
               "CALLS"
             ],
             [
+              "src.flask.cli.FlaskGroup.make_context",
+              "src.flask.cli.ScriptInfo",
+              "CALLS"
+            ],
+            [
               "src.flask.cli.ScriptInfo.load_app",
               "examples.celery.src.task_app.create_app",
+              "CALLS"
+            ],
+            [
+              "src.flask.cli.ScriptInfo.load_app",
+              "src.flask.cli.NoAppException",
+              "CALLS"
+            ],
+            [
+              "src.flask.cli.find_app_by_string",
+              "src.flask.cli.NoAppException",
+              "CALLS"
+            ],
+            [
+              "src.flask.cli.find_best_app",
+              "src.flask.cli.NoAppException",
+              "CALLS"
+            ],
+            [
+              "src.flask.cli.locate_app",
+              "src.flask.cli.NoAppException",
               "CALLS"
             ],
             [
@@ -2518,23 +2628,8 @@
               "CALLS"
             ],
             [
-              "src.flask.app.Flask.app_context",
-              "src.flask.ctx.AppContext",
-              "CALLS"
-            ],
-            [
-              "src.flask.app.Flask.do_teardown_appcontext",
-              "src.flask.helpers._CollectErrors",
-              "CALLS"
-            ],
-            [
               "src.flask.app.Flask.do_teardown_appcontext",
               "src.flask.signals.appcontext_tearing_down.send",
-              "CALLS"
-            ],
-            [
-              "src.flask.app.Flask.do_teardown_request",
-              "src.flask.helpers._CollectErrors",
               "CALLS"
             ],
             [
@@ -2578,11 +2673,6 @@
               "CALLS"
             ],
             [
-              "src.flask.app.Flask.raise_routing_exception",
-              "src.flask.debughelpers.FormDataRoutingRedirect",
-              "CALLS"
-            ],
-            [
               "src.flask.app.Flask.run",
               "src.flask.cli.AppGroup.load_dotenv",
               "CALLS"
@@ -2610,11 +2700,6 @@
             [
               "src.flask.app.Flask.test_client",
               "src.flask.testing.FlaskClient",
-              "CALLS"
-            ],
-            [
-              "src.flask.app.Flask.test_request_context",
-              "src.flask.testing.EnvironBuilder",
               "CALLS"
             ],
             [
@@ -2650,11 +2735,6 @@
             [
               "src.flask.app.add_ctx.wrapper",
               "src.flask.globals.app_ctx._get_current_object",
-              "CALLS"
-            ],
-            [
-              "src.flask.blueprints.Blueprint.__init__",
-              "src.flask.cli.AppGroup",
               "CALLS"
             ],
             [
@@ -2731,64 +2811,64 @@
           "ambiguity_note": "candidate_set_size not yet emitted by the indexed binary; metrics skipped."
         },
         "all_calls_family": {
-          "measured_count": 266,
+          "measured_count": 288,
           "oracle_count": 93,
           "oracle_caller_count": 46,
           "exact": {
-            "tp": 51,
-            "fp": 215,
-            "fn": 42,
-            "precision": 0.1917,
-            "recall": 0.5484,
-            "f1": 0.2841
+            "tp": 57,
+            "fp": 231,
+            "fn": 36,
+            "precision": 0.1979,
+            "recall": 0.6129,
+            "f1": 0.2992
           },
           "suffix_3seg": {
-            "tp": 51,
-            "fp": 215,
-            "fn": 42,
-            "precision": 0.1917,
-            "recall": 0.5484,
-            "f1": 0.2841
+            "tp": 57,
+            "fp": 231,
+            "fn": 36,
+            "precision": 0.1979,
+            "recall": 0.6129,
+            "f1": 0.2992
           },
           "scope_aligned": {
-            "tp": 51,
-            "fp": 34,
-            "fn": 42,
-            "precision": 0.6,
-            "recall": 0.5484,
-            "f1": 0.573
+            "tp": 57,
+            "fp": 44,
+            "fn": 36,
+            "precision": 0.5644,
+            "recall": 0.6129,
+            "f1": 0.5876
           },
           "scope_aligned_high_confidence": {
-            "tp": 51,
-            "fp": 34,
-            "fn": 42,
-            "precision": 0.6,
-            "recall": 0.5484,
-            "f1": 0.573
+            "tp": 57,
+            "fp": 44,
+            "fn": 36,
+            "precision": 0.5644,
+            "recall": 0.6129,
+            "f1": 0.5876
           },
           "scope_impl_normalized": {
-            "tp": 51,
-            "fp": 34,
-            "fn": 42,
-            "precision": 0.6,
-            "recall": 0.5484,
-            "f1": 0.573
+            "tp": 57,
+            "fp": 44,
+            "fn": 36,
+            "precision": 0.5644,
+            "recall": 0.6129,
+            "f1": 0.5876
           },
           "scope_generic_normalized": {
-            "tp": 51,
-            "fp": 34,
-            "fn": 42,
-            "precision": 0.6,
-            "recall": 0.5484,
-            "f1": 0.573
+            "tp": 57,
+            "fp": 44,
+            "fn": 36,
+            "precision": 0.5644,
+            "recall": 0.6129,
+            "f1": 0.5876
           },
           "scope_canonical": {
-            "tp": 51,
-            "fp": 34,
-            "fn": 42,
-            "precision": 0.6,
-            "recall": 0.5484,
-            "f1": 0.573
+            "tp": 57,
+            "fp": 44,
+            "fn": 36,
+            "precision": 0.5644,
+            "recall": 0.6129,
+            "f1": 0.5876
           },
           "sample_fp_exact": [
             [
@@ -2799,6 +2879,16 @@
             [
               "src.flask.__main__",
               "src.flask.cli.main",
+              "CALLS"
+            ],
+            [
+              "src.flask.app",
+              "src.flask.sessions.SecureCookieSessionInterface",
+              "CALLS"
+            ],
+            [
+              "src.flask.app.Flask.__init__",
+              "src.flask.cli.AppGroup",
               "CALLS"
             ],
             [
@@ -2830,16 +2920,6 @@
               "src.flask.app.Flask.make_default_options_response",
               "examples.tutorial.flaskr.blog.update",
               "CALLS"
-            ],
-            [
-              "src.flask.app.Flask.make_response",
-              "examples.tutorial.flaskr.blog.update",
-              "CALLS"
-            ],
-            [
-              "src.flask.app.Flask.make_shell_context",
-              "examples.tutorial.flaskr.blog.update",
-              "CALLS"
             ]
           ],
           "sample_fn_exact": [
@@ -2859,23 +2939,8 @@
               "CALLS"
             ],
             [
-              "src.flask.app.Flask.app_context",
-              "src.flask.ctx.AppContext",
-              "CALLS"
-            ],
-            [
-              "src.flask.app.Flask.do_teardown_appcontext",
-              "src.flask.helpers._CollectErrors",
-              "CALLS"
-            ],
-            [
               "src.flask.app.Flask.do_teardown_appcontext",
               "src.flask.signals.appcontext_tearing_down.send",
-              "CALLS"
-            ],
-            [
-              "src.flask.app.Flask.do_teardown_request",
-              "src.flask.helpers._CollectErrors",
               "CALLS"
             ],
             [
@@ -2892,9 +2957,34 @@
               "src.flask.app.Flask.full_dispatch_request",
               "src.flask.signals.request_started.send",
               "CALLS"
+            ],
+            [
+              "src.flask.app.Flask.handle_exception",
+              "src.flask.signals.got_request_exception.send",
+              "CALLS"
+            ],
+            [
+              "src.flask.app.Flask.make_default_options_response",
+              "src.flask.ctx.AppContext.from_environ.url_adapter.allowed_methods",
+              "CALLS"
+            ],
+            [
+              "src.flask.app.Flask.make_response",
+              "src.flask.typing.cast",
+              "CALLS"
             ]
           ],
           "sample_fp_scoped": [
+            [
+              "src.flask.app",
+              "src.flask.sessions.SecureCookieSessionInterface",
+              "CALLS"
+            ],
+            [
+              "src.flask.app.Flask.__init__",
+              "src.flask.cli.AppGroup",
+              "CALLS"
+            ],
             [
               "src.flask.app.Flask.handle_exception",
               "src.flask.sansio.app.App._find_error_handler",
@@ -2934,16 +3024,6 @@
               "src.flask.app.Flask.process_response",
               "src.flask.sessions.SessionInterface.is_null_session",
               "CALLS"
-            ],
-            [
-              "src.flask.app.Flask.run",
-              "src.flask.cli.load_dotenv",
-              "CALLS"
-            ],
-            [
-              "src.flask.app.Flask.run",
-              "src.flask.cli.show_server_banner",
-              "CALLS"
             ]
           ],
           "sample_fn_scoped": [
@@ -2963,23 +3043,8 @@
               "CALLS"
             ],
             [
-              "src.flask.app.Flask.app_context",
-              "src.flask.ctx.AppContext",
-              "CALLS"
-            ],
-            [
-              "src.flask.app.Flask.do_teardown_appcontext",
-              "src.flask.helpers._CollectErrors",
-              "CALLS"
-            ],
-            [
               "src.flask.app.Flask.do_teardown_appcontext",
               "src.flask.signals.appcontext_tearing_down.send",
-              "CALLS"
-            ],
-            [
-              "src.flask.app.Flask.do_teardown_request",
-              "src.flask.helpers._CollectErrors",
               "CALLS"
             ],
             [
@@ -2996,9 +3061,34 @@
               "src.flask.app.Flask.full_dispatch_request",
               "src.flask.signals.request_started.send",
               "CALLS"
+            ],
+            [
+              "src.flask.app.Flask.handle_exception",
+              "src.flask.signals.got_request_exception.send",
+              "CALLS"
+            ],
+            [
+              "src.flask.app.Flask.make_default_options_response",
+              "src.flask.ctx.AppContext.from_environ.url_adapter.allowed_methods",
+              "CALLS"
+            ],
+            [
+              "src.flask.app.Flask.make_response",
+              "src.flask.typing.cast",
+              "CALLS"
             ]
           ],
           "fp_scoped_full": [
+            [
+              "src.flask.app",
+              "src.flask.sessions.SecureCookieSessionInterface",
+              "CALLS"
+            ],
+            [
+              "src.flask.app.Flask.__init__",
+              "src.flask.cli.AppGroup",
+              "CALLS"
+            ],
             [
               "src.flask.app.Flask.handle_exception",
               "src.flask.sansio.app.App._find_error_handler",
@@ -3100,6 +3190,21 @@
               "CALLS"
             ],
             [
+              "src.flask.cli",
+              "src.flask.cli.CertParamType",
+              "CALLS"
+            ],
+            [
+              "src.flask.cli",
+              "src.flask.cli.FlaskGroup",
+              "CALLS"
+            ],
+            [
+              "src.flask.cli",
+              "src.flask.cli.SeparatedPathType",
+              "CALLS"
+            ],
+            [
               "src.flask.cli.FlaskGroup.get_command",
               "src.flask.app.Flask.app_context",
               "CALLS"
@@ -3140,8 +3245,33 @@
               "CALLS"
             ],
             [
+              "src.flask.cli.FlaskGroup.make_context",
+              "src.flask.cli.ScriptInfo",
+              "CALLS"
+            ],
+            [
               "src.flask.cli.ScriptInfo.load_app",
               "examples.celery.src.task_app.create_app",
+              "CALLS"
+            ],
+            [
+              "src.flask.cli.ScriptInfo.load_app",
+              "src.flask.cli.NoAppException",
+              "CALLS"
+            ],
+            [
+              "src.flask.cli.find_app_by_string",
+              "src.flask.cli.NoAppException",
+              "CALLS"
+            ],
+            [
+              "src.flask.cli.find_best_app",
+              "src.flask.cli.NoAppException",
+              "CALLS"
+            ],
+            [
+              "src.flask.cli.locate_app",
+              "src.flask.cli.NoAppException",
               "CALLS"
             ],
             [
@@ -3187,23 +3317,8 @@
               "CALLS"
             ],
             [
-              "src.flask.app.Flask.app_context",
-              "src.flask.ctx.AppContext",
-              "CALLS"
-            ],
-            [
-              "src.flask.app.Flask.do_teardown_appcontext",
-              "src.flask.helpers._CollectErrors",
-              "CALLS"
-            ],
-            [
               "src.flask.app.Flask.do_teardown_appcontext",
               "src.flask.signals.appcontext_tearing_down.send",
-              "CALLS"
-            ],
-            [
-              "src.flask.app.Flask.do_teardown_request",
-              "src.flask.helpers._CollectErrors",
               "CALLS"
             ],
             [
@@ -3247,11 +3362,6 @@
               "CALLS"
             ],
             [
-              "src.flask.app.Flask.raise_routing_exception",
-              "src.flask.debughelpers.FormDataRoutingRedirect",
-              "CALLS"
-            ],
-            [
               "src.flask.app.Flask.run",
               "src.flask.cli.AppGroup.load_dotenv",
               "CALLS"
@@ -3279,11 +3389,6 @@
             [
               "src.flask.app.Flask.test_client",
               "src.flask.testing.FlaskClient",
-              "CALLS"
-            ],
-            [
-              "src.flask.app.Flask.test_request_context",
-              "src.flask.testing.EnvironBuilder",
               "CALLS"
             ],
             [
@@ -3319,11 +3424,6 @@
             [
               "src.flask.app.add_ctx.wrapper",
               "src.flask.globals.app_ctx._get_current_object",
-              "CALLS"
-            ],
-            [
-              "src.flask.blueprints.Blueprint.__init__",
-              "src.flask.cli.AppGroup",
               "CALLS"
             ],
             [

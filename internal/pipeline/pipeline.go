@@ -1866,7 +1866,13 @@ func buildEdgesFromResults(results [][]resolvedEdge, qnToID map[string]int64, la
 			// keeps its tag.
 			if edgeType == "CALLS" && labels != nil {
 				tgtLabel, have := labels[re.TargetQN]
-				if have && tgtLabel != "Function" && tgtLabel != "Method" {
+				// Class targets are direct constructor calls (e.g. Python
+				// `AppContext(self)`, Rust struct construction surfaced
+				// through register paths). PyCG records these as CALLS
+				// to the class; demoting to INDIRECT_CALLS loses those
+				// edges against the oracle. Variable/File/Module targets
+				// remain indirect-dispatch and get the demotion.
+				if have && tgtLabel != "Function" && tgtLabel != "Method" && tgtLabel != "Class" {
 					edgeType = "INDIRECT_CALLS"
 					indirectCalls++
 				}

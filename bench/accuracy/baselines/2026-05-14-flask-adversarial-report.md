@@ -17,7 +17,7 @@ Two operating points are reported because the resolver emits Janusian-ambiguous 
 
 | Edge type | Oracle | Oracle / Measured | Exact P/R/F1 | Scope-aligned P/R/F1 (all) | Scope-aligned P/R/F1 (high-conf) | Impl-normalized P/R/F1 |
 |---|---|---|---|---|---|---|
-| CALLS | pycg | 93 / 266 | 0.192 / 0.548 / 0.284 | 0.600 / 0.548 / 0.573 | 0.600 / 0.548 / 0.573 | 0.600 / 0.548 / 0.573 |
+| CALLS | pycg | 93 / 288 | 0.198 / 0.613 / 0.299 | 0.564 / 0.613 / 0.588 | 0.564 / 0.613 / 0.588 | 0.564 / 0.613 / 0.588 |
 | IMPORTS | ast | 97 / 219 | 0.055 / 0.124 / 0.076 | 0.089 / 0.124 / 0.103 | 0.089 / 0.124 / 0.103 | 0.089 / 0.124 / 0.103 |
 | HTTP_CALLS | opus+sonnet (not yet run) | — / — | — (pending) | — | — |
 
@@ -29,11 +29,11 @@ Each CALLS edge is tagged with the AST scope of its caller (`function-body`, `me
 
 | Kind | TP | FP | Precision | Support |
 |---|---:|---:|---:|---:|
-| `method-body` | 43 | 28 | 0.606 | 71 |
+| `method-body` | 49 | 31 | 0.613 | 80 |
 
-**Package-block caller FP rate**: 0.0294 (1 of 34 FPs)
+**Package-block caller FP rate**: 0.1136 (5 of 44 FPs) ALARM
 
-**Caller-kind complement legitimacy** (function/method-body share of all scope-aligned edges): 0.6535 (83 of 127)
+**Caller-kind complement legitimacy** (function/method-body share of all scope-aligned edges): 0.6934 (95 of 137)
 
 ### IMPORTS
 
@@ -50,16 +50,16 @@ Each CALLS edge carries the resolver's pre-tie-break candidate cardinality (`can
 
 | Project | Ambiguous sites | Total sites | Index |
 |---|---:|---:|---:|
-| __all__ | 3 | 36 | 0.0833 |
+| __all__ | 3 | 41 | 0.0732 |
 
 **janusian_site_precision_split** — precision conditional on call-site ambiguity:
 
 | Bucket | TP | FP | Precision | Support |
 |---|---:|---:|---:|---:|
 | `ambiguous` | 0 | 3 | 0.0000 | 3 |
-| `unambiguous` | 51 | 31 | 0.6220 | 82 |
+| `unambiguous` | 57 | 41 | 0.5816 | 98 |
 
-**janusian_precision_gap** (unambiguous − ambiguous precision): +0.6220. Positive = unambiguous sites resolve more accurately, consistent with Step 2's prediction. Negative or near-zero = ambiguity is not the dominant FP driver.
+**janusian_precision_gap** (unambiguous − ambiguous precision): +0.5816. Positive = unambiguous sites resolve more accurately, consistent with Step 2's prediction. Negative or near-zero = ambiguity is not the dominant FP driver.
 
 
 ## CALLS modal split — by edge-kind union
@@ -75,10 +75,10 @@ Headline `results.CALLS` is the `real_only` row.
 
 | Union | Measured | Exact P/R/F1 | Suffix-3 P/R/F1 | Scope-aligned P/R/F1 |
 |---|---|---|---|---|
-| real_only | 266 | 0.192 / 0.548 / 0.284 | 0.192 / 0.548 / 0.284 | 0.600 / 0.548 / 0.573 |
-| real_plus_external | 266 | 0.192 / 0.548 / 0.284 | 0.192 / 0.548 / 0.284 | 0.600 / 0.548 / 0.573 |
-| real_plus_pseudo | 266 | 0.192 / 0.548 / 0.284 | 0.192 / 0.548 / 0.284 | 0.600 / 0.548 / 0.573 |
-| all_calls_family | 266 | 0.192 / 0.548 / 0.284 | 0.192 / 0.548 / 0.284 | 0.600 / 0.548 / 0.573 |
+| real_only | 288 | 0.198 / 0.613 / 0.299 | 0.198 / 0.613 / 0.299 | 0.564 / 0.613 / 0.588 |
+| real_plus_external | 288 | 0.198 / 0.613 / 0.299 | 0.198 / 0.613 / 0.299 | 0.564 / 0.613 / 0.588 |
+| real_plus_pseudo | 288 | 0.198 / 0.613 / 0.299 | 0.198 / 0.613 / 0.299 | 0.564 / 0.613 / 0.588 |
+| all_calls_family | 288 | 0.198 / 0.613 / 0.299 | 0.198 / 0.613 / 0.299 | 0.564 / 0.613 / 0.588 |
 
 Diverging rows expose how each non-real population dilutes the aggregate. Most accuracy regressions live in `real_only`; the other rows are diagnostic.
 
@@ -90,6 +90,8 @@ Oracle analyzed callers: 46
 
 **Scope-aligned false positives** (code-graph edge from a PyCG-analyzed caller to a callee PyCG did not record):
 ```
+  src.flask.app --> src.flask.sessions.SecureCookieSessionInterface
+  src.flask.app.Flask.__init__ --> src.flask.cli.AppGroup
   src.flask.app.Flask.handle_exception --> src.flask.sansio.app.App._find_error_handler
   src.flask.app.Flask.handle_http_exception --> src.flask.sansio.app.App._find_error_handler
   src.flask.app.Flask.handle_user_exception --> src.flask.sansio.app.App._find_error_handler
@@ -98,8 +100,6 @@ Oracle analyzed callers: 46
   src.flask.app.Flask.make_response --> examples.tutorial.flaskr.blog.update
   src.flask.app.Flask.process_response --> src.flask.ctx.AppContext._get_session
   src.flask.app.Flask.process_response --> src.flask.sessions.SessionInterface.is_null_session
-  src.flask.app.Flask.run --> src.flask.cli.load_dotenv
-  src.flask.app.Flask.run --> src.flask.cli.show_server_banner
 ```
 
 **Scope-aligned false negatives** (oracle recorded, code-graph did NOT):
@@ -107,27 +107,27 @@ Oracle analyzed callers: 46
   src.flask.app --> src.flask.typing.TypeVar
   src.flask.app.Flask --> src.flask.sessions.SecureCookieSessionInterface
   src.flask.app.Flask.__init__ --> src.flask.cli.AppGroup.AppGroup
-  src.flask.app.Flask.app_context --> src.flask.ctx.AppContext
-  src.flask.app.Flask.do_teardown_appcontext --> src.flask.helpers._CollectErrors
   src.flask.app.Flask.do_teardown_appcontext --> src.flask.signals.appcontext_tearing_down.send
-  src.flask.app.Flask.do_teardown_request --> src.flask.helpers._CollectErrors
   src.flask.app.Flask.do_teardown_request --> src.flask.signals.request_tearing_down.send
   src.flask.app.Flask.finalize_request --> src.flask.signals.request_finished.send
   src.flask.app.Flask.full_dispatch_request --> src.flask.signals.request_started.send
+  src.flask.app.Flask.handle_exception --> src.flask.signals.got_request_exception.send
+  src.flask.app.Flask.make_default_options_response --> src.flask.ctx.AppContext.from_environ.url_adapter.allowed_methods
+  src.flask.app.Flask.make_response --> src.flask.typing.cast
 ```
 
 **Raw-exact false positives (may include out-of-scope callers)**:
 ```
   examples.celery.src.task_app.create_app --> examples.celery.src.task_app.celery_init_app
   src.flask.__main__ --> src.flask.cli.main
+  src.flask.app --> src.flask.sessions.SecureCookieSessionInterface
+  src.flask.app.Flask.__init__ --> src.flask.cli.AppGroup
   src.flask.app.Flask.create_jinja_environment --> examples.tutorial.flaskr.blog.update
   src.flask.app.Flask.handle_exception --> src.flask.sansio.app.App._find_error_handler
   src.flask.app.Flask.handle_http_exception --> src.flask.sansio.app.App._find_error_handler
   src.flask.app.Flask.handle_user_exception --> src.flask.sansio.app.App._find_error_handler
   src.flask.app.Flask.handle_user_exception --> src.flask.sansio.app.App.trap_http_exception
   src.flask.app.Flask.make_default_options_response --> examples.tutorial.flaskr.blog.update
-  src.flask.app.Flask.make_response --> examples.tutorial.flaskr.blog.update
-  src.flask.app.Flask.make_shell_context --> examples.tutorial.flaskr.blog.update
 ```
 
 **Raw-exact false negatives**:
@@ -135,13 +135,13 @@ Oracle analyzed callers: 46
   src.flask.app --> src.flask.typing.TypeVar
   src.flask.app.Flask --> src.flask.sessions.SecureCookieSessionInterface
   src.flask.app.Flask.__init__ --> src.flask.cli.AppGroup.AppGroup
-  src.flask.app.Flask.app_context --> src.flask.ctx.AppContext
-  src.flask.app.Flask.do_teardown_appcontext --> src.flask.helpers._CollectErrors
   src.flask.app.Flask.do_teardown_appcontext --> src.flask.signals.appcontext_tearing_down.send
-  src.flask.app.Flask.do_teardown_request --> src.flask.helpers._CollectErrors
   src.flask.app.Flask.do_teardown_request --> src.flask.signals.request_tearing_down.send
   src.flask.app.Flask.finalize_request --> src.flask.signals.request_finished.send
   src.flask.app.Flask.full_dispatch_request --> src.flask.signals.request_started.send
+  src.flask.app.Flask.handle_exception --> src.flask.signals.got_request_exception.send
+  src.flask.app.Flask.make_default_options_response --> src.flask.ctx.AppContext.from_environ.url_adapter.allowed_methods
+  src.flask.app.Flask.make_response --> src.flask.typing.cast
 ```
 
 ### IMPORTS

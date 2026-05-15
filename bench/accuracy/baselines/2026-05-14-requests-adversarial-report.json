@@ -9,63 +9,63 @@
     "CALLS": {
       "oracle": "pycg",
       "oracle_count": 194,
-      "measured_count": 235,
+      "measured_count": 282,
       "oracle_caller_count": 58,
       "exact": {
-        "tp": 95,
-        "fp": 140,
-        "fn": 99,
-        "precision": 0.4043,
-        "recall": 0.4897,
-        "f1": 0.4429
+        "tp": 111,
+        "fp": 171,
+        "fn": 83,
+        "precision": 0.3936,
+        "recall": 0.5722,
+        "f1": 0.4664
       },
       "suffix_3seg": {
-        "tp": 95,
-        "fp": 138,
-        "fn": 99,
-        "precision": 0.4077,
-        "recall": 0.4897,
-        "f1": 0.445
+        "tp": 111,
+        "fp": 169,
+        "fn": 83,
+        "precision": 0.3964,
+        "recall": 0.5722,
+        "f1": 0.4684
       },
       "scope_aligned": {
-        "tp": 95,
-        "fp": 18,
-        "fn": 99,
-        "precision": 0.8407,
-        "recall": 0.4897,
-        "f1": 0.6189
+        "tp": 111,
+        "fp": 21,
+        "fn": 83,
+        "precision": 0.8409,
+        "recall": 0.5722,
+        "f1": 0.681
       },
       "scope_aligned_high_confidence": {
-        "tp": 95,
-        "fp": 18,
-        "fn": 99,
-        "precision": 0.8407,
-        "recall": 0.4897,
-        "f1": 0.6189
+        "tp": 111,
+        "fp": 21,
+        "fn": 83,
+        "precision": 0.8409,
+        "recall": 0.5722,
+        "f1": 0.681
       },
       "scope_impl_normalized": {
-        "tp": 95,
-        "fp": 18,
-        "fn": 99,
-        "precision": 0.8407,
-        "recall": 0.4897,
-        "f1": 0.6189
+        "tp": 111,
+        "fp": 21,
+        "fn": 83,
+        "precision": 0.8409,
+        "recall": 0.5722,
+        "f1": 0.681
       },
       "scope_generic_normalized": {
-        "tp": 95,
-        "fp": 18,
-        "fn": 99,
-        "precision": 0.8407,
-        "recall": 0.4897,
-        "f1": 0.6189
+        "tp": 111,
+        "fp": 21,
+        "fn": 83,
+        "precision": 0.8409,
+        "recall": 0.5722,
+        "f1": 0.681
       },
       "scope_canonical": {
-        "tp": 95,
-        "fp": 18,
-        "fn": 99,
-        "precision": 0.8407,
-        "recall": 0.4897,
-        "f1": 0.6189
+        "tp": 111,
+        "fp": 21,
+        "fn": 83,
+        "precision": 0.8409,
+        "recall": 0.5722,
+        "f1": 0.681
       },
       "sample_fp_exact": [
         [
@@ -105,26 +105,21 @@
         ],
         [
           "src.requests.adapters.HTTPAdapter.build_response",
+          "src.requests.models.Response",
+          "CALLS"
+        ],
+        [
+          "src.requests.adapters.HTTPAdapter.build_response",
+          "src.requests.structures.CaseInsensitiveDict",
+          "CALLS"
+        ],
+        [
+          "src.requests.adapters.HTTPAdapter.build_response",
           "src.requests.utils.get_encoding_from_headers",
-          "CALLS"
-        ],
-        [
-          "src.requests.adapters.HTTPAdapter.close",
-          "src.requests.cookies.RequestsCookieJar.values",
-          "CALLS"
-        ],
-        [
-          "src.requests.adapters.HTTPAdapter.get_connection",
-          "src.requests.adapters.HTTPAdapter.proxy_manager_for",
           "CALLS"
         ]
       ],
       "sample_fn_exact": [
-        [
-          "src.requests.api.request",
-          "src.requests.sessions.Session",
-          "CALLS"
-        ],
         [
           "src.requests.models.PreparedRequest.copy",
           "src.requests.models.PreparedRequest.__init__",
@@ -133,11 +128,6 @@
         [
           "src.requests.models.PreparedRequest.copy",
           "src.requests.structures.CaseInsensitiveDict.copy",
-          "CALLS"
-        ],
-        [
-          "src.requests.models.PreparedRequest.prepare_auth",
-          "src.requests.auth.HTTPBasicAuth",
           "CALLS"
         ],
         [
@@ -169,12 +159,27 @@
           "src.requests.models.PreparedRequest.prepare_body",
           "src.requests.compat.json.dumps.encode",
           "CALLS"
+        ],
+        [
+          "src.requests.models.PreparedRequest.prepare_body",
+          "src.requests.compat.json.dumps.encode.tell",
+          "CALLS"
+        ],
+        [
+          "src.requests.models.PreparedRequest.prepare_body",
+          "src.requests.compat.json.dumps.tell",
+          "CALLS"
         ]
       ],
       "sample_fp_scoped": [
         [
           "src.requests.api.request",
           "src.requests.sessions.Session.request",
+          "CALLS"
+        ],
+        [
+          "src.requests.models.PreparedRequest.copy",
+          "src.requests.models.PreparedRequest",
           "CALLS"
         ],
         [
@@ -195,6 +200,11 @@
         [
           "src.requests.models.Request.__init__",
           "src.requests.cookies.RequestsCookieJar.items",
+          "CALLS"
+        ],
+        [
+          "src.requests.models.Request.prepare",
+          "src.requests.models.PreparedRequest",
           "CALLS"
         ],
         [
@@ -211,24 +221,9 @@
           "src.requests.sessions.Session.merge_environment_settings",
           "src.requests.cookies.RequestsCookieJar.get",
           "CALLS"
-        ],
-        [
-          "src.requests.sessions.Session.merge_environment_settings",
-          "src.requests.cookies.RequestsCookieJar.items",
-          "CALLS"
-        ],
-        [
-          "src.requests.sessions.Session.request",
-          "src.requests.cookies.RequestsCookieJar.update",
-          "CALLS"
         ]
       ],
       "sample_fn_scoped": [
-        [
-          "src.requests.api.request",
-          "src.requests.sessions.Session",
-          "CALLS"
-        ],
         [
           "src.requests.models.PreparedRequest.copy",
           "src.requests.models.PreparedRequest.__init__",
@@ -237,11 +232,6 @@
         [
           "src.requests.models.PreparedRequest.copy",
           "src.requests.structures.CaseInsensitiveDict.copy",
-          "CALLS"
-        ],
-        [
-          "src.requests.models.PreparedRequest.prepare_auth",
-          "src.requests.auth.HTTPBasicAuth",
           "CALLS"
         ],
         [
@@ -273,12 +263,27 @@
           "src.requests.models.PreparedRequest.prepare_body",
           "src.requests.compat.json.dumps.encode",
           "CALLS"
+        ],
+        [
+          "src.requests.models.PreparedRequest.prepare_body",
+          "src.requests.compat.json.dumps.encode.tell",
+          "CALLS"
+        ],
+        [
+          "src.requests.models.PreparedRequest.prepare_body",
+          "src.requests.compat.json.dumps.tell",
+          "CALLS"
         ]
       ],
       "fp_scoped_full": [
         [
           "src.requests.api.request",
           "src.requests.sessions.Session.request",
+          "CALLS"
+        ],
+        [
+          "src.requests.models.PreparedRequest.copy",
+          "src.requests.models.PreparedRequest",
           "CALLS"
         ],
         [
@@ -299,6 +304,11 @@
         [
           "src.requests.models.Request.__init__",
           "src.requests.cookies.RequestsCookieJar.items",
+          "CALLS"
+        ],
+        [
+          "src.requests.models.Request.prepare",
+          "src.requests.models.PreparedRequest",
           "CALLS"
         ],
         [
@@ -365,14 +375,14 @@
           "src.requests.sessions.merge_setting",
           "src.requests.cookies.RequestsCookieJar.update",
           "CALLS"
+        ],
+        [
+          "src.requests.sessions.session",
+          "src.requests.sessions.Session",
+          "CALLS"
         ]
       ],
       "fn_scoped_full": [
-        [
-          "src.requests.api.request",
-          "src.requests.sessions.Session",
-          "CALLS"
-        ],
         [
           "src.requests.models.PreparedRequest.copy",
           "src.requests.models.PreparedRequest.__init__",
@@ -381,11 +391,6 @@
         [
           "src.requests.models.PreparedRequest.copy",
           "src.requests.structures.CaseInsensitiveDict.copy",
-          "CALLS"
-        ],
-        [
-          "src.requests.models.PreparedRequest.prepare_auth",
-          "src.requests.auth.HTTPBasicAuth",
           "CALLS"
         ],
         [
@@ -434,11 +439,6 @@
           "CALLS"
         ],
         [
-          "src.requests.models.PreparedRequest.prepare_body",
-          "src.requests.exceptions.InvalidJSONError",
-          "CALLS"
-        ],
-        [
           "src.requests.models.PreparedRequest.prepare_content_length",
           "src.requests.compat.builtin_str",
           "CALLS"
@@ -449,11 +449,6 @@
           "CALLS"
         ],
         [
-          "src.requests.models.PreparedRequest.prepare_headers",
-          "src.requests.structures.CaseInsensitiveDict",
-          "CALLS"
-        ],
-        [
           "src.requests.models.PreparedRequest.prepare_method",
           "src.requests._internal_utils.to_native_string.upper",
           "CALLS"
@@ -461,16 +456,6 @@
         [
           "src.requests.models.PreparedRequest.prepare_url",
           "src.requests.compat.urlunparse",
-          "CALLS"
-        ],
-        [
-          "src.requests.models.PreparedRequest.prepare_url",
-          "src.requests.exceptions.InvalidURL",
-          "CALLS"
-        ],
-        [
-          "src.requests.models.PreparedRequest.prepare_url",
-          "src.requests.exceptions.MissingSchema",
           "CALLS"
         ],
         [
@@ -549,18 +534,8 @@
           "CALLS"
         ],
         [
-          "src.requests.models.Response.__init__",
-          "src.requests.structures.CaseInsensitiveDict",
-          "CALLS"
-        ],
-        [
           "src.requests.models.Response.apparent_encoding",
           "src.requests.compat.chardet.detect",
-          "CALLS"
-        ],
-        [
-          "src.requests.models.Response.iter_content",
-          "src.requests.exceptions.StreamConsumedError",
           "CALLS"
         ],
         [
@@ -614,11 +589,6 @@
           "CALLS"
         ],
         [
-          "src.requests.models.Response.json",
-          "src.requests.exceptions.JSONDecodeError",
-          "CALLS"
-        ],
-        [
           "src.requests.models.Response.links",
           "src.requests.structures.CaseInsensitiveDict.get",
           "CALLS"
@@ -626,21 +596,6 @@
         [
           "src.requests.models.Response.links",
           "src.requests.utils.parse_header_links.get",
-          "CALLS"
-        ],
-        [
-          "src.requests.models.Response.raise_for_status",
-          "src.requests.exceptions.HTTPError",
-          "CALLS"
-        ],
-        [
-          "src.requests.sessions.Session.__init__",
-          "src.requests.adapters.HTTPAdapter",
-          "CALLS"
-        ],
-        [
-          "src.requests.sessions.Session.get_adapter",
-          "src.requests.exceptions.InvalidSchema",
           "CALLS"
         ],
         [
@@ -715,22 +670,7 @@
         ],
         [
           "src.requests.sessions.Session.prepare_request",
-          "src.requests.cookies.RequestsCookieJar",
-          "CALLS"
-        ],
-        [
-          "src.requests.sessions.Session.prepare_request",
-          "src.requests.models.PreparedRequest",
-          "CALLS"
-        ],
-        [
-          "src.requests.sessions.Session.prepare_request",
           "src.requests.models.Request.method.upper",
-          "CALLS"
-        ],
-        [
-          "src.requests.sessions.Session.request",
-          "src.requests.models.Request",
           "CALLS"
         ],
         [
@@ -791,11 +731,6 @@
         [
           "src.requests.sessions.SessionRedirectMixin.resolve_redirects",
           "src.requests.compat.urlparse.geturl.startswith",
-          "CALLS"
-        ],
-        [
-          "src.requests.sessions.SessionRedirectMixin.resolve_redirects",
-          "src.requests.exceptions.TooManyRedirects",
           "CALLS"
         ],
         [
@@ -866,35 +801,42 @@
       ],
       "caller_kind_precision": {
         "method-body": {
-          "tp": 86,
-          "fp": 14,
-          "precision": 0.86,
-          "support": 100
+          "tp": 101,
+          "fp": 16,
+          "precision": 0.8632,
+          "support": 117
         }
       },
       "pkg_block_caller_FP_rate": {
         "value": 0.0,
         "alarm": false,
         "fp_count": 0,
-        "fp_total": 18
+        "fp_total": 21
       },
       "caller_kind_complement_legitimacy": {
-        "value": 0.533,
-        "legitimate_count": 113,
-        "population_total": 212
+        "value": 0.614,
+        "legitimate_count": 132,
+        "population_total": 215
       },
-      "modality_precision": {},
+      "modality_precision": {
+        "cross-package-import-map": {
+          "tp": 59,
+          "fp": 0,
+          "precision": 1.0,
+          "support": 59
+        }
+      },
       "modality_mix_gini": {
-        "__all__": 0.4263
+        "__all__": 0.4621
       },
       "caller_context_tuple_precision": {
         "method-body|cross-package-imported": {
           "caller_kind": "method-body",
           "callee_package_relation": "cross-package-imported",
-          "tp": 53,
-          "fp": 14,
-          "precision": 0.791,
-          "support": 67
+          "tp": 68,
+          "fp": 16,
+          "precision": 0.8095,
+          "support": 84
         },
         "method-body|same-package": {
           "caller_kind": "method-body",
@@ -907,9 +849,9 @@
       },
       "method_set_ambiguity_index": {
         "__all__": {
-          "value": 0.1321,
+          "value": 0.1273,
           "ambiguous_sites": 7,
-          "total_sites": 53
+          "total_sites": 55
         }
       },
       "janusian_site_precision_split": {
@@ -920,73 +862,73 @@
           "support": 7
         },
         "unambiguous": {
-          "tp": 95,
-          "fp": 11,
-          "precision": 0.8962,
-          "support": 106
+          "tp": 111,
+          "fp": 14,
+          "precision": 0.888,
+          "support": 125
         }
       },
-      "janusian_precision_gap": 0.8962,
+      "janusian_precision_gap": 0.888,
       "modal_split": {
         "real_only": {
-          "measured_count": 235,
+          "measured_count": 282,
           "oracle_count": 194,
           "oracle_caller_count": 58,
           "exact": {
-            "tp": 95,
-            "fp": 140,
-            "fn": 99,
-            "precision": 0.4043,
-            "recall": 0.4897,
-            "f1": 0.4429
+            "tp": 111,
+            "fp": 171,
+            "fn": 83,
+            "precision": 0.3936,
+            "recall": 0.5722,
+            "f1": 0.4664
           },
           "suffix_3seg": {
-            "tp": 95,
-            "fp": 138,
-            "fn": 99,
-            "precision": 0.4077,
-            "recall": 0.4897,
-            "f1": 0.445
+            "tp": 111,
+            "fp": 169,
+            "fn": 83,
+            "precision": 0.3964,
+            "recall": 0.5722,
+            "f1": 0.4684
           },
           "scope_aligned": {
-            "tp": 95,
-            "fp": 18,
-            "fn": 99,
-            "precision": 0.8407,
-            "recall": 0.4897,
-            "f1": 0.6189
+            "tp": 111,
+            "fp": 21,
+            "fn": 83,
+            "precision": 0.8409,
+            "recall": 0.5722,
+            "f1": 0.681
           },
           "scope_aligned_high_confidence": {
-            "tp": 95,
-            "fp": 18,
-            "fn": 99,
-            "precision": 0.8407,
-            "recall": 0.4897,
-            "f1": 0.6189
+            "tp": 111,
+            "fp": 21,
+            "fn": 83,
+            "precision": 0.8409,
+            "recall": 0.5722,
+            "f1": 0.681
           },
           "scope_impl_normalized": {
-            "tp": 95,
-            "fp": 18,
-            "fn": 99,
-            "precision": 0.8407,
-            "recall": 0.4897,
-            "f1": 0.6189
+            "tp": 111,
+            "fp": 21,
+            "fn": 83,
+            "precision": 0.8409,
+            "recall": 0.5722,
+            "f1": 0.681
           },
           "scope_generic_normalized": {
-            "tp": 95,
-            "fp": 18,
-            "fn": 99,
-            "precision": 0.8407,
-            "recall": 0.4897,
-            "f1": 0.6189
+            "tp": 111,
+            "fp": 21,
+            "fn": 83,
+            "precision": 0.8409,
+            "recall": 0.5722,
+            "f1": 0.681
           },
           "scope_canonical": {
-            "tp": 95,
-            "fp": 18,
-            "fn": 99,
-            "precision": 0.8407,
-            "recall": 0.4897,
-            "f1": 0.6189
+            "tp": 111,
+            "fp": 21,
+            "fn": 83,
+            "precision": 0.8409,
+            "recall": 0.5722,
+            "f1": 0.681
           },
           "sample_fp_exact": [
             [
@@ -1026,26 +968,21 @@
             ],
             [
               "src.requests.adapters.HTTPAdapter.build_response",
+              "src.requests.models.Response",
+              "CALLS"
+            ],
+            [
+              "src.requests.adapters.HTTPAdapter.build_response",
+              "src.requests.structures.CaseInsensitiveDict",
+              "CALLS"
+            ],
+            [
+              "src.requests.adapters.HTTPAdapter.build_response",
               "src.requests.utils.get_encoding_from_headers",
-              "CALLS"
-            ],
-            [
-              "src.requests.adapters.HTTPAdapter.close",
-              "src.requests.cookies.RequestsCookieJar.values",
-              "CALLS"
-            ],
-            [
-              "src.requests.adapters.HTTPAdapter.get_connection",
-              "src.requests.adapters.HTTPAdapter.proxy_manager_for",
               "CALLS"
             ]
           ],
           "sample_fn_exact": [
-            [
-              "src.requests.api.request",
-              "src.requests.sessions.Session",
-              "CALLS"
-            ],
             [
               "src.requests.models.PreparedRequest.copy",
               "src.requests.models.PreparedRequest.__init__",
@@ -1054,11 +991,6 @@
             [
               "src.requests.models.PreparedRequest.copy",
               "src.requests.structures.CaseInsensitiveDict.copy",
-              "CALLS"
-            ],
-            [
-              "src.requests.models.PreparedRequest.prepare_auth",
-              "src.requests.auth.HTTPBasicAuth",
               "CALLS"
             ],
             [
@@ -1090,12 +1022,27 @@
               "src.requests.models.PreparedRequest.prepare_body",
               "src.requests.compat.json.dumps.encode",
               "CALLS"
+            ],
+            [
+              "src.requests.models.PreparedRequest.prepare_body",
+              "src.requests.compat.json.dumps.encode.tell",
+              "CALLS"
+            ],
+            [
+              "src.requests.models.PreparedRequest.prepare_body",
+              "src.requests.compat.json.dumps.tell",
+              "CALLS"
             ]
           ],
           "sample_fp_scoped": [
             [
               "src.requests.api.request",
               "src.requests.sessions.Session.request",
+              "CALLS"
+            ],
+            [
+              "src.requests.models.PreparedRequest.copy",
+              "src.requests.models.PreparedRequest",
               "CALLS"
             ],
             [
@@ -1116,6 +1063,11 @@
             [
               "src.requests.models.Request.__init__",
               "src.requests.cookies.RequestsCookieJar.items",
+              "CALLS"
+            ],
+            [
+              "src.requests.models.Request.prepare",
+              "src.requests.models.PreparedRequest",
               "CALLS"
             ],
             [
@@ -1132,24 +1084,9 @@
               "src.requests.sessions.Session.merge_environment_settings",
               "src.requests.cookies.RequestsCookieJar.get",
               "CALLS"
-            ],
-            [
-              "src.requests.sessions.Session.merge_environment_settings",
-              "src.requests.cookies.RequestsCookieJar.items",
-              "CALLS"
-            ],
-            [
-              "src.requests.sessions.Session.request",
-              "src.requests.cookies.RequestsCookieJar.update",
-              "CALLS"
             ]
           ],
           "sample_fn_scoped": [
-            [
-              "src.requests.api.request",
-              "src.requests.sessions.Session",
-              "CALLS"
-            ],
             [
               "src.requests.models.PreparedRequest.copy",
               "src.requests.models.PreparedRequest.__init__",
@@ -1158,11 +1095,6 @@
             [
               "src.requests.models.PreparedRequest.copy",
               "src.requests.structures.CaseInsensitiveDict.copy",
-              "CALLS"
-            ],
-            [
-              "src.requests.models.PreparedRequest.prepare_auth",
-              "src.requests.auth.HTTPBasicAuth",
               "CALLS"
             ],
             [
@@ -1194,12 +1126,27 @@
               "src.requests.models.PreparedRequest.prepare_body",
               "src.requests.compat.json.dumps.encode",
               "CALLS"
+            ],
+            [
+              "src.requests.models.PreparedRequest.prepare_body",
+              "src.requests.compat.json.dumps.encode.tell",
+              "CALLS"
+            ],
+            [
+              "src.requests.models.PreparedRequest.prepare_body",
+              "src.requests.compat.json.dumps.tell",
+              "CALLS"
             ]
           ],
           "fp_scoped_full": [
             [
               "src.requests.api.request",
               "src.requests.sessions.Session.request",
+              "CALLS"
+            ],
+            [
+              "src.requests.models.PreparedRequest.copy",
+              "src.requests.models.PreparedRequest",
               "CALLS"
             ],
             [
@@ -1220,6 +1167,11 @@
             [
               "src.requests.models.Request.__init__",
               "src.requests.cookies.RequestsCookieJar.items",
+              "CALLS"
+            ],
+            [
+              "src.requests.models.Request.prepare",
+              "src.requests.models.PreparedRequest",
               "CALLS"
             ],
             [
@@ -1286,14 +1238,14 @@
               "src.requests.sessions.merge_setting",
               "src.requests.cookies.RequestsCookieJar.update",
               "CALLS"
+            ],
+            [
+              "src.requests.sessions.session",
+              "src.requests.sessions.Session",
+              "CALLS"
             ]
           ],
           "fn_scoped_full": [
-            [
-              "src.requests.api.request",
-              "src.requests.sessions.Session",
-              "CALLS"
-            ],
             [
               "src.requests.models.PreparedRequest.copy",
               "src.requests.models.PreparedRequest.__init__",
@@ -1302,11 +1254,6 @@
             [
               "src.requests.models.PreparedRequest.copy",
               "src.requests.structures.CaseInsensitiveDict.copy",
-              "CALLS"
-            ],
-            [
-              "src.requests.models.PreparedRequest.prepare_auth",
-              "src.requests.auth.HTTPBasicAuth",
               "CALLS"
             ],
             [
@@ -1355,11 +1302,6 @@
               "CALLS"
             ],
             [
-              "src.requests.models.PreparedRequest.prepare_body",
-              "src.requests.exceptions.InvalidJSONError",
-              "CALLS"
-            ],
-            [
               "src.requests.models.PreparedRequest.prepare_content_length",
               "src.requests.compat.builtin_str",
               "CALLS"
@@ -1370,11 +1312,6 @@
               "CALLS"
             ],
             [
-              "src.requests.models.PreparedRequest.prepare_headers",
-              "src.requests.structures.CaseInsensitiveDict",
-              "CALLS"
-            ],
-            [
               "src.requests.models.PreparedRequest.prepare_method",
               "src.requests._internal_utils.to_native_string.upper",
               "CALLS"
@@ -1382,16 +1319,6 @@
             [
               "src.requests.models.PreparedRequest.prepare_url",
               "src.requests.compat.urlunparse",
-              "CALLS"
-            ],
-            [
-              "src.requests.models.PreparedRequest.prepare_url",
-              "src.requests.exceptions.InvalidURL",
-              "CALLS"
-            ],
-            [
-              "src.requests.models.PreparedRequest.prepare_url",
-              "src.requests.exceptions.MissingSchema",
               "CALLS"
             ],
             [
@@ -1470,18 +1397,8 @@
               "CALLS"
             ],
             [
-              "src.requests.models.Response.__init__",
-              "src.requests.structures.CaseInsensitiveDict",
-              "CALLS"
-            ],
-            [
               "src.requests.models.Response.apparent_encoding",
               "src.requests.compat.chardet.detect",
-              "CALLS"
-            ],
-            [
-              "src.requests.models.Response.iter_content",
-              "src.requests.exceptions.StreamConsumedError",
               "CALLS"
             ],
             [
@@ -1535,11 +1452,6 @@
               "CALLS"
             ],
             [
-              "src.requests.models.Response.json",
-              "src.requests.exceptions.JSONDecodeError",
-              "CALLS"
-            ],
-            [
               "src.requests.models.Response.links",
               "src.requests.structures.CaseInsensitiveDict.get",
               "CALLS"
@@ -1547,21 +1459,6 @@
             [
               "src.requests.models.Response.links",
               "src.requests.utils.parse_header_links.get",
-              "CALLS"
-            ],
-            [
-              "src.requests.models.Response.raise_for_status",
-              "src.requests.exceptions.HTTPError",
-              "CALLS"
-            ],
-            [
-              "src.requests.sessions.Session.__init__",
-              "src.requests.adapters.HTTPAdapter",
-              "CALLS"
-            ],
-            [
-              "src.requests.sessions.Session.get_adapter",
-              "src.requests.exceptions.InvalidSchema",
               "CALLS"
             ],
             [
@@ -1636,22 +1533,7 @@
             ],
             [
               "src.requests.sessions.Session.prepare_request",
-              "src.requests.cookies.RequestsCookieJar",
-              "CALLS"
-            ],
-            [
-              "src.requests.sessions.Session.prepare_request",
-              "src.requests.models.PreparedRequest",
-              "CALLS"
-            ],
-            [
-              "src.requests.sessions.Session.prepare_request",
               "src.requests.models.Request.method.upper",
-              "CALLS"
-            ],
-            [
-              "src.requests.sessions.Session.request",
-              "src.requests.models.Request",
               "CALLS"
             ],
             [
@@ -1712,11 +1594,6 @@
             [
               "src.requests.sessions.SessionRedirectMixin.resolve_redirects",
               "src.requests.compat.urlparse.geturl.startswith",
-              "CALLS"
-            ],
-            [
-              "src.requests.sessions.SessionRedirectMixin.resolve_redirects",
-              "src.requests.exceptions.TooManyRedirects",
               "CALLS"
             ],
             [
@@ -1803,64 +1680,64 @@
           "ambiguity_note": "candidate_set_size not yet emitted by the indexed binary; metrics skipped."
         },
         "real_plus_external": {
-          "measured_count": 235,
+          "measured_count": 282,
           "oracle_count": 194,
           "oracle_caller_count": 58,
           "exact": {
-            "tp": 95,
-            "fp": 140,
-            "fn": 99,
-            "precision": 0.4043,
-            "recall": 0.4897,
-            "f1": 0.4429
+            "tp": 111,
+            "fp": 171,
+            "fn": 83,
+            "precision": 0.3936,
+            "recall": 0.5722,
+            "f1": 0.4664
           },
           "suffix_3seg": {
-            "tp": 95,
-            "fp": 138,
-            "fn": 99,
-            "precision": 0.4077,
-            "recall": 0.4897,
-            "f1": 0.445
+            "tp": 111,
+            "fp": 169,
+            "fn": 83,
+            "precision": 0.3964,
+            "recall": 0.5722,
+            "f1": 0.4684
           },
           "scope_aligned": {
-            "tp": 95,
-            "fp": 18,
-            "fn": 99,
-            "precision": 0.8407,
-            "recall": 0.4897,
-            "f1": 0.6189
+            "tp": 111,
+            "fp": 21,
+            "fn": 83,
+            "precision": 0.8409,
+            "recall": 0.5722,
+            "f1": 0.681
           },
           "scope_aligned_high_confidence": {
-            "tp": 95,
-            "fp": 18,
-            "fn": 99,
-            "precision": 0.8407,
-            "recall": 0.4897,
-            "f1": 0.6189
+            "tp": 111,
+            "fp": 21,
+            "fn": 83,
+            "precision": 0.8409,
+            "recall": 0.5722,
+            "f1": 0.681
           },
           "scope_impl_normalized": {
-            "tp": 95,
-            "fp": 18,
-            "fn": 99,
-            "precision": 0.8407,
-            "recall": 0.4897,
-            "f1": 0.6189
+            "tp": 111,
+            "fp": 21,
+            "fn": 83,
+            "precision": 0.8409,
+            "recall": 0.5722,
+            "f1": 0.681
           },
           "scope_generic_normalized": {
-            "tp": 95,
-            "fp": 18,
-            "fn": 99,
-            "precision": 0.8407,
-            "recall": 0.4897,
-            "f1": 0.6189
+            "tp": 111,
+            "fp": 21,
+            "fn": 83,
+            "precision": 0.8409,
+            "recall": 0.5722,
+            "f1": 0.681
           },
           "scope_canonical": {
-            "tp": 95,
-            "fp": 18,
-            "fn": 99,
-            "precision": 0.8407,
-            "recall": 0.4897,
-            "f1": 0.6189
+            "tp": 111,
+            "fp": 21,
+            "fn": 83,
+            "precision": 0.8409,
+            "recall": 0.5722,
+            "f1": 0.681
           },
           "sample_fp_exact": [
             [
@@ -1900,26 +1777,21 @@
             ],
             [
               "src.requests.adapters.HTTPAdapter.build_response",
+              "src.requests.models.Response",
+              "CALLS"
+            ],
+            [
+              "src.requests.adapters.HTTPAdapter.build_response",
+              "src.requests.structures.CaseInsensitiveDict",
+              "CALLS"
+            ],
+            [
+              "src.requests.adapters.HTTPAdapter.build_response",
               "src.requests.utils.get_encoding_from_headers",
-              "CALLS"
-            ],
-            [
-              "src.requests.adapters.HTTPAdapter.close",
-              "src.requests.cookies.RequestsCookieJar.values",
-              "CALLS"
-            ],
-            [
-              "src.requests.adapters.HTTPAdapter.get_connection",
-              "src.requests.adapters.HTTPAdapter.proxy_manager_for",
               "CALLS"
             ]
           ],
           "sample_fn_exact": [
-            [
-              "src.requests.api.request",
-              "src.requests.sessions.Session",
-              "CALLS"
-            ],
             [
               "src.requests.models.PreparedRequest.copy",
               "src.requests.models.PreparedRequest.__init__",
@@ -1928,11 +1800,6 @@
             [
               "src.requests.models.PreparedRequest.copy",
               "src.requests.structures.CaseInsensitiveDict.copy",
-              "CALLS"
-            ],
-            [
-              "src.requests.models.PreparedRequest.prepare_auth",
-              "src.requests.auth.HTTPBasicAuth",
               "CALLS"
             ],
             [
@@ -1964,12 +1831,27 @@
               "src.requests.models.PreparedRequest.prepare_body",
               "src.requests.compat.json.dumps.encode",
               "CALLS"
+            ],
+            [
+              "src.requests.models.PreparedRequest.prepare_body",
+              "src.requests.compat.json.dumps.encode.tell",
+              "CALLS"
+            ],
+            [
+              "src.requests.models.PreparedRequest.prepare_body",
+              "src.requests.compat.json.dumps.tell",
+              "CALLS"
             ]
           ],
           "sample_fp_scoped": [
             [
               "src.requests.api.request",
               "src.requests.sessions.Session.request",
+              "CALLS"
+            ],
+            [
+              "src.requests.models.PreparedRequest.copy",
+              "src.requests.models.PreparedRequest",
               "CALLS"
             ],
             [
@@ -1990,6 +1872,11 @@
             [
               "src.requests.models.Request.__init__",
               "src.requests.cookies.RequestsCookieJar.items",
+              "CALLS"
+            ],
+            [
+              "src.requests.models.Request.prepare",
+              "src.requests.models.PreparedRequest",
               "CALLS"
             ],
             [
@@ -2006,24 +1893,9 @@
               "src.requests.sessions.Session.merge_environment_settings",
               "src.requests.cookies.RequestsCookieJar.get",
               "CALLS"
-            ],
-            [
-              "src.requests.sessions.Session.merge_environment_settings",
-              "src.requests.cookies.RequestsCookieJar.items",
-              "CALLS"
-            ],
-            [
-              "src.requests.sessions.Session.request",
-              "src.requests.cookies.RequestsCookieJar.update",
-              "CALLS"
             ]
           ],
           "sample_fn_scoped": [
-            [
-              "src.requests.api.request",
-              "src.requests.sessions.Session",
-              "CALLS"
-            ],
             [
               "src.requests.models.PreparedRequest.copy",
               "src.requests.models.PreparedRequest.__init__",
@@ -2032,11 +1904,6 @@
             [
               "src.requests.models.PreparedRequest.copy",
               "src.requests.structures.CaseInsensitiveDict.copy",
-              "CALLS"
-            ],
-            [
-              "src.requests.models.PreparedRequest.prepare_auth",
-              "src.requests.auth.HTTPBasicAuth",
               "CALLS"
             ],
             [
@@ -2068,12 +1935,27 @@
               "src.requests.models.PreparedRequest.prepare_body",
               "src.requests.compat.json.dumps.encode",
               "CALLS"
+            ],
+            [
+              "src.requests.models.PreparedRequest.prepare_body",
+              "src.requests.compat.json.dumps.encode.tell",
+              "CALLS"
+            ],
+            [
+              "src.requests.models.PreparedRequest.prepare_body",
+              "src.requests.compat.json.dumps.tell",
+              "CALLS"
             ]
           ],
           "fp_scoped_full": [
             [
               "src.requests.api.request",
               "src.requests.sessions.Session.request",
+              "CALLS"
+            ],
+            [
+              "src.requests.models.PreparedRequest.copy",
+              "src.requests.models.PreparedRequest",
               "CALLS"
             ],
             [
@@ -2094,6 +1976,11 @@
             [
               "src.requests.models.Request.__init__",
               "src.requests.cookies.RequestsCookieJar.items",
+              "CALLS"
+            ],
+            [
+              "src.requests.models.Request.prepare",
+              "src.requests.models.PreparedRequest",
               "CALLS"
             ],
             [
@@ -2160,14 +2047,14 @@
               "src.requests.sessions.merge_setting",
               "src.requests.cookies.RequestsCookieJar.update",
               "CALLS"
+            ],
+            [
+              "src.requests.sessions.session",
+              "src.requests.sessions.Session",
+              "CALLS"
             ]
           ],
           "fn_scoped_full": [
-            [
-              "src.requests.api.request",
-              "src.requests.sessions.Session",
-              "CALLS"
-            ],
             [
               "src.requests.models.PreparedRequest.copy",
               "src.requests.models.PreparedRequest.__init__",
@@ -2176,11 +2063,6 @@
             [
               "src.requests.models.PreparedRequest.copy",
               "src.requests.structures.CaseInsensitiveDict.copy",
-              "CALLS"
-            ],
-            [
-              "src.requests.models.PreparedRequest.prepare_auth",
-              "src.requests.auth.HTTPBasicAuth",
               "CALLS"
             ],
             [
@@ -2229,11 +2111,6 @@
               "CALLS"
             ],
             [
-              "src.requests.models.PreparedRequest.prepare_body",
-              "src.requests.exceptions.InvalidJSONError",
-              "CALLS"
-            ],
-            [
               "src.requests.models.PreparedRequest.prepare_content_length",
               "src.requests.compat.builtin_str",
               "CALLS"
@@ -2244,11 +2121,6 @@
               "CALLS"
             ],
             [
-              "src.requests.models.PreparedRequest.prepare_headers",
-              "src.requests.structures.CaseInsensitiveDict",
-              "CALLS"
-            ],
-            [
               "src.requests.models.PreparedRequest.prepare_method",
               "src.requests._internal_utils.to_native_string.upper",
               "CALLS"
@@ -2256,16 +2128,6 @@
             [
               "src.requests.models.PreparedRequest.prepare_url",
               "src.requests.compat.urlunparse",
-              "CALLS"
-            ],
-            [
-              "src.requests.models.PreparedRequest.prepare_url",
-              "src.requests.exceptions.InvalidURL",
-              "CALLS"
-            ],
-            [
-              "src.requests.models.PreparedRequest.prepare_url",
-              "src.requests.exceptions.MissingSchema",
               "CALLS"
             ],
             [
@@ -2344,18 +2206,8 @@
               "CALLS"
             ],
             [
-              "src.requests.models.Response.__init__",
-              "src.requests.structures.CaseInsensitiveDict",
-              "CALLS"
-            ],
-            [
               "src.requests.models.Response.apparent_encoding",
               "src.requests.compat.chardet.detect",
-              "CALLS"
-            ],
-            [
-              "src.requests.models.Response.iter_content",
-              "src.requests.exceptions.StreamConsumedError",
               "CALLS"
             ],
             [
@@ -2409,11 +2261,6 @@
               "CALLS"
             ],
             [
-              "src.requests.models.Response.json",
-              "src.requests.exceptions.JSONDecodeError",
-              "CALLS"
-            ],
-            [
               "src.requests.models.Response.links",
               "src.requests.structures.CaseInsensitiveDict.get",
               "CALLS"
@@ -2421,21 +2268,6 @@
             [
               "src.requests.models.Response.links",
               "src.requests.utils.parse_header_links.get",
-              "CALLS"
-            ],
-            [
-              "src.requests.models.Response.raise_for_status",
-              "src.requests.exceptions.HTTPError",
-              "CALLS"
-            ],
-            [
-              "src.requests.sessions.Session.__init__",
-              "src.requests.adapters.HTTPAdapter",
-              "CALLS"
-            ],
-            [
-              "src.requests.sessions.Session.get_adapter",
-              "src.requests.exceptions.InvalidSchema",
               "CALLS"
             ],
             [
@@ -2510,22 +2342,7 @@
             ],
             [
               "src.requests.sessions.Session.prepare_request",
-              "src.requests.cookies.RequestsCookieJar",
-              "CALLS"
-            ],
-            [
-              "src.requests.sessions.Session.prepare_request",
-              "src.requests.models.PreparedRequest",
-              "CALLS"
-            ],
-            [
-              "src.requests.sessions.Session.prepare_request",
               "src.requests.models.Request.method.upper",
-              "CALLS"
-            ],
-            [
-              "src.requests.sessions.Session.request",
-              "src.requests.models.Request",
               "CALLS"
             ],
             [
@@ -2586,11 +2403,6 @@
             [
               "src.requests.sessions.SessionRedirectMixin.resolve_redirects",
               "src.requests.compat.urlparse.geturl.startswith",
-              "CALLS"
-            ],
-            [
-              "src.requests.sessions.SessionRedirectMixin.resolve_redirects",
-              "src.requests.exceptions.TooManyRedirects",
               "CALLS"
             ],
             [
@@ -2677,64 +2489,64 @@
           "ambiguity_note": "candidate_set_size not yet emitted by the indexed binary; metrics skipped."
         },
         "real_plus_pseudo": {
-          "measured_count": 235,
+          "measured_count": 282,
           "oracle_count": 194,
           "oracle_caller_count": 58,
           "exact": {
-            "tp": 95,
-            "fp": 140,
-            "fn": 99,
-            "precision": 0.4043,
-            "recall": 0.4897,
-            "f1": 0.4429
+            "tp": 111,
+            "fp": 171,
+            "fn": 83,
+            "precision": 0.3936,
+            "recall": 0.5722,
+            "f1": 0.4664
           },
           "suffix_3seg": {
-            "tp": 95,
-            "fp": 138,
-            "fn": 99,
-            "precision": 0.4077,
-            "recall": 0.4897,
-            "f1": 0.445
+            "tp": 111,
+            "fp": 169,
+            "fn": 83,
+            "precision": 0.3964,
+            "recall": 0.5722,
+            "f1": 0.4684
           },
           "scope_aligned": {
-            "tp": 95,
-            "fp": 18,
-            "fn": 99,
-            "precision": 0.8407,
-            "recall": 0.4897,
-            "f1": 0.6189
+            "tp": 111,
+            "fp": 21,
+            "fn": 83,
+            "precision": 0.8409,
+            "recall": 0.5722,
+            "f1": 0.681
           },
           "scope_aligned_high_confidence": {
-            "tp": 95,
-            "fp": 18,
-            "fn": 99,
-            "precision": 0.8407,
-            "recall": 0.4897,
-            "f1": 0.6189
+            "tp": 111,
+            "fp": 21,
+            "fn": 83,
+            "precision": 0.8409,
+            "recall": 0.5722,
+            "f1": 0.681
           },
           "scope_impl_normalized": {
-            "tp": 95,
-            "fp": 18,
-            "fn": 99,
-            "precision": 0.8407,
-            "recall": 0.4897,
-            "f1": 0.6189
+            "tp": 111,
+            "fp": 21,
+            "fn": 83,
+            "precision": 0.8409,
+            "recall": 0.5722,
+            "f1": 0.681
           },
           "scope_generic_normalized": {
-            "tp": 95,
-            "fp": 18,
-            "fn": 99,
-            "precision": 0.8407,
-            "recall": 0.4897,
-            "f1": 0.6189
+            "tp": 111,
+            "fp": 21,
+            "fn": 83,
+            "precision": 0.8409,
+            "recall": 0.5722,
+            "f1": 0.681
           },
           "scope_canonical": {
-            "tp": 95,
-            "fp": 18,
-            "fn": 99,
-            "precision": 0.8407,
-            "recall": 0.4897,
-            "f1": 0.6189
+            "tp": 111,
+            "fp": 21,
+            "fn": 83,
+            "precision": 0.8409,
+            "recall": 0.5722,
+            "f1": 0.681
           },
           "sample_fp_exact": [
             [
@@ -2774,26 +2586,21 @@
             ],
             [
               "src.requests.adapters.HTTPAdapter.build_response",
+              "src.requests.models.Response",
+              "CALLS"
+            ],
+            [
+              "src.requests.adapters.HTTPAdapter.build_response",
+              "src.requests.structures.CaseInsensitiveDict",
+              "CALLS"
+            ],
+            [
+              "src.requests.adapters.HTTPAdapter.build_response",
               "src.requests.utils.get_encoding_from_headers",
-              "CALLS"
-            ],
-            [
-              "src.requests.adapters.HTTPAdapter.close",
-              "src.requests.cookies.RequestsCookieJar.values",
-              "CALLS"
-            ],
-            [
-              "src.requests.adapters.HTTPAdapter.get_connection",
-              "src.requests.adapters.HTTPAdapter.proxy_manager_for",
               "CALLS"
             ]
           ],
           "sample_fn_exact": [
-            [
-              "src.requests.api.request",
-              "src.requests.sessions.Session",
-              "CALLS"
-            ],
             [
               "src.requests.models.PreparedRequest.copy",
               "src.requests.models.PreparedRequest.__init__",
@@ -2802,11 +2609,6 @@
             [
               "src.requests.models.PreparedRequest.copy",
               "src.requests.structures.CaseInsensitiveDict.copy",
-              "CALLS"
-            ],
-            [
-              "src.requests.models.PreparedRequest.prepare_auth",
-              "src.requests.auth.HTTPBasicAuth",
               "CALLS"
             ],
             [
@@ -2838,12 +2640,27 @@
               "src.requests.models.PreparedRequest.prepare_body",
               "src.requests.compat.json.dumps.encode",
               "CALLS"
+            ],
+            [
+              "src.requests.models.PreparedRequest.prepare_body",
+              "src.requests.compat.json.dumps.encode.tell",
+              "CALLS"
+            ],
+            [
+              "src.requests.models.PreparedRequest.prepare_body",
+              "src.requests.compat.json.dumps.tell",
+              "CALLS"
             ]
           ],
           "sample_fp_scoped": [
             [
               "src.requests.api.request",
               "src.requests.sessions.Session.request",
+              "CALLS"
+            ],
+            [
+              "src.requests.models.PreparedRequest.copy",
+              "src.requests.models.PreparedRequest",
               "CALLS"
             ],
             [
@@ -2864,6 +2681,11 @@
             [
               "src.requests.models.Request.__init__",
               "src.requests.cookies.RequestsCookieJar.items",
+              "CALLS"
+            ],
+            [
+              "src.requests.models.Request.prepare",
+              "src.requests.models.PreparedRequest",
               "CALLS"
             ],
             [
@@ -2880,24 +2702,9 @@
               "src.requests.sessions.Session.merge_environment_settings",
               "src.requests.cookies.RequestsCookieJar.get",
               "CALLS"
-            ],
-            [
-              "src.requests.sessions.Session.merge_environment_settings",
-              "src.requests.cookies.RequestsCookieJar.items",
-              "CALLS"
-            ],
-            [
-              "src.requests.sessions.Session.request",
-              "src.requests.cookies.RequestsCookieJar.update",
-              "CALLS"
             ]
           ],
           "sample_fn_scoped": [
-            [
-              "src.requests.api.request",
-              "src.requests.sessions.Session",
-              "CALLS"
-            ],
             [
               "src.requests.models.PreparedRequest.copy",
               "src.requests.models.PreparedRequest.__init__",
@@ -2906,11 +2713,6 @@
             [
               "src.requests.models.PreparedRequest.copy",
               "src.requests.structures.CaseInsensitiveDict.copy",
-              "CALLS"
-            ],
-            [
-              "src.requests.models.PreparedRequest.prepare_auth",
-              "src.requests.auth.HTTPBasicAuth",
               "CALLS"
             ],
             [
@@ -2942,12 +2744,27 @@
               "src.requests.models.PreparedRequest.prepare_body",
               "src.requests.compat.json.dumps.encode",
               "CALLS"
+            ],
+            [
+              "src.requests.models.PreparedRequest.prepare_body",
+              "src.requests.compat.json.dumps.encode.tell",
+              "CALLS"
+            ],
+            [
+              "src.requests.models.PreparedRequest.prepare_body",
+              "src.requests.compat.json.dumps.tell",
+              "CALLS"
             ]
           ],
           "fp_scoped_full": [
             [
               "src.requests.api.request",
               "src.requests.sessions.Session.request",
+              "CALLS"
+            ],
+            [
+              "src.requests.models.PreparedRequest.copy",
+              "src.requests.models.PreparedRequest",
               "CALLS"
             ],
             [
@@ -2968,6 +2785,11 @@
             [
               "src.requests.models.Request.__init__",
               "src.requests.cookies.RequestsCookieJar.items",
+              "CALLS"
+            ],
+            [
+              "src.requests.models.Request.prepare",
+              "src.requests.models.PreparedRequest",
               "CALLS"
             ],
             [
@@ -3034,14 +2856,14 @@
               "src.requests.sessions.merge_setting",
               "src.requests.cookies.RequestsCookieJar.update",
               "CALLS"
+            ],
+            [
+              "src.requests.sessions.session",
+              "src.requests.sessions.Session",
+              "CALLS"
             ]
           ],
           "fn_scoped_full": [
-            [
-              "src.requests.api.request",
-              "src.requests.sessions.Session",
-              "CALLS"
-            ],
             [
               "src.requests.models.PreparedRequest.copy",
               "src.requests.models.PreparedRequest.__init__",
@@ -3050,11 +2872,6 @@
             [
               "src.requests.models.PreparedRequest.copy",
               "src.requests.structures.CaseInsensitiveDict.copy",
-              "CALLS"
-            ],
-            [
-              "src.requests.models.PreparedRequest.prepare_auth",
-              "src.requests.auth.HTTPBasicAuth",
               "CALLS"
             ],
             [
@@ -3103,11 +2920,6 @@
               "CALLS"
             ],
             [
-              "src.requests.models.PreparedRequest.prepare_body",
-              "src.requests.exceptions.InvalidJSONError",
-              "CALLS"
-            ],
-            [
               "src.requests.models.PreparedRequest.prepare_content_length",
               "src.requests.compat.builtin_str",
               "CALLS"
@@ -3118,11 +2930,6 @@
               "CALLS"
             ],
             [
-              "src.requests.models.PreparedRequest.prepare_headers",
-              "src.requests.structures.CaseInsensitiveDict",
-              "CALLS"
-            ],
-            [
               "src.requests.models.PreparedRequest.prepare_method",
               "src.requests._internal_utils.to_native_string.upper",
               "CALLS"
@@ -3130,16 +2937,6 @@
             [
               "src.requests.models.PreparedRequest.prepare_url",
               "src.requests.compat.urlunparse",
-              "CALLS"
-            ],
-            [
-              "src.requests.models.PreparedRequest.prepare_url",
-              "src.requests.exceptions.InvalidURL",
-              "CALLS"
-            ],
-            [
-              "src.requests.models.PreparedRequest.prepare_url",
-              "src.requests.exceptions.MissingSchema",
               "CALLS"
             ],
             [
@@ -3218,18 +3015,8 @@
               "CALLS"
             ],
             [
-              "src.requests.models.Response.__init__",
-              "src.requests.structures.CaseInsensitiveDict",
-              "CALLS"
-            ],
-            [
               "src.requests.models.Response.apparent_encoding",
               "src.requests.compat.chardet.detect",
-              "CALLS"
-            ],
-            [
-              "src.requests.models.Response.iter_content",
-              "src.requests.exceptions.StreamConsumedError",
               "CALLS"
             ],
             [
@@ -3283,11 +3070,6 @@
               "CALLS"
             ],
             [
-              "src.requests.models.Response.json",
-              "src.requests.exceptions.JSONDecodeError",
-              "CALLS"
-            ],
-            [
               "src.requests.models.Response.links",
               "src.requests.structures.CaseInsensitiveDict.get",
               "CALLS"
@@ -3295,21 +3077,6 @@
             [
               "src.requests.models.Response.links",
               "src.requests.utils.parse_header_links.get",
-              "CALLS"
-            ],
-            [
-              "src.requests.models.Response.raise_for_status",
-              "src.requests.exceptions.HTTPError",
-              "CALLS"
-            ],
-            [
-              "src.requests.sessions.Session.__init__",
-              "src.requests.adapters.HTTPAdapter",
-              "CALLS"
-            ],
-            [
-              "src.requests.sessions.Session.get_adapter",
-              "src.requests.exceptions.InvalidSchema",
               "CALLS"
             ],
             [
@@ -3384,22 +3151,7 @@
             ],
             [
               "src.requests.sessions.Session.prepare_request",
-              "src.requests.cookies.RequestsCookieJar",
-              "CALLS"
-            ],
-            [
-              "src.requests.sessions.Session.prepare_request",
-              "src.requests.models.PreparedRequest",
-              "CALLS"
-            ],
-            [
-              "src.requests.sessions.Session.prepare_request",
               "src.requests.models.Request.method.upper",
-              "CALLS"
-            ],
-            [
-              "src.requests.sessions.Session.request",
-              "src.requests.models.Request",
               "CALLS"
             ],
             [
@@ -3460,11 +3212,6 @@
             [
               "src.requests.sessions.SessionRedirectMixin.resolve_redirects",
               "src.requests.compat.urlparse.geturl.startswith",
-              "CALLS"
-            ],
-            [
-              "src.requests.sessions.SessionRedirectMixin.resolve_redirects",
-              "src.requests.exceptions.TooManyRedirects",
               "CALLS"
             ],
             [
@@ -3551,64 +3298,64 @@
           "ambiguity_note": "candidate_set_size not yet emitted by the indexed binary; metrics skipped."
         },
         "all_calls_family": {
-          "measured_count": 235,
+          "measured_count": 282,
           "oracle_count": 194,
           "oracle_caller_count": 58,
           "exact": {
-            "tp": 95,
-            "fp": 140,
-            "fn": 99,
-            "precision": 0.4043,
-            "recall": 0.4897,
-            "f1": 0.4429
+            "tp": 111,
+            "fp": 171,
+            "fn": 83,
+            "precision": 0.3936,
+            "recall": 0.5722,
+            "f1": 0.4664
           },
           "suffix_3seg": {
-            "tp": 95,
-            "fp": 138,
-            "fn": 99,
-            "precision": 0.4077,
-            "recall": 0.4897,
-            "f1": 0.445
+            "tp": 111,
+            "fp": 169,
+            "fn": 83,
+            "precision": 0.3964,
+            "recall": 0.5722,
+            "f1": 0.4684
           },
           "scope_aligned": {
-            "tp": 95,
-            "fp": 18,
-            "fn": 99,
-            "precision": 0.8407,
-            "recall": 0.4897,
-            "f1": 0.6189
+            "tp": 111,
+            "fp": 21,
+            "fn": 83,
+            "precision": 0.8409,
+            "recall": 0.5722,
+            "f1": 0.681
           },
           "scope_aligned_high_confidence": {
-            "tp": 95,
-            "fp": 18,
-            "fn": 99,
-            "precision": 0.8407,
-            "recall": 0.4897,
-            "f1": 0.6189
+            "tp": 111,
+            "fp": 21,
+            "fn": 83,
+            "precision": 0.8409,
+            "recall": 0.5722,
+            "f1": 0.681
           },
           "scope_impl_normalized": {
-            "tp": 95,
-            "fp": 18,
-            "fn": 99,
-            "precision": 0.8407,
-            "recall": 0.4897,
-            "f1": 0.6189
+            "tp": 111,
+            "fp": 21,
+            "fn": 83,
+            "precision": 0.8409,
+            "recall": 0.5722,
+            "f1": 0.681
           },
           "scope_generic_normalized": {
-            "tp": 95,
-            "fp": 18,
-            "fn": 99,
-            "precision": 0.8407,
-            "recall": 0.4897,
-            "f1": 0.6189
+            "tp": 111,
+            "fp": 21,
+            "fn": 83,
+            "precision": 0.8409,
+            "recall": 0.5722,
+            "f1": 0.681
           },
           "scope_canonical": {
-            "tp": 95,
-            "fp": 18,
-            "fn": 99,
-            "precision": 0.8407,
-            "recall": 0.4897,
-            "f1": 0.6189
+            "tp": 111,
+            "fp": 21,
+            "fn": 83,
+            "precision": 0.8409,
+            "recall": 0.5722,
+            "f1": 0.681
           },
           "sample_fp_exact": [
             [
@@ -3648,26 +3395,21 @@
             ],
             [
               "src.requests.adapters.HTTPAdapter.build_response",
+              "src.requests.models.Response",
+              "CALLS"
+            ],
+            [
+              "src.requests.adapters.HTTPAdapter.build_response",
+              "src.requests.structures.CaseInsensitiveDict",
+              "CALLS"
+            ],
+            [
+              "src.requests.adapters.HTTPAdapter.build_response",
               "src.requests.utils.get_encoding_from_headers",
-              "CALLS"
-            ],
-            [
-              "src.requests.adapters.HTTPAdapter.close",
-              "src.requests.cookies.RequestsCookieJar.values",
-              "CALLS"
-            ],
-            [
-              "src.requests.adapters.HTTPAdapter.get_connection",
-              "src.requests.adapters.HTTPAdapter.proxy_manager_for",
               "CALLS"
             ]
           ],
           "sample_fn_exact": [
-            [
-              "src.requests.api.request",
-              "src.requests.sessions.Session",
-              "CALLS"
-            ],
             [
               "src.requests.models.PreparedRequest.copy",
               "src.requests.models.PreparedRequest.__init__",
@@ -3676,11 +3418,6 @@
             [
               "src.requests.models.PreparedRequest.copy",
               "src.requests.structures.CaseInsensitiveDict.copy",
-              "CALLS"
-            ],
-            [
-              "src.requests.models.PreparedRequest.prepare_auth",
-              "src.requests.auth.HTTPBasicAuth",
               "CALLS"
             ],
             [
@@ -3712,12 +3449,27 @@
               "src.requests.models.PreparedRequest.prepare_body",
               "src.requests.compat.json.dumps.encode",
               "CALLS"
+            ],
+            [
+              "src.requests.models.PreparedRequest.prepare_body",
+              "src.requests.compat.json.dumps.encode.tell",
+              "CALLS"
+            ],
+            [
+              "src.requests.models.PreparedRequest.prepare_body",
+              "src.requests.compat.json.dumps.tell",
+              "CALLS"
             ]
           ],
           "sample_fp_scoped": [
             [
               "src.requests.api.request",
               "src.requests.sessions.Session.request",
+              "CALLS"
+            ],
+            [
+              "src.requests.models.PreparedRequest.copy",
+              "src.requests.models.PreparedRequest",
               "CALLS"
             ],
             [
@@ -3738,6 +3490,11 @@
             [
               "src.requests.models.Request.__init__",
               "src.requests.cookies.RequestsCookieJar.items",
+              "CALLS"
+            ],
+            [
+              "src.requests.models.Request.prepare",
+              "src.requests.models.PreparedRequest",
               "CALLS"
             ],
             [
@@ -3754,24 +3511,9 @@
               "src.requests.sessions.Session.merge_environment_settings",
               "src.requests.cookies.RequestsCookieJar.get",
               "CALLS"
-            ],
-            [
-              "src.requests.sessions.Session.merge_environment_settings",
-              "src.requests.cookies.RequestsCookieJar.items",
-              "CALLS"
-            ],
-            [
-              "src.requests.sessions.Session.request",
-              "src.requests.cookies.RequestsCookieJar.update",
-              "CALLS"
             ]
           ],
           "sample_fn_scoped": [
-            [
-              "src.requests.api.request",
-              "src.requests.sessions.Session",
-              "CALLS"
-            ],
             [
               "src.requests.models.PreparedRequest.copy",
               "src.requests.models.PreparedRequest.__init__",
@@ -3780,11 +3522,6 @@
             [
               "src.requests.models.PreparedRequest.copy",
               "src.requests.structures.CaseInsensitiveDict.copy",
-              "CALLS"
-            ],
-            [
-              "src.requests.models.PreparedRequest.prepare_auth",
-              "src.requests.auth.HTTPBasicAuth",
               "CALLS"
             ],
             [
@@ -3816,12 +3553,27 @@
               "src.requests.models.PreparedRequest.prepare_body",
               "src.requests.compat.json.dumps.encode",
               "CALLS"
+            ],
+            [
+              "src.requests.models.PreparedRequest.prepare_body",
+              "src.requests.compat.json.dumps.encode.tell",
+              "CALLS"
+            ],
+            [
+              "src.requests.models.PreparedRequest.prepare_body",
+              "src.requests.compat.json.dumps.tell",
+              "CALLS"
             ]
           ],
           "fp_scoped_full": [
             [
               "src.requests.api.request",
               "src.requests.sessions.Session.request",
+              "CALLS"
+            ],
+            [
+              "src.requests.models.PreparedRequest.copy",
+              "src.requests.models.PreparedRequest",
               "CALLS"
             ],
             [
@@ -3842,6 +3594,11 @@
             [
               "src.requests.models.Request.__init__",
               "src.requests.cookies.RequestsCookieJar.items",
+              "CALLS"
+            ],
+            [
+              "src.requests.models.Request.prepare",
+              "src.requests.models.PreparedRequest",
               "CALLS"
             ],
             [
@@ -3908,14 +3665,14 @@
               "src.requests.sessions.merge_setting",
               "src.requests.cookies.RequestsCookieJar.update",
               "CALLS"
+            ],
+            [
+              "src.requests.sessions.session",
+              "src.requests.sessions.Session",
+              "CALLS"
             ]
           ],
           "fn_scoped_full": [
-            [
-              "src.requests.api.request",
-              "src.requests.sessions.Session",
-              "CALLS"
-            ],
             [
               "src.requests.models.PreparedRequest.copy",
               "src.requests.models.PreparedRequest.__init__",
@@ -3924,11 +3681,6 @@
             [
               "src.requests.models.PreparedRequest.copy",
               "src.requests.structures.CaseInsensitiveDict.copy",
-              "CALLS"
-            ],
-            [
-              "src.requests.models.PreparedRequest.prepare_auth",
-              "src.requests.auth.HTTPBasicAuth",
               "CALLS"
             ],
             [
@@ -3977,11 +3729,6 @@
               "CALLS"
             ],
             [
-              "src.requests.models.PreparedRequest.prepare_body",
-              "src.requests.exceptions.InvalidJSONError",
-              "CALLS"
-            ],
-            [
               "src.requests.models.PreparedRequest.prepare_content_length",
               "src.requests.compat.builtin_str",
               "CALLS"
@@ -3992,11 +3739,6 @@
               "CALLS"
             ],
             [
-              "src.requests.models.PreparedRequest.prepare_headers",
-              "src.requests.structures.CaseInsensitiveDict",
-              "CALLS"
-            ],
-            [
               "src.requests.models.PreparedRequest.prepare_method",
               "src.requests._internal_utils.to_native_string.upper",
               "CALLS"
@@ -4004,16 +3746,6 @@
             [
               "src.requests.models.PreparedRequest.prepare_url",
               "src.requests.compat.urlunparse",
-              "CALLS"
-            ],
-            [
-              "src.requests.models.PreparedRequest.prepare_url",
-              "src.requests.exceptions.InvalidURL",
-              "CALLS"
-            ],
-            [
-              "src.requests.models.PreparedRequest.prepare_url",
-              "src.requests.exceptions.MissingSchema",
               "CALLS"
             ],
             [
@@ -4092,18 +3824,8 @@
               "CALLS"
             ],
             [
-              "src.requests.models.Response.__init__",
-              "src.requests.structures.CaseInsensitiveDict",
-              "CALLS"
-            ],
-            [
               "src.requests.models.Response.apparent_encoding",
               "src.requests.compat.chardet.detect",
-              "CALLS"
-            ],
-            [
-              "src.requests.models.Response.iter_content",
-              "src.requests.exceptions.StreamConsumedError",
               "CALLS"
             ],
             [
@@ -4157,11 +3879,6 @@
               "CALLS"
             ],
             [
-              "src.requests.models.Response.json",
-              "src.requests.exceptions.JSONDecodeError",
-              "CALLS"
-            ],
-            [
               "src.requests.models.Response.links",
               "src.requests.structures.CaseInsensitiveDict.get",
               "CALLS"
@@ -4169,21 +3886,6 @@
             [
               "src.requests.models.Response.links",
               "src.requests.utils.parse_header_links.get",
-              "CALLS"
-            ],
-            [
-              "src.requests.models.Response.raise_for_status",
-              "src.requests.exceptions.HTTPError",
-              "CALLS"
-            ],
-            [
-              "src.requests.sessions.Session.__init__",
-              "src.requests.adapters.HTTPAdapter",
-              "CALLS"
-            ],
-            [
-              "src.requests.sessions.Session.get_adapter",
-              "src.requests.exceptions.InvalidSchema",
               "CALLS"
             ],
             [
@@ -4258,22 +3960,7 @@
             ],
             [
               "src.requests.sessions.Session.prepare_request",
-              "src.requests.cookies.RequestsCookieJar",
-              "CALLS"
-            ],
-            [
-              "src.requests.sessions.Session.prepare_request",
-              "src.requests.models.PreparedRequest",
-              "CALLS"
-            ],
-            [
-              "src.requests.sessions.Session.prepare_request",
               "src.requests.models.Request.method.upper",
-              "CALLS"
-            ],
-            [
-              "src.requests.sessions.Session.request",
-              "src.requests.models.Request",
               "CALLS"
             ],
             [
@@ -4334,11 +4021,6 @@
             [
               "src.requests.sessions.SessionRedirectMixin.resolve_redirects",
               "src.requests.compat.urlparse.geturl.startswith",
-              "CALLS"
-            ],
-            [
-              "src.requests.sessions.SessionRedirectMixin.resolve_redirects",
-              "src.requests.exceptions.TooManyRedirects",
               "CALLS"
             ],
             [

@@ -112,6 +112,8 @@ Single-shot (iter=1) baseline (n=200, 2026-05-03): file=82.5%, class=46.5%, func
 
 **The defended number is the iter=2 measurement above.** iter=2 is the production default (`LOCAGENT_ITERATIONS=2`).
 
+> **Reproduction status (2026-05-16)**: the 2026-05-12 re-run is **REFUSED** for publication — 142/200 instances indexed because 58 PR `base_commit` SHAs have been GC'd on GitHub since 2026-05-04 (see `bench/accuracy/baselines/2026-05-12-loc-bench-unreachable-tail-finding.md`). On the indexed subset of 142, the numbers shifted to file=80.3% / class=80.3% / func=73.9% — but the missing 67 instances are category-skewed (42% Security Vulnerability), so the May-4 → May-12 delta is not apples-to-apples. The 86.0/84.5/73.5 numbers remain the defended baseline as a *historical measurement*; re-baselining on the current reachable corpus is required before citing externally.
+
 #### Methodology caveats — read before citing the numbers above externally
 
 The 86.0% / 84.5% / 73.5% numbers are not directly comparable to the LocAgent paper's Loc-Bench numbers without three caveats:

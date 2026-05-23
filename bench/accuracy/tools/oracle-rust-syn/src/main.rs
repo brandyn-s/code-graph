@@ -1,6 +1,21 @@
 //! CALLS+IMPORTS ground-truth oracle for Rust fixtures via `syn`.
 //!
-//! Run: `oracle-rust-syn <crate_root> <project_name>`
+//! Two modes:
+//!   1. Crate walk (oracle mode):
+//!        `oracle-rust-syn <crate_root> <project_name>`
+//!      Walks every .rs file under <crate_root>, emits edges + def QNs.
+//!      This is the original ground-truth-oracle invocation used by
+//!      `bench/accuracy/oracle_rust_syn.py`.
+//!   2. Single-file (production-extractor mode, Phase A'''' Option α
+//!      Session 1):
+//!        `oracle-rust-syn --single-file <abs_path> --crate-root <abs_path> --project <name>`
+//!      Parses a single .rs file at <abs_path>, computes its module_qn
+//!      relative to <crate_root>, emits the same edge shape but with
+//!      file-resolved `line` numbers (proc-macro2 spans) instead of 0.
+//!      This is the foundational building block for the C-extractor
+//!      Rust-path replacement named in PR #330 (Phase A''' Session 2's
+//!      named pivot — closures / async / macros / struct-literal /
+//!      turbofish coverage that the C extractor misses).
 //!
 //! Emits JSON array of edges to stdout, shape:
 //!   [{"from_qn": "...", "to_qn": "...", "type": "CALLS"|"IMPORTS",
@@ -15,13 +30,21 @@
 //!   are NOT named -> we use the nearest named enclosing fn).
 //! - Callee QN is the syntactic form as written at the call site. The Python
 //!   wrapper does internal-vs-external filtering (same pattern as oracle_pycg.py).
+//! - Line numbers (Session 1, 2026-05-23): proc-macro2 `Span::start()` exposes
+//!   `LineColumn { line, column }` when the `span-locations` feature is on.
+//!   The crate-walk mode also emits real line numbers now — the original
+//!   `line: 0` comment was inherited from before this feature was enabled
+//!   and is no longer accurate. Oracle consumers that don't read `line`
+//!   are unaffected; consumers that do read it now get useful values.
 
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
+use proc_macro2::Span;
 use serde::Serialize;
+use syn::spanned::Spanned;
 use syn::visit::Visit;
 use syn::{Expr, ExprCall, ExprMethodCall, ExprPath, ImplItemFn, ItemFn, ItemMod, ItemUse, UseTree};
 use walkdir::WalkDir;
@@ -135,7 +158,8 @@ impl<'ast> Visit<'ast> for Visitor {
 
     fn visit_item_use(&mut self, i: &'ast ItemUse) {
         let mut prefix = Vec::<String>::new();
-        emit_use_tree(&i.tree, &mut prefix, &mut self.edges, &self.module_qn, &self.file_rel);
+        let use_line = line_of(i.span());
+        emit_use_tree(&i.tree, &mut prefix, &mut self.edges, &self.module_qn, &self.file_rel, use_line);
     }
 
     fn visit_expr_call(&mut self, i: &'ast ExprCall) {
@@ -146,9 +170,7 @@ impl<'ast> Visit<'ast> for Visitor {
                 to_qn: callee,
                 edge_type: "CALLS".to_string(),
                 file: self.file_rel.clone(),
-                // syn doesn't expose spans without `proc-macro2::Span` + file context;
-                // emit 0 for now. The file field is what matters for scope alignment.
-                line: 0,
+                line: line_of(i.span()),
                 source: "syn".to_string(),
             });
         }
@@ -167,11 +189,19 @@ impl<'ast> Visit<'ast> for Visitor {
             to_qn: callee,
             edge_type: "CALLS".to_string(),
             file: self.file_rel.clone(),
-            line: 0,
+            line: line_of(i.method.span()),
             source: "syn".to_string(),
         });
         syn::visit::visit_expr_method_call(self, i);
     }
+}
+
+/// Extract a 1-based line number from a proc-macro2 Span. Requires the
+/// `span-locations` feature on proc-macro2 (enabled in Cargo.toml).
+/// Returns 0 on the no-span case (shouldn't happen for parsed source).
+fn line_of(span: Span) -> u32 {
+    let start = span.start();
+    u32::try_from(start.line).unwrap_or(0)
 }
 
 /// Best-effort path extraction from a callee expression. `foo::bar` -> "foo.bar",
@@ -196,11 +226,12 @@ fn emit_use_tree(
     edges: &mut Vec<Edge>,
     module_qn: &str,
     file_rel: &str,
+    use_line: u32,
 ) {
     match tree {
         UseTree::Path(p) => {
             prefix.push(p.ident.to_string());
-            emit_use_tree(&p.tree, prefix, edges, module_qn, file_rel);
+            emit_use_tree(&p.tree, prefix, edges, module_qn, file_rel, use_line);
             prefix.pop();
         }
         UseTree::Name(n) => {
@@ -211,7 +242,7 @@ fn emit_use_tree(
                 to_qn: parts.join("."),
                 edge_type: "IMPORTS".to_string(),
                 file: file_rel.to_string(),
-                line: 0,
+                line: use_line,
                 source: "syn".to_string(),
             });
         }
@@ -223,7 +254,7 @@ fn emit_use_tree(
                 to_qn: parts.join("."),
                 edge_type: "IMPORTS".to_string(),
                 file: file_rel.to_string(),
-                line: 0,
+                line: use_line,
                 source: "syn".to_string(),
             });
         }
@@ -236,14 +267,14 @@ fn emit_use_tree(
                     to_qn: prefix.join("."),
                     edge_type: "IMPORTS".to_string(),
                     file: file_rel.to_string(),
-                    line: 0,
+                    line: use_line,
                     source: "syn".to_string(),
                 });
             }
         }
         UseTree::Group(g) => {
             for item in &g.items {
-                emit_use_tree(item, prefix, edges, module_qn, file_rel);
+                emit_use_tree(item, prefix, edges, module_qn, file_rel, use_line);
             }
         }
     }
@@ -289,65 +320,191 @@ fn process_file(
     Ok(())
 }
 
+fn print_usage() {
+    eprintln!(
+        "usage:\n  \
+         oracle-rust-syn <crate_root> <project_name>\n  \
+         oracle-rust-syn --single-file <abs_path> --crate-root <abs_path> --project <name>"
+    );
+}
+
 fn main() -> ExitCode {
     let args: Vec<String> = env::args().collect();
-    if args.len() != 3 {
-        eprintln!("usage: oracle-rust-syn <crate_root> <project_name>");
-        return ExitCode::from(2);
-    }
-    let crate_root = PathBuf::from(&args[1]);
-    let project = &args[2];
 
-    if !crate_root.is_dir() {
-        eprintln!("crate_root not a directory: {}", crate_root.display());
-        return ExitCode::from(2);
-    }
+    // Mode 2: --single-file <abs_path> --crate-root <abs_path> --project <name>
+    // (flag order tolerant)
+    if args.iter().any(|a| a == "--single-file") {
+        let mut single_file: Option<PathBuf> = None;
+        let mut crate_root_arg: Option<PathBuf> = None;
+        let mut project_arg: Option<String> = None;
 
-    let mut edges: Vec<Edge> = Vec::new();
-    let mut defs: Vec<String> = Vec::new();
-    let mut errors: Vec<String> = Vec::new();
-    let mut parsed = 0usize;
-
-    for entry in WalkDir::new(&crate_root).into_iter().filter_map(|e| e.ok()) {
-        let p = entry.path();
-        if !p.is_file() {
-            continue;
+        let mut i = 1;
+        while i < args.len() {
+            match args[i].as_str() {
+                "--single-file" => {
+                    i += 1;
+                    if i >= args.len() {
+                        eprintln!("--single-file requires a path argument");
+                        print_usage();
+                        return ExitCode::from(2);
+                    }
+                    single_file = Some(PathBuf::from(&args[i]));
+                }
+                "--crate-root" => {
+                    i += 1;
+                    if i >= args.len() {
+                        eprintln!("--crate-root requires a path argument");
+                        print_usage();
+                        return ExitCode::from(2);
+                    }
+                    crate_root_arg = Some(PathBuf::from(&args[i]));
+                }
+                "--project" => {
+                    i += 1;
+                    if i >= args.len() {
+                        eprintln!("--project requires a name argument");
+                        print_usage();
+                        return ExitCode::from(2);
+                    }
+                    project_arg = Some(args[i].clone());
+                }
+                other => {
+                    eprintln!("unrecognized argument: {}", other);
+                    print_usage();
+                    return ExitCode::from(2);
+                }
+            }
+            i += 1;
         }
-        if p.extension().and_then(|s| s.to_str()) != Some("rs") {
-            continue;
-        }
-        // Skip target/ dirs, tests under targets, build.rs outputs.
-        let s = p.to_string_lossy().replace('\\', "/");
-        if s.contains("/target/") || s.ends_with("/build.rs") {
-            continue;
-        }
-        match process_file(p, &crate_root, project, &mut edges, &mut defs) {
-            Ok(()) => parsed += 1,
-            Err(e) => errors.push(e),
-        }
-    }
 
-    eprintln!(
-        "oracle-rust-syn: project={} files_parsed={} edges={} defs={} errors={}",
-        project,
-        parsed,
-        edges.len(),
-        defs.len(),
-        errors.len()
-    );
-    for e in &errors {
-        eprintln!("  error: {}", e);
-    }
+        let single_file = match single_file {
+            Some(p) => p,
+            None => {
+                eprintln!("--single-file mode requires a --single-file <path> argument");
+                print_usage();
+                return ExitCode::from(2);
+            }
+        };
+        let crate_root = match crate_root_arg {
+            Some(p) => p,
+            None => {
+                eprintln!("--single-file mode requires --crate-root <path>");
+                print_usage();
+                return ExitCode::from(2);
+            }
+        };
+        let project = match project_arg {
+            Some(p) => p,
+            None => {
+                eprintln!("--single-file mode requires --project <name>");
+                print_usage();
+                return ExitCode::from(2);
+            }
+        };
 
-    // Emit both edges and def QNs. Python wrapper uses defs to resolve bare
-    // calls without re-parsing the crate.
-    #[derive(Serialize)]
-    struct Output<'a> {
-        edges: &'a [Edge],
-        defs: &'a [String],
+        if !single_file.is_file() {
+            eprintln!("--single-file path is not a regular file: {}", single_file.display());
+            return ExitCode::from(2);
+        }
+        if !crate_root.is_dir() {
+            eprintln!("--crate-root is not a directory: {}", crate_root.display());
+            return ExitCode::from(2);
+        }
+        if !single_file.starts_with(&crate_root) {
+            eprintln!(
+                "--single-file ({}) is not under --crate-root ({})",
+                single_file.display(),
+                crate_root.display()
+            );
+            return ExitCode::from(2);
+        }
+
+        let mut edges: Vec<Edge> = Vec::new();
+        let mut defs: Vec<String> = Vec::new();
+        match process_file(&single_file, &crate_root, &project, &mut edges, &mut defs) {
+            Ok(()) => {
+                eprintln!(
+                    "oracle-rust-syn --single-file: project={} file={} edges={} defs={}",
+                    project,
+                    single_file.display(),
+                    edges.len(),
+                    defs.len()
+                );
+                #[derive(Serialize)]
+                struct Output<'a> {
+                    edges: &'a [Edge],
+                    defs: &'a [String],
+                }
+                let out = Output { edges: &edges, defs: &defs };
+                let json = serde_json::to_string(&out).expect("serde_json");
+                println!("{}", json);
+                ExitCode::SUCCESS
+            }
+            Err(e) => {
+                eprintln!("oracle-rust-syn --single-file: parse error: {}", e);
+                ExitCode::from(1)
+            }
+        }
+    } else {
+        // Mode 1: original crate-walk oracle invocation.
+        if args.len() != 3 {
+            print_usage();
+            return ExitCode::from(2);
+        }
+        let crate_root = PathBuf::from(&args[1]);
+        let project = &args[2];
+
+        if !crate_root.is_dir() {
+            eprintln!("crate_root not a directory: {}", crate_root.display());
+            return ExitCode::from(2);
+        }
+
+        let mut edges: Vec<Edge> = Vec::new();
+        let mut defs: Vec<String> = Vec::new();
+        let mut errors: Vec<String> = Vec::new();
+        let mut parsed = 0usize;
+
+        for entry in WalkDir::new(&crate_root).into_iter().filter_map(|e| e.ok()) {
+            let p = entry.path();
+            if !p.is_file() {
+                continue;
+            }
+            if p.extension().and_then(|s| s.to_str()) != Some("rs") {
+                continue;
+            }
+            // Skip target/ dirs, tests under targets, build.rs outputs.
+            let s = p.to_string_lossy().replace('\\', "/");
+            if s.contains("/target/") || s.ends_with("/build.rs") {
+                continue;
+            }
+            match process_file(p, &crate_root, project, &mut edges, &mut defs) {
+                Ok(()) => parsed += 1,
+                Err(e) => errors.push(e),
+            }
+        }
+
+        eprintln!(
+            "oracle-rust-syn: project={} files_parsed={} edges={} defs={} errors={}",
+            project,
+            parsed,
+            edges.len(),
+            defs.len(),
+            errors.len()
+        );
+        for e in &errors {
+            eprintln!("  error: {}", e);
+        }
+
+        // Emit both edges and def QNs. Python wrapper uses defs to resolve bare
+        // calls without re-parsing the crate.
+        #[derive(Serialize)]
+        struct Output<'a> {
+            edges: &'a [Edge],
+            defs: &'a [String],
+        }
+        let out = Output { edges: &edges, defs: &defs };
+        let json = serde_json::to_string(&out).expect("serde_json");
+        println!("{}", json);
+        ExitCode::SUCCESS
     }
-    let out = Output { edges: &edges, defs: &defs };
-    let json = serde_json::to_string(&out).expect("serde_json");
-    println!("{}", json);
-    ExitCode::SUCCESS
 }

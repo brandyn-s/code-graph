@@ -59,6 +59,26 @@ func (s *Server) handleQueryGraph(_ context.Context, req *mcp.CallToolRequest) (
 			result.EffectiveCap,
 		)
 	}
+	// Surface projects whose per-project execution failed. Previously a
+	// single corrupt-DB project would silently drop out of the merged
+	// result; callers can now see which projects were excluded.
+	if len(result.SkippedProjects) > 0 {
+		skipped := make([]map[string]any, 0, len(result.SkippedProjects))
+		for _, sp := range result.SkippedProjects {
+			skipped = append(skipped, map[string]any{"name": sp.Name, "err": sp.Err})
+		}
+		responseData["skipped_projects"] = skipped
+	}
+	// Surface unbounded-`*` cap so callers know when they wrote `*` but
+	// the engine applied a depth limit. The signal is suppressed when the
+	// query used an explicit `*N..M` upper bound.
+	if result.UnboundedDepthCap > 0 {
+		responseData["unbounded_depth_cap"] = result.UnboundedDepthCap
+		responseData["unbounded_depth_hint"] = fmt.Sprintf(
+			"Unbounded `*` path was capped at depth %d. Use `*N..M` for an explicit bound, or raise via Executor.MaxUnboundedPathDepth.",
+			result.UnboundedDepthCap,
+		)
+	}
 	s.addIndexStatus(responseData)
 
 	s.queryCache.Set(cacheKey, responseData)

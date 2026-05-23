@@ -105,6 +105,13 @@ func (s *Server) handleIndexHealth(ctx context.Context, req *mcp.CallToolRequest
 	nodeCount, _ := st.CountNodes(effectiveProject)
 	edgeCount, _ := st.CountEdges(effectiveProject)
 
+	// Resolver rule + confidence tier distribution. Each CALLS edge
+	// already records which resolver rule emitted it and which confidence
+	// tier it lands in — surface those aggregates so operators can see
+	// the precision posture of an index without sampling edges.
+	resolverRuleCounts, _ := st.CallsResolverRuleStats(effectiveProject)
+	confidenceTierCounts, _ := st.CallsConfidenceTierStats(effectiveProject)
+
 	// Build response
 	enrichmentStale := proj.EnrichmentVersion != pipeline.EnrichmentVersion
 
@@ -133,6 +140,12 @@ func (s *Server) handleIndexHealth(ctx context.Context, req *mcp.CallToolRequest
 	}
 	if grammarVersionsAge >= 0 {
 		responseData["grammar_versions_age_days"] = grammarVersionsAge
+	}
+	if len(resolverRuleCounts) > 0 {
+		responseData["calls_by_resolver_rule"] = resolverRuleCounts
+	}
+	if len(confidenceTierCounts) > 0 {
+		responseData["calls_by_confidence_tier"] = confidenceTierCounts
 	}
 
 	// Include file lists if small enough to be useful

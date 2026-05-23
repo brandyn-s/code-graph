@@ -113,8 +113,12 @@ type Watcher struct {
 	ctx      context.Context
 
 	// Explicit watch list — only watched projects get polled.
-	mu        sync.Mutex
-	watchList map[string]watchEntry
+	// strategies mirrors the current change-detection strategy per project
+	// so operators can query without parsing logs. Guarded by mu so external
+	// callers can read it concurrently with the Run goroutine.
+	mu         sync.Mutex
+	watchList  map[string]watchEntry
+	strategies map[string]string
 
 	// testStrategy overrides auto-detection when non-zero (for tests).
 	testStrategy watchStrategy
@@ -123,12 +127,42 @@ type Watcher struct {
 // New creates a Watcher. indexFn is called when file changes are detected.
 func New(r *store.StoreRouter, indexFn IndexFunc) *Watcher {
 	return &Watcher{
-		router:    r,
-		indexFn:   indexFn,
-		projects:  make(map[string]*projectState),
-		watchList: make(map[string]watchEntry),
-		ctx:       context.Background(),
+		router:     r,
+		indexFn:    indexFn,
+		projects:   make(map[string]*projectState),
+		watchList:  make(map[string]watchEntry),
+		strategies: make(map[string]string),
+		ctx:        context.Background(),
 	}
+}
+
+// Strategies returns a snapshot of the current change-detection strategy
+// per watched project. Useful for surfacing silent degradations (e.g., a
+// project that probed as "git" but downgraded to "dirmtime" after git
+// failures). Returned map is safe to mutate.
+func (w *Watcher) Strategies() map[string]string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	out := make(map[string]string, len(w.strategies))
+	for k, v := range w.strategies {
+		out[k] = v
+	}
+	return out
+}
+
+// setStrategy records the current strategy for project. Called whenever
+// state.strategy is assigned so Strategies() stays in sync.
+func (w *Watcher) setStrategy(project string, s watchStrategy) {
+	w.mu.Lock()
+	w.strategies[project] = s.String()
+	w.mu.Unlock()
+}
+
+// forgetStrategy drops the record for a project that's no longer watched.
+func (w *Watcher) forgetStrategy(project string) {
+	w.mu.Lock()
+	delete(w.strategies, project)
+	w.mu.Unlock()
 }
 
 // Watch adds a project to the watch list. Called after successful index.
@@ -213,6 +247,7 @@ func (w *Watcher) pollAll() {
 			slog.Info("watcher.prune", "project", name)
 			state.close()
 			delete(w.projects, name)
+			w.forgetStrategy(name)
 		}
 	}
 
@@ -335,6 +370,8 @@ func (w *Watcher) initBaseline(proj *store.Project, state *projectState) {
 		state.dirMtimes, _ = checkDirMtimes(w.ctx, proj.RootPath)
 		slog.Debug("watcher.baseline", "project", proj.Name, "strategy", "dirmtime", "files", len(snap), "dirs", len(state.dirMtimes))
 	}
+
+	w.setStrategy(proj.Name, state.strategy)
 }
 
 // checkSentinel returns (changed, strategyFailed).
@@ -381,7 +418,10 @@ func (w *Watcher) downgradeStrategy(proj *store.Project, state *projectState) {
 	default:
 		return // already at bottom tier
 	}
-	slog.Info("watcher.strategy.downgrade", "project", proj.Name, "from", old.String(), "to", state.strategy.String())
+	// Warn, not Info: a downgrade means the preferred strategy stopped
+	// working. Operators need to see this without filtering Info logs.
+	slog.Warn("watcher.strategy.downgrade", "project", proj.Name, "from", old.String(), "to", state.strategy.String())
+	w.setStrategy(proj.Name, state.strategy)
 }
 
 func (w *Watcher) fullSnapshotAndIndex(proj *store.Project, state *projectState) {

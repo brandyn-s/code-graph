@@ -1173,3 +1173,210 @@ func TestBFSWithCrossServiceEdges(t *testing.T) {
 		t.Error("expected has_cross_service=true for HTTP_CALLS edge")
 	}
 }
+
+// TestCallsResolverRuleStats verifies the resolver-rule aggregation reads
+// the resolver_rule_gen generated column and buckets correctly, with
+// missing rules landing in the "unset" bucket. This is the observability
+// signal that lets index_health surface "how was this CALLS graph
+// actually resolved?" without scanning property JSON blobs.
+func TestCallsResolverRuleStats(t *testing.T) {
+	s, err := OpenMemory()
+	if err != nil {
+		t.Fatalf("OpenMemory: %v", err)
+	}
+	defer s.Close()
+
+	const proj = "rrstats"
+	if err := s.UpsertProject(proj, "/tmp/rrstats"); err != nil {
+		t.Fatalf("UpsertProject: %v", err)
+	}
+	idA, _ := s.UpsertNode(&Node{Project: proj, Label: "Function", Name: "A", QualifiedName: "rrstats.A"})
+	idB, _ := s.UpsertNode(&Node{Project: proj, Label: "Function", Name: "B", QualifiedName: "rrstats.B"})
+	idC, _ := s.UpsertNode(&Node{Project: proj, Label: "Function", Name: "C", QualifiedName: "rrstats.C"})
+	idD, _ := s.UpsertNode(&Node{Project: proj, Label: "Function", Name: "D", QualifiedName: "rrstats.D"})
+
+	// Two cross-package-import-map edges and one cross-package-suffix.
+	mustInsertEdge(t, s, proj, idA, idB, "CALLS", map[string]any{"resolver_rule": "cross-package-import-map"})
+	mustInsertEdge(t, s, proj, idA, idC, "CALLS", map[string]any{"resolver_rule": "cross-package-import-map"})
+	mustInsertEdge(t, s, proj, idA, idD, "CALLS", map[string]any{"resolver_rule": "cross-package-suffix"})
+	// One edge with no resolver_rule property → must land in "unset".
+	mustInsertEdge(t, s, proj, idB, idC, "CALLS", nil)
+	// Non-CALLS edges must be excluded from the aggregation entirely.
+	mustInsertEdge(t, s, proj, idB, idD, "INHERITS", map[string]any{"resolver_rule": "should-be-ignored"})
+
+	got, err := s.CallsResolverRuleStats(proj)
+	if err != nil {
+		t.Fatalf("CallsResolverRuleStats: %v", err)
+	}
+	want := map[string]int{
+		"cross-package-import-map": 2,
+		"cross-package-suffix":     1,
+		"unset":                    1,
+	}
+	if len(got) != len(want) {
+		t.Fatalf("expected %d buckets, got %d (%v)", len(want), len(got), got)
+	}
+	for k, v := range want {
+		if got[k] != v {
+			t.Errorf("bucket %q: expected %d, got %d (full: %v)", k, v, got[k], got)
+		}
+	}
+	if _, ok := got["should-be-ignored"]; ok {
+		t.Error("non-CALLS edge leaked into aggregation")
+	}
+}
+
+// TestCallsConfidenceTierStats verifies confidence-tier aggregation.
+// Same shape as resolver-rule: indexed generated column, "unset" bucket
+// for missing values, CALLS-only.
+func TestCallsConfidenceTierStats(t *testing.T) {
+	s, err := OpenMemory()
+	if err != nil {
+		t.Fatalf("OpenMemory: %v", err)
+	}
+	defer s.Close()
+
+	const proj = "ctstats"
+	if err := s.UpsertProject(proj, "/tmp/ctstats"); err != nil {
+		t.Fatalf("UpsertProject: %v", err)
+	}
+	idA, _ := s.UpsertNode(&Node{Project: proj, Label: "Function", Name: "A", QualifiedName: "ctstats.A"})
+	idB, _ := s.UpsertNode(&Node{Project: proj, Label: "Function", Name: "B", QualifiedName: "ctstats.B"})
+	idC, _ := s.UpsertNode(&Node{Project: proj, Label: "Function", Name: "C", QualifiedName: "ctstats.C"})
+
+	mustInsertEdge(t, s, proj, idA, idB, "CALLS", map[string]any{"confidence_tier": "HIGH"})
+	mustInsertEdge(t, s, proj, idA, idC, "CALLS", map[string]any{"confidence_tier": "HIGH"})
+	mustInsertEdge(t, s, proj, idB, idC, "CALLS", map[string]any{"confidence_tier": "SPECULATIVE"})
+	// No tier set → confidence_tier_gen COALESCEs to 'EXTRACTED' per the
+	// schema migration default (store.go:535).
+	mustInsertEdge(t, s, proj, idC, idA, "CALLS", nil)
+
+	got, err := s.CallsConfidenceTierStats(proj)
+	if err != nil {
+		t.Fatalf("CallsConfidenceTierStats: %v", err)
+	}
+	if got["HIGH"] != 2 {
+		t.Errorf("HIGH: expected 2, got %d (full: %v)", got["HIGH"], got)
+	}
+	if got["SPECULATIVE"] != 1 {
+		t.Errorf("SPECULATIVE: expected 1, got %d (full: %v)", got["SPECULATIVE"], got)
+	}
+	if got["EXTRACTED"] != 1 {
+		t.Errorf("EXTRACTED (default): expected 1, got %d (full: %v)", got["EXTRACTED"], got)
+	}
+}
+
+// mustInsertEdge is a local test helper that inserts an edge with optional
+// JSON properties. Lets the resolver-rule/confidence-tier tests stay
+// focused on the aggregation contract.
+func mustInsertEdge(t *testing.T, s *Store, project string, src, tgt int64, edgeType string, props map[string]any) {
+	t.Helper()
+	e := &Edge{Project: project, SourceID: src, TargetID: tgt, Type: edgeType, Properties: props}
+	if _, err := s.InsertEdge(e); err != nil {
+		t.Fatalf("InsertEdge: %v", err)
+	}
+}
+
+// TestUpsertNodeReturnsStableID is the regression test for the
+// LastInsertId race that the pre-RETURNING UpsertNode comment
+// acknowledged. On a conflict, ON CONFLICT DO UPDATE used to return
+// either 0 (fallback SELECT path) or a stale id (silent FK failure
+// path) from LastInsertId(). With RETURNING, the id from the second
+// upsert must equal the id from the first — every call returns the id
+// of the row it actually touched.
+func TestUpsertNodeReturnsStableID(t *testing.T) {
+	s, err := OpenMemory()
+	if err != nil {
+		t.Fatalf("OpenMemory: %v", err)
+	}
+	defer s.Close()
+
+	if err := s.UpsertProject("test", "/tmp/test"); err != nil {
+		t.Fatalf("UpsertProject: %v", err)
+	}
+
+	n := &Node{Project: "test", Label: "Function", Name: "Foo", QualifiedName: "test.main.Foo"}
+	firstID, err := s.UpsertNode(n)
+	if err != nil {
+		t.Fatalf("first UpsertNode: %v", err)
+	}
+	if firstID == 0 {
+		t.Fatal("first UpsertNode returned id=0")
+	}
+
+	// Insert several other nodes between the upserts so the underlying
+	// rowid counter would have moved if LastInsertId were still in play.
+	// The conflict-update path must still return the original row id.
+	for i := 0; i < 5; i++ {
+		filler := &Node{Project: "test", Label: "Function", Name: "Bar", QualifiedName: fmt.Sprintf("test.main.Bar%d", i)}
+		if _, err := s.UpsertNode(filler); err != nil {
+			t.Fatalf("filler upsert: %v", err)
+		}
+	}
+
+	updated := &Node{
+		Project: "test", Label: "Function", Name: "Foo",
+		QualifiedName: "test.main.Foo",
+		Properties:    map[string]any{"updated": true},
+	}
+	secondID, err := s.UpsertNode(updated)
+	if err != nil {
+		t.Fatalf("second UpsertNode: %v", err)
+	}
+	if secondID != firstID {
+		t.Fatalf("expected stable id %d on conflict-update, got %d (race the comment warned about)", firstID, secondID)
+	}
+
+	// Sanity: the row at firstID still exists and has the updated property.
+	found, err := s.FindNodeByID(firstID)
+	if err != nil {
+		t.Fatalf("FindNodeByID: %v", err)
+	}
+	if found.Properties["updated"] != true {
+		t.Errorf("expected updated property at id=%d, got %v", firstID, found.Properties)
+	}
+}
+
+// TestUpsertNodeIDMatchesRow is the stronger invariant: across many
+// interleaved upserts (some new inserts, some updates), the id returned
+// by UpsertNode is ALWAYS the id you'd get from FindNodeByQN. The
+// pre-RETURNING path could violate this when LastInsertId returned a
+// non-zero stale id, which would manifest as FK failures in edge
+// inserts that used the returned id.
+func TestUpsertNodeIDMatchesRow(t *testing.T) {
+	s, err := OpenMemory()
+	if err != nil {
+		t.Fatalf("OpenMemory: %v", err)
+	}
+	defer s.Close()
+
+	if err := s.UpsertProject("test", "/tmp/test"); err != nil {
+		t.Fatalf("UpsertProject: %v", err)
+	}
+
+	const n = 50
+	for i := 0; i < n; i++ {
+		qn := fmt.Sprintf("test.main.Fn%d", i)
+		// First pass: fresh insert. Second pass: conflict-update.
+		for pass := 0; pass < 2; pass++ {
+			node := &Node{
+				Project:       "test",
+				Label:         "Function",
+				Name:          fmt.Sprintf("Fn%d", i),
+				QualifiedName: qn,
+				Properties:    map[string]any{"pass": pass},
+			}
+			gotID, err := s.UpsertNode(node)
+			if err != nil {
+				t.Fatalf("pass=%d i=%d UpsertNode: %v", pass, i, err)
+			}
+			lookup, err := s.FindNodeByQN("test", qn)
+			if err != nil || lookup == nil {
+				t.Fatalf("pass=%d i=%d FindNodeByQN: %v", pass, i, err)
+			}
+			if gotID != lookup.ID {
+				t.Fatalf("pass=%d i=%d: UpsertNode returned id=%d but FindNodeByQN found id=%d (race)", pass, i, gotID, lookup.ID)
+			}
+		}
+	}
+}

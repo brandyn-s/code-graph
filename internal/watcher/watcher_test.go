@@ -1148,3 +1148,60 @@ func TestPollAllPrunesUnwatched(t *testing.T) {
 		t.Error("unwatched project should be pruned from projects map")
 	}
 }
+
+// TestStrategiesReportsBaselineAndDowngrade verifies that the Strategies()
+// query reflects the current strategy after baseline and tracks downgrades
+// without needing git (so it runs in environments where commit signing is
+// unavailable). Exercises fsnotify-or-dirmtime baseline, then a forced
+// downgrade via downgradeStrategy.
+func TestStrategiesReportsBaselineAndDowngrade(t *testing.T) {
+	tmpDir := t.TempDir()
+	mustWriteFile(t, filepath.Join(tmpDir, "main.go"), []byte("package main\n"))
+
+	r := newTestRouter(t, filepath.Base(tmpDir), tmpDir)
+	w := newWatcherWithStrategy(r, func(_ context.Context, _, _ string) error { return nil }, strategyFSNotify)
+	t.Cleanup(w.closeAll)
+	projName := filepath.Base(tmpDir)
+	w.Watch(projName, tmpDir)
+
+	// Pre-baseline: no strategy reported yet.
+	if got := w.Strategies(); len(got) != 0 {
+		t.Fatalf("expected empty strategies pre-baseline, got %v", got)
+	}
+
+	w.pollAll()
+
+	got := w.Strategies()
+	baseline, ok := got[projName]
+	if !ok {
+		t.Fatalf("expected strategy reported for %s, got %v", projName, got)
+	}
+	if baseline != "fsnotify" && baseline != "dirmtime" {
+		t.Fatalf("expected fsnotify or dirmtime baseline, got %q", baseline)
+	}
+
+	// Force a downgrade. From fsnotify the next tier is dirmtime; from
+	// dirmtime there is no further tier (downgradeStrategy is a no-op).
+	state := w.projects[projName]
+	if state == nil {
+		t.Fatal("project state should exist after baseline")
+	}
+	proj := &store.Project{Name: projName, RootPath: tmpDir}
+	w.downgradeStrategy(proj, state)
+
+	got = w.Strategies()
+	current := got[projName]
+	if baseline == "fsnotify" && current != "dirmtime" {
+		t.Fatalf("expected downgrade fsnotify -> dirmtime, got %q", current)
+	}
+	if baseline == "dirmtime" && current != "dirmtime" {
+		t.Fatalf("expected dirmtime to remain (bottom tier), got %q", current)
+	}
+
+	// Unwatch + poll should drop the record.
+	w.Unwatch(projName)
+	w.pollAll()
+	if _, ok := w.Strategies()[projName]; ok {
+		t.Fatalf("expected strategy record cleared after unwatch+prune")
+	}
+}

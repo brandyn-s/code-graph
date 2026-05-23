@@ -6,31 +6,29 @@ import (
 	"strings"
 )
 
-// UpsertNode inserts or replaces a node (dedup by qualified_name).
-// Note: LastInsertId() can return stale IDs for ON CONFLICT DO UPDATE,
-// causing occasional FK failures in downstream edge inserts. This is
-// accepted for performance — the fallback SELECT only runs when id==0.
+// UpsertNode inserts or replaces a node (dedup by qualified_name) and
+// returns the node's row id.
+//
+// Uses SQLite's RETURNING clause (available since 3.35, March 2021) so
+// the id is read directly from the row written or updated by this
+// statement. The pre-RETURNING path used LastInsertId() with a fallback
+// SELECT when it returned 0, and accepted "occasional FK failures in
+// downstream edge inserts" when LastInsertId returned a stale (non-zero)
+// id on a conflict. RETURNING closes that race: SQLite emits one row
+// per inserted or updated row, so the id is always the id of the row
+// this statement just touched, regardless of conflict behavior.
 func (s *Store) UpsertNode(n *Node) (int64, error) {
-	res, err := s.q.Exec(`
+	var id int64
+	err := s.q.QueryRow(`
 		INSERT INTO nodes (project, label, name, qualified_name, file_path, start_line, end_line, properties)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(project, qualified_name) DO UPDATE SET
 			label=excluded.label, name=excluded.name, file_path=excluded.file_path,
-			start_line=excluded.start_line, end_line=excluded.end_line, properties=excluded.properties`,
-		n.Project, n.Label, n.Name, n.QualifiedName, n.FilePath, n.StartLine, n.EndLine, marshalProps(n.Properties))
+			start_line=excluded.start_line, end_line=excluded.end_line, properties=excluded.properties
+		RETURNING id`,
+		n.Project, n.Label, n.Name, n.QualifiedName, n.FilePath, n.StartLine, n.EndLine, marshalProps(n.Properties)).Scan(&id)
 	if err != nil {
 		return 0, fmt.Errorf("upsert node: %w", err)
-	}
-	id, err := res.LastInsertId()
-	if err != nil {
-		return 0, err
-	}
-	// On conflict, LastInsertId may return 0; query the actual id
-	if id == 0 {
-		err = s.q.QueryRow("SELECT id FROM nodes WHERE project=? AND qualified_name=?", n.Project, n.QualifiedName).Scan(&id)
-		if err != nil {
-			return 0, fmt.Errorf("get node id: %w", err)
-		}
 	}
 	return id, nil
 }

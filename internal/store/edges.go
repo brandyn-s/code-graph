@@ -181,6 +181,65 @@ func (s *Store) EdgeCountsByType(project string) (map[string]int, error) {
 	return result, rows.Err()
 }
 
+// CallsResolverRuleStats returns CALLS edge counts grouped by resolver_rule.
+// Reads the indexed resolver_rule_gen generated column, so the aggregation
+// stays cheap (O(distinct rules) seeks) even on graphs with millions of
+// edges. Rows whose resolver_rule property is missing land in the "unset"
+// bucket — these are typically pre-migration edges from older indexes or
+// edges emitted by passes that don't categorize (HTTP_CALLS, INHERITS,
+// etc., which CALLS rows shouldn't contain). The output is suitable for
+// surfacing in index_health so operators can see precision-distribution
+// at a glance ("how many edges came from cross-package-suffix vs
+// cross-package-import-map?") without scanning JSON properties.
+func (s *Store) CallsResolverRuleStats(project string) (map[string]int, error) {
+	rows, err := s.q.Query(`
+		SELECT COALESCE(resolver_rule_gen, 'unset') AS rule, COUNT(*) AS cnt
+		FROM edges WHERE project=? AND type='CALLS'
+		GROUP BY rule ORDER BY cnt DESC`, project)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := make(map[string]int)
+	for rows.Next() {
+		var rule string
+		var count int
+		if err := rows.Scan(&rule, &count); err != nil {
+			return nil, err
+		}
+		result[rule] = count
+	}
+	return result, rows.Err()
+}
+
+// CallsConfidenceTierStats returns CALLS edge counts grouped by
+// confidence_tier (EXTRACTED, HIGH, MEDIUM, LOW, SPECULATIVE, …). Same
+// shape as CallsResolverRuleStats; uses the indexed confidence_tier_gen
+// generated column. Gives operators a quick "how risky is this graph?"
+// summary — a graph dominated by SPECULATIVE has different reliability
+// characteristics than one dominated by HIGH, even if total edge count
+// is the same.
+func (s *Store) CallsConfidenceTierStats(project string) (map[string]int, error) {
+	rows, err := s.q.Query(`
+		SELECT COALESCE(confidence_tier_gen, 'unset') AS tier, COUNT(*) AS cnt
+		FROM edges WHERE project=? AND type='CALLS'
+		GROUP BY tier ORDER BY cnt DESC`, project)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := make(map[string]int)
+	for rows.Next() {
+		var tier string
+		var count int
+		if err := rows.Scan(&tier, &count); err != nil {
+			return nil, err
+		}
+		result[tier] = count
+	}
+	return result, rows.Err()
+}
+
 // CallsResolutionStats returns CALLS edge counts grouped by resolution_strategy.
 func (s *Store) CallsResolutionStats(project string) (map[string]int, error) {
 	rows, err := s.q.Query(`

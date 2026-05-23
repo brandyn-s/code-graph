@@ -1448,3 +1448,91 @@ func TestExecuteWhereIsNotNull(t *testing.T) {
 		t.Errorf("expected 3 rows, got %d", len(result.Rows))
 	}
 }
+
+// TestExecuteUnboundedPathSignalsCap exercises the new unbounded-`*`
+// observability: when a query uses a bare `*` with no upper bound, the
+// engine applies its default cap and now signals this on the Result so
+// callers know their `*` was clipped. Previously the cap was silent.
+func TestExecuteUnboundedPathSignalsCap(t *testing.T) {
+	s := setupTestStoreMultiEdge(t)
+	defer s.Close()
+
+	exec := &Executor{Store: s}
+	result, err := exec.Execute(`MATCH (a)-[:HTTP_CALLS*]->(b) RETURN b.name`)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if result.UnboundedDepthCap == 0 {
+		t.Fatalf("expected UnboundedDepthCap > 0 for `*` query, got 0")
+	}
+	if result.UnboundedDepthCap != defaultUnboundedPathDepth {
+		t.Fatalf("expected default cap %d, got %d", defaultUnboundedPathDepth, result.UnboundedDepthCap)
+	}
+	if !result.Truncated {
+		t.Errorf("unbounded `*` should set Truncated=true so callers see they got a sample")
+	}
+}
+
+// TestExecuteUnboundedPathConfigurableCap verifies callers can raise the
+// cap via Executor.MaxUnboundedPathDepth and the Result reports the
+// effective cap that was actually applied.
+func TestExecuteUnboundedPathConfigurableCap(t *testing.T) {
+	s := setupTestStoreMultiEdge(t)
+	defer s.Close()
+
+	exec := &Executor{Store: s, MaxUnboundedPathDepth: 25}
+	result, err := exec.Execute(`MATCH (a)-[:HTTP_CALLS*]->(b) RETURN b.name`)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if result.UnboundedDepthCap != 25 {
+		t.Fatalf("expected configured cap 25, got %d", result.UnboundedDepthCap)
+	}
+}
+
+// TestExecuteBoundedPathDoesNotSignalUnboundedCap confirms that bounded
+// var-length queries (`*1..3`) leave UnboundedDepthCap at 0 — only bare
+// `*` triggers the signal, since only bare `*` is being silently capped.
+func TestExecuteBoundedPathDoesNotSignalUnboundedCap(t *testing.T) {
+	s := setupTestStoreMultiEdge(t)
+	defer s.Close()
+
+	exec := &Executor{Store: s}
+	result, err := exec.Execute(`MATCH (a)-[:HTTP_CALLS*1..3]->(b) RETURN b.name`)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if result.UnboundedDepthCap != 0 {
+		t.Errorf("bounded `*1..3` should not set UnboundedDepthCap, got %d", result.UnboundedDepthCap)
+	}
+}
+
+// TestExecuteSkippedProjectsPopulated verifies the wiring between the
+// executor's per-project error path and the Result.SkippedProjects
+// field. Drives the wiring by directly populating skippedProjects
+// before Execute runs — the production failure shape (corrupt DB,
+// transient SQL error) is hard to synthesize in a unit test, but the
+// propagation contract is the part we need to pin so the refactor
+// doesn't regress to silent skips.
+func TestExecuteSkippedProjectsPopulated(t *testing.T) {
+	s := setupTestStore(t)
+	defer s.Close()
+
+	exec := &Executor{Store: s}
+	exec.skippedProjects = []SkippedProject{
+		{Name: "ghost-project", Err: "corrupt: file is not a database"},
+	}
+	result, err := exec.Execute(`MATCH (f:Function) RETURN f.name LIMIT 1`)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if len(result.SkippedProjects) != 1 {
+		t.Fatalf("expected 1 skipped project in Result, got %d", len(result.SkippedProjects))
+	}
+	if result.SkippedProjects[0].Name != "ghost-project" {
+		t.Errorf("expected ghost-project, got %q", result.SkippedProjects[0].Name)
+	}
+	if !strings.Contains(result.SkippedProjects[0].Err, "corrupt") {
+		t.Errorf("expected error string to mention 'corrupt', got %q", result.SkippedProjects[0].Err)
+	}
+}

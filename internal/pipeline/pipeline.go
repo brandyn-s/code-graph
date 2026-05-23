@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -13,6 +14,7 @@ import (
 	"regexp"
 	"runtime"
 	"runtime/debug"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -251,9 +253,61 @@ func ProjectNameFromPath(absPath string) string {
 	return name
 }
 
-// checkCancel returns ctx.Err() if the pipeline's context has been cancelled.
+// ErrHeapPressure is returned by checkCancel when the in-memory graph
+// buffer + extraction caches push HeapAlloc past CODE_GRAPH_HEAP_LIMIT_MB.
+// Pass orchestration treats it like a context cancellation — the pipeline
+// aborts cleanly between passes rather than racing toward OOM. The
+// returned error includes the configured limit and the observed
+// allocation so operators can size the limit appropriately.
+var ErrHeapPressure = errors.New("pipeline aborted: heap pressure exceeded CODE_GRAPH_HEAP_LIMIT_MB")
+
+// heapLimitBytes resolves the operator-configured heap limit. Returns 0
+// when CODE_GRAPH_HEAP_LIMIT_MB is unset or unparseable, which disables
+// the check (the production default). Read each call so tests can flip
+// the env without restarting the binary.
+func heapLimitBytes() uint64 {
+	raw := os.Getenv("CODE_GRAPH_HEAP_LIMIT_MB")
+	if raw == "" {
+		return 0
+	}
+	mb, err := strconv.ParseUint(raw, 10, 64)
+	if err != nil || mb == 0 {
+		return 0
+	}
+	return mb << 20
+}
+
+// heapPressureExceeded compares HeapAlloc to the configured limit and
+// returns (heapAlloc, true) when the limit fired. Factored out so tests
+// can drive the same decision without spinning up a full pipeline.
+func heapPressureExceeded() (uint64, uint64, bool) {
+	limit := heapLimitBytes()
+	if limit == 0 {
+		return 0, 0, false
+	}
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+	return m.HeapAlloc, limit, m.HeapAlloc > limit
+}
+
+// checkCancel returns a non-nil error if the pipeline should abort the
+// current pass. Two reasons: the caller's context was cancelled, or
+// HeapAlloc has crossed the CODE_GRAPH_HEAP_LIMIT_MB threshold. Pass
+// boundaries already call this between passes so the heap check inherits
+// the existing abort-cleanly machinery without new call sites.
 func (p *Pipeline) checkCancel() error {
-	return p.ctx.Err()
+	if err := p.ctx.Err(); err != nil {
+		return err
+	}
+	if alloc, limit, over := heapPressureExceeded(); over {
+		slog.Warn("pipeline.heap_pressure",
+			"heap_alloc_mb", alloc/(1<<20),
+			"limit_mb", limit/(1<<20),
+			"action", "aborting pass cleanly",
+		)
+		return fmt.Errorf("%w (heap=%dMB, limit=%dMB)", ErrHeapPressure, alloc/(1<<20), limit/(1<<20))
+	}
+	return nil
 }
 
 // --- Bridge methods: dispatch to in-memory buffer or SQLite store ---

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log/slog"
 	"regexp"
 	"sort"
 	"strconv"
@@ -15,14 +16,30 @@ import (
 const defaultMaxRows = 200
 const absoluteMaxRows = 10000
 
+// defaultUnboundedPathDepth caps depth for variable-length patterns written
+// as `*` with no upper bound. Without a cap, a cyclic graph would let BFS
+// run unbounded; with a silent cap, the caller has no idea their `*` was
+// clipped. The new behavior caps AND signals via Result.UnboundedDepthCap.
+const defaultUnboundedPathDepth = 10
+
 // Executor runs Cypher execution plans against a store.
 type Executor struct {
-	Store       *store.Store
-	MaxRows     int // 0 means defaultMaxRows
-	regexCache  map[string]*regexp.Regexp
-	ctx         context.Context // set by Execute, used for DB queries
-	expandLimit int             // binding cap for current query (set per-execution)
-	truncated   bool            // set to true when ANY clipping step drops results; propagated to Result
+	Store   *store.Store
+	MaxRows int // 0 means defaultMaxRows
+
+	// MaxUnboundedPathDepth overrides the depth used when a query uses a
+	// bare `*` variable-length pattern with no upper bound. Zero means
+	// defaultUnboundedPathDepth. The effective cap is always reported on
+	// Result.UnboundedDepthCap when the cap fires so callers see when
+	// their `*` was clipped.
+	MaxUnboundedPathDepth int
+
+	regexCache       map[string]*regexp.Regexp
+	ctx              context.Context // set by Execute, used for DB queries
+	expandLimit      int             // binding cap for current query (set per-execution)
+	truncated        bool            // set to true when ANY clipping step drops results; propagated to Result
+	skippedProjects  []SkippedProject
+	unboundedCapHit  int // depth used when an unbounded `*` was capped; 0 means not used
 }
 
 // markTruncated records that an intermediate or final cap trimmed results.
@@ -74,6 +91,29 @@ type Result struct {
 	// defaultMaxRows when max_rows is not set. Always populated so clients
 	// can report "capped at N" even when Truncated is false.
 	EffectiveCap int `json:"effective_cap"`
+
+	// SkippedProjects lists projects whose execution returned an error and
+	// were excluded from the merged result. Empty when no projects were
+	// skipped. Populating this (instead of silently dropping the project)
+	// lets callers see when a single corrupt project DB or transient query
+	// failure is shaping the result set.
+	SkippedProjects []SkippedProject `json:"skipped_projects,omitempty"`
+
+	// UnboundedDepthCap is set to the depth used when a query uses a bare
+	// `*` variable-length pattern and the engine had to apply its default
+	// cap. Zero means no unbounded pattern was capped. Callers that issued
+	// an unbounded `*` should treat any non-zero value as "this is a
+	// sample to depth N — raise MaxUnboundedPathDepth or use an explicit
+	// upper bound for full coverage."
+	UnboundedDepthCap int `json:"unbounded_depth_cap,omitempty"`
+}
+
+// SkippedProject describes a project that errored during execution and
+// was excluded from the merged result. Err is the error string at the
+// time of skip.
+type SkippedProject struct {
+	Name string `json:"name"`
+	Err  string `json:"err"`
 }
 
 // binding maps variable names to matched nodes and edges.
@@ -114,8 +154,23 @@ func (e *Executor) Execute(query string) (*Result, error) {
 		if e.truncated {
 			result.Truncated = true
 		}
+		if len(e.skippedProjects) > 0 {
+			result.SkippedProjects = e.skippedProjects
+		}
+		if e.unboundedCapHit > 0 {
+			result.UnboundedDepthCap = e.unboundedCapHit
+		}
 	}
 	return result, nil
+}
+
+// maxUnboundedPathDepth resolves the configured cap, falling back to the
+// package default when unset.
+func (e *Executor) maxUnboundedPathDepth() int {
+	if e.MaxUnboundedPathDepth > 0 {
+		return e.MaxUnboundedPathDepth
+	}
+	return defaultUnboundedPathDepth
 }
 
 func (e *Executor) executePlan(plan *Plan) (*Result, error) {
@@ -135,7 +190,16 @@ func (e *Executor) executePlan(plan *Plan) (*Result, error) {
 	for _, proj := range projects {
 		bindings, err := e.executeStepsForProject(proj.Name, plan.Steps)
 		if err != nil {
-			continue // skip projects that error
+			// Per-project failure (corrupt DB, transient query error, etc.)
+			// is recorded on the Result so callers see when a project was
+			// excluded — previously this was a silent `continue` and a
+			// single bad project just shrank the result set with no signal.
+			// We still surface results from healthy projects so the query
+			// isn't entirely lost on one corrupt DB.
+			slog.Warn("cypher.project_skipped", "project", proj.Name, "err", err)
+			e.skippedProjects = append(e.skippedProjects, SkippedProject{Name: proj.Name, Err: err.Error()})
+			e.markTruncated()
+			continue
 		}
 		allBindings = append(allBindings, bindings...)
 		if len(allBindings) > bindingCap {
@@ -194,7 +258,13 @@ func (e *Executor) tryAggregateSQL(plan *Plan) (*Result, bool) {
 
 	allRows := make([]map[string]any, 0)
 	for _, proj := range projects {
-		projRows := e.executeAggregateForProject(proj.Name, &sqlCtx, scan, expand, filter, groupItems, countCol)
+		projRows, projErr := e.executeAggregateForProject(proj.Name, &sqlCtx, scan, expand, filter, groupItems, countCol)
+		if projErr != nil {
+			slog.Warn("cypher.project_skipped", "project", proj.Name, "path", "aggregate", "err", projErr)
+			e.skippedProjects = append(e.skippedProjects, SkippedProject{Name: proj.Name, Err: projErr.Error()})
+			e.markTruncated()
+			continue
+		}
 		allRows = append(allRows, projRows...)
 	}
 
@@ -341,12 +411,12 @@ func (e *Executor) executeAggregateForProject(
 	project string, ctx *aggregateSQLContext,
 	scan *ScanNodes, expand *ExpandRelationship, filter *FilterWhere,
 	groupItems []ReturnItem, countCol string,
-) []map[string]any {
+) ([]map[string]any, error) {
 	query, args := buildProjectAggregateSQL(project, ctx, scan, expand, filter)
 
 	rows, qErr := e.Store.DB().QueryContext(e.ctx, query, args...)
 	if qErr != nil {
-		return nil
+		return nil, fmt.Errorf("aggregate query: %w", qErr)
 	}
 	defer rows.Close()
 
@@ -358,7 +428,7 @@ func (e *Executor) executeAggregateForProject(
 			ptrs[i] = &vals[i]
 		}
 		if sErr := rows.Scan(ptrs...); sErr != nil {
-			continue
+			return nil, fmt.Errorf("aggregate scan: %w", sErr)
 		}
 		row := make(map[string]any)
 		for i, gi := range groupItems {
@@ -380,8 +450,10 @@ func (e *Executor) executeAggregateForProject(
 		}
 		result = append(result, row)
 	}
-	_ = rows.Err()
-	return result
+	if rErr := rows.Err(); rErr != nil {
+		return nil, fmt.Errorf("aggregate rows: %w", rErr)
+	}
+	return result, nil
 }
 
 // buildProjectAggregateSQL constructs the SQL query and args for one project.
@@ -934,8 +1006,16 @@ func buildExpandedBindings(bindings []binding, s *ExpandRelationship, edgesByNod
 
 func (e *Executor) expandVariableLength(b binding, fromNode *store.Node, s *ExpandRelationship) ([]binding, error) {
 	maxDepth := s.MaxHops
-	if maxDepth == 0 {
-		maxDepth = 10 // cap unbounded at 10
+	unbounded := maxDepth == 0
+	if unbounded {
+		maxDepth = e.maxUnboundedPathDepth()
+		// Record that an unbounded `*` ran at our cap so the Result can
+		// surface UnboundedDepthCap to the caller. Keep the maximum cap
+		// across multiple expansions in the same query.
+		if maxDepth > e.unboundedCapHit {
+			e.unboundedCapHit = maxDepth
+		}
+		e.markTruncated()
 	}
 
 	direction := s.Direction

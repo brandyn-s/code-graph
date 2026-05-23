@@ -1181,8 +1181,20 @@ func (p *Pipeline) loadImportMapFromDB(moduleQN string) map[string]string {
 }
 
 // passCallsForFiles resolves calls only for the specified files (incremental).
+//
+// Unresolved-count handling mirrors the full-pass aggregator (passCalls
+// stage 3, lines 1856-1862): we accumulate counts per caller-QN across
+// every file in this incremental batch and write each caller's total
+// EXACTLY ONCE at the end. Before this aggregation, the function wrote
+// unresolved_call_count inline per-file via SetNodeIntProperty which
+// uses json_set (overwrite, not add) — so a caller whose unresolved
+// call sites spanned files A and B would end up with B's count alone,
+// silently losing A's contribution. Rare in practice (most callers are
+// file-local) but a real semantic divergence between full and
+// incremental paths.
 func (p *Pipeline) passCallsForFiles(files []discover.FileInfo) {
 	slog.Info("pass3.calls.incremental", "files", len(files))
+	aggregatedUnresolved := make(map[string]int)
 	for _, f := range files {
 		if p.ctx.Err() != nil {
 			return
@@ -1221,13 +1233,17 @@ func (p *Pipeline) passCallsForFiles(files []discover.FileInfo) {
 				})
 			}
 		}
-		// Single-file path: write unresolved counts inline (parallel
-		// path uses passWriteUnresolvedCounts after the file batch).
+		// Aggregate this file's unresolved counts; defer the write to
+		// the end of the batch so a caller across multiple files gets
+		// the sum, not just the last file's contribution.
 		for callerQN, count := range unresolved {
 			if count > 0 {
-				_, _ = p.Store.SetNodeIntProperty(p.ProjectName, callerQN, "unresolved_call_count", count)
+				aggregatedUnresolved[callerQN] += count
 			}
 		}
+	}
+	for callerQN, count := range aggregatedUnresolved {
+		_, _ = p.Store.SetNodeIntProperty(p.ProjectName, callerQN, "unresolved_call_count", count)
 	}
 }
 

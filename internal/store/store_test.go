@@ -1480,3 +1480,59 @@ func TestFindCallerFilesOfTargetsInFiles_ProjectIsolation(t *testing.T) {
 		t.Fatalf("expected exactly mine/caller.go, got %v", got)
 	}
 }
+
+// TestInsertEdgeReturnsStableID is the regression test for the
+// InsertEdge LastInsertId race that mirrored the UpsertNode race
+// closed in PR #332. On ON CONFLICT DO UPDATE, the pre-RETURNING
+// LastInsertId() returned a stale non-zero id from the AUTOINCREMENT
+// counter, not the rowid of the row this statement actually touched.
+// Downstream callers operated on the wrong edge.
+//
+// Pre-fix repro: first insert returned id=1; intervening UpsertNode
+// + InsertEdge calls advanced the rowid counter; conflict-update on
+// the original edge returned id=6 from LastInsertId() — but the real
+// edge is still id=1. Test now asserts the returned id equals the
+// rowid in the DB.
+func TestInsertEdgeReturnsStableID(t *testing.T) {
+	s, err := OpenMemory()
+	if err != nil {
+		t.Fatalf("OpenMemory: %v", err)
+	}
+	defer s.Close()
+
+	if err := s.UpsertProject("test", "/tmp/test"); err != nil {
+		t.Fatalf("UpsertProject: %v", err)
+	}
+	a, _ := s.UpsertNode(&Node{Project: "test", Label: "Function", Name: "A", QualifiedName: "test.A"})
+	b, _ := s.UpsertNode(&Node{Project: "test", Label: "Function", Name: "B", QualifiedName: "test.B"})
+
+	firstID, err := s.InsertEdge(&Edge{Project: "test", SourceID: a, TargetID: b, Type: "CALLS"})
+	if err != nil {
+		t.Fatalf("first InsertEdge: %v", err)
+	}
+	if firstID == 0 {
+		t.Fatal("first InsertEdge returned id=0")
+	}
+
+	// Advance the AUTOINCREMENT counter with unrelated edges; the
+	// pre-RETURNING LastInsertId path would return one of these new
+	// rowids on the next conflict instead of the original edge's rowid.
+	for i := 0; i < 5; i++ {
+		x, _ := s.UpsertNode(&Node{Project: "test", Label: "Function", Name: fmt.Sprintf("X%d", i), QualifiedName: fmt.Sprintf("test.X%d", i)})
+		if _, err := s.InsertEdge(&Edge{Project: "test", SourceID: a, TargetID: x, Type: "CALLS"}); err != nil {
+			t.Fatalf("filler edge: %v", err)
+		}
+	}
+
+	// Conflict path — re-insert the same (src, tgt, type) tuple.
+	secondID, err := s.InsertEdge(&Edge{
+		Project: "test", SourceID: a, TargetID: b, Type: "CALLS",
+		Properties: map[string]any{"updated": true},
+	})
+	if err != nil {
+		t.Fatalf("second InsertEdge: %v", err)
+	}
+	if secondID != firstID {
+		t.Fatalf("expected stable id %d on conflict-update, got %d (race the comment warned about)", firstID, secondID)
+	}
+}

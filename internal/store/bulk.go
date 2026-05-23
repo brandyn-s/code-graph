@@ -20,9 +20,11 @@ var userIndexes = []string{
 }
 
 // DropUserIndexes drops all user-created indexes for faster bulk writes.
+// Honors ctx — callers cancelling a long-running bulk pass need the SQL
+// to abort, not run to completion.
 func (s *Store) DropUserIndexes(ctx context.Context) error {
 	for _, idx := range userIndexes {
-		if _, err := s.q.Exec("DROP INDEX IF EXISTS " + idx); err != nil {
+		if _, err := s.q.ExecContext(ctx, "DROP INDEX IF EXISTS "+idx); err != nil {
 			return fmt.Errorf("drop index %s: %w", idx, err)
 		}
 	}
@@ -30,6 +32,7 @@ func (s *Store) DropUserIndexes(ctx context.Context) error {
 }
 
 // CreateUserIndexes recreates all user-created indexes (single sorted pass, O(N)).
+// Honors ctx so a slow CREATE INDEX on a large table is cancellable.
 func (s *Store) CreateUserIndexes(ctx context.Context) error {
 	indexes := []string{
 		"CREATE INDEX IF NOT EXISTS idx_nodes_label ON nodes(project, label)",
@@ -43,7 +46,7 @@ func (s *Store) CreateUserIndexes(ctx context.Context) error {
 		"CREATE INDEX IF NOT EXISTS idx_edges_url_path ON edges(project, url_path_gen)",
 	}
 	for _, ddl := range indexes {
-		if _, err := s.q.Exec(ddl); err != nil {
+		if _, err := s.q.ExecContext(ctx, ddl); err != nil {
 			return fmt.Errorf("create index: %w", err)
 		}
 	}
@@ -52,20 +55,26 @@ func (s *Store) CreateUserIndexes(ctx context.Context) error {
 
 // BulkInsertNodes inserts nodes in batches using plain INSERT (no ON CONFLICT).
 // Assumes no duplicates exist for the project after a prior DELETE.
+// Honors ctx — at the start of each chunk we check ctx.Err() so a cancel
+// stops the next batch even before SQL would notice. The chunk itself
+// also uses ExecContext so the in-flight statement aborts.
 func (s *Store) BulkInsertNodes(ctx context.Context, nodes []*Node) error {
 	for i := 0; i < len(nodes); i += nodesBatchSize {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		end := i + nodesBatchSize
 		if end > len(nodes) {
 			end = len(nodes)
 		}
-		if err := s.bulkInsertNodeChunk(nodes[i:end]); err != nil {
+		if err := s.bulkInsertNodeChunk(ctx, nodes[i:end]); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (s *Store) bulkInsertNodeChunk(batch []*Node) error {
+func (s *Store) bulkInsertNodeChunk(ctx context.Context, batch []*Node) error {
 	var sb strings.Builder
 	sb.WriteString("INSERT INTO nodes (project, label, name, qualified_name, file_path, start_line, end_line, properties) VALUES ")
 
@@ -78,7 +87,7 @@ func (s *Store) bulkInsertNodeChunk(batch []*Node) error {
 		args = append(args, n.Project, n.Label, n.Name, n.QualifiedName, n.FilePath, n.StartLine, n.EndLine, marshalProps(n.Properties))
 	}
 
-	if _, err := s.q.Exec(sb.String(), args...); err != nil {
+	if _, err := s.q.ExecContext(ctx, sb.String(), args...); err != nil {
 		return fmt.Errorf("bulk insert nodes: %w", err)
 	}
 	return nil
@@ -86,20 +95,24 @@ func (s *Store) bulkInsertNodeChunk(batch []*Node) error {
 
 // BulkInsertEdges inserts edges in batches using plain INSERT (no ON CONFLICT).
 // Assumes no duplicates exist for the project after a prior DELETE.
+// Honors ctx the same way BulkInsertNodes does.
 func (s *Store) BulkInsertEdges(ctx context.Context, edges []*Edge) error {
 	for i := 0; i < len(edges); i += edgesBatchSize {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		end := i + edgesBatchSize
 		if end > len(edges) {
 			end = len(edges)
 		}
-		if err := s.bulkInsertEdgeChunk(edges[i:end]); err != nil {
+		if err := s.bulkInsertEdgeChunk(ctx, edges[i:end]); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (s *Store) bulkInsertEdgeChunk(batch []*Edge) error {
+func (s *Store) bulkInsertEdgeChunk(ctx context.Context, batch []*Edge) error {
 	var sb strings.Builder
 	sb.WriteString("INSERT INTO edges (project, source_id, target_id, type, properties) VALUES ")
 
@@ -112,7 +125,7 @@ func (s *Store) bulkInsertEdgeChunk(batch []*Edge) error {
 		args = append(args, e.Project, e.SourceID, e.TargetID, e.Type, marshalProps(e.Properties))
 	}
 
-	if _, err := s.q.Exec(sb.String(), args...); err != nil {
+	if _, err := s.q.ExecContext(ctx, sb.String(), args...); err != nil {
 		return fmt.Errorf("bulk insert edges: %w", err)
 	}
 	return nil
@@ -120,7 +133,7 @@ func (s *Store) bulkInsertEdgeChunk(batch []*Edge) error {
 
 // LoadNodeIDMap returns a map of qualified_name → SQLite ID for all nodes in a project.
 func (s *Store) LoadNodeIDMap(ctx context.Context, project string) (map[string]int64, error) {
-	rows, err := s.q.Query("SELECT id, qualified_name FROM nodes WHERE project=?", project)
+	rows, err := s.q.QueryContext(ctx, "SELECT id, qualified_name FROM nodes WHERE project=?", project)
 	if err != nil {
 		return nil, fmt.Errorf("load node id map: %w", err)
 	}

@@ -131,6 +131,17 @@ func newBinding() binding {
 
 // Execute parses, plans, and executes a Cypher query across all projects.
 func (e *Executor) Execute(query string) (*Result, error) {
+	// Reset per-execution accumulator state. truncated / skippedProjects /
+	// unboundedCapHit are populated by markTruncated() and the per-project
+	// loops in executePlan + tryAggregateSQL; without this reset, a reused
+	// Executor inherits flags from the previous query (e.g. Q1 truncated,
+	// Q2 with LIMIT 5 still reports Truncated=true). MCP handlers
+	// construct a fresh Executor per request, but the type is exported
+	// and reuse is the natural pattern — pin the invariant here.
+	e.truncated = false
+	e.skippedProjects = nil
+	e.unboundedCapHit = 0
+
 	if e.ctx == nil {
 		e.ctx = context.Background()
 	}

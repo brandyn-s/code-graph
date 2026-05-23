@@ -61,17 +61,32 @@ func (e *Edge) ConfidenceTier() string {
 	return ConfidenceExtracted
 }
 
-// InsertEdge inserts an edge (dedup by source_id, target_id, type).
+// InsertEdge inserts an edge (dedup by source_id, target_id, type) and
+// returns its row id.
+//
+// Uses SQLite's RETURNING clause (available since 3.35, March 2021) so
+// the id is read directly from the row written or updated by this
+// statement. The pre-RETURNING path used LastInsertId(), which after
+// `ON CONFLICT DO UPDATE` can return a STALE non-zero id — the
+// most-recent-insert rowid the AUTOINCREMENT counter would have used,
+// not the rowid of the conflict-targeted row. Callers that operated on
+// the returned id (downstream node lookups, dedup) silently pointed at
+// the wrong edge. The InsertEdgeBatch comment at edges.go:416 still
+// names this as the upstream cause of its FK-violation fallback path.
+//
+// Mirrors the fix applied to UpsertNode in PR #332 / commit 2085f8f.
 func (s *Store) InsertEdge(e *Edge) (int64, error) {
-	res, err := s.q.Exec(`
+	var id int64
+	err := s.q.QueryRow(`
 		INSERT INTO edges (project, source_id, target_id, type, properties)
 		VALUES (?, ?, ?, ?, ?)
-		ON CONFLICT(source_id, target_id, type) DO UPDATE SET properties=json_patch(properties, excluded.properties)`,
-		e.Project, e.SourceID, e.TargetID, e.Type, marshalProps(e.Properties))
+		ON CONFLICT(source_id, target_id, type) DO UPDATE SET properties=json_patch(properties, excluded.properties)
+		RETURNING id`,
+		e.Project, e.SourceID, e.TargetID, e.Type, marshalProps(e.Properties)).Scan(&id)
 	if err != nil {
 		return 0, fmt.Errorf("insert edge: %w", err)
 	}
-	return res.LastInsertId()
+	return id, nil
 }
 
 // FindEdgesBySource finds all edges from a given source node.

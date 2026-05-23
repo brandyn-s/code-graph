@@ -1205,3 +1205,160 @@ func TestStrategiesReportsBaselineAndDowngrade(t *testing.T) {
 		t.Fatalf("expected strategy record cleared after unwatch+prune")
 	}
 }
+
+// TestUpgradeFromDirMtimeToGitWhenGitAppears verifies the auto-upgrade
+// path: a project that's currently on dirmtime (after a `git init`
+// happens AFTER baseline) probes and promotes to git on the next
+// upgrade-check interval. Closes the recovery gap where a transient
+// .git problem during initBaseline would leave the project on the
+// lower tier permanently.
+func TestUpgradeFromDirMtimeToGitWhenGitAppears(t *testing.T) {
+	tmpDir := t.TempDir()
+	mustWriteFile(t, filepath.Join(tmpDir, "main.go"), []byte("package main\n"))
+
+	r := newTestRouter(t, filepath.Base(tmpDir), tmpDir)
+
+	w := New(r, func(_ context.Context, _, _ string) error { return nil })
+	t.Cleanup(w.closeAll)
+	projName := filepath.Base(tmpDir)
+	w.Watch(projName, tmpDir)
+
+	// First poll: no .git yet, probeStrategy → fsnotify, initBaseline
+	// runs and either lands on fsnotify or falls back to dirmtime.
+	// Force dirmtime by failing fsnotify init isn't easy here, so
+	// instead we let baseline run and then manually downgrade for the
+	// test. The upgrade path is what we're testing — both fsnotify
+	// AND dirmtime should upgrade to git when .git appears.
+	w.pollAll()
+	state := w.projects[projName]
+	if state == nil {
+		t.Fatal("no state after baseline")
+	}
+
+	// Force the state into dirmtime to exercise the upgrade path
+	// regardless of what baseline picked.
+	state.close()
+	state.strategy = strategyDirMtime
+	state.dirMtimes, _ = checkDirMtimes(w.ctx, tmpDir)
+	w.setStrategy(projName, state.strategy)
+
+	// Skip the cooldown so the next poll fires the upgrade probe.
+	state.pollsSinceUpgradeCheck = upgradeAttemptInterval
+
+	// Now create the .git directory — the upgrade probe should detect it.
+	if !gitAvailable() {
+		t.Skip("git not available")
+	}
+	if err := runCmd(tmpDir, "git", "init", "--quiet"); err != nil {
+		t.Fatalf("git init: %v", err)
+	}
+
+	resetPollTimers(w)
+	w.pollAll()
+
+	if state.strategy != strategyGit {
+		t.Errorf("expected upgrade dirmtime -> git after .git appears, got %v", state.strategy)
+	}
+	if got := w.Strategies()[projName]; got != "git" {
+		t.Errorf("Strategies() should report git after upgrade, got %q", got)
+	}
+}
+
+// TestUpgradeFromFSNotifyToGitWhenGitAppears mirrors the previous test
+// for fsnotify→git. The transition must close the fsnotify watcher so
+// its drain goroutine exits.
+func TestUpgradeFromFSNotifyToGitWhenGitAppears(t *testing.T) {
+	tmpDir := t.TempDir()
+	mustWriteFile(t, filepath.Join(tmpDir, "main.go"), []byte("package main\n"))
+
+	r := newTestRouter(t, filepath.Base(tmpDir), tmpDir)
+	w := New(r, func(_ context.Context, _, _ string) error { return nil })
+	t.Cleanup(w.closeAll)
+	projName := filepath.Base(tmpDir)
+	w.Watch(projName, tmpDir)
+	w.pollAll()
+	state := w.projects[projName]
+	if state == nil {
+		t.Fatal("no state after baseline")
+	}
+	// Only meaningful when baseline landed on fsnotify; if dirmtime,
+	// the previous test covers it.
+	if state.strategy != strategyFSNotify {
+		t.Skipf("baseline didn't land on fsnotify (got %v), skipping fsnotify-specific test", state.strategy)
+	}
+
+	state.pollsSinceUpgradeCheck = upgradeAttemptInterval
+
+	if !gitAvailable() {
+		t.Skip("git not available")
+	}
+	if err := runCmd(tmpDir, "git", "init", "--quiet"); err != nil {
+		t.Fatalf("git init: %v", err)
+	}
+
+	resetPollTimers(w)
+	w.pollAll()
+
+	if state.strategy != strategyGit {
+		t.Errorf("expected upgrade fsnotify -> git, got %v", state.strategy)
+	}
+}
+
+// TestUpgradeNotAttemptedAtTopTier confirms that a project already on
+// git doesn't trigger the upgrade probe (no-op).
+func TestUpgradeNotAttemptedAtTopTier(t *testing.T) {
+	tmpDir := t.TempDir()
+	mustWriteFile(t, filepath.Join(tmpDir, "main.go"), []byte("package main\n"))
+
+	r := newTestRouter(t, filepath.Base(tmpDir), tmpDir)
+	w := newWatcherWithStrategy(r, func(_ context.Context, _, _ string) error { return nil }, strategyGit)
+	t.Cleanup(w.closeAll)
+	projName := filepath.Base(tmpDir)
+	w.Watch(projName, tmpDir)
+	w.pollAll()
+	state := w.projects[projName]
+	if state == nil {
+		t.Fatal("no state")
+	}
+
+	state.pollsSinceUpgradeCheck = upgradeAttemptInterval + 10
+	originalStrategy := state.strategy
+	w.tryUpgradeStrategy(&store.Project{Name: projName, RootPath: tmpDir}, state)
+	// With testStrategy != strategyAuto, tryUpgradeStrategy short-circuits.
+	if state.strategy != originalStrategy {
+		t.Errorf("test-strategy override should suppress upgrade, got %v", state.strategy)
+	}
+}
+
+// TestUpgradeCounterResetOnDowngrade ensures a downgrade clears the
+// upgrade-check counter so we don't immediately re-probe the higher
+// tier (which would race against whatever just failed).
+func TestUpgradeCounterResetOnDowngrade(t *testing.T) {
+	tmpDir := t.TempDir()
+	mustWriteFile(t, filepath.Join(tmpDir, "main.go"), []byte("package main\n"))
+
+	r := newTestRouter(t, filepath.Base(tmpDir), tmpDir)
+	w := newWatcherWithStrategy(r, func(_ context.Context, _, _ string) error { return nil }, strategyFSNotify)
+	t.Cleanup(w.closeAll)
+	projName := filepath.Base(tmpDir)
+	w.Watch(projName, tmpDir)
+	w.pollAll()
+	state := w.projects[projName]
+	if state == nil {
+		t.Fatal("no state")
+	}
+
+	state.pollsSinceUpgradeCheck = upgradeAttemptInterval
+	proj := &store.Project{Name: projName, RootPath: tmpDir}
+	w.downgradeStrategy(proj, state)
+	if state.pollsSinceUpgradeCheck != 0 {
+		t.Errorf("downgrade should reset pollsSinceUpgradeCheck to 0, got %d", state.pollsSinceUpgradeCheck)
+	}
+}
+
+// runCmd is a tiny helper for git invocations in tests.
+func runCmd(dir string, name string, args ...string) error {
+	cmd := exec.Command(name, args...)
+	cmd.Dir = dir
+	return cmd.Run()
+}

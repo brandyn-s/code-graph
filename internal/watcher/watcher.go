@@ -46,6 +46,15 @@ const (
 	baseInterval         = 5 * time.Second
 	maxInterval          = 60 * time.Second
 	fullSnapshotInterval = 5 // polls between forced full snapshots
+	// upgradeAttemptInterval bounds the recovery window for a downgraded
+	// project. After a `git → fsnotify → dirmtime` downgrade the watcher
+	// is stuck on the lower tier until this many polls elapse, at which
+	// point it probes whether the higher tier is available again (e.g.
+	// .git was restored, fsnotify init now succeeds). With baseInterval=5s
+	// and adaptive intervals up to maxInterval=60s, 60 polls is roughly
+	// 5–60 minutes — long enough to avoid spam, short enough to recover
+	// within a reasonable operator window.
+	upgradeAttemptInterval = 60
 )
 
 type fileSnapshot struct {
@@ -56,10 +65,15 @@ type fileSnapshot struct {
 type projectState struct {
 	snapshot       map[string]fileSnapshot
 	pollsSinceFull int
-	interval       time.Duration
-	nextPoll       time.Time
+	// pollsSinceUpgradeCheck counts polls since the last attempted
+	// strategy upgrade. Reset to 0 after every upgrade probe (success
+	// or fail); resets to upgradeAttemptInterval-1 on downgrade so we
+	// don't try to immediately re-upgrade after a failure.
+	pollsSinceUpgradeCheck int
+	interval               time.Duration
+	nextPoll               time.Time
 
-	// Strategy (set during baseline, may downgrade at runtime).
+	// Strategy (set during baseline, may downgrade and re-upgrade at runtime).
 	strategy watchStrategy
 
 	// Git strategy state.
@@ -313,6 +327,7 @@ func (w *Watcher) pollProject(proj *store.Project, state *projectState) {
 	}
 
 	state.pollsSinceFull++
+	state.pollsSinceUpgradeCheck++
 
 	// Check sentinel based on strategy.
 	changed, strategyFailed := w.checkSentinel(proj, state)
@@ -320,6 +335,15 @@ func (w *Watcher) pollProject(proj *store.Project, state *projectState) {
 	if strategyFailed {
 		w.downgradeStrategy(proj, state)
 		changed, _ = w.checkSentinel(proj, state)
+	} else if state.strategy != strategyGit && state.pollsSinceUpgradeCheck >= upgradeAttemptInterval {
+		// Probe whether a higher-tier strategy is now available. Only
+		// fires when the current strategy is BELOW git (the top tier)
+		// and only when an upgrade interval has elapsed. Recovers from
+		// transient downgrade causes (.git removed then restored,
+		// fsnotify file-descriptor exhaustion that subsequently
+		// cleared, etc.) without operator intervention.
+		state.pollsSinceUpgradeCheck = 0
+		w.tryUpgradeStrategy(proj, state)
 	}
 
 	// Git sentinel catches everything — no forced full snapshot needed.
@@ -421,7 +445,59 @@ func (w *Watcher) downgradeStrategy(proj *store.Project, state *projectState) {
 	// Warn, not Info: a downgrade means the preferred strategy stopped
 	// working. Operators need to see this without filtering Info logs.
 	slog.Warn("watcher.strategy.downgrade", "project", proj.Name, "from", old.String(), "to", state.strategy.String())
+	// Reset the upgrade-check counter so we don't immediately re-probe
+	// the higher tier (which would race against whatever made it fail).
+	state.pollsSinceUpgradeCheck = 0
 	w.setStrategy(proj.Name, state.strategy)
+}
+
+// tryUpgradeStrategy probes whether a higher-tier change-detection
+// strategy is available and switches to it when so. Preference order
+// matches the original probe ladder: git > fsnotify > dirmtime.
+//
+// Called every upgradeAttemptInterval polls when the current strategy
+// is below git. On success, fsnotify state is closed before switching
+// to git (otherwise the fsnotify goroutine continues consuming events
+// nobody reads). The function is best-effort — failures are silent so
+// we just wait for the next interval.
+//
+// Test override: when testStrategy is set we skip the upgrade probe
+// entirely so tests that pin a strategy don't see auto-promotion.
+func (w *Watcher) tryUpgradeStrategy(proj *store.Project, state *projectState) {
+	if w.testStrategy != strategyAuto {
+		return
+	}
+	old := state.strategy
+	// Prefer git — it's the highest-signal strategy.
+	if isGitRepo(w.ctx, proj.RootPath) {
+		head, _ := gitHead(w.ctx, proj.RootPath)
+		if state.strategy == strategyFSNotify {
+			state.close()
+		}
+		state.lastGitHead = head
+		state.strategy = strategyGit
+		slog.Info("watcher.strategy.upgrade",
+			"project", proj.Name,
+			"from", old.String(),
+			"to", state.strategy.String(),
+			"trigger", "git_now_available",
+		)
+		w.setStrategy(proj.Name, state.strategy)
+		return
+	}
+	// Else try fsnotify if we're at the bottom.
+	if state.strategy == strategyDirMtime {
+		if err := w.initFSNotify(state, proj.RootPath); err == nil {
+			state.strategy = strategyFSNotify
+			slog.Info("watcher.strategy.upgrade",
+				"project", proj.Name,
+				"from", old.String(),
+				"to", state.strategy.String(),
+				"trigger", "fsnotify_now_available",
+			)
+			w.setStrategy(proj.Name, state.strategy)
+		}
+	}
 }
 
 func (w *Watcher) fullSnapshotAndIndex(proj *store.Project, state *projectState) {

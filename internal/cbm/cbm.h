@@ -108,6 +108,16 @@ typedef struct {
 typedef struct {
     const char* callee_name;       // raw callee text ("pkg.Func", "foo")
     const char* enclosing_func_qn; // QN of enclosing function (or module QN)
+    // dispatch_kind tags calls that were synthesized from an
+    // indirect-dispatch pattern rather than appearing literally in the
+    // source. NULL/empty for ordinary direct calls. Populated values:
+    //   "executor_submit"  — <pool>.submit(fn, ...) v0.1
+    //   "depends"          — FastAPI Depends(fn) (similar shape)
+    // Future values (v0.2+): "getattr", "decorator", "fn_pointer".
+    // Consumed by the Go-side pipeline to label the resulting CALLS
+    // edge with properties.dispatch_kind so trace_call_path can
+    // distinguish direct from indirect resolutions.
+    const char* dispatch_kind;
 } CBMCall;
 
 typedef struct {

@@ -266,6 +266,79 @@ func (s *Store) CallsResolutionStats(project string) (map[string]int, error) {
 	return result, rows.Err()
 }
 
+// FindCallerFilesOfTargetsInFiles returns the set of file paths
+// containing source nodes for any edge of one of the given types whose
+// target node's file_path is in targetFilePaths.
+//
+// This is the building block for Plan 1 Phase 3's invalidation
+// rewrite. Today findDependentFiles only walks one hop of the import
+// graph (callers of changed modules); it misses cases where a call
+// site's resolution depended on a changed function in a different
+// module that the caller's module DIDN'T import directly (transitive
+// callers, type-based dispatch, stranded handlers). This helper lets
+// the pipeline ask the question directly: "Which files contain
+// edges pointing AT functions in the changed files?" The result is
+// the union of those caller-files; if their target's resolution may
+// have shifted, we re-resolve them.
+//
+// Uses idx_nodes_file (project, file_path) to scope the target side
+// and idx_edges_target_type (project, target_id, type) on the edge
+// join — both present from initial schema, no migration needed. Edge
+// types are filtered explicitly rather than IN() so the planner can
+// use the composite index; the typical caller passes
+// ["CALLS", "USES", "HTTP_CALLS"].
+//
+// Returns a deduped, sorted slice of relative file paths. Empty
+// targetFilePaths or edgeTypes returns nil without querying.
+func (s *Store) FindCallerFilesOfTargetsInFiles(project string, targetFilePaths, edgeTypes []string) ([]string, error) {
+	if len(targetFilePaths) == 0 || len(edgeTypes) == 0 {
+		return nil, nil
+	}
+
+	pathPH := strings.Repeat("?,", len(targetFilePaths))
+	pathPH = pathPH[:len(pathPH)-1]
+	typePH := strings.Repeat("?,", len(edgeTypes))
+	typePH = typePH[:len(typePH)-1]
+
+	args := make([]any, 0, 1+len(targetFilePaths)+1+len(edgeTypes))
+	args = append(args, project)
+	for _, p := range targetFilePaths {
+		args = append(args, p)
+	}
+	args = append(args, project)
+	for _, t := range edgeTypes {
+		args = append(args, t)
+	}
+
+	q := fmt.Sprintf(`
+		SELECT DISTINCT src.file_path
+		FROM nodes tgt
+		JOIN edges e ON e.target_id = tgt.id AND e.project = tgt.project
+		JOIN nodes src ON src.id = e.source_id AND src.project = e.project
+		WHERE tgt.project = ?
+		  AND tgt.file_path IN (%s)
+		  AND e.project = ?
+		  AND e.type IN (%s)
+		  AND src.file_path != ''
+		ORDER BY src.file_path`, pathPH, typePH)
+
+	rows, err := s.q.Query(q, args...)
+	if err != nil {
+		return nil, fmt.Errorf("find caller files: %w", err)
+	}
+	defer rows.Close()
+
+	var out []string
+	for rows.Next() {
+		var fp string
+		if err := rows.Scan(&fp); err != nil {
+			return nil, err
+		}
+		out = append(out, fp)
+	}
+	return out, rows.Err()
+}
+
 // DeleteEdgesByType deletes all edges of a given type for a project.
 func (s *Store) DeleteEdgesByType(project, edgeType string) error {
 	_, err := s.q.Exec("DELETE FROM edges WHERE project=? AND type=?", project, edgeType)

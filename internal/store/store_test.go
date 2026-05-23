@@ -1380,3 +1380,103 @@ func TestUpsertNodeIDMatchesRow(t *testing.T) {
 		}
 	}
 }
+
+// TestFindCallerFilesOfTargetsInFiles verifies the caller-of-target
+// invalidation primitive used by Plan 1 Phase 3. Edge types are
+// filtered to CALLS-family explicitly so we don't pick up structural
+// edges (CONTAINS, INHERITS) that aren't subject to call-resolution
+// drift.
+func TestFindCallerFilesOfTargetsInFiles(t *testing.T) {
+	s, err := OpenMemory()
+	if err != nil {
+		t.Fatalf("OpenMemory: %v", err)
+	}
+	defer s.Close()
+
+	const proj = "callerlookup"
+	if err := s.UpsertProject(proj, "/tmp/cl"); err != nil {
+		t.Fatalf("UpsertProject: %v", err)
+	}
+
+	// Graph topology:
+	//   a.go::A    -- CALLS    --> changed.go::Target
+	//   b.go::B    -- USES     --> changed.go::Target
+	//   c.go::C    -- INHERITS --> changed.go::Target   (NOT a call-shape)
+	//   d.go::D    -- CALLS    --> other.go::Other      (target not in changed set)
+	idA, _ := s.UpsertNode(&Node{Project: proj, Label: "Function", Name: "A", QualifiedName: "cl.a.A", FilePath: "a.go"})
+	idB, _ := s.UpsertNode(&Node{Project: proj, Label: "Function", Name: "B", QualifiedName: "cl.b.B", FilePath: "b.go"})
+	idC, _ := s.UpsertNode(&Node{Project: proj, Label: "Function", Name: "C", QualifiedName: "cl.c.C", FilePath: "c.go"})
+	idD, _ := s.UpsertNode(&Node{Project: proj, Label: "Function", Name: "D", QualifiedName: "cl.d.D", FilePath: "d.go"})
+	idTarget, _ := s.UpsertNode(&Node{Project: proj, Label: "Function", Name: "Target", QualifiedName: "cl.changed.Target", FilePath: "changed.go"})
+	idOther, _ := s.UpsertNode(&Node{Project: proj, Label: "Function", Name: "Other", QualifiedName: "cl.other.Other", FilePath: "other.go"})
+
+	mustInsertEdge(t, s, proj, idA, idTarget, "CALLS", nil)
+	mustInsertEdge(t, s, proj, idB, idTarget, "USES", nil)
+	mustInsertEdge(t, s, proj, idC, idTarget, "INHERITS", nil)
+	mustInsertEdge(t, s, proj, idD, idOther, "CALLS", nil)
+
+	got, err := s.FindCallerFilesOfTargetsInFiles(proj, []string{"changed.go"}, []string{"CALLS", "USES", "HTTP_CALLS"})
+	if err != nil {
+		t.Fatalf("FindCallerFilesOfTargetsInFiles: %v", err)
+	}
+
+	// Expected: a.go (CALLS) and b.go (USES). c.go's INHERITS is not a
+	// call-shape and is excluded by edge-type filter. d.go targets
+	// other.go, not in the changed set.
+	want := []string{"a.go", "b.go"}
+	if len(got) != len(want) {
+		t.Fatalf("expected %d caller files, got %d (%v)", len(want), len(got), got)
+	}
+	for i, w := range want {
+		if got[i] != w {
+			t.Errorf("[%d] expected %q, got %q (full: %v)", i, w, got[i], got)
+		}
+	}
+}
+
+// TestFindCallerFilesOfTargetsInFiles_Empty verifies degenerate inputs
+// short-circuit without hitting the DB.
+func TestFindCallerFilesOfTargetsInFiles_Empty(t *testing.T) {
+	s, err := OpenMemory()
+	if err != nil {
+		t.Fatalf("OpenMemory: %v", err)
+	}
+	defer s.Close()
+
+	got, err := s.FindCallerFilesOfTargetsInFiles("p", nil, []string{"CALLS"})
+	if err != nil || got != nil {
+		t.Errorf("empty targets: expected (nil, nil), got (%v, %v)", got, err)
+	}
+	got, err = s.FindCallerFilesOfTargetsInFiles("p", []string{"f.go"}, nil)
+	if err != nil || got != nil {
+		t.Errorf("empty types: expected (nil, nil), got (%v, %v)", got, err)
+	}
+}
+
+// TestFindCallerFilesOfTargetsInFiles_ProjectIsolation confirms the
+// query is correctly scoped to a single project — callers in project
+// "other" must not surface when we ask about project "mine".
+func TestFindCallerFilesOfTargetsInFiles_ProjectIsolation(t *testing.T) {
+	s, err := OpenMemory()
+	if err != nil {
+		t.Fatalf("OpenMemory: %v", err)
+	}
+	defer s.Close()
+
+	for _, p := range []string{"mine", "other"} {
+		if err := s.UpsertProject(p, "/tmp/"+p); err != nil {
+			t.Fatalf("UpsertProject %s: %v", p, err)
+		}
+		caller, _ := s.UpsertNode(&Node{Project: p, Label: "Function", Name: "C", QualifiedName: p + ".caller.C", FilePath: "caller.go"})
+		target, _ := s.UpsertNode(&Node{Project: p, Label: "Function", Name: "T", QualifiedName: p + ".target.T", FilePath: "target.go"})
+		mustInsertEdge(t, s, p, caller, target, "CALLS", nil)
+	}
+
+	got, err := s.FindCallerFilesOfTargetsInFiles("mine", []string{"target.go"}, []string{"CALLS"})
+	if err != nil {
+		t.Fatalf("FindCallerFilesOfTargetsInFiles: %v", err)
+	}
+	if len(got) != 1 || got[0] != "caller.go" {
+		t.Fatalf("expected exactly mine/caller.go, got %v", got)
+	}
+}

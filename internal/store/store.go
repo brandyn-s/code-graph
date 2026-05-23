@@ -631,6 +631,19 @@ func (s *Store) initSchema() error {
 		_, _ = s.db.ExecContext(ctx, `ALTER TABLE projects ADD COLUMN index_detail TEXT NOT NULL DEFAULT ''`)
 	}
 
+	// Migration: incrementals_since_full counter for the
+	// periodic-full-reindex sentinel. Bounds the lifetime of
+	// silently-stale edges that the incremental dependency-discovery
+	// heuristic (findDependentFiles) can miss. Reset to 0 on every full
+	// reindex, bumped by 1 on every successful incremental. The pipeline
+	// forces a full reindex when the counter exceeds
+	// CODE_GRAPH_FULL_REINDEX_EVERY (default 50, env-configurable).
+	var isfCol int
+	_ = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM pragma_table_xinfo('projects') WHERE name='incrementals_since_full'`).Scan(&isfCol)
+	if isfCol == 0 {
+		_, _ = s.db.ExecContext(ctx, `ALTER TABLE projects ADD COLUMN incrementals_since_full INTEGER NOT NULL DEFAULT 0`)
+	}
+
 	// Migration: node_embeddings table for Voyage AI semantic search.
 	_, _ = s.db.ExecContext(ctx, `
 		CREATE TABLE IF NOT EXISTS node_embeddings (

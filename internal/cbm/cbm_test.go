@@ -225,3 +225,82 @@ const result = greet("world");
 		fmt.Printf("  Name=%q Label=%q QN=%q\n", d.Name, d.Label, d.QualifiedName)
 	}
 }
+
+// TestPythonExecutorSubmitDispatchKind verifies that calls synthesized
+// from the .submit(fn) pattern carry DispatchKind="executor_submit",
+// while direct calls (the .submit invocation itself, regular function
+// calls) carry no dispatch_kind. This is the metadata the pipeline
+// reads to label INDIRECT_CALLS edges in trace_call_path.
+func TestPythonExecutorSubmitDispatchKind(t *testing.T) {
+	source := []byte(`
+from concurrent.futures import ThreadPoolExecutor
+
+def bg():
+    return 1
+
+def run():
+    with ThreadPoolExecutor() as executor:
+        executor.submit(bg)
+`)
+	result, err := ExtractFile(source, lang.Python, "test", "app/d.py")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var bgCall, submitCall *Call
+	for i := range result.Calls {
+		c := &result.Calls[i]
+		switch c.CalleeName {
+		case "bg":
+			bgCall = c
+		case "executor.submit":
+			submitCall = c
+		}
+	}
+	if bgCall == nil {
+		t.Fatalf("expected synthesized bg call, got %v", result.Calls)
+	}
+	if bgCall.DispatchKind != "executor_submit" {
+		t.Errorf("bg call: expected DispatchKind=executor_submit, got %q", bgCall.DispatchKind)
+	}
+	if submitCall == nil {
+		t.Fatalf("expected direct executor.submit call entry")
+	}
+	if submitCall.DispatchKind != "" {
+		t.Errorf("direct executor.submit call: expected empty DispatchKind, got %q", submitCall.DispatchKind)
+	}
+}
+
+// TestPythonDependsDispatchKind verifies the Depends() variant.
+func TestPythonDependsDispatchKind(t *testing.T) {
+	source := []byte(`
+def get_db(): pass
+
+def handler(db = Depends(get_db)):
+    pass
+`)
+	result, err := ExtractFile(source, lang.Python, "test", "app/dep.py")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var getDB, depends *Call
+	for i := range result.Calls {
+		c := &result.Calls[i]
+		switch c.CalleeName {
+		case "get_db":
+			getDB = c
+		case "Depends":
+			depends = c
+		}
+	}
+	if getDB == nil {
+		t.Fatalf("expected synthesized get_db call from Depends pattern, calls=%v", result.Calls)
+	}
+	if getDB.DispatchKind != "depends" {
+		t.Errorf("get_db call: expected DispatchKind=depends, got %q", getDB.DispatchKind)
+	}
+	if depends != nil && depends.DispatchKind != "" {
+		t.Errorf("direct Depends call: expected empty DispatchKind, got %q", depends.DispatchKind)
+	}
+}

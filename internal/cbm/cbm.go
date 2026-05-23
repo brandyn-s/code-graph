@@ -77,9 +77,22 @@ type Definition struct {
 }
 
 // Call represents a raw call site (callee name + enclosing function).
+//
+// DispatchKind labels calls synthesized by an indirect-dispatch pattern
+// rather than appearing literally in source. Empty for ordinary direct
+// calls. Set by the C extractor on:
+//   - "executor_submit" : <pool>.submit(fn, ...) — concurrent.futures
+//   - "depends"         : FastAPI Depends(fn)
+//   - "getattr"         : getattr(obj, "method")(...)
+//
+// Consumed by the pipeline to label the resulting CALLS edge with
+// properties.dispatch_kind + properties.confidence so trace_call_path
+// can distinguish direct from indirect resolutions for confidence-band
+// calculation.
 type Call struct {
 	CalleeName      string
 	EnclosingFuncQN string
+	DispatchKind    string
 }
 
 // Import represents a local name -> module path mapping.
@@ -311,6 +324,7 @@ func convertResult(r *C.CBMFileResult) *FileResult {
 			fr.Calls[i] = Call{
 				CalleeName:      C.GoString(c.callee_name),
 				EnclosingFuncQN: C.GoString(c.enclosing_func_qn),
+				DispatchKind:    C.GoString(c.dispatch_kind),
 			}
 		}
 	}

@@ -464,7 +464,35 @@ func (p *Pipeline) runPasses(files []discover.FileInfo) (bool, error) {
 	// If all files are changed (first index or no hashes), do full pass
 	isFullIndex := len(unchanged) == 0
 	if isFullIndex {
-		return true, p.runFullPasses(files)
+		if err := p.runFullPasses(files); err != nil {
+			return true, err
+		}
+		_ = p.Store.ResetIncrementalsSinceFull(p.ProjectName)
+		return true, nil
+	}
+
+	// Periodic-full-reindex sentinel (Plan 1 Phase 1). The incremental
+	// dependency-discovery heuristic in findDependentFiles misses some
+	// shapes (transitive importers, type-based dependents, stranded
+	// route handlers) so silently-stale edges accumulate over many
+	// incrementals. Force a full reindex every N incrementals to bound
+	// the staleness lifetime. N = CODE_GRAPH_FULL_REINDEX_EVERY (default
+	// 50). Set to 0 to disable.
+	limit := fullReindexEvery()
+	if limit > 0 {
+		isf, _ := p.Store.GetIncrementalsSinceFull(p.ProjectName)
+		if isf >= limit {
+			slog.Info("incremental.force_full",
+				"reason", "sentinel",
+				"incrementals_since_full", isf,
+				"limit", limit,
+			)
+			if err := p.runFullPasses(files); err != nil {
+				return true, err
+			}
+			_ = p.Store.ResetIncrementalsSinceFull(p.ProjectName)
+			return true, nil
+		}
 	}
 
 	slog.Info("incremental.classify", "changed", len(changed), "unchanged", len(unchanged), "total", len(files))
@@ -475,7 +503,26 @@ func (p *Pipeline) runPasses(files []discover.FileInfo) (bool, error) {
 		return false, nil
 	}
 
-	return true, p.runIncrementalPasses(files, changed, unchanged)
+	if err := p.runIncrementalPasses(files, changed, unchanged); err != nil {
+		return true, err
+	}
+	_ = p.Store.IncrementIncrementalsSinceFull(p.ProjectName)
+	return true, nil
+}
+
+// fullReindexEvery resolves the periodic-full-reindex threshold from
+// CODE_GRAPH_FULL_REINDEX_EVERY. Default 50; 0 (or unparseable) disables
+// the sentinel and lets the incremental path run indefinitely.
+func fullReindexEvery() int {
+	raw := os.Getenv("CODE_GRAPH_FULL_REINDEX_EVERY")
+	if raw == "" {
+		return 50
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n < 0 {
+		return 50
+	}
+	return n
 }
 
 // runFullPasses runs the complete pipeline (no incremental optimization).
@@ -809,11 +856,38 @@ func (p *Pipeline) runIncrementalPasses(
 		return err
 	}
 
-	// Determine which files need call re-resolution:
-	// changed files + files that import any changed module
+	// Determine which files need call re-resolution. Two sources of
+	// dependents:
+	//   (a) Direct importers of changed modules (the original heuristic).
+	//   (b) Callers of any node defined in a changed file (Plan 1 Phase 3).
+	//       Catches transitive callers, type-based dispatch, and stranded
+	//       handlers whose resolution depends on a node in a changed file
+	//       but whose own module didn't import the changed module
+	//       directly. Backed by store.FindCallerFilesOfTargetsInFiles
+	//       against the indexed (target_id, type) edge composite.
+	//
+	// If the union grows past the cap we fall through to a full reindex —
+	// at that scale the incremental's "skip unchanged files" win is gone
+	// and a full reindex is more correct and roughly the same cost.
 	dependents := p.findDependentFiles(changed, unchanged)
+	callerDependents := p.findCallerOfTargetDependents(changed, unchanged)
 	filesToResolve := mergeFiles(changed, dependents)
-	slog.Info("incremental.resolve", "changed", len(changed), "dependents", len(dependents))
+	filesToResolve = mergeFiles(filesToResolve, callerDependents)
+	slog.Info("incremental.resolve",
+		"changed", len(changed),
+		"importer_dependents", len(dependents),
+		"caller_of_target_dependents", len(callerDependents),
+		"total_to_resolve", len(filesToResolve),
+	)
+
+	if limit := incrementalCap(); limit > 0 && len(filesToResolve) > limit {
+		slog.Info("incremental.fallback_to_full",
+			"reason", "files_to_resolve_over_cap",
+			"files_to_resolve", len(filesToResolve),
+			"cap", limit,
+		)
+		return p.runFullPasses(allFiles)
+	}
 
 	// Delete edges for files being re-resolved (all AST-derived edge types)
 	for _, f := range filesToResolve {
@@ -978,6 +1052,73 @@ func (p *Pipeline) classifyFiles(files []discover.FileInfo) (changed, unchanged 
 		}
 	}
 	return changed, unchanged
+}
+
+// findCallerOfTargetDependents returns unchanged files containing call
+// sites whose target nodes live in changed files. Complements
+// findDependentFiles (which walks the import graph one hop) by directly
+// querying the existing CALLS/USES/HTTP_CALLS edge tables for callers
+// of any node in a changed file. Catches transitive callers, type-based
+// dispatch resolutions, and stranded handlers — the leak classes the
+// import-graph heuristic misses.
+//
+// The result is the intersection of "files containing CALL-shape
+// callers of changed-file targets" with "unchanged files" — adding a
+// changed file to its own dependent set is harmless but the cap check
+// in runIncrementalPasses works in terms of files-to-resolve, so we
+// keep this set strictly disjoint from `changed`.
+func (p *Pipeline) findCallerOfTargetDependents(changed, unchanged []discover.FileInfo) []discover.FileInfo {
+	if len(changed) == 0 || len(unchanged) == 0 {
+		return nil
+	}
+	changedPaths := make([]string, 0, len(changed))
+	for _, f := range changed {
+		changedPaths = append(changedPaths, f.RelPath)
+	}
+	callerFiles, err := p.Store.FindCallerFilesOfTargetsInFiles(
+		p.ProjectName,
+		changedPaths,
+		[]string{"CALLS", "USES", "HTTP_CALLS"},
+	)
+	if err != nil {
+		slog.Warn("incremental.caller_of_target.err", "err", err)
+		return nil
+	}
+	if len(callerFiles) == 0 {
+		return nil
+	}
+	callerSet := make(map[string]struct{}, len(callerFiles))
+	for _, fp := range callerFiles {
+		callerSet[fp] = struct{}{}
+	}
+	// Exclude changed files — they're re-resolved unconditionally.
+	for _, f := range changed {
+		delete(callerSet, f.RelPath)
+	}
+	var out []discover.FileInfo
+	for _, f := range unchanged {
+		if _, ok := callerSet[f.RelPath]; ok {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
+// incrementalCap resolves CODE_GRAPH_INCREMENTAL_CAP — the maximum
+// number of files-to-resolve before runIncrementalPasses falls through
+// to a full reindex. Default 10000. Set to 0 to disable the cap (keep
+// expanding the dependent set indefinitely; not recommended for large
+// repos).
+func incrementalCap() int {
+	raw := os.Getenv("CODE_GRAPH_INCREMENTAL_CAP")
+	if raw == "" {
+		return 10000
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n < 0 {
+		return 10000
+	}
+	return n
 }
 
 // findDependentFiles finds unchanged files that import any changed file's module.

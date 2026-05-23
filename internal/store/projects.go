@@ -57,6 +57,31 @@ func (s *Store) DeleteProject(name string) error {
 	return err
 }
 
+// GetIncrementalsSinceFull returns how many incremental reindexes have
+// run since the last full reindex for this project. The pipeline uses
+// this to enforce a periodic-full-reindex sentinel (Plan 1 Phase 1),
+// bounding the staleness window of any edges that the incremental
+// dependency-discovery heuristic missed.
+func (s *Store) GetIncrementalsSinceFull(project string) (int, error) {
+	var n int
+	err := s.q.QueryRow("SELECT incrementals_since_full FROM projects WHERE name=?", project).Scan(&n)
+	return n, err
+}
+
+// IncrementIncrementalsSinceFull bumps the counter by 1. Called after a
+// successful incremental reindex.
+func (s *Store) IncrementIncrementalsSinceFull(project string) error {
+	_, err := s.q.Exec(`UPDATE projects SET incrementals_since_full = incrementals_since_full + 1 WHERE name=?`, project)
+	return err
+}
+
+// ResetIncrementalsSinceFull zeroes the counter. Called after a
+// successful full reindex.
+func (s *Store) ResetIncrementalsSinceFull(project string) error {
+	_, err := s.q.Exec(`UPDATE projects SET incrementals_since_full = 0 WHERE name=?`, project)
+	return err
+}
+
 // SetEnrichmentVersion updates the enrichment_version for a project.
 func (s *Store) SetEnrichmentVersion(name, version string) error {
 	_, err := s.q.Exec("UPDATE projects SET enrichment_version=? WHERE name=?", version, name)

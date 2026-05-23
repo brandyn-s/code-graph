@@ -430,6 +430,7 @@ func (p *Pipeline) resolveFileCallsCBM(relPath string, ext *cachedExtraction) ([
 			typeMap = TypeMap{}
 		}
 		if edge, ok := p.resolveCallEdge(call, moduleQN, importMap, typeMap, lspCallerMethods, ext.Language); ok {
+			tagIndirectDispatch(&edge, call.DispatchKind)
 			edges = append(edges, edge)
 		} else {
 			unresolvedByCaller[callerQN]++
@@ -437,6 +438,44 @@ func (p *Pipeline) resolveFileCallsCBM(relPath string, ext *cachedExtraction) ([
 	}
 
 	return edges, unresolvedByCaller
+}
+
+// tagIndirectDispatch annotates an edge with dispatch_kind + confidence
+// properties when the source Call was synthesized by an
+// indirect-dispatch pattern in the C extractor (executor.submit,
+// Depends, getattr). No-op for direct calls.
+//
+// Confidence values mirror the original INDIRECT_CALLS_DESIGN.md
+// recommendations: executor.submit is the strongest pattern (we
+// resolved a deterministic function reference, only the dispatch was
+// indirect — "high"); Depends() is similar; getattr is weaker because
+// the method name is a string literal that could be dynamic
+// ("medium"). trace_call_path's confidence-band calculation can use
+// these to decide whether to count an INDIRECT_CALLS-style edge as
+// resolved vs partial.
+func tagIndirectDispatch(edge *resolvedEdge, dispatchKind string) {
+	if dispatchKind == "" {
+		return
+	}
+	if edge.Properties == nil {
+		edge.Properties = map[string]any{}
+	}
+	edge.Properties["dispatch_kind"] = dispatchKind
+	edge.Properties["confidence"] = dispatchKindConfidence(dispatchKind)
+}
+
+// dispatchKindConfidence maps a dispatch_kind string to its
+// hand-picked confidence label. Kept narrow so unknown values default
+// to "medium" rather than silently dropping out.
+func dispatchKindConfidence(kind string) string {
+	switch kind {
+	case "executor_submit", "depends":
+		return "high"
+	case "getattr":
+		return "medium"
+	default:
+		return "medium"
+	}
 }
 
 // runGoLSPCrossFileResolution re-runs LSP with cross-file definitions from imported packages.

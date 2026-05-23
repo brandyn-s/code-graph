@@ -241,6 +241,7 @@ static void walk_calls(CBMExtractCtx* ctx, TSNode node, const CBMLangSpec* spec)
                 CBMCall call;
                 call.callee_name = callee;
                 call.enclosing_func_qn = cbm_enclosing_func_qn_cached(ctx, node);
+                call.dispatch_kind = NULL;
                 cbm_calls_push(&ctx->result->calls, ctx->arena, call);
 
                 // Python: Depends(func) — emit the argument as a call target too
@@ -258,6 +259,7 @@ static void walk_calls(CBMExtractCtx* ctx, TSNode node, const CBMLangSpec* spec)
                                     CBMCall dep_call;
                                     dep_call.callee_name = dep_name;
                                     dep_call.enclosing_func_qn = call.enclosing_func_qn;
+                                    dep_call.dispatch_kind = "depends";
                                     cbm_calls_push(&ctx->result->calls, ctx->arena, dep_call);
                                 }
                             }
@@ -297,6 +299,7 @@ static void walk_calls(CBMExtractCtx* ctx, TSNode node, const CBMLangSpec* spec)
                                         CBMCall sub_call;
                                         sub_call.callee_name = sub_name;
                                         sub_call.enclosing_func_qn = call.enclosing_func_qn;
+                                        sub_call.dispatch_kind = "executor_submit";
                                         cbm_calls_push(&ctx->result->calls, ctx->arena, sub_call);
                                     }
                                 }
@@ -336,6 +339,7 @@ static void walk_calls(CBMExtractCtx* ctx, TSNode node, const CBMLangSpec* spec)
                                                 ga_call.callee_name = method_name;
                                                 ga_call.enclosing_func_qn =
                                                     cbm_enclosing_func_qn_cached(ctx, node);
+                                                ga_call.dispatch_kind = "getattr";
                                                 cbm_calls_push(&ctx->result->calls, ctx->arena, ga_call);
                                             }
                                             break;
@@ -380,6 +384,7 @@ static void extract_jsx_refs(CBMExtractCtx* ctx, TSNode node) {
     CBMCall call;
     call.callee_name = name;
     call.enclosing_func_qn = cbm_enclosing_func_qn_cached(ctx, node);
+    call.dispatch_kind = NULL;
     cbm_calls_push(&ctx->result->calls, ctx->arena, call);
 }
 
@@ -403,6 +408,7 @@ void handle_calls(CBMExtractCtx* ctx, TSNode node, const CBMLangSpec* spec, Walk
             CBMCall call;
             call.callee_name = callee;
             call.enclosing_func_qn = state->enclosing_func_qn;
+            call.dispatch_kind = NULL;
             cbm_calls_push(&ctx->result->calls, ctx->arena, call);
 
             // Python: Depends(func) — emit the argument as a call target too
@@ -419,6 +425,7 @@ void handle_calls(CBMExtractCtx* ctx, TSNode node, const CBMLangSpec* spec, Walk
                                 CBMCall dep_call;
                                 dep_call.callee_name = dep_name;
                                 dep_call.enclosing_func_qn = state->enclosing_func_qn;
+                                dep_call.dispatch_kind = "depends";
                                 cbm_calls_push(&ctx->result->calls, ctx->arena, dep_call);
                             }
                         }
@@ -447,6 +454,7 @@ void handle_calls(CBMExtractCtx* ctx, TSNode node, const CBMLangSpec* spec, Walk
                                     CBMCall sub_call;
                                     sub_call.callee_name = sub_name;
                                     sub_call.enclosing_func_qn = state->enclosing_func_qn;
+                                    sub_call.dispatch_kind = "executor_submit";
                                     cbm_calls_push(&ctx->result->calls, ctx->arena, sub_call);
                                 }
                             }
@@ -499,6 +507,7 @@ void handle_calls(CBMExtractCtx* ctx, TSNode node, const CBMLangSpec* spec, Walk
                                                 CBMCall ga_call;
                                                 ga_call.callee_name = method_name;
                                                 ga_call.enclosing_func_qn = state->enclosing_func_qn;
+                                                ga_call.dispatch_kind = "getattr";
                                                 cbm_calls_push(&ctx->result->calls, ctx->arena, ga_call);
                                             }
                                             break;
@@ -524,6 +533,7 @@ void handle_calls(CBMExtractCtx* ctx, TSNode node, const CBMLangSpec* spec, Walk
                     CBMCall call;
                     call.callee_name = name;
                     call.enclosing_func_qn = state->enclosing_func_qn;
+                    call.dispatch_kind = NULL;
                     cbm_calls_push(&ctx->result->calls, ctx->arena, call);
                 }
             }

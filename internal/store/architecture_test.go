@@ -83,7 +83,9 @@ func TestGetArchitectureAll(t *testing.T) {
 	s := setupArchTestStore(t)
 	defer s.Close()
 
-	info, err := s.GetArchitecture("test", nil) // nil = all aspects
+	// Pass []string{"all"} explicitly — the contract changed in PR #301
+	// (2026-05-12) so nil now defaults to "summary only", not all aspects.
+	info, err := s.GetArchitecture("test", []string{"all"})
 	if err != nil {
 		t.Fatalf("GetArchitecture: %v", err)
 	}

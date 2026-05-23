@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 )
@@ -1534,5 +1535,76 @@ func TestInsertEdgeReturnsStableID(t *testing.T) {
 	}
 	if secondID != firstID {
 		t.Fatalf("expected stable id %d on conflict-update, got %d (race the comment warned about)", firstID, secondID)
+	}
+}
+
+// TestInsertEdgeBatchPartialDropSurfacesError pins the new contract:
+// when the per-edge fallback path skips edges (FK violation, missing
+// node), InsertEdgeBatch returns a *PartialBatchInsertError with the
+// dropped count, instead of silently returning nil with only an
+// Info-level log. Drives a forced FK violation by referencing a
+// non-existent target node id.
+func TestInsertEdgeBatchPartialDropSurfacesError(t *testing.T) {
+	s, err := OpenMemory()
+	if err != nil {
+		t.Fatalf("OpenMemory: %v", err)
+	}
+	defer s.Close()
+	if err := s.UpsertProject("p", "/tmp/p"); err != nil {
+		t.Fatalf("UpsertProject: %v", err)
+	}
+	a, _ := s.UpsertNode(&Node{Project: "p", Label: "Function", Name: "A", QualifiedName: "p.A"})
+	b, _ := s.UpsertNode(&Node{Project: "p", Label: "Function", Name: "B", QualifiedName: "p.B"})
+
+	edges := []*Edge{
+		{Project: "p", SourceID: a, TargetID: b, Type: "CALLS"},
+		// FK violation: target_id 999999 doesn't exist.
+		{Project: "p", SourceID: a, TargetID: 999999, Type: "CALLS"},
+		{Project: "p", SourceID: b, TargetID: a, Type: "CALLS"},
+	}
+
+	err = s.InsertEdgeBatch(edges)
+	if err == nil {
+		t.Fatal("expected PartialBatchInsertError when batch had FK violation; got nil")
+	}
+	var partial *PartialBatchInsertError
+	if !errors.As(err, &partial) {
+		t.Fatalf("expected *PartialBatchInsertError, got %T: %v", err, err)
+	}
+	if partial.Dropped != 1 {
+		t.Errorf("expected Dropped=1 (the bogus target_id row), got %d", partial.Dropped)
+	}
+	if partial.Total != 3 {
+		t.Errorf("expected Total=3, got %d", partial.Total)
+	}
+
+	// The two valid edges should still be inserted — partial-insert
+	// semantics are "best effort with visibility".
+	count, _ := s.CountEdges("p")
+	if count != 2 {
+		t.Errorf("expected 2 successful inserts, got %d", count)
+	}
+}
+
+// TestInsertEdgeBatchSuccessReturnsNil confirms the happy path —
+// clean batches return nil, not a zero-Dropped error.
+func TestInsertEdgeBatchSuccessReturnsNil(t *testing.T) {
+	s, err := OpenMemory()
+	if err != nil {
+		t.Fatalf("OpenMemory: %v", err)
+	}
+	defer s.Close()
+	if err := s.UpsertProject("p", "/tmp/p"); err != nil {
+		t.Fatalf("UpsertProject: %v", err)
+	}
+	a, _ := s.UpsertNode(&Node{Project: "p", Label: "Function", Name: "A", QualifiedName: "p.A"})
+	b, _ := s.UpsertNode(&Node{Project: "p", Label: "Function", Name: "B", QualifiedName: "p.B"})
+
+	edges := []*Edge{
+		{Project: "p", SourceID: a, TargetID: b, Type: "CALLS"},
+		{Project: "p", SourceID: b, TargetID: a, Type: "CALLS"},
+	}
+	if err := s.InsertEdgeBatch(edges); err != nil {
+		t.Errorf("clean batch should return nil, got %v", err)
 	}
 }

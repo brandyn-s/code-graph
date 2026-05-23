@@ -30,6 +30,8 @@ import sys
 import time
 from pathlib import Path
 
+from project_id import project_name_from_path
+
 try:
     sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
     sys.stderr.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
@@ -85,9 +87,32 @@ def load_questions() -> dict:
 
 
 def load_targets() -> dict[str, dict]:
+    """Load corpus targets, with optional env-var path overrides.
+
+    The corpus file hard-codes developer-machine paths and the
+    project_id derived from them. CI clones fixtures to different
+    paths (e.g. $HOME/fixture/ripgrep) so the stored project_id never
+    matches and every schema-validation question fails because the
+    `project` arg points at a non-existent project.
+
+    For each target, if the env var `CORPUS_<TARGET_ID_UPPER>_PATH`
+    is set (e.g. CORPUS_RIPGREP_PATH=/home/runner/fixture/ripgrep),
+    override `path` and recompute `project_id` from the override
+    path via project_name_from_path. Targets without the override
+    keep their corpus-file values for developer-local runs.
+    """
     with open(CORPUS_FILE, encoding="utf-8") as f:
         corpus = json.load(f)
-    return {t["id"]: t for t in corpus["targets"]}
+    out: dict[str, dict] = {}
+    for t in corpus["targets"]:
+        target = dict(t)  # don't mutate the corpus file's in-memory copy
+        env_key = f"CORPUS_{target['id'].upper()}_PATH"
+        override = os.environ.get(env_key)
+        if override:
+            target["path"] = override
+            target["project_id"] = project_name_from_path(override)
+        out[target["id"]] = target
+    return out
 
 
 def load_allowlist() -> list[str]:

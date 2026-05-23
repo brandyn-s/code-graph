@@ -89,7 +89,10 @@ func (s *Server) generateOrientationReport(projectName string) (*orientationRepo
 		return nil, fmt.Errorf("root_path for %q is not a directory: %s", projectName, rootPath)
 	}
 
-	arch, err := st.GetArchitecture(projectName, nil)
+	// Pass "all" — orientation_report reads detail aspects (Hotspots,
+	// EntryPoints, etc.). The GetArchitecture contract changed in PR #301
+	// so nil now means "summary only".
+	arch, err := st.GetArchitecture(projectName, []string{"all"})
 	if err != nil {
 		return nil, fmt.Errorf("get architecture: %w", err)
 	}

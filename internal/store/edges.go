@@ -392,24 +392,59 @@ const numEdgeCols = 5
 const edgesBatchSize = 999 / numEdgeCols // = 199
 
 // InsertEdgeBatch inserts multiple edges in batched multi-row INSERTs.
+// PartialBatchInsertError is returned by InsertEdgeBatch when the
+// per-edge fallback path skipped one or more edges (typically due to
+// FK constraint violations from stale source/target IDs). The function
+// completes — successful edges are inserted — but the error signals
+// data loss so callers can choose to log, retry, or escalate.
+//
+// PR #334 closed the most-common upstream cause of these FK violations
+// (InsertEdge LastInsertId race); this error type exists so any
+// remaining cause (resolver pointing at uncreated phantoms,
+// concurrent deletes) surfaces explicitly rather than via Info-level
+// logs that no caller checks. Use errors.As to inspect counts:
+//
+//	var partial *PartialBatchInsertError
+//	if errors.As(err, &partial) { ... }
+type PartialBatchInsertError struct {
+	Dropped int
+	Total   int
+}
+
+func (e *PartialBatchInsertError) Error() string {
+	return fmt.Sprintf("partial batch insert: %d of %d edges dropped (FK or other per-row constraint)", e.Dropped, e.Total)
+}
+
 func (s *Store) InsertEdgeBatch(edges []*Edge) error {
 	if len(edges) == 0 {
 		return nil
 	}
 
+	totalDropped := 0
 	for i := 0; i < len(edges); i += edgesBatchSize {
 		end := i + edgesBatchSize
 		if end > len(edges) {
 			end = len(edges)
 		}
-		if err := s.insertEdgeChunk(edges[i:end]); err != nil {
+		dropped, err := s.insertEdgeChunk(edges[i:end])
+		if err != nil {
 			return err
 		}
+		totalDropped += dropped
+	}
+	if totalDropped > 0 {
+		return &PartialBatchInsertError{Dropped: totalDropped, Total: len(edges)}
 	}
 	return nil
 }
 
-func (s *Store) insertEdgeChunk(batch []*Edge) error {
+// insertEdgeChunk inserts a chunk of edges. Returns (dropped, error):
+// dropped is the count of edges that failed the per-row fallback path
+// (FK violation, constraint conflict, etc.) and is propagated to
+// InsertEdgeBatch so callers can surface partial-insert as a typed
+// error. err is non-nil only for hard failures (i.e. couldn't even
+// fall back).
+func (s *Store) insertEdgeChunk(batch []*Edge) (int, error) {
 	var sb strings.Builder
 	sb.WriteString(`INSERT INTO edges (project, source_id, target_id, type, properties) VALUES `)
 
@@ -425,11 +460,13 @@ func (s *Store) insertEdgeChunk(batch []*Edge) error {
 
 	_, err := s.q.Exec(sb.String(), args...)
 	if err == nil {
-		return nil
+		return 0, nil
 	}
 
-	// Batch failed (likely FK constraint from stale LastInsertId) — fall back
-	// to one-at-a-time inserts so one bad edge doesn't break the entire batch.
+	// Batch failed (e.g. one edge references a non-existent node, FK
+	// constraint, etc.) — fall back to one-at-a-time inserts so one
+	// bad edge doesn't break the entire batch. Track drops so
+	// InsertEdgeBatch can surface them via PartialBatchInsertError.
 	skipped := 0
 	for _, e := range batch {
 		if _, err2 := s.q.Exec(`
@@ -441,9 +478,13 @@ func (s *Store) insertEdgeChunk(batch []*Edge) error {
 		}
 	}
 	if skipped > 0 {
-		slog.Info("edges.batch.fk_skip", "skipped", skipped, "total", len(batch))
+		// Warn, not Info: this is real data loss now that PR #334
+		// closed the most-common stale-LastInsertId cause. Remaining
+		// causes (phantom targets, concurrent delete, etc.) warrant
+		// operator attention.
+		slog.Warn("edges.batch.fk_skip", "skipped", skipped, "total", len(batch))
 	}
-	return nil
+	return skipped, nil
 }
 
 // FindEdgesBySourceIDs returns all edges where source_id is in the given set,

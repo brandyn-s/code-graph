@@ -163,7 +163,16 @@ func (s *Store) fetchAspects(project string, info *ArchitectureInfo, want map[st
 }
 
 // GetArchitecture computes architecture aspects for a project.
-// When aspects contains "all" or is empty, all aspects are computed.
+// An empty/nil aspects slice defaults to the compact "summary" aspect
+// only — see buildAspectSet for the full set of names. Callers that
+// want detail fields (Languages / Packages / EntryPoints / Routes /
+// Hotspots / Boundaries / Services / Layers / Clusters / FileTree)
+// must pass them explicitly, or pass `[]string{"all"}` for everything.
+//
+// The "empty = summary only" default landed in PR #301 (2026-05-12) so
+// the cheap path is the default; the older "empty = all aspects"
+// contract is removed. Callers that relied on the old contract must
+// pass `[]string{"all"}` instead.
 func (s *Store) GetArchitecture(project string, aspects []string) (*ArchitectureInfo, error) {
 	want := buildAspectSet(aspects)
 	info := &ArchitectureInfo{}

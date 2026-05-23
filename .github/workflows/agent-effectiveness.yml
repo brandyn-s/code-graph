@@ -104,11 +104,31 @@ jobs:
             echo "ANTHROPIC_API_KEY: SET (length: ${#ANTHROPIC_API_KEY})"
           fi
 
+      - name: Fresh start — clear stale results.jsonl
+        run: |
+          # run_battery.py appends to results.jsonl and the file is
+          # committed in the repo as a developer-local resume
+          # checkpoint. On CI we want a clean slate so the
+          # post-summary step renders THIS run's results, not
+          # historical PSM rows from the developer who committed
+          # last. Truncate (don't delete) so the schema runner's
+          # append-mode open still works.
+          : > bench/research/agent-effectiveness/results.jsonl
+
       - name: Run category 6 (schema validation; no API cost)
         env:
           CODE_GRAPH_BIN: ${{ github.workspace }}/bin/codebase-memory-mcp
         run: |
           cd bench/research/agent-effectiveness
+          # corpus.json hard-codes a developer-machine ripgrep path +
+          # the project_id derived from it. CI clones the fixture to
+          # $HOME/fixture/ripgrep which produces a different project_id
+          # ("home-runner-fixture-ripgrep" on ubuntu runners). Without
+          # this override the schema battery queries a non-existent
+          # project and every question fails. run_battery.py's
+          # load_targets reads CORPUS_<TARGET>_PATH and recomputes
+          # project_id via project_id.project_name_from_path.
+          export CORPUS_RIPGREP_PATH="$HOME/fixture/ripgrep"
           # Schema questions are PSM-only by default; for CI, swap to ripgrep
           # by passing --filter-target ripgrep. Tools without ripgrep-friendly
           # args are skipped via the runner's target match.
@@ -120,6 +140,7 @@ jobs:
           CODE_GRAPH_BIN: ${{ github.workspace }}/bin/codebase-memory-mcp
         run: |
           cd bench/research/agent-effectiveness
+          export CORPUS_RIPGREP_PATH="$HOME/fixture/ripgrep"
           python run_battery.py --filter-category 1 --filter-target ripgrep --budget-usd ${{ github.event.inputs.budget_usd || '3' }}
 
       - name: Run additional categories on manual dispatch
@@ -128,6 +149,7 @@ jobs:
           CODE_GRAPH_BIN: ${{ github.workspace }}/bin/codebase-memory-mcp
         run: |
           cd bench/research/agent-effectiveness
+          export CORPUS_RIPGREP_PATH="$HOME/fixture/ripgrep"
           CATEGORY_FILTER="${{ github.event.inputs.filter_category }}"
           if [ -n "$CATEGORY_FILTER" ]; then
             python run_battery.py --filter-category $CATEGORY_FILTER --filter-target ripgrep --budget-usd ${{ github.event.inputs.budget_usd || '5' }}

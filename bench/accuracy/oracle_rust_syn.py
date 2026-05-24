@@ -62,11 +62,28 @@ ORACLE_BIN = (
 
 
 def ensure_oracle_built() -> Path:
-    """Build the Rust oracle binary if missing. Idempotent."""
-    if ORACLE_BIN.exists():
-        return ORACLE_BIN
-    print(f"[rust-syn] building oracle binary at {ORACLE_BIN.parent.parent}")
+    """Build the Rust oracle binary if missing or stale relative to its source.
+
+    Staleness check: if any .rs file in the binary's src/ tree has an mtime
+    newer than the compiled binary, rebuild. Without this, a binary compiled
+    against an older revision of `walk_chain_root` / `is_external_chain_root`
+    silently emits edges missing the chain_root_path field — which makes the
+    Python filter's external-chain drop a no-op for every existing edge in
+    the cache. PR #346 shipped chain-root awareness 2026-05-24; the stale
+    binary from May 2 produced 27 phantom assetman FNs (diesel `.get_result`
+    fuzzy-matched to in-graph candidates) that disappeared on rebuild.
+    """
     cargo_dir = ACCURACY_DIR / "tools" / "oracle-rust-syn"
+    src_dir = cargo_dir / "src"
+    bin_mtime = ORACLE_BIN.stat().st_mtime if ORACLE_BIN.exists() else 0.0
+    src_mtime = max(
+        (p.stat().st_mtime for p in src_dir.rglob("*.rs")),
+        default=0.0,
+    )
+    if ORACLE_BIN.exists() and bin_mtime >= src_mtime:
+        return ORACLE_BIN
+    reason = "missing" if not ORACLE_BIN.exists() else f"stale (src newer by {src_mtime - bin_mtime:.0f}s)"
+    print(f"[rust-syn] building oracle binary at {cargo_dir} — {reason}")
     rc = subprocess.run(
         ["cargo", "build", "--release"],
         cwd=cargo_dir,
@@ -322,11 +339,20 @@ def build_ground_truth(fixture_id: str, force: bool = False) -> Path:
     verify_fixture_sha(fixture)
 
     cache_path = CACHE_DIR / f"rust-syn-{fixture_id}-{fixture['short_sha']}.json"
-    if cache_path.exists() and not force:
-        print(f"[rust-syn] cache hit: {cache_path}")
-        return cache_path
-
+    # Build binary first so we know its mtime before the cache-hit check.
+    # ensure_oracle_built() also fires on stale src (PR #346 chain-root fix
+    # would silently no-op without this).
     ensure_oracle_built()
+    if cache_path.exists() and not force:
+        bin_mtime = ORACLE_BIN.stat().st_mtime
+        cache_mtime = cache_path.stat().st_mtime
+        if cache_mtime >= bin_mtime:
+            print(f"[rust-syn] cache hit: {cache_path}")
+            return cache_path
+        print(
+            f"[rust-syn] cache stale (binary {bin_mtime - cache_mtime:.0f}s newer); "
+            f"regenerating {cache_path.name}"
+        )
 
     fixture_path = Path(fixture["path"])
     subsets: list[str] = fixture.get("subset") or []

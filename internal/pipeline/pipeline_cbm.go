@@ -440,19 +440,29 @@ func (p *Pipeline) resolveFileCallsCBM(relPath string, ext *cachedExtraction) ([
 	return edges, unresolvedByCaller
 }
 
-// tagIndirectDispatch annotates an edge with dispatch_kind + confidence
-// properties when the source Call was synthesized by an
-// indirect-dispatch pattern in the C extractor (executor.submit,
-// Depends, getattr). No-op for direct calls.
+// tagIndirectDispatch annotates an edge with dispatch_kind +
+// confidence + confidence_band properties when the source Call was
+// synthesized by an indirect-dispatch pattern in the C extractor
+// (executor.submit, Depends, getattr, Flask hook registrars). No-op
+// for direct calls.
 //
-// Confidence values mirror the original INDIRECT_CALLS_DESIGN.md
-// recommendations: executor.submit is the strongest pattern (we
-// resolved a deterministic function reference, only the dispatch was
-// indirect — "high"); Depends() is similar; getattr is weaker because
-// the method name is a string literal that could be dynamic
-// ("medium"). trace_call_path's confidence-band calculation can use
-// these to decide whether to count an INDIRECT_CALLS-style edge as
-// resolved vs partial.
+// Storage shape matches `collectLSPResolvedEdges` above (lines
+// 533-545): `confidence` is the NUMERIC score (required by the SQL
+// scan path in `internal/store/traverse.go::BFS` — line 120 reads
+// `json_extract(...,'$.confidence')` directly into a `float64`
+// column, so a string value here breaks `trace_call_path` BFS at
+// query time), and `confidence_band` is the human-readable label.
+// Prior to v0.3 this helper stored the band STRING in `confidence`,
+// which was a latent bug — never surfaced because no existing fixture
+// exercised the BFS path against an indirect-dispatch edge. v0.3
+// surfaced it because flask-tiny F004's inbound trace into
+// `log_request` walks the synthesized edge.
+//
+// Numeric sentinels chosen above the `confidenceBand` thresholds
+// (resolver.go:1282): "high" -> 0.9 (≥0.7), "medium" -> 0.6 (≥0.45).
+// Round-tripping `confidenceBand(...) == dispatchKindBand(...)` is
+// pinned by `TestTagIndirectDispatchBandMatchesConfidence` so a
+// future threshold change in resolver.go can't silently desync.
 func tagIndirectDispatch(edge *resolvedEdge, dispatchKind string) {
 	if dispatchKind == "" {
 		return
@@ -462,20 +472,39 @@ func tagIndirectDispatch(edge *resolvedEdge, dispatchKind string) {
 	}
 	edge.Properties["dispatch_kind"] = dispatchKind
 	edge.Properties["confidence"] = dispatchKindConfidence(dispatchKind)
+	edge.Properties["confidence_band"] = dispatchKindBand(dispatchKind)
 }
 
-// dispatchKindConfidence maps a dispatch_kind string to its
-// hand-picked confidence label. Kept narrow so unknown values default
-// to "medium" rather than silently dropping out.
-func dispatchKindConfidence(kind string) string {
+// dispatchKindConfidence maps a dispatch_kind string to a numeric
+// confidence score in [0,1]. Kept narrow so unknown values default
+// to medium (0.6) rather than silently dropping out.
+//
+// v0.3 Pattern A adds the seven Flask hook-registrar labels. All map
+// to 0.9 ("high" band) — the registered function is a deterministic
+// Name reference at the registration call site; only the dispatch
+// (Flask invoking from its registered-hook list) is indirect. Same
+// shape as executor.submit and Depends, hence the same band.
+func dispatchKindConfidence(kind string) float64 {
 	switch kind {
-	case "executor_submit", "depends":
-		return "high"
+	case "executor_submit", "depends",
+		"before_request_hook", "after_request_hook",
+		"teardown_request_hook", "teardown_appcontext_hook",
+		"errorhandler_hook", "context_processor_hook",
+		"before_first_request_hook":
+		return 0.9
 	case "getattr":
-		return "medium"
+		return 0.6
 	default:
-		return "medium"
+		return 0.6
 	}
+}
+
+// dispatchKindBand returns the human-readable confidence band string
+// ("high" / "medium" / "speculative") for a dispatch_kind, derived
+// from `dispatchKindConfidence` so the numeric and band values can
+// never drift apart.
+func dispatchKindBand(kind string) string {
+	return confidenceBand(dispatchKindConfidence(kind))
 }
 
 // runGoLSPCrossFileResolution re-runs LSP with cross-file definitions from imported packages.

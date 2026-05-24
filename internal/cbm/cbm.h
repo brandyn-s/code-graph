@@ -111,9 +111,17 @@ typedef struct {
     // dispatch_kind tags calls that were synthesized from an
     // indirect-dispatch pattern rather than appearing literally in the
     // source. NULL/empty for ordinary direct calls. Populated values:
-    //   "executor_submit"  — <pool>.submit(fn, ...) v0.1
-    //   "depends"          — FastAPI Depends(fn) (similar shape)
-    // Future values (v0.2+): "getattr", "decorator", "fn_pointer".
+    //   "executor_submit"           — <pool>.submit(fn, ...) v0.1
+    //   "depends"                   — FastAPI Depends(fn) (similar shape)
+    //   "getattr"                   — getattr(obj, "name")() v0.2
+    //   "before_request_hook"       — Flask app.before_request(fn) v0.3
+    //   "after_request_hook"        — Flask app.after_request(fn) v0.3
+    //   "teardown_request_hook"     — Flask app.teardown_request(fn) v0.3
+    //   "teardown_appcontext_hook"  — Flask app.teardown_appcontext(fn) v0.3
+    //   "errorhandler_hook"         — Flask app.errorhandler(fn) v0.3
+    //   "context_processor_hook"    — Flask app.context_processor(fn) v0.3
+    //   "before_first_request_hook" — Flask app.before_first_request(fn) v0.3
+    // Future values (v0.4+): "route_register" (decorator), "fn_pointer".
     // Consumed by the Go-side pipeline to label the resulting CALLS
     // edge with properties.dispatch_kind so trace_call_path can
     // distinguish direct from indirect resolutions.

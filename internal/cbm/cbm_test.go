@@ -304,3 +304,116 @@ def handler(db = Depends(get_db)):
 		t.Errorf("direct Depends call: expected empty DispatchKind, got %q", depends.DispatchKind)
 	}
 }
+
+// TestPythonBeforeRequestRegisterTracked pins INDIRECT_CALLS v0.3
+// Pattern A: when a caller invokes app.before_request(fn) (or any
+// of the seven Flask hook-registrar methods), the extractor emits
+// fn as a synthesized call with dispatch_kind set to the per-
+// registrar label. Closes the flask-tiny F004 baseline gap.
+//
+// The function reference at the registration site is a deterministic
+// Name; only the dispatch is indirect (Flask invokes from a
+// registered-hook list at request time). Without this emission, the
+// registered function has 0 inbound CALLS edges and trace_call_path
+// inbound returns confidence_band=high + unresolved_call_count=0
+// (the extractor never saw a call into it).
+//
+// Negative: a non-allowlist method call ending in something other
+// than the seven Flask suffixes (e.g. "obj.register(fn)") must NOT
+// emit a synthesized call.
+func TestPythonBeforeRequestRegisterTracked(t *testing.T) {
+	source := []byte(`
+from flask import Flask
+
+def log_request():
+    pass
+
+def log_response():
+    pass
+
+def cleanup():
+    pass
+
+def handle_404():
+    pass
+
+def inject_user():
+    pass
+
+def warm_cache():
+    pass
+
+def close_db():
+    pass
+
+def unrelated_register():
+    pass
+
+def create_app():
+    app = Flask(__name__)
+    app.before_request(log_request)
+    app.after_request(log_response)
+    app.teardown_request(cleanup)
+    app.errorhandler(handle_404)
+    app.context_processor(inject_user)
+    app.before_first_request(warm_cache)
+    app.teardown_appcontext(close_db)
+    # Negative: not on the allowlist, must NOT emit synthetic call.
+    app.register(unrelated_register)
+    return app
+`)
+	result, err := ExtractFile(source, lang.Python, "test", "app/main.py")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Map of synthesized hook name → expected dispatch_kind. Each
+	// must appear exactly once with the right label and with
+	// enclosing_func_qn = the create_app QN.
+	want := map[string]string{
+		"log_request":  "before_request_hook",
+		"log_response": "after_request_hook",
+		"cleanup":      "teardown_request_hook",
+		"close_db":     "teardown_appcontext_hook",
+		"handle_404":   "errorhandler_hook",
+		"inject_user":  "context_processor_hook",
+		"warm_cache":   "before_first_request_hook",
+	}
+	const wantEnclosing = "test.app.main.create_app"
+
+	got := map[string]*Call{}
+	for i := range result.Calls {
+		c := &result.Calls[i]
+		t.Logf("Call: callee=%q enclosing=%q dispatch=%q",
+			c.CalleeName, c.EnclosingFuncQN, c.DispatchKind)
+		if _, expected := want[c.CalleeName]; expected && c.DispatchKind != "" {
+			got[c.CalleeName] = c
+		}
+		// Negative: unrelated_register must NOT be emitted as a
+		// synthesized call. The .register(...) suffix is not on the
+		// allowlist; only the seven Flask hook-registrar names are.
+		if c.CalleeName == "unrelated_register" && c.DispatchKind != "" {
+			t.Errorf("unrelated_register was synthesized as call with "+
+				"dispatch_kind=%q; .register is NOT on the v0.3 "+
+				"allowlist. All calls: %v", c.DispatchKind, result.Calls)
+		}
+	}
+
+	for name, label := range want {
+		c, ok := got[name]
+		if !ok {
+			t.Errorf("expected synthesized call to %q with "+
+				"dispatch_kind=%q; not found. All calls: %v",
+				name, label, result.Calls)
+			continue
+		}
+		if c.DispatchKind != label {
+			t.Errorf("%s: dispatch_kind = %q, want %q",
+				name, c.DispatchKind, label)
+		}
+		if c.EnclosingFuncQN != wantEnclosing {
+			t.Errorf("%s: enclosing_func_qn = %q, want %q",
+				name, c.EnclosingFuncQN, wantEnclosing)
+		}
+	}
+}

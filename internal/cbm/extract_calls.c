@@ -10,6 +10,48 @@ static void walk_calls(CBMExtractCtx* ctx, TSNode node, const CBMLangSpec* spec)
 static char* extract_callee_name(CBMArena* a, TSNode node, const char* source, CBMLanguage lang);
 static void extract_jsx_refs(CBMExtractCtx* ctx, TSNode node);
 
+// cbm_python_flask_hook_label classifies a Python call expression's
+// dotted callee_name against the Flask hook-registrar allowlist from
+// INDIRECT_CALLS v0.3 Pattern A. Returns the per-registrar
+// dispatch_kind label string when the callee ends in one of the
+// seven registered suffixes; NULL otherwise.
+//
+// The seven registrars all share the same emission shape: at the
+// call site (which must be inside an enclosing function, otherwise
+// the resulting edge would land in CALLS_PSEUDO and be invisible to
+// trace_call_path), the first identifier argument names the
+// function being registered as a Flask hook. We emit that function
+// as a synthesized callee with dispatch_kind tagged to the
+// registrar's family.
+//
+// Allowlist sourced from internal/pipeline/INDIRECT_CALLS_V0_3_PLAN.md.
+// Mirrors the existing executor.submit / Depends / getattr Call-
+// synthesis pattern (see emission blocks below).
+static const char* cbm_python_flask_hook_label(const char* callee) {
+    if (!callee) return NULL;
+    size_t n = strlen(callee);
+    static const struct {
+        const char* suffix;
+        size_t      len;
+        const char* label;
+    } rules[] = {
+        { ".before_request",       15, "before_request_hook"       },
+        { ".after_request",        14, "after_request_hook"        },
+        { ".teardown_request",     17, "teardown_request_hook"     },
+        { ".teardown_appcontext",  20, "teardown_appcontext_hook"  },
+        { ".errorhandler",         13, "errorhandler_hook"         },
+        { ".context_processor",    18, "context_processor_hook"    },
+        { ".before_first_request", 21, "before_first_request_hook" },
+    };
+    for (size_t i = 0; i < sizeof(rules) / sizeof(rules[0]); i++) {
+        if (n >= rules[i].len &&
+            strcmp(callee + n - rules[i].len, rules[i].suffix) == 0) {
+            return rules[i].label;
+        }
+    }
+    return NULL;
+}
+
 // Lean 4: check if an apply node is inside a type annotation.
 // Strategy: walk up to the nearest declaration boundary; if the apply falls
 // inside that declaration's explicit_binder/implicit_binder, or before the
@@ -307,6 +349,44 @@ static void walk_calls(CBMExtractCtx* ctx, TSNode node, const CBMLangSpec* spec)
                         }
                     }
                 }
+
+                // Python: app.before_request(fn) and the rest of the
+                // Flask hook-registrar family — emit fn as a call target.
+                // INDIRECT_CALLS v0.3 Pattern A. The registration is
+                // an explicit Name reference at the call site; only the
+                // dispatch is indirect (Flask invokes from a registered-
+                // hook list at request time). Without this, every Flask
+                // hook handler has 0 inbound CALLS edges and trace_call_path
+                // returns confidence_band=high with unresolved_call_count=0
+                // (the extractor sees no callers in the first place).
+                //
+                // The allowlist is narrow (7 Flask-specific suffixes — see
+                // cbm_python_flask_hook_label above). Pattern B (route
+                // decorators) and Pattern C (functools.wraps closures) are
+                // deferred to v0.4 per INDIRECT_CALLS_V0_3_PLAN.md.
+                if (ctx->language == CBM_LANG_PYTHON) {
+                    const char* hook_label = cbm_python_flask_hook_label(callee);
+                    if (hook_label != NULL) {
+                        TSNode args = ts_node_child_by_field_name(node, "arguments", 9);
+                        if (!ts_node_is_null(args)) {
+                            uint32_t ncount = ts_node_named_child_count(args);
+                            if (ncount > 0) {
+                                TSNode first_arg = ts_node_named_child(args, 0);
+                                if (!ts_node_is_null(first_arg) &&
+                                    strcmp(ts_node_type(first_arg), "identifier") == 0) {
+                                    char* hook_name = cbm_node_text(ctx->arena, first_arg, ctx->source);
+                                    if (hook_name && hook_name[0] && !cbm_is_keyword(hook_name, ctx->language)) {
+                                        CBMCall hook_call;
+                                        hook_call.callee_name = hook_name;
+                                        hook_call.enclosing_func_qn = call.enclosing_func_qn;
+                                        hook_call.dispatch_kind = hook_label;
+                                        cbm_calls_push(&ctx->result->calls, ctx->arena, hook_call);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
 
@@ -456,6 +536,35 @@ void handle_calls(CBMExtractCtx* ctx, TSNode node, const CBMLangSpec* spec, Walk
                                     sub_call.enclosing_func_qn = state->enclosing_func_qn;
                                     sub_call.dispatch_kind = "executor_submit";
                                     cbm_calls_push(&ctx->result->calls, ctx->arena, sub_call);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Python: app.before_request(fn) family — emit fn as a call
+            // target. INDIRECT_CALLS v0.3 Pattern A. Mirrors walk_calls()
+            // path above; this is the unified production code path.
+            // See cbm_python_flask_hook_label above for the registrar
+            // allowlist and INDIRECT_CALLS_V0_3_PLAN.md for design.
+            if (ctx->language == CBM_LANG_PYTHON) {
+                const char* hook_label = cbm_python_flask_hook_label(callee);
+                if (hook_label != NULL) {
+                    TSNode args = ts_node_child_by_field_name(node, "arguments", 9);
+                    if (!ts_node_is_null(args)) {
+                        uint32_t ncount = ts_node_named_child_count(args);
+                        if (ncount > 0) {
+                            TSNode first_arg = ts_node_named_child(args, 0);
+                            if (!ts_node_is_null(first_arg) &&
+                                strcmp(ts_node_type(first_arg), "identifier") == 0) {
+                                char* hook_name = cbm_node_text(ctx->arena, first_arg, ctx->source);
+                                if (hook_name && hook_name[0] && !cbm_is_keyword(hook_name, ctx->language)) {
+                                    CBMCall hook_call;
+                                    hook_call.callee_name = hook_name;
+                                    hook_call.enclosing_func_qn = state->enclosing_func_qn;
+                                    hook_call.dispatch_kind = hook_label;
+                                    cbm_calls_push(&ctx->result->calls, ctx->arena, hook_call);
                                 }
                             }
                         }

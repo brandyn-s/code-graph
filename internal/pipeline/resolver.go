@@ -835,6 +835,21 @@ func (r *FunctionRegistry) applyImportBindingFilter(ctx CallContext, candidates 
 	if !ok {
 		return candidates, "", false
 	}
+	// Rust intra-crate relative paths (`super::`, `self::`) cannot be
+	// resolved to an absolute registry QN without per-file path context
+	// the resolver doesn't carry. They're INTERNAL by construction — the
+	// `super::audio::arm` form refers to a sibling module within the same
+	// crate. Pre-2026-05-24 the C extractor never emitted bindings for
+	// these (it only emitted one garbage CBMImport for grouped imports);
+	// post-PR #350 it correctly decomposes grouped imports, including
+	// `use super::{audio::{arm, ...}};` shapes, which causes this filter
+	// to mis-classify them as external and drop the correct internal
+	// candidates (35 newly-opened apid FNs, -7.6pp F1 regression
+	// 2026-05-24). Skip the filter for these: let downstream
+	// nameLookup / suffix_match continue with the original candidate set.
+	if strings.HasPrefix(target, "super::") || strings.HasPrefix(target, "self::") {
+		return candidates, "", false
+	}
 	// Normalize Rust `::` separators to QN-style `.` for comparison.
 	targetQN := strings.ReplaceAll(target, "::", ".")
 	// Rust `crate::` is the implicit crate root, not a registered QN

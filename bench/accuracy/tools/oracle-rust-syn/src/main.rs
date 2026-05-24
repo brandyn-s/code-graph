@@ -58,6 +58,22 @@ struct Edge {
     file: String,
     line: u32,
     source: String,
+    /// First path segment of the chain's syntactic root, when the call is an
+    /// `ExprMethodCall` whose receiver chain is rooted in a path expression
+    /// (e.g. `diesel::insert_into(...).values(...).get_result(conn)` has
+    /// chain_root_path = "diesel"; `OpenOptions::new().create(true)` has
+    /// chain_root_path = "OpenOptions"). None when the chain is rooted in a
+    /// local variable (`x.method()`), a literal, a closure, etc. — i.e. when
+    /// no syntactic crate-or-type prefix is visible.
+    ///
+    /// The Python wrapper uses this against `cargo metadata --no-deps` to
+    /// drop external-crate dispatches that the bare-name resolver would
+    /// otherwise phantom-resolve to coincidentally-named in-graph defs.
+    ///
+    /// Added 2026-05-24 (syn-oracle external-chain fix). See
+    /// `~/Documents/knowledge-base/plans/2026-05-24-syn-oracle-external-chain-fix.md`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    chain_root_path: Option<String>,
 }
 
 struct Visitor {
@@ -172,6 +188,7 @@ impl<'ast> Visit<'ast> for Visitor {
                 file: self.file_rel.clone(),
                 line: line_of(i.span()),
                 source: "syn".to_string(),
+                chain_root_path: None,
             });
         }
         syn::visit::visit_expr_call(self, i);
@@ -183,7 +200,13 @@ impl<'ast> Visit<'ast> for Visitor {
         // Emit with bare method name as to_qn — the Python wrapper filters
         // by ambiguity (only emit when the bare name has exactly one def
         // in the project, regardless of whether ExprCall or ExprMethodCall).
+        //
+        // 2026-05-24 (syn-oracle external-chain fix): also compute the
+        // chain's syntactic root path so the Python wrapper can drop
+        // external-crate dispatches via cargo metadata before the
+        // single-candidate-in-graph match phantom-resolves them.
         let callee = i.method.to_string();
+        let chain_root_path = walk_chain_root(&i.receiver);
         self.edges.push(Edge {
             from_qn: self.current_caller(),
             to_qn: callee,
@@ -191,9 +214,54 @@ impl<'ast> Visit<'ast> for Visitor {
             file: self.file_rel.clone(),
             line: line_of(i.method.span()),
             source: "syn".to_string(),
+            chain_root_path,
         });
         syn::visit::visit_expr_method_call(self, i);
     }
+}
+
+/// Walk up an ExprMethodCall receiver chain to find the syntactic root.
+/// Returns the first segment of the root path, e.g.:
+///   `diesel::insert_into(t).values(v).returning(c).get_result(conn)`
+///     → root is `diesel::insert_into(t)` (an ExprCall), root path = "diesel",
+///       return Some("diesel")
+///   `OpenOptions::new().create(true).open(p)`
+///     → root is `OpenOptions::new()` (an ExprCall), root path = "OpenOptions",
+///       return Some("OpenOptions")
+///   `self.field.method()` → root is ExprField (not a path) → None
+///   `x.method()` where x is a local → root is ExprPath("x") → return Some("x")
+///     (caller filters single-segment locals against cargo metadata; locals
+///      won't be in the external crates set so they pass through unchanged)
+///
+/// The first segment is what cargo metadata can classify (external crate
+/// name vs workspace member). Deeper path resolution isn't needed.
+fn walk_chain_root(receiver: &Expr) -> Option<String> {
+    match receiver {
+        // Method chain: recurse into the inner receiver.
+        Expr::MethodCall(inner) => walk_chain_root(&inner.receiver),
+        // Function/constructor call at root: `Type::method(...)` or `crate::fn(...)`.
+        Expr::Call(call) => path_from_expr(&call.func).and_then(first_segment),
+        // Path expression at root: bare `x` or `crate::path::thing`.
+        Expr::Path(ExprPath { path, .. }) => path.segments.first().map(|s| s.ident.to_string()),
+        // Parenthesized: unwrap and recurse.
+        Expr::Paren(p) => walk_chain_root(&p.expr),
+        // Try/await/reference operators: unwrap and recurse.
+        Expr::Try(t) => walk_chain_root(&t.expr),
+        Expr::Await(a) => walk_chain_root(&a.base),
+        Expr::Reference(r) => walk_chain_root(&r.expr),
+        // Field access (`self.field`, `obj.field`): walk into the base.
+        // The first segment of the base is what classifies the chain root.
+        Expr::Field(f) => walk_chain_root(&f.base),
+        // Anything else (literal, closure, macro, block, if, match) has no
+        // syntactic path-rooted chain; return None.
+        _ => None,
+    }
+}
+
+/// Extract the first dotted segment from a "foo.bar.baz"-form path string
+/// (what path_from_expr returns).
+fn first_segment(dotted: String) -> Option<String> {
+    dotted.split('.').next().map(|s| s.to_string())
 }
 
 /// Extract a 1-based line number from a proc-macro2 Span. Requires the
@@ -244,6 +312,7 @@ fn emit_use_tree(
                 file: file_rel.to_string(),
                 line: use_line,
                 source: "syn".to_string(),
+                chain_root_path: None,
             });
         }
         UseTree::Rename(r) => {
@@ -256,6 +325,7 @@ fn emit_use_tree(
                 file: file_rel.to_string(),
                 line: use_line,
                 source: "syn".to_string(),
+                chain_root_path: None,
             });
         }
         UseTree::Glob(_) => {
@@ -269,6 +339,7 @@ fn emit_use_tree(
                     file: file_rel.to_string(),
                     line: use_line,
                     source: "syn".to_string(),
+                    chain_root_path: None,
                 });
             }
         }
@@ -508,3 +579,200 @@ fn main() -> ExitCode {
         ExitCode::SUCCESS
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Parse a synthetic source containing a diesel-style chain and walk it
+    /// to confirm the chain root extracts as "diesel".
+    /// Pinned 2026-05-24 (syn-oracle external-chain fix).
+    #[test]
+    fn chain_root_diesel_insert() {
+        let src = r#"
+            fn caller(conn: &mut PgConnection) {
+                diesel::insert_into(users::table)
+                    .values(&new_user)
+                    .returning(users::id)
+                    .get_result(conn);
+            }
+        "#;
+        let parsed: syn::File = syn::parse_str(src).expect("parse");
+        let mut v = Visitor {
+            module_qn: "test.src.main".into(),
+            file_rel: "src/main.rs".into(),
+            mod_stack: vec![],
+            fn_stack: vec![],
+            impl_stack: vec![],
+            edges: vec![],
+            defs: vec![],
+        };
+        v.visit_file(&parsed);
+
+        // Find the .get_result(conn) emission and confirm chain_root_path = "diesel"
+        let get_result = v.edges.iter().find(|e| e.to_qn == "get_result")
+            .expect("should emit get_result edge");
+        assert_eq!(get_result.chain_root_path.as_deref(), Some("diesel"),
+            "chain root of diesel::insert_into(...).get_result(...) should be 'diesel'");
+    }
+
+    /// `tokio::fs::OpenOptions::new().create(true).open(p)` — chain root = "tokio".
+    #[test]
+    fn chain_root_tokio_openoptions() {
+        let src = r#"
+            async fn caller() {
+                let _ = tokio::fs::OpenOptions::new()
+                    .create(true)
+                    .open("/tmp/file");
+            }
+        "#;
+        let parsed: syn::File = syn::parse_str(src).expect("parse");
+        let mut v = Visitor {
+            module_qn: "test.src.main".into(),
+            file_rel: "src/main.rs".into(),
+            mod_stack: vec![],
+            fn_stack: vec![],
+            impl_stack: vec![],
+            edges: vec![],
+            defs: vec![],
+        };
+        v.visit_file(&parsed);
+
+        let create = v.edges.iter().find(|e| e.to_qn == "create")
+            .expect("should emit create edge");
+        assert_eq!(create.chain_root_path.as_deref(), Some("tokio"),
+            "chain root of tokio::fs::OpenOptions::new().create(...) should be 'tokio'");
+    }
+
+    /// `OpenOptions::new().create(true)` (no `tokio::` prefix) — chain root = "OpenOptions".
+    /// Confirms Type-static-prefix is preserved when no crate qualifier is present.
+    #[test]
+    fn chain_root_bare_type_static() {
+        let src = r#"
+            fn caller() {
+                let _ = OpenOptions::new().create(true);
+            }
+        "#;
+        let parsed: syn::File = syn::parse_str(src).expect("parse");
+        let mut v = Visitor {
+            module_qn: "test.src.main".into(),
+            file_rel: "src/main.rs".into(),
+            mod_stack: vec![],
+            fn_stack: vec![],
+            impl_stack: vec![],
+            edges: vec![],
+            defs: vec![],
+        };
+        v.visit_file(&parsed);
+
+        let create = v.edges.iter().find(|e| e.to_qn == "create")
+            .expect("should emit create edge");
+        assert_eq!(create.chain_root_path.as_deref(), Some("OpenOptions"),
+            "chain root of OpenOptions::new().create(...) should be 'OpenOptions'");
+    }
+
+    /// `x.method()` where `x` is a local variable — chain root = "x".
+    /// The wrapper filters single-segment locals against cargo metadata's external
+    /// set; locals won't be in that set and pass through to fn_def_map.
+    #[test]
+    fn chain_root_local_variable() {
+        let src = r#"
+            fn caller(x: &Foo) {
+                x.method();
+            }
+        "#;
+        let parsed: syn::File = syn::parse_str(src).expect("parse");
+        let mut v = Visitor {
+            module_qn: "test.src.main".into(),
+            file_rel: "src/main.rs".into(),
+            mod_stack: vec![],
+            fn_stack: vec![],
+            impl_stack: vec![],
+            edges: vec![],
+            defs: vec![],
+        };
+        v.visit_file(&parsed);
+
+        let m = v.edges.iter().find(|e| e.to_qn == "method")
+            .expect("should emit method edge");
+        assert_eq!(m.chain_root_path.as_deref(), Some("x"));
+    }
+
+    /// `self.field.method()` — chain root walks through ExprField to `self`.
+    #[test]
+    fn chain_root_self_field() {
+        let src = r#"
+            impl Foo {
+                fn caller(&self) {
+                    self.repository.create_user();
+                }
+            }
+        "#;
+        let parsed: syn::File = syn::parse_str(src).expect("parse");
+        let mut v = Visitor {
+            module_qn: "test.src.main".into(),
+            file_rel: "src/main.rs".into(),
+            mod_stack: vec![],
+            fn_stack: vec![],
+            impl_stack: vec![],
+            edges: vec![],
+            defs: vec![],
+        };
+        v.visit_file(&parsed);
+
+        let c = v.edges.iter().find(|e| e.to_qn == "create_user")
+            .expect("should emit create_user edge");
+        assert_eq!(c.chain_root_path.as_deref(), Some("self"));
+    }
+
+    /// `obj?.method()` — try-unwrap then method. Chain root walks through Try.
+    #[test]
+    fn chain_root_try_unwrap() {
+        let src = r#"
+            fn caller(obj: Option<Foo>) {
+                obj?.method();
+            }
+        "#;
+        let parsed: syn::File = syn::parse_str(src).expect("parse");
+        let mut v = Visitor {
+            module_qn: "test.src.main".into(),
+            file_rel: "src/main.rs".into(),
+            mod_stack: vec![],
+            fn_stack: vec![],
+            impl_stack: vec![],
+            edges: vec![],
+            defs: vec![],
+        };
+        v.visit_file(&parsed);
+
+        let m = v.edges.iter().find(|e| e.to_qn == "method")
+            .expect("should emit method edge");
+        assert_eq!(m.chain_root_path.as_deref(), Some("obj"));
+    }
+
+    /// `future.await.method()` — await unwrap then method. Chain root walks through Await.
+    #[test]
+    fn chain_root_await() {
+        let src = r#"
+            async fn caller(f: impl std::future::Future<Output = Foo>) {
+                f.await.method();
+            }
+        "#;
+        let parsed: syn::File = syn::parse_str(src).expect("parse");
+        let mut v = Visitor {
+            module_qn: "test.src.main".into(),
+            file_rel: "src/main.rs".into(),
+            mod_stack: vec![],
+            fn_stack: vec![],
+            impl_stack: vec![],
+            edges: vec![],
+            defs: vec![],
+        };
+        v.visit_file(&parsed);
+
+        let m = v.edges.iter().find(|e| e.to_qn == "method")
+            .expect("should emit method edge");
+        assert_eq!(m.chain_root_path.as_deref(), Some("f"));
+    }
+}
+

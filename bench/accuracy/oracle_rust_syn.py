@@ -49,6 +49,7 @@ from common import (  # noqa: E402
     verify_fixture_sha,
     write_edges,
 )
+from cargo_metadata import CargoMetadataResult, run_cargo_metadata  # noqa: E402
 
 ORACLE_BIN = (
     ACCURACY_DIR
@@ -149,6 +150,7 @@ def build_fn_def_map_from_binary(defs: list[str]) -> dict[str, list[str]]:
 def resolve_and_filter(
     raw_edges: list[dict],
     fn_def_map: dict[str, list[str]],
+    cargo: CargoMetadataResult | None = None,
 ) -> tuple[list[Edge], dict[str, int]]:
     """Resolve bare and scoped-form calls, drop external/unresolvable/ambiguous.
 
@@ -157,6 +159,14 @@ def resolve_and_filter(
         a narrow set of cases (confirmed empirically: 0 edges for a single
         canstatd index, 8 total across the full 260-crate repo). Symmetric
         drop until the resolver is completed.
+
+      External-chain drop (NEW 2026-05-24): when `cargo` is provided and
+      the edge's chain_root_path (set by the Rust binary on ExprMethodCall)
+      classifies as an external crate per cargo metadata, drop the edge
+      regardless of whether the bare name has an in-graph def. This closes
+      the bug where `diesel::insert_into(...).get_result(conn)` phantom-
+      resolved to a coincidentally-named in-graph `get_result` (see audit
+      `plans/2026-05-24-syn-oracle-barename-audit.md`).
 
       CALLS bare (`foo`):
         - 0 defs: drop (external or test-only).
@@ -188,10 +198,32 @@ def resolve_and_filter(
         "calls_bare_resolved": 0,
         "calls_bare_unresolved": 0,
         "calls_bare_ambiguous_dropped": 0,
+        "calls_method_external_chain_dropped": 0,  # 2026-05-24 external-chain fix
         "calls_scoped_resolved": 0,
         "calls_scoped_external_dropped": 0,
         "calls_scoped_ambiguous_dropped": 0,
     }
+    external_crates = cargo.external_crates if cargo else set()
+    workspace_members = cargo.workspace_members if cargo else set()
+
+    def is_external_chain_root(chain_root: str | None) -> bool:
+        """Classify the chain's syntactic root against cargo metadata.
+
+        The root is the first segment of the chain (e.g., 'diesel',
+        'tokio', 'OpenOptions', 'self', 'x'). Normalize per Rust
+        identifier convention (already kebab-stripped at parse time
+        for cargo names) and check membership in the external set
+        but NOT the workspace set.
+        """
+        if not chain_root:
+            return False
+        # Normalize the same way cargo metadata names are normalized so
+        # `tokio_util` vs `tokio-util` both classify correctly.
+        root_norm = chain_root.replace("-", "_")
+        if root_norm in workspace_members:
+            return False  # workspace member overrides
+        return root_norm in external_crates
+
     kept: list[Edge] = []
     for e in raw_edges:
         if e["type"] == "IMPORTS":
@@ -201,7 +233,14 @@ def resolve_and_filter(
             continue
         to = e["to_qn"]
         if "." not in to:
-            # Bare call: try resolve via fn_def_map.
+            # Bare call (ExprMethodCall): check chain root against cargo metadata
+            # BEFORE the fn_def_map lookup. An external chain root means the
+            # syntactic receiver is an external crate (diesel, tokio, std);
+            # the bare callee's in-graph "candidate" is a coincidental name
+            # match, not a real edge.
+            if is_external_chain_root(e.get("chain_root_path")):
+                stats["calls_method_external_chain_dropped"] += 1
+                continue
             candidates = fn_def_map.get(to) or []
             if not candidates:
                 stats["calls_bare_unresolved"] += 1
@@ -289,13 +328,24 @@ def build_ground_truth(fixture_id: str, force: bool = False) -> Path:
         print(f"[rust-syn] subset={sub} project={project}")
         raw, defs = run_oracle_on_subset(project, sub_dir)
         fn_def_map = build_fn_def_map_from_binary(defs)
-        print(f"  fn defs (binary-sourced): {len(fn_def_map)}")
-        kept, stats = resolve_and_filter(raw, fn_def_map)
+        # 2026-05-24 external-chain fix: load cargo metadata per subset so
+        # the resolver can drop external-rooted method chains via cargo's
+        # authoritative crate classification. Graceful degradation: empty
+        # result on missing Cargo.toml / cargo binary / parse error means
+        # external-chain drop simply doesn't fire (pre-fix behavior).
+        cargo = run_cargo_metadata(sub_dir)
+        print(
+            f"  fn defs (binary-sourced): {len(fn_def_map)} | "
+            f"cargo external_crates={len(cargo.external_crates)} "
+            f"workspace_members={len(cargo.workspace_members)}"
+        )
+        kept, stats = resolve_and_filter(raw, fn_def_map, cargo=cargo)
         per_subset_stats[sub] = {"raw_edges": len(raw), "kept": len(kept), **stats}
         print(
             f"  raw={len(raw)} kept={len(kept)} "
             f"bare_resolved={stats['calls_bare_resolved']} "
             f"bare_unresolved={stats['calls_bare_unresolved']} "
+            f"method_external_dropped={stats['calls_method_external_chain_dropped']} "
             f"scoped_resolved={stats['calls_scoped_resolved']} "
             f"scoped_external_dropped={stats['calls_scoped_external_dropped']}"
         )

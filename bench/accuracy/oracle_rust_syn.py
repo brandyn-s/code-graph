@@ -278,6 +278,23 @@ def resolve_and_filter(
             if parent_last == type_name:
                 internal_matches.append(cand_qn)
 
+        # Dedup identical QNs before counting. The oracle binary's
+        # `visit_impl_item_fn` emits one def-QN per impl block, so a type
+        # with multiple `impl Trait<X> for T { fn method }` blocks (e.g.
+        # `HostType` with `From<i16>`, `From<&str>`, `From<String>`) yields
+        # N literally-identical entries in fn_def_map[method] — all of
+        # shape `<project>.<file>.T.method`. Without this dedup, the
+        # `len(internal_matches) > 1` check below fires on the duplicates
+        # and drops the call as `calls_scoped_ambiguous_dropped` even
+        # though every candidate IS the same target. Confirmed via
+        # 2026-05-24 HostType.from / NixOSImage.from audit: 9 of the
+        # 74 assetman FPs trace to this missing dedup.
+        #
+        # set() is safe here — internal_matches is a list of strings; we
+        # only need uniqueness, not ordering (downstream we either emit
+        # the single element or drop on len>1).
+        internal_matches = list(set(internal_matches))
+
         if not internal_matches:
             # External (Vec::new, tracing::info, std::fs::read_to_string)
             # OR module-routed call we can't resolve (`crate::foo::bar`

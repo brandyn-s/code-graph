@@ -1,0 +1,63 @@
+{
+  "packages": [
+    {
+      "name": "service-a",
+      "version": "0.1.0",
+      "id": "service-a 0.1.0 (path+file:///ws/a)",
+      "source": null,
+      "dependencies": [
+        {
+          "name": "service-b",
+          "source": null,
+          "req": "*",
+          "kind": null,
+          "path": "/ws/b"
+        },
+        {
+          "name": "tokio",
+          "source": "registry+https://github.com/rust-lang/crates.io-index",
+          "req": "^1",
+          "kind": null
+        }
+      ],
+      "targets": [{"name": "service-a", "kind": ["bin"], "src_path": "/ws/a/src/main.rs"}],
+      "manifest_path": "/ws/a/Cargo.toml"
+    },
+    {
+      "name": "service-b",
+      "version": "0.1.0",
+      "id": "service-b 0.1.0 (path+file:///ws/b)",
+      "source": null,
+      "dependencies": [
+        {
+          "name": "service-c",
+          "source": null,
+          "req": "*",
+          "kind": null,
+          "path": "/ws/c"
+        }
+      ],
+      "targets": [{"name": "service-b", "kind": ["lib"], "src_path": "/ws/b/src/lib.rs"}],
+      "manifest_path": "/ws/b/Cargo.toml"
+    },
+    {
+      "name": "service-c",
+      "version": "0.1.0",
+      "id": "service-c 0.1.0 (path+file:///ws/c)",
+      "source": null,
+      "dependencies": [],
+      "targets": [{"name": "service-c", "kind": ["lib"], "src_path": "/ws/c/src/lib.rs"}],
+      "manifest_path": "/ws/c/Cargo.toml"
+    }
+  ],
+  "workspace_members": [
+    "service-a 0.1.0 (path+file:///ws/a)",
+    "service-b 0.1.0 (path+file:///ws/b)",
+    "service-c 0.1.0 (path+file:///ws/c)"
+  ],
+  "resolve": null,
+  "target_directory": "/ws/target",
+  "version": 1,
+  "workspace_root": "/ws",
+  "metadata": null
+}

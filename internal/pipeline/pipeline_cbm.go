@@ -659,6 +659,14 @@ func (p *Pipeline) resolveCallEdge(
 
 	// Type-based method dispatch for qualified calls like obj.method()
 	result := p.resolveCallWithTypes(calleeName, callerQN, moduleQN, importMap, typeMap, language)
+	// Tier-2 v0.1: resolveCallWithTypes signals "external chain root,
+	// intentional drop" via Strategy=tier2ExternalDropStrategy with an
+	// empty QualifiedName. Skip the fuzzy fallback in that case — the
+	// whole point of the drop is to PREVENT fuzzy from picking an
+	// in-graph candidate for what's really an external-crate dispatch.
+	if result.QualifiedName == "" && result.Strategy == tier2ExternalDropStrategy {
+		return resolvedEdge{}, false
+	}
 	if result.QualifiedName == "" {
 		// Phase 3a/b: route the fuzzy fallback through FuzzyResolveCtx
 		// so Tier 2 (receiver-type) and Tier 3 (import-binding)

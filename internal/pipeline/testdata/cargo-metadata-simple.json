@@ -1,0 +1,53 @@
+{
+  "packages": [
+    {
+      "name": "my_app",
+      "version": "0.1.0",
+      "id": "my_app 0.1.0 (path+file:///path/to/my_app)",
+      "source": null,
+      "dependencies": [
+        {
+          "name": "serde",
+          "source": "registry+https://github.com/rust-lang/crates.io-index",
+          "req": "^1.0",
+          "kind": null
+        },
+        {
+          "name": "tokio",
+          "source": "registry+https://github.com/rust-lang/crates.io-index",
+          "req": "^1",
+          "kind": null,
+          "features": ["full"]
+        },
+        {
+          "name": "anyhow",
+          "source": "registry+https://github.com/rust-lang/crates.io-index",
+          "req": "^1.0",
+          "kind": null
+        },
+        {
+          "name": "serde-json",
+          "source": "registry+https://github.com/rust-lang/crates.io-index",
+          "req": "^1.0",
+          "kind": null
+        }
+      ],
+      "targets": [
+        {
+          "name": "my_app",
+          "kind": ["bin"],
+          "src_path": "/path/to/my_app/src/main.rs"
+        }
+      ],
+      "manifest_path": "/path/to/my_app/Cargo.toml"
+    }
+  ],
+  "workspace_members": [
+    "my_app 0.1.0 (path+file:///path/to/my_app)"
+  ],
+  "resolve": null,
+  "target_directory": "/path/to/my_app/target",
+  "version": 1,
+  "workspace_root": "/path/to/my_app",
+  "metadata": null
+}

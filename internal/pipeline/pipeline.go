@@ -102,6 +102,23 @@ type Pipeline struct {
 	// Used in passImports to resolve `use foo_crate::Y::Z` to the actual
 	// Module node at `<project>.<foo_crate_dir>.src.Y.Z`.
 	rustCrateMap map[string]string
+
+	// externalCrates / workspaceMembers — Tier-2 v0.1 (2026-05-24).
+	// Populated by populateCargoMetadata at index start (via `cargo
+	// metadata --no-deps`). Consumed by the chain walker in
+	// resolveCallWithTypes: when a chain root names a crate in
+	// externalCrates AND NOT in workspaceMembers, the walker emits
+	// chainReceiverType="_external.<crate>" and the resolver drops the
+	// edge instead of fuzzy-matching the bare callee into an in-graph
+	// candidate (the PR #341 dominant FP shape — diesel external-crate
+	// dispatch matched to AssetIntrospectImpl.get_result).
+	//
+	// Nil sets are valid: on cargo failure (no toolchain, no Cargo.toml,
+	// timeout, parse error), populateCargoMetadata leaves these nil and
+	// the chain walker's external check degrades to a no-op. Non-Rust
+	// indexing skips the populate call entirely.
+	externalCrates   map[string]bool
+	workspaceMembers map[string]bool
 }
 
 // reportProgress safely calls the progress callback if set.
@@ -587,6 +604,13 @@ func (p *Pipeline) runFullPasses(files []discover.FileInfo) error {
 	// use it for resolving `use crate_name::X::Y` paths. No-op for non-Rust
 	// projects (Cargo.toml walk returns nothing).
 	p.buildRustCrateMap()
+	// Tier-2 v0.1: ingest cargo-metadata to classify external vs
+	// workspace crates. Gated on Cargo.toml presence inside
+	// populateCargoMetadata; on any failure (missing cargo, parse error,
+	// timeout) the maps stay nil and the downstream chain-walker check
+	// degrades to a no-op. No-op for non-Rust projects (Cargo.toml
+	// absent → early return inside runCargoMetadata).
+	p.populateCargoMetadata()
 	p.passImports()
 	slog.Info("pass.timing", "pass", "imports", "elapsed", time.Since(t))
 	p.reportProgress("imports", 42, "import maps built")
@@ -2259,6 +2283,42 @@ func (p *Pipeline) resolveCallWithTypes(
 					// receiver (overrides the root). Catches Trait-method
 					// dispatches the direct candidate check misses.
 					chainReceiverType = currentType
+				}
+			}
+
+			// Tier-2 v0.1 (2026-05-24): external-crate chain root drop.
+			// If the chain walker above didn't bottom out (rootType
+			// unknown or chain walk failed) AND the chain root names
+			// a static-call path into an external crate
+			// (`<crate>::path::fn(...)`), mark the chain as external
+			// and short-circuit: return an empty resolution with a
+			// sentinel Strategy so the caller in pipeline_cbm.go
+			// skips the fuzzy fallback. Without this drop the bare
+			// callee (e.g. `get_result` from
+			// `diesel::insert_into(...).get_result(conn)`) fuzzy-
+			// matches into the only in-graph candidate
+			// (AssetIntrospectImpl.get_result), the dominant FP
+			// shape per PR #341.
+			//
+			// The check fires only when chainReceiverType is still
+			// empty (the existing chain walker couldn't classify the
+			// root). When externalCrates/workspaceMembers are nil
+			// (non-Rust project, cargo unavailable, parse failure),
+			// the check is a no-op and behavior is identical to
+			// pre-v0.1.
+			if chainReceiverType == "" && p.externalCrates != nil {
+				if idx := strings.Index(rootName, "::"); idx >= 0 {
+					rootCrate := rootName[:idx]
+					if p.externalCrates[rootCrate] && !p.workspaceMembers[rootCrate] {
+						slog.Debug("tier2.external_drop",
+							"root_crate", rootCrate,
+							"callee", calleeName,
+							"caller", callerQN,
+						)
+						return ResolutionResult{
+							Strategy: tier2ExternalDropStrategy,
+						}
+					}
 				}
 			}
 		}

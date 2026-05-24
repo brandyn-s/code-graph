@@ -16,6 +16,12 @@ import (
 // plan (knowledge-base PR #491) to classify the 72 ambiguous fuzzy edges.
 var tier2DebugEnabled = os.Getenv("RESOLVER_TIER2_DEBUG") != ""
 
+// staticDispatchDebugEnabled gates one slog.Info per resolveViaTypeStaticDispatch
+// call. Used to classify why bucket-B FNs (Type::new constructors) drop on PSM
+// Rust — distinguishes "type not registered" from "static fn not registered as
+// child" from "reachability rejected (import binding missing)" from "ambiguous".
+var staticDispatchDebugEnabled = os.Getenv("RESOLVER_STATIC_DISPATCH_DEBUG") != ""
+
 // envPolicy classifies the RESOLVER_DROP_FUZZY_JANUSIAN_CHAINS env state.
 // Phase E (2026-05-14) split the policy into three states so the default
 // can be language-scoped (Python-only) while still honoring explicit
@@ -577,6 +583,29 @@ func (r *FunctionRegistry) resolveViaTypeStaticDispatch(ctx CallContext) Resolut
 		}
 	}
 
+	if staticDispatchDebugEnabled {
+		_, imported := ctx.ImportBindings[typeName]
+		outcome := "drop_ambiguous_or_external"
+		if len(emissions) == 1 {
+			outcome = "resolved"
+		} else if len(emissions) == 0 && len(r.byName[typeName]) == 0 && len(r.modules[typeName]) == 0 {
+			outcome = "drop_type_not_registered"
+		} else if len(emissions) == 0 {
+			outcome = "drop_no_candidate_passed_filter"
+		}
+		slog.Info("static_dispatch.outcome",
+			"callee", ctx.CalleeName,
+			"caller_qn", ctx.CallerQN,
+			"module_qn", ctx.ModuleQN,
+			"type_name", typeName,
+			"remainder", remainder,
+			"byname_class_count", len(r.byName[typeName]),
+			"modules_count", len(r.modules[typeName]),
+			"import_binding_present", imported,
+			"emission_count", len(emissions),
+			"outcome", outcome,
+		)
+	}
 	if len(emissions) == 0 && len(r.byName[typeName]) == 0 && len(r.modules[typeName]) == 0 {
 		return ResolutionResult{}
 	}

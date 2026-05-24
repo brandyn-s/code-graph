@@ -373,39 +373,163 @@ static void parse_java_imports(CBMExtractCtx* ctx) {
 }
 
 // --- Rust imports ---
-// use_declaration -> use_list or scoped_use_list
+//
+// Tree-sitter Rust use_declaration grammar:
+//   use_declaration -> "use" use_clause ";"
+// use_clause is one of:
+//   - identifier               `use foo;`
+//   - scoped_identifier        `use a::b::c;`
+//   - use_as_clause            `use a::b as c;`
+//   - scoped_use_list          `use a::b::{x, y};`
+//   - use_list                 (bare `{x, y}` — rare)
+//   - use_wildcard             `use a::*;`
+//
+// The walker recursively decomposes nested groups (`use a::{b::{c, d}, e};`)
+// into one CBMImport per leaf identifier, with the prefix path tracked.
+// Pre-2026-05-24: the parser took the full use_declaration text and emitted
+// ONE CBMImport with a garbage local_name like "{x, y, z}". This dropped
+// every binding inside a group, breaking the resolver's import-reachability
+// gate for thousands of `Type::method` static calls.
 
-static void parse_rust_imports(CBMExtractCtx* ctx) {
+// Join two `::`-separated path segments. Either side may be empty.
+static const char* join_use_path(CBMArena* a, const char* prefix, const char* segment) {
+    if (!prefix || !prefix[0]) {
+        return segment ? cbm_arena_strdup(a, segment) : NULL;
+    }
+    if (!segment || !segment[0]) {
+        return cbm_arena_strdup(a, prefix);
+    }
+    return cbm_arena_sprintf(a, "%s::%s", prefix, segment);
+}
+
+// Return the last `::`-separated segment of a scoped path string.
+// `a::b::c` -> `c`. `c` -> `c`. NULL/empty -> empty string.
+static const char* last_use_segment(const char* text) {
+    if (!text || !text[0]) return "";
+    const char* p = text;
+    const char* last = text;
+    while ((p = strstr(p, "::")) != NULL) {
+        last = p + 2;
+        p += 2;
+    }
+    return last;
+}
+
+// Recursive walker for a Rust use-tree node. Emits CBMImports for every
+// leaf identifier (or alias) it encounters, with the module_path built
+// from `prefix` plus the leaf's scoped position.
+static void emit_rust_use_clause(CBMExtractCtx* ctx, TSNode node, const char* prefix) {
+    if (ts_node_is_null(node)) return;
+    const char* kind = ts_node_type(node);
     CBMArena* a = ctx->arena;
 
+    // Leaf: bare identifier (`foo` or `self`).
+    if (strcmp(kind, "identifier") == 0 || strcmp(kind, "self") == 0) {
+        char* name = cbm_node_text(a, node, ctx->source);
+        if (!name || !name[0]) return;
+        const char* full_path = join_use_path(a, prefix, name);
+        if (!full_path) return;
+        // For `use foo::{self};` the leaf is `self` and the binding name
+        // is the prefix's last segment. Otherwise the binding name is the
+        // identifier itself.
+        const char* local = name;
+        if (strcmp(name, "self") == 0 && prefix && prefix[0]) {
+            local = cbm_arena_strdup(a, last_use_segment(prefix));
+            if (!local || !local[0]) return;
+            // module_path drops the `::self` tail — the alias maps to the prefix.
+            CBMImport imp = {.local_name = local, .module_path = cbm_arena_strdup(a, prefix)};
+            cbm_imports_push(&ctx->result->imports, a, imp);
+            return;
+        }
+        CBMImport imp = {.local_name = name, .module_path = full_path};
+        cbm_imports_push(&ctx->result->imports, a, imp);
+        return;
+    }
+
+    // Leaf: scoped path (`a::b::c`). The binding name is the last segment.
+    if (strcmp(kind, "scoped_identifier") == 0) {
+        char* text = cbm_node_text(a, node, ctx->source);
+        if (!text || !text[0]) return;
+        const char* last = last_use_segment(text);
+        if (!last || !last[0]) return;
+        char* local = cbm_arena_strdup(a, last);
+        const char* full_path = join_use_path(a, prefix, text);
+        if (!full_path) return;
+        CBMImport imp = {.local_name = local, .module_path = full_path};
+        cbm_imports_push(&ctx->result->imports, a, imp);
+        return;
+    }
+
+    // Alias: `<path> as <alias>`. The alias is the local_name; the path
+    // (joined with prefix) is the module_path.
+    if (strcmp(kind, "use_as_clause") == 0) {
+        TSNode path = ts_node_child_by_field_name(node, "path", 4);
+        TSNode alias = ts_node_child_by_field_name(node, "alias", 5);
+        if (ts_node_is_null(path) || ts_node_is_null(alias)) return;
+        char* path_text = cbm_node_text(a, path, ctx->source);
+        char* alias_text = cbm_node_text(a, alias, ctx->source);
+        if (!path_text || !path_text[0] || !alias_text || !alias_text[0]) return;
+        const char* full_path = join_use_path(a, prefix, path_text);
+        if (!full_path) return;
+        CBMImport imp = {.local_name = alias_text, .module_path = full_path};
+        cbm_imports_push(&ctx->result->imports, a, imp);
+        return;
+    }
+
+    // Scoped group: `<path>::{...}`. Extract the prefix, recurse on list items.
+    if (strcmp(kind, "scoped_use_list") == 0) {
+        TSNode path = ts_node_child_by_field_name(node, "path", 4);
+        TSNode list = ts_node_child_by_field_name(node, "list", 4);
+        const char* new_prefix = prefix;
+        if (!ts_node_is_null(path)) {
+            char* path_text = cbm_node_text(a, path, ctx->source);
+            if (path_text && path_text[0]) {
+                new_prefix = join_use_path(a, prefix, path_text);
+            }
+        }
+        if (!ts_node_is_null(list)) {
+            uint32_t n = ts_node_named_child_count(list);
+            for (uint32_t i = 0; i < n; i++) {
+                emit_rust_use_clause(ctx, ts_node_named_child(list, i), new_prefix);
+            }
+        }
+        return;
+    }
+
+    // Bare group: `{a, b, c}` (no scoped prefix). Each child inherits the
+    // outer prefix unchanged. Rare in practice but grammatically valid.
+    if (strcmp(kind, "use_list") == 0) {
+        uint32_t n = ts_node_named_child_count(node);
+        for (uint32_t i = 0; i < n; i++) {
+            emit_rust_use_clause(ctx, ts_node_named_child(node, i), prefix);
+        }
+        return;
+    }
+
+    // Wildcard `*`: brings unspecified names into scope. No binding to emit.
+    if (strcmp(kind, "use_wildcard") == 0) {
+        return;
+    }
+
+    // Unknown clause kind: silently skip rather than emit garbage.
+}
+
+static void parse_rust_imports(CBMExtractCtx* ctx) {
     uint32_t count = ts_node_child_count(ctx->root);
     for (uint32_t i = 0; i < count; i++) {
         TSNode node = ts_node_child(ctx->root, i);
         if (strcmp(ts_node_type(node), "use_declaration") != 0) continue;
 
-        char* full = cbm_node_text(a, node, ctx->source);
-        if (!full) continue;
-        // Strip "use " prefix and trailing ";"
-        if (strncmp(full, "use ", 4) == 0) full += 4;
-        size_t len = strlen(full);
-        if (len > 0 && full[len-1] == ';') full[len-1] = '\0';
-
-        // ACC-004: detect `use path::item as alias` rename. The alias
-        // becomes the LocalName (what's brought into scope); the target
-        // path is the ModulePath (what the resolver looks up). Without
-        // this split, local_name = "item as alias" (invalid identifier)
-        // and importMap / importBindings never match by alias.
-        char* as_marker = strstr(full, " as ");
-        if (as_marker != NULL) {
-            *as_marker = '\0';
-            char* alias = as_marker + 4;
-            CBMImport imp = {.local_name = alias, .module_path = full};
-            cbm_imports_push(&ctx->result->imports, a, imp);
-            continue;
+        // The clause is the use_declaration's "argument" field. Tree-sitter
+        // Rust grammar tags this child explicitly; fall back to the first
+        // named child if the grammar version is older.
+        TSNode clause = ts_node_child_by_field_name(node, "argument", 8);
+        if (ts_node_is_null(clause)) {
+            uint32_t nc = ts_node_named_child_count(node);
+            if (nc > 0) clause = ts_node_named_child(node, 0);
         }
-
-        CBMImport imp = {.local_name = path_last(a, full), .module_path = full};
-        cbm_imports_push(&ctx->result->imports, a, imp);
+        if (ts_node_is_null(clause)) continue;
+        emit_rust_use_clause(ctx, clause, "");
     }
 }
 

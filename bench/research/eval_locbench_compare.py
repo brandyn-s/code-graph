@@ -379,7 +379,7 @@ def _try_snapshot_cache(repo: str, base_commit: str, dest: Path) -> bool:
     try:
         dest.parent.mkdir(parents=True, exist_ok=True)
         with tarfile.open(tarball, "r:gz") as tf:
-            tf.extractall(dest)
+            tf.extractall(dest, filter="data")
         return dest.exists()
     except (OSError, tarfile.TarError) as e:
         print(f"  snapshot-cache extract failed: {e}")
@@ -481,7 +481,7 @@ def _try_software_heritage(repo: str, base_commit: str, dest: Path) -> bool:
         with urllib.request.urlopen(fetch_url, timeout=300) as resp:
             bare_tar.write_bytes(resp.read())
         with tarfile.open(bare_tar, "r:*") as tf:
-            tf.extractall(dest.parent / f".swh-{base_commit[:12]}-bare")
+            tf.extractall(dest.parent / f".swh-{base_commit[:12]}-bare", filter="data")
         bare_dir = dest.parent / f".swh-{base_commit[:12]}-bare"
         # The bare dir layout is <root>/<sha>.git/ — find it
         bare_subdirs = [d for d in bare_dir.iterdir() if d.is_dir() and d.name.endswith(".git")]

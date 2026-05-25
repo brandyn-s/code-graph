@@ -88,6 +88,9 @@ func (s *Server) generateOrientationReport(projectName string) (*orientationRepo
 	if info, statErr := os.Stat(rootPath); statErr != nil || !info.IsDir() {
 		return nil, fmt.Errorf("root_path for %q is not a directory: %s", projectName, rootPath)
 	}
+	if isForbiddenIndexPath(rootPath) {
+		return nil, fmt.Errorf("refused to write report: root_path %s is a sensitive or system directory", rootPath)
+	}
 
 	// Pass "all" — orientation_report reads detail aspects (Hotspots,
 	// EntryPoints, etc.). The GetArchitecture contract changed in PR #301

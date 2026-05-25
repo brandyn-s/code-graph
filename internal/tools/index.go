@@ -52,6 +52,11 @@ func (s *Server) handleIndexRepository(ctx context.Context, req *mcp.CallToolReq
 		return errResult(fmt.Sprintf("invalid path: %v", err)), nil
 	}
 
+	// Reject paths that point to sensitive or system directories.
+	if isForbiddenIndexPath(absPath) {
+		return errResult(fmt.Sprintf("refused to index %s: path is a sensitive or system directory", absPath)), nil
+	}
+
 	// Validate path exists and is a directory before committing to a long index
 	if info, statErr := os.Stat(absPath); statErr != nil {
 		return errResult(fmt.Sprintf("path does not exist: %s", absPath)), nil

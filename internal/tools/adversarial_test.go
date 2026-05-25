@@ -140,6 +140,26 @@ func TestAdversarialPayloads(t *testing.T) {
 			`{"path":"/etc/shadow"}`,
 			anyOutcomeNoPanic,
 		},
+
+		// --- Sensitive directory indexing (forbidden index paths) ---
+		{
+			"index_etc",
+			"index_repository",
+			`{"repo_path":"/etc"}`,
+			expectErrorOrIsError,
+		},
+		{
+			"index_var",
+			"index_repository",
+			`{"repo_path":"/var"}`,
+			expectErrorOrIsError,
+		},
+		{
+			"index_root",
+			"index_repository",
+			`{"repo_path":"/"}`,
+			expectErrorOrIsError,
+		},
 		{
 			"path_traversal_url_encoded",
 			"get_code_snippet",

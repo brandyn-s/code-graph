@@ -241,6 +241,66 @@ def resolve_and_filter(
             return False  # workspace member overrides
         return root_norm in external_crates
 
+    # Pass 1: build per-module imports map for bare-call external classification.
+    # IMPORTS edges from the binary have:
+    #   from_qn = module_qn (e.g., "<project>.src.feature_gate")
+    #   to_qn   = dotted path of the import (e.g., "futures_util.future.ready")
+    # The LOCAL NAME is the last segment of to_qn; the CRATE ROOT is the first.
+    #
+    # 2026-05-24 Phase 2 of external-chain awareness: covers the bare-imported
+    # free-function case that ExprMethodCall's chain-root walker can't see.
+    # `use futures_util::future::ready; ... ready(Ok(x))` produces an ExprCall
+    # whose to_qn is just `"ready"` (no chain), so the existing chain-root
+    # check is bypassed. With per-module imports we can drop these by looking
+    # up `ready` in the caller's imports and checking the crate root.
+    imports_by_module: dict[str, dict[str, str]] = {}
+    for e in raw_edges:
+        if e.get("type") != "IMPORTS":
+            continue
+        from_qn = e.get("from_qn", "")
+        to = e.get("to_qn", "")
+        if not (from_qn and to and "." in to):
+            continue
+        first_seg, _, _ = to.partition(".")
+        local_name = to.rsplit(".", 1)[-1]
+        if not first_seg or not local_name:
+            continue
+        imports_by_module.setdefault(from_qn, {})[local_name] = first_seg
+
+    def caller_module(caller_qn: str) -> str:
+        """Find the longest module_qn (an IMPORTS from_qn) that prefixes
+        caller_qn. Returns "" if no match — caller is in a module that
+        emitted no imports (e.g., empty file or file with only macro uses).
+        """
+        # The caller's module is some prefix of caller_qn. Walk down from
+        # the full caller_qn, stripping segments, until we find a match.
+        parts = caller_qn.split(".")
+        while parts:
+            candidate = ".".join(parts)
+            if candidate in imports_by_module:
+                return candidate
+            parts.pop()
+        return ""
+
+    def is_external_imported_bare_call(caller_qn: str, bare_name: str) -> bool:
+        """True if `bare_name` is imported in the caller's module FROM an
+        external crate. Used to drop `ready(Ok(...))`-style phantom matches
+        where the bare name happens to collide with an in-graph def.
+        """
+        mod = caller_module(caller_qn)
+        if not mod:
+            return False
+        imp = imports_by_module.get(mod, {})
+        target_root = imp.get(bare_name, "")
+        if not target_root:
+            return False
+        target_norm = target_root.replace("-", "_")
+        if target_norm in workspace_members:
+            return False
+        return target_norm in external_crates
+
+    stats["calls_bare_imported_external_dropped"] = 0
+
     kept: list[Edge] = []
     for e in raw_edges:
         if e["type"] == "IMPORTS":
@@ -257,6 +317,14 @@ def resolve_and_filter(
             # match, not a real edge.
             if is_external_chain_root(e.get("chain_root_path")):
                 stats["calls_method_external_chain_dropped"] += 1
+                continue
+            # 2026-05-24 Phase 2: drop bare calls to external-imported free
+            # functions. ExprCall for `ready(Ok(x))` has chain_root_path=None
+            # (it's not a method chain), so the chain-root drop above misses
+            # it. Per-module imports catch it: `use futures_util::future::ready;`
+            # makes `ready` resolve to futures_util (external).
+            if is_external_imported_bare_call(e.get("from_qn", ""), to):
+                stats["calls_bare_imported_external_dropped"] += 1
                 continue
             candidates = fn_def_map.get(to) or []
             if not candidates:

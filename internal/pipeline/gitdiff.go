@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/DeusData/codebase-memory-mcp/internal/safegit"
 )
 
 // validBranchName matches safe git ref names: alphanumeric, slashes, dots, hyphens, underscores.
@@ -243,7 +245,7 @@ func parseRange(s string) (start, count int) {
 
 // runGit executes a git command and returns stdout. Returns a clear error if git is not found.
 func runGit(repoPath string, args []string) (string, error) {
-	gitPath, err := exec.LookPath("git")
+	_, err := exec.LookPath("git")
 	if err != nil {
 		return "", fmt.Errorf("git not found in PATH: install git to use detect_changes")
 	}
@@ -251,7 +253,7 @@ func runGit(repoPath string, args []string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, gitPath, args...)
+	cmd := safegit.Command(ctx, args...)
 	cmd.Dir = repoPath
 
 	output, err := cmd.Output()

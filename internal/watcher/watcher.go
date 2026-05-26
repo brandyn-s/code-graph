@@ -6,7 +6,6 @@ import (
 	"io/fs"
 	"log/slog"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -16,6 +15,7 @@ import (
 	"github.com/fsnotify/fsnotify"
 
 	"github.com/DeusData/codebase-memory-mcp/internal/discover"
+	"github.com/DeusData/codebase-memory-mcp/internal/safegit"
 	"github.com/DeusData/codebase-memory-mcp/internal/store"
 )
 
@@ -542,7 +542,7 @@ func (w *Watcher) fullSnapshotAndIndex(proj *store.Project, state *projectState)
 func isGitRepo(ctx context.Context, rootPath string) bool {
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "git", "-C", rootPath, "rev-parse", "--git-dir")
+	cmd := safegit.Command(ctx, "-C", rootPath, "rev-parse", "--git-dir")
 	cmd.Stdout = nil
 	cmd.Stderr = nil
 	return cmd.Run() == nil
@@ -552,7 +552,7 @@ func isGitRepo(ctx context.Context, rootPath string) bool {
 func gitHead(ctx context.Context, rootPath string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "git", "-C", rootPath, "rev-parse", "HEAD")
+	cmd := safegit.Command(ctx, "-C", rootPath, "rev-parse", "HEAD")
 	out, err := cmd.Output()
 	if err != nil {
 		return "", err
@@ -574,7 +574,7 @@ func gitSentinel(ctx context.Context, rootPath, lastHead string) (changed bool, 
 	}
 
 	// Check working tree.
-	cmd := exec.CommandContext(ctx, "git", "--no-optional-locks", "-C", rootPath,
+	cmd := safegit.Command(ctx, "--no-optional-locks", "-C", rootPath,
 		"status", "--porcelain", "--untracked-files=normal")
 	out, err := cmd.Output()
 	if err != nil {

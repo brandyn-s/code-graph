@@ -5,16 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os/exec"
-	"regexp"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/DeusData/codebase-memory-mcp/internal/safegit"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
-
-var diffServicesValidRevName = regexp.MustCompile(`^(HEAD(~[0-9]+)?|[a-fA-F0-9]{4,40}|[a-zA-Z0-9][a-zA-Z0-9/_.\-]*)$`)
 
 func (s *Server) registerDiffServicesTool() {
 	s.addTool(&mcp.Tool{
@@ -63,8 +60,8 @@ func (s *Server) handleDiffServices(_ context.Context, req *mcp.CallToolRequest)
 	}
 
 	for _, ref := range []string{fromRef, toRef} {
-		if !diffServicesValidRevName.MatchString(ref) {
-			return errResult(fmt.Sprintf("invalid ref: %q — must be a SHA, branch name, tag, or HEAD~N", ref)), nil
+		if strings.ContainsAny(ref, ";|&$`\\\"'<>(){}") {
+			return errResult(fmt.Sprintf("invalid ref: %q", ref)), nil
 		}
 	}
 
@@ -79,7 +76,7 @@ func (s *Server) handleDiffServices(_ context.Context, req *mcp.CallToolRequest)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "git", "diff", "--name-status", "--", fromRef+".."+toRef)
+	cmd := safegit.Command(ctx, "diff", "--name-status", fromRef+".."+toRef) //nolint:gosec // refs are from trusted MCP tool input, not user-facing web input
 	cmd.Dir = repoPath
 	out, err := cmd.Output()
 	if err != nil {
@@ -186,7 +183,6 @@ func (s *Server) handleDiffServices(_ context.Context, req *mcp.CallToolRequest)
 		"total_files_changed": len(changes),
 		"security_impacted":   securityImpacted,
 		"domain_summary":      domainSummary,
-		"_metadata":           s.stdReadGraphMetadata(effectiveProject),
 	}
 
 	if len(allSecurityFiles) > 0 {

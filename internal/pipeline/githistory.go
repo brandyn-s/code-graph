@@ -5,11 +5,11 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"os/exec"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/DeusData/codebase-memory-mcp/internal/safegit"
 	"github.com/DeusData/codebase-memory-mcp/internal/store"
 )
 
@@ -54,7 +54,7 @@ func (p *Pipeline) passGitHistory() {
 func parseGitLog(repoPath string) ([]CommitFiles, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "git", "log", "--name-only", "--pretty=format:COMMIT:%H", "--since=6 months ago")
+	cmd := safegit.Command(ctx, "log", "--name-only", "--pretty=format:COMMIT:%H", "--since=6 months ago")
 	cmd.Dir = repoPath
 
 	output, err := cmd.Output()

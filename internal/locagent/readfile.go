@@ -80,14 +80,33 @@ func readFile(rootPath string, args readFileArgs) (any, error) {
 	if err != nil {
 		return map[string]string{"error": "could not resolve path"}, nil
 	}
-	// Final containment check — the resolved path must be under the
-	// resolved root. Defends against symlinks / Path.Clean trickery.
+	// Lexical containment check (fast-reject before any I/O).
 	rel, err := filepath.Rel(cleanRoot, cleanFull)
 	if err != nil || strings.HasPrefix(rel, "..") {
 		return map[string]string{"error": fmt.Sprintf("path %q is outside project root", args.Path)}, nil
 	}
 
-	info, err := os.Stat(cleanFull)
+	// Resolve symlinks on both root and target, then re-verify
+	// containment. This defeats symlink-escape attacks where a repo
+	// contains e.g. 'leak -> /' so 'leak/etc/shadow' passes the
+	// lexical check but dereferences outside the repo.
+	resolvedRoot, err := filepath.EvalSymlinks(cleanRoot)
+	if err != nil {
+		return nil, fmt.Errorf("resolve root symlinks: %w", err)
+	}
+	resolvedFull, err := filepath.EvalSymlinks(cleanFull)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return map[string]string{"error": fmt.Sprintf("file not found: %s", args.Path)}, nil
+		}
+		return map[string]string{"error": fmt.Sprintf("cannot resolve path: %v", err)}, nil
+	}
+	rel, err = filepath.Rel(resolvedRoot, resolvedFull)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		return map[string]string{"error": fmt.Sprintf("path %q escapes project root via symlink", args.Path)}, nil
+	}
+
+	info, err := os.Stat(resolvedFull)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return map[string]string{"error": fmt.Sprintf("file not found: %s", args.Path)}, nil
@@ -98,7 +117,7 @@ func readFile(rootPath string, args readFileArgs) (any, error) {
 		return map[string]string{"error": fmt.Sprintf("%s is a directory", args.Path)}, nil
 	}
 
-	data, err := os.ReadFile(cleanFull)
+	data, err := os.ReadFile(resolvedFull)
 	if err != nil {
 		return map[string]string{"error": fmt.Sprintf("read: %v", err)}, nil
 	}

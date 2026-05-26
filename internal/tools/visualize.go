@@ -223,6 +223,26 @@ func (s *Server) handleVisualize(_ context.Context, req *mcp.CallToolRequest) (*
 		} else {
 			outputPath = projName + "-graph.html"
 		}
+	} else {
+		if proj.RootPath == "" {
+			return errResult("output_path requires a project with a root path"), nil
+		}
+		if filepath.IsAbs(outputPath) {
+			rel, relErr := filepath.Rel(proj.RootPath, outputPath)
+			if relErr != nil {
+				return errResult(fmt.Sprintf("output_path %q cannot be made relative to project root: %v", outputPath, relErr)), nil
+			}
+			outputPath = rel
+		}
+		safe, pathErr := safePath(proj.RootPath, outputPath)
+		if pathErr != nil {
+			return errResult(fmt.Sprintf("output_path rejected: %v", pathErr)), nil
+		}
+		outputPath = safe
+	}
+
+	if strings.ToLower(filepath.Ext(outputPath)) != ".html" {
+		return errResult("output_path must have a .html extension"), nil
 	}
 
 	if writeErr := os.WriteFile(outputPath, []byte(page), 0o644); writeErr != nil { //nolint:gosec // output path from trusted tool input

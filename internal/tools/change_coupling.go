@@ -63,6 +63,11 @@ func (s *Server) handleChangeCoupling(_ context.Context, req *mcp.CallToolReques
 
 	minScore := getFloatArg(args, "min_score", 0.3)
 	limit := getIntArg(args, "limit", 30)
+	if limit < 1 {
+		limit = 30
+	} else if limit > 1000 {
+		limit = 1000
+	}
 	crossCrateOnly := true
 	if v, ok := args["cross_crate_only"]; ok {
 		if b, ok := v.(bool); ok {

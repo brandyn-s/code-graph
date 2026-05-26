@@ -182,7 +182,11 @@ func computeSQLLimit(params *SearchParams, nameHasLikeHints, qnHasLikeHints bool
 	// The +1000 buffer ensures has_more is correct for result sets
 	// up to ~1000 beyond the requested page, at negligible cost
 	// (~2 extra batch degree queries ≈ 20ms worst case).
-	sqlLimit := params.Offset + params.Limit + 1000
+	off := params.Offset
+	if off < 0 {
+		off = 0
+	}
+	sqlLimit := off + params.Limit + 1000
 	if sqlLimit > 200000 {
 		sqlLimit = 200000
 	}
@@ -250,10 +254,16 @@ func applyPatternFilters(nodes []*Node, params *SearchParams) ([]*Node, error) {
 func paginateResults(allResults []*SearchResult, offset, limit int) *SearchOutput {
 	total := len(allResults)
 	start := offset
+	if start < 0 {
+		start = 0
+	}
 	if start > total {
 		start = total
 	}
 	end := start + limit
+	if end < start {
+		end = start
+	}
 	if end > total {
 		end = total
 	}

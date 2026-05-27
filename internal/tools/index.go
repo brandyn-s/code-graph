@@ -127,9 +127,17 @@ func (s *Server) handleIndexRepository(ctx context.Context, req *mcp.CallToolReq
 		s.indexStatus.Store("ready")
 	}
 
-	// Gather stats
-	nodeCount, _ := st.CountNodes(projectName)
-	edgeCount, _ := st.CountEdges(projectName)
+	// Gather stats from the pipeline directly, NOT via a fresh
+	// st.CountNodes() call. Post-bulk-write + post-WAL-checkpoint reads via
+	// the outer `st` reference were observed to return 0 even when nodes had
+	// committed (code-search 2026-05-26: fast-mode wrote 5,640 nodes; the
+	// response blob reported nodes=0/edges=0 because CountNodes called here
+	// returned 0). The Pipeline populates LastNodeCount/LastEdgeCount during
+	// Run() using its own connection state (which sees the just-committed
+	// data) and exposes the values via fields. Reading the fields preserves
+	// the truth instead of re-querying with potentially stale visibility.
+	nodeCount := p.LastNodeCount
+	edgeCount := p.LastEdgeCount
 
 	proj, _ := st.GetProject(projectName)
 	indexedAt := store.Now()

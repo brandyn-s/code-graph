@@ -119,6 +119,55 @@ func TestPipelineRun(t *testing.T) {
 	}
 }
 
+// TestPipelineRunPopulatesLastCountFields pins the contract that Pipeline.Run()
+// populates LastNodeCount and LastEdgeCount with the actual post-write counts,
+// matching what's in the DB. Callers (handleIndexRepository) rely on these
+// fields to surface accurate counts in the response blob WITHOUT issuing a
+// fresh st.CountNodes() call — which was observed to return 0 even after a
+// successful full-pass write (code-search 2026-05-26: fast-mode wrote 5,640
+// nodes; the response blob reported 0/0 because the post-pipeline re-query
+// from a fresh store reference had stale read visibility).
+func TestPipelineRunPopulatesLastCountFields(t *testing.T) {
+	repoDir, cleanup := setupTestRepo(t)
+	defer cleanup()
+
+	s, err := store.OpenMemory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+
+	p := New(context.Background(), s, repoDir, discover.ModeFull)
+	if err := p.Run(); err != nil {
+		t.Fatalf("Pipeline.Run: %v", err)
+	}
+
+	// The fields must be populated.
+	if p.LastNodeCount == 0 {
+		t.Fatal("p.LastNodeCount = 0 after successful Run(); expected > 0")
+	}
+	if p.LastEdgeCount == 0 {
+		t.Fatal("p.LastEdgeCount = 0 after successful Run(); expected > 0")
+	}
+
+	// And must agree with a fresh DB query (the source of truth). If these
+	// diverge, the fields are stale and callers will surface wrong numbers.
+	dbNodes, err := s.CountNodes(p.ProjectName)
+	if err != nil {
+		t.Fatalf("CountNodes: %v", err)
+	}
+	if p.LastNodeCount != dbNodes {
+		t.Errorf("LastNodeCount=%d does not match DB CountNodes=%d", p.LastNodeCount, dbNodes)
+	}
+	dbEdges, err := s.CountEdges(p.ProjectName)
+	if err != nil {
+		t.Fatalf("CountEdges: %v", err)
+	}
+	if p.LastEdgeCount != dbEdges {
+		t.Errorf("LastEdgeCount=%d does not match DB CountEdges=%d", p.LastEdgeCount, dbEdges)
+	}
+}
+
 func TestPipelinePythonProject(t *testing.T) {
 	dir, err := os.MkdirTemp("", "cgm-py-test-*")
 	if err != nil {

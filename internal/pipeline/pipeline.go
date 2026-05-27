@@ -55,6 +55,18 @@ type Pipeline struct {
 	// Progress is called between pipeline phases to report indexing progress.
 	// May be nil if no progress reporting is needed.
 	Progress ProgressCallback
+	// LastNodeCount and LastEdgeCount carry the post-write node and edge
+	// counts populated by Run(). Callers (e.g. handleIndexRepository) read
+	// these instead of issuing a fresh CountNodes/CountEdges query —
+	// post-bulk-write / post-WAL-checkpoint reads via a fresh `st` reference
+	// were observed to return 0 even when 5,640 nodes had committed (code-
+	// search 2026-05-26). The inner CountNodes inside Run() returns the
+	// real counts because it reuses the same connection state as the writes;
+	// exposing those values via fields propagates the truth instead of
+	// re-querying. Zero when Run() has not been called (or returned early
+	// on a no-op incremental).
+	LastNodeCount int
+	LastEdgeCount int
 	// buf holds all nodes/edges in memory during full-index passes 1-14.
 	// nil during incremental mode and post-flush passes 15-18.
 	buf *GraphBuffer
@@ -463,6 +475,8 @@ func (p *Pipeline) Run() error {
 
 	nc, _ := p.Store.CountNodes(p.ProjectName)
 	ec, _ := p.Store.CountEdges(p.ProjectName)
+	p.LastNodeCount = nc
+	p.LastEdgeCount = ec
 	logHeapStats("post_index")
 	slog.Info("pipeline.done", "nodes", nc, "edges", ec, "total_elapsed", time.Since(runStart))
 	return nil

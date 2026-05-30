@@ -1,0 +1,54 @@
+name: locbench-reachability
+
+# Manually dispatched. Partitions the Loc-Bench corpus into github-reachable /
+# Software-Heritage-recoverable / unreachable, PINS the recoverable subset to a
+# stable manifest, and reports the unreachable tail's category skew. Needs only
+# the auto-provided GITHUB_TOKEN (the GitHub commits API at ~5000/hr) — no
+# external secrets. This produces the stable corpus that makes the Loc-Bench
+# re-baseline (locbench-rebaseline.yml) apples-to-apples over time.
+#
+# Why a workflow and not a local run: the correct reachability check is the
+# GitHub commits API (git ls-remote false-negatives every base_commit), which
+# is rate-limited to 60/hr unauthenticated — only viable with a token, and CI
+# provides one for free.
+
+on:
+  workflow_dispatch:
+    inputs:
+      instances:
+        description: 'Loc-Bench instances JSON (repo-relative)'
+        required: false
+        default: 'bench/research/locbench_v1_instances.json'
+
+permissions:
+  contents: read
+
+jobs:
+  reachability:
+    if: github.repository_owner != 'redacted-brandyn'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.0.0
+        with:
+          python-version: '3.13'
+
+      - name: Partition + pin reachable Loc-Bench subset
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python bench/accuracy/locbench_reachability.py \
+            --instances "${{ github.event.inputs.instances }}" \
+            --pin bench/accuracy/locbench_reachable_pin.json
+
+      - name: Upload pin manifest
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: locbench-reachable-pin
+          path: bench/accuracy/locbench_reachable_pin.json
+          if-no-files-found: warn

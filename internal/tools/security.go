@@ -25,7 +25,7 @@ func (s *Server) registerSecurityTools() {
 			DestructiveHint: boolPtr(false),
 		},
 
-		Description: "Query security-tagged code elements for compliance evidence. Returns functions classified by security_role (auth_boundary, input_entry_point, sensitive_sink, crypto_operation, privilege_escalation, session_management, audit_logging, sanitizer) with granular security_subtype. Use mode='tainted_paths' to find call paths from entry points to sinks — annotates each path as 'sanitized' or 'unsanitized' based on whether a sanitizer/auth_boundary node exists on the path. Sources are refined: main() functions are replaced by their first-hop callees that handle external input. STIG mapping: AC-3 -> auth_boundary, SI-10 -> tainted_paths, SC-13 -> crypto_operation.",
+		Description: "Query security-tagged code elements for compliance evidence. Returns functions classified by security_role (auth_boundary, input_entry_point, sensitive_sink, crypto_operation, privilege_escalation, session_management, audit_logging, sanitizer) with granular security_subtype. Use mode='tainted_paths' to find call paths from entry points to sinks — annotates each (source, sink) pair as 'sanitized' only when EVERY path between them crosses a sanitizer/auth_boundary node, and 'unsanitized' when at least one path reaches the sink without crossing any sanitizer (sound: a sanitizer on an unrelated branch never masks a real path). Sources are refined: main() functions are replaced by their first-hop callees that handle external input. STIG mapping: AC-3 -> auth_boundary, SI-10 -> tainted_paths, SC-13 -> crypto_operation.",
 		InputSchema: json.RawMessage(`{
 			"type": "object",
 			"properties": {
@@ -265,6 +265,9 @@ func (s *Server) handleTaintedPaths(st *store.Store, projName string, args map[s
 			continue
 		}
 
+		// A sink can appear multiple times in result.Visited (once per hop it is
+		// reachable at); report each (source, sink) pair once, at its minimal hop.
+		seenSink := make(map[int64]bool)
 		for _, nh := range result.Visited {
 			if len(paths) >= maxPaths {
 				break
@@ -272,12 +275,18 @@ func (s *Server) handleTaintedPaths(st *store.Store, projName string, args map[s
 			if _, isSink := sinkIDs[nh.Node.ID]; !isSink {
 				continue
 			}
+			if seenSink[nh.Node.ID] {
+				continue
+			}
+			seenSink[nh.Node.ID] = true
 
 			srcSubtype, _ := src.Properties["security_subtype"].(string)
 			sinkSubtype, _ := nh.Node.Properties["security_subtype"].(string)
 
-			// Check if any intermediate node on the BFS path is a sanitizer
-			sanitized, sanitizedBy := checkPathSanitized(result.Visited, nh.Hop, src.ID, nh.Node.ID, sanitizerIDs)
+			// Sound check: the pair is sanitized only if EVERY source->sink path
+			// crosses a sanitizer/auth_boundary node (not merely if one exists
+			// somewhere in the reachable set).
+			sanitized, sanitizedBy := pathSanitized(st, src.ID, nh.Node.ID, edgeTypes, depth, sanitizerIDs)
 
 			paths = append(paths, taintedPath{
 				SourceName:    src.Name,
@@ -314,7 +323,7 @@ func (s *Server) handleTaintedPaths(st *store.Store, projName string, args map[s
 		"paths_unsanitized": len(paths) - sanitizedCount,
 		"max_depth":         depth,
 		"exclude_tests":     excludeTests,
-		"stig_hint":         "SI-10: Unsanitized paths represent user input reaching sensitive sinks without validation. Sanitized paths pass through a sanitizer or auth_boundary node.",
+		"stig_hint":         "SI-10: An unsanitized pair means at least one path reaches the sink without crossing any sanitizer/auth_boundary node (user input may reach the sink unvalidated). A sanitized pair means every path from the source to the sink crosses a sanitizer/auth_boundary node.",
 	}
 
 	return jsonResult(responseData), nil
@@ -391,25 +400,47 @@ func isInfraCallee(name string) bool {
 	return infraCalleePattern.MatchString(name)
 }
 
-// checkPathSanitized checks whether any node on the BFS path between source and
-// sink has a sanitizer or auth_boundary role. Uses the BFS visited list — nodes
-// at intermediate hops (between 1 and sinkHop-1) are candidates.
-func checkPathSanitized(visited []*store.NodeHop, sinkHop int, sourceID, sinkID int64, sanitizerIDs map[int64]string) (sanitized bool, sanitizerName string) {
-	if sinkHop <= 1 {
-		return false, "" // Direct call, no intermediate nodes
+// pathSanitized reports whether EVERY call path from sourceID to sinkID (within
+// maxDepth hops, over edgeTypes) passes through a sanitizer or auth_boundary
+// node. It is sound for compliance use: it returns sanitized=false whenever any
+// sanitizer-free path exists, so a genuinely-unsanitized path can never be
+// masked by a sanitizer that merely sits on an unrelated branch.
+//
+// Mechanism: the pair is sanitized iff the sink is unreachable from the source
+// once every sanitizer node is cut from the graph (store.ReachableExcluding).
+// When sanitized, a concrete witness path is reconstructed via parent pointers
+// (store.ShortestPath) and the first sanitizer on it is returned as evidence.
+//
+// On a query error the function fails safe — it reports unsanitized rather than
+// risk masking a real taint path in compliance output.
+func pathSanitized(st *store.Store, sourceID, sinkID int64, edgeTypes []string, maxDepth int, sanitizerIDs map[int64]string) (sanitized bool, sanitizerName string) {
+	exclude := make(map[int64]bool, len(sanitizerIDs))
+	for id := range sanitizerIDs {
+		exclude[id] = true
 	}
-	for _, nh := range visited {
-		if nh.Node.ID == sourceID || nh.Node.ID == sinkID {
-			continue
-		}
-		if nh.Hop >= sinkHop {
-			continue
-		}
-		if name, ok := sanitizerIDs[nh.Node.ID]; ok {
-			return true, name
+
+	reachable, err := st.ReachableExcluding(sourceID, sinkID, "outbound", edgeTypes, maxDepth, exclude)
+	if err != nil {
+		slog.Debug("tainted_paths.sanitize_check.err", "source", sourceID, "sink", sinkID, "err", err)
+		return false, "" // fail safe: do not claim sanitized on error
+	}
+	if reachable {
+		// A sanitizer-free path exists — the pair is unsanitized.
+		return false, ""
+	}
+
+	// Every path crosses a sanitizer. Reconstruct a witness path for evidence.
+	if path, perr := st.ShortestPath(sourceID, sinkID, "outbound", edgeTypes, maxDepth); perr == nil {
+		for _, id := range path {
+			if id == sourceID || id == sinkID {
+				continue
+			}
+			if name, ok := sanitizerIDs[id]; ok {
+				return true, name
+			}
 		}
 	}
-	return false, ""
+	return true, ""
 }
 
 // filterTestNodes removes test files and test functions from a node list.

@@ -626,6 +626,11 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--n", type=int, default=20, help="Number of instances")
     ap.add_argument("--seed", type=int, default=42, help="Random seed for sampling")
+    ap.add_argument(
+        "--instances", type=Path, default=None,
+        help="Run a FIXED instance set from a pin JSON (locbench_reachability.py "
+             "output; reads pinned_instance_ids) instead of a fresh random sample, "
+             "so re-baselines are apples-to-apples over time. Ignores --n/--seed.")
     ap.add_argument("--budget-usd", type=float, default=3.0, help="Hard abort threshold")
     ap.add_argument("--workdir", type=Path, default=Path(r"C:/tmp/locbench-batch"))
     ap.add_argument(
@@ -657,7 +662,17 @@ def main() -> int:
         return 2
 
     df = pd.read_parquet(PARQUET)
-    selected = select_instances(df, args.n, args.seed)
+    if args.instances:
+        # Pinned-subset mode: run a FIXED instance set (e.g. the reachable
+        # subset from locbench_reachability.py) so re-baselines compare the same
+        # instances over time, instead of a fresh random sample that also pulls
+        # in GC'd (clone-failing) instances.
+        pin = json.loads(args.instances.read_text(encoding="utf-8"))
+        ids = pin.get("pinned_instance_ids", pin) if isinstance(pin, dict) else pin
+        selected = df[df["instance_id"].isin(set(ids))]
+        print(f"Pinned mode: {len(selected)}/{len(ids)} pinned instances present in parquet")
+    else:
+        selected = select_instances(df, args.n, args.seed)
     print(f"Selected {len(selected)} instances:")
     for _, row in selected.iterrows():
         print(f"  - {row['instance_id']} ({row.get('category', '?')})")

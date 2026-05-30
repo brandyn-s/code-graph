@@ -117,40 +117,111 @@ func TestFilterTestNodes(t *testing.T) {
 
 // --- Graph-dependent tests ---
 
-func TestCheckPathSanitized(t *testing.T) {
-	// Simulated BFS visited list: source(hop 0) -> sanitizer(hop 1) -> sink(hop 2)
-	visited := []*store.NodeHop{
-		{Node: &store.Node{ID: 1, Name: "source"}, Hop: 0},
-		{Node: &store.Node{ID: 2, Name: "validate_input"}, Hop: 1},
-		{Node: &store.Node{ID: 3, Name: "sink"}, Hop: 2},
+// setupSanitizerGraph builds a graph that exercises path-level sanitization,
+// including the failure mode the previous implementation got wrong: a sanitizer
+// on a SIBLING branch that is not actually on the source->sink path.
+//
+//	src ─CALLS→ san1 (sanitizer) ─CALLS→ sink2     # sink2: only path crosses san1 → SANITIZED
+//	                              └CALLS→ sink3     # sink3 also reachable via san1 ...
+//	src ─CALLS→ mid             ─CALLS→ sink1       # sink1: path avoids san1 → UNSANITIZED
+//	src ─CALLS→ bypass          ─CALLS→ sink3       # ... and via bypass (no sanitizer) → UNSANITIZED
+//	src ─CALLS→ sink_direct                          # direct call, no intermediate → UNSANITIZED
+func setupSanitizerGraph(t *testing.T) (*store.Store, testIDs) {
+	t.Helper()
+	st, err := store.OpenMemory()
+	if err != nil {
+		t.Fatalf("OpenMemory: %v", err)
 	}
-	sanitizerIDs := map[int64]string{2: "validate_input"}
+	if err := st.UpsertProject("test", "/tmp/test"); err != nil {
+		t.Fatalf("UpsertProject: %v", err)
+	}
 
-	t.Run("sanitized path", func(t *testing.T) {
-		sanitized, by := checkPathSanitized(visited, 2, 1, 3, sanitizerIDs)
-		if !sanitized {
-			t.Error("expected path to be sanitized")
+	mk := func(name, role string) *store.Node {
+		props := map[string]any{}
+		if role != "" {
+			props["security_role"] = role
 		}
-		if by != "validate_input" {
-			t.Errorf("expected sanitized by 'validate_input', got %q", by)
+		return &store.Node{
+			Project: "test", Label: "Function", Name: name,
+			QualifiedName: "test." + name, FilePath: "src/" + name + ".go",
+			Properties: props,
 		}
-	})
+	}
+	nodes := []*store.Node{
+		mk("src", "input_entry_point"),
+		mk("san1", "sanitizer"),
+		mk("mid", ""),
+		mk("bypass", ""),
+		mk("sink1", "sensitive_sink"),
+		mk("sink2", "sensitive_sink"),
+		mk("sink3", "sensitive_sink"),
+		mk("sink_direct", "sensitive_sink"),
+	}
+	ids := make(testIDs)
+	for _, n := range nodes {
+		id, upErr := st.UpsertNode(n)
+		if upErr != nil {
+			t.Fatalf("UpsertNode %s: %v", n.Name, upErr)
+		}
+		ids[n.Name] = id
+	}
 
-	t.Run("direct call unsanitized", func(t *testing.T) {
-		// hop=1 means direct call, no intermediate nodes possible
-		sanitized, _ := checkPathSanitized(visited, 1, 1, 3, sanitizerIDs)
-		if sanitized {
-			t.Error("direct call (hop=1) should not be sanitized")
+	edges := [][2]string{
+		{"src", "san1"}, {"src", "mid"}, {"src", "bypass"}, {"src", "sink_direct"},
+		{"san1", "sink2"}, {"san1", "sink3"},
+		{"mid", "sink1"},
+		{"bypass", "sink3"},
+	}
+	for _, e := range edges {
+		if _, insErr := st.InsertEdge(&store.Edge{
+			Project: "test", SourceID: ids[e[0]], TargetID: ids[e[1]], Type: "CALLS",
+		}); insErr != nil {
+			t.Fatalf("InsertEdge %s->%s: %v", e[0], e[1], insErr)
 		}
-	})
+	}
+	return st, ids
+}
 
-	t.Run("no sanitizer on path", func(t *testing.T) {
-		emptySanitizers := map[int64]string{}
-		sanitized, _ := checkPathSanitized(visited, 2, 1, 3, emptySanitizers)
-		if sanitized {
-			t.Error("expected unsanitized when no sanitizers defined")
-		}
-	})
+func TestPathSanitized(t *testing.T) {
+	st, ids := setupSanitizerGraph(t)
+	defer st.Close()
+
+	edgeTypes := []string{"CALLS"}
+	sanitizerIDs := map[int64]string{ids["san1"]: "san1"}
+
+	cases := []struct {
+		name          string
+		sink          string
+		wantSanitized bool
+		wantBy        string // "" = don't care / expect empty
+	}{
+		// Regression pin for the sibling-branch false positive: san1 is reachable
+		// from src at a shallower hop than sink1, but it is NOT on src->mid->sink1.
+		// The old visited-set heuristic reported this SANITIZED; the sound check
+		// must report UNSANITIZED.
+		{"sibling sanitizer does not sanitize", "sink1", false, ""},
+		// Every path to sink2 crosses san1 → sanitized, witness names san1.
+		{"only path crosses sanitizer", "sink2", true, "san1"},
+		// sink3 has a sanitized path (via san1) AND an unsanitized one (via bypass);
+		// the existence of any sanitizer-free path makes the pair unsanitized.
+		{"bypass path makes pair unsanitized", "sink3", false, ""},
+		// Direct call: no intermediate node, so never sanitized.
+		{"direct call is unsanitized", "sink_direct", false, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			sanitized, by := pathSanitized(st, ids["src"], ids[tc.sink], edgeTypes, 4, sanitizerIDs)
+			if sanitized != tc.wantSanitized {
+				t.Errorf("pathSanitized(src->%s) sanitized=%v, want %v (by=%q)", tc.sink, sanitized, tc.wantSanitized, by)
+			}
+			if tc.wantSanitized && tc.wantBy != "" && by != tc.wantBy {
+				t.Errorf("pathSanitized(src->%s) by=%q, want %q", tc.sink, by, tc.wantBy)
+			}
+			if !tc.wantSanitized && by != "" {
+				t.Errorf("pathSanitized(src->%s) reported unsanitized but named sanitizer %q", tc.sink, by)
+			}
+		})
+	}
 }
 
 func TestRefineSources(t *testing.T) {
@@ -299,36 +370,43 @@ func TestTaintedPathsBFS(t *testing.T) {
 		}
 	})
 
-	t.Run("sanitizer exists on authenticate->get_user path", func(t *testing.T) {
-		// The path handle_request -> authenticate -> validate_jwt exists
-		// and validate_jwt is a sanitizer. But authenticate -> get_user is
-		// a sibling call, not through validate_jwt. The BFS visited list
-		// includes validate_jwt at hop < sink hop, so checkPathSanitized
-		// should detect it.
-		edgeTypes := []string{"CALLS", "HTTP_CALLS", "ASYNC_CALLS"}
-		result, err := st.BFS(ids["handle_request"], "outbound", edgeTypes, 4, 500)
-		if err != nil {
-			t.Fatalf("BFS: %v", err)
-		}
+	edgeTypes := []string{"CALLS", "HTTP_CALLS", "ASYNC_CALLS"}
 
-		// Build sanitizer ID set
+	t.Run("get_user sanitized when authenticate is on the only path", func(t *testing.T) {
+		// The only path is handle_request -> authenticate -> get_user, and
+		// authenticate is in the sanitizer set, so every path crosses it.
 		sanitizerIDs := map[int64]string{
 			ids["validate_jwt"]: "validate_jwt",
 			ids["authenticate"]: "authenticate",
 		}
+		sanitized, by := pathSanitized(st, ids["handle_request"], ids["get_user"], edgeTypes, 4, sanitizerIDs)
+		if !sanitized {
+			t.Error("path to get_user should be sanitized (authenticate is on the only path)")
+		}
+		if by != "authenticate" {
+			t.Errorf("expected witness sanitizer 'authenticate', got %q", by)
+		}
+	})
 
-		// Find the get_user sink in visited
-		for _, nh := range result.Visited {
-			if nh.Node.ID == ids["get_user"] {
-				sanitized, by := checkPathSanitized(result.Visited, nh.Hop, ids["handle_request"], nh.Node.ID, sanitizerIDs)
-				if !sanitized {
-					t.Error("path to get_user should be sanitized (authenticate is auth_boundary)")
-				}
-				if by == "" {
-					t.Error("expected non-empty sanitizer name")
-				}
-				break
-			}
+	t.Run("get_user NOT sanitized by a sibling-branch sanitizer", func(t *testing.T) {
+		// validate_jwt is authenticate's sibling of get_user (authenticate calls
+		// BOTH validate_jwt and get_user). It is reachable from the source but is
+		// NOT on the handle_request -> authenticate -> get_user path. The sound
+		// check must report unsanitized; the old visited-set heuristic was wrong.
+		sanitizerIDs := map[int64]string{ids["validate_jwt"]: "validate_jwt"}
+		sanitized, by := pathSanitized(st, ids["handle_request"], ids["get_user"], edgeTypes, 4, sanitizerIDs)
+		if sanitized {
+			t.Errorf("get_user must NOT be sanitized by sibling-branch validate_jwt (by=%q)", by)
+		}
+	})
+
+	t.Run("direct-call sink is unsanitized", func(t *testing.T) {
+		// handle_request -> execute_sql is a direct call; no intermediate node,
+		// so no sanitizer can be on the path.
+		sanitizerIDs := map[int64]string{ids["authenticate"]: "authenticate"}
+		sanitized, _ := pathSanitized(st, ids["handle_request"], ids["execute_sql"], edgeTypes, 4, sanitizerIDs)
+		if sanitized {
+			t.Error("direct call handle_request->execute_sql should be unsanitized")
 		}
 	})
 }

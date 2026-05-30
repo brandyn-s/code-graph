@@ -150,3 +150,141 @@ func (s *Store) BFS(startNodeID int64, direction string, edgeTypes []string, max
 
 	return result, edgeRows.Err()
 }
+
+// neighborIDs returns the IDs of the nodes adjacent to nodeID along edges of the
+// given types, in the given direction ("outbound" follows source->target,
+// "inbound" follows target->source).
+func (s *Store) neighborIDs(nodeID int64, direction string, edgeTypes []string) ([]int64, error) {
+	var ids []int64
+	for _, et := range edgeTypes {
+		var edges []*Edge
+		var err error
+		if direction == "inbound" {
+			edges, err = s.FindEdgesByTargetAndType(nodeID, et)
+		} else {
+			edges, err = s.FindEdgesBySourceAndType(nodeID, et)
+		}
+		if err != nil {
+			return nil, err
+		}
+		for _, e := range edges {
+			if direction == "inbound" {
+				ids = append(ids, e.SourceID)
+			} else {
+				ids = append(ids, e.TargetID)
+			}
+		}
+	}
+	return ids, nil
+}
+
+// ReachableExcluding reports whether targetID is reachable from startID within
+// maxDepth hops, following edges of the given types in the given direction,
+// WITHOUT routing through any node in the exclude set. A node in exclude is a
+// cut point: it is never entered, so no path may pass through it (the target
+// itself is still detectable even if excluded).
+//
+// Taint analysis uses this to decide sanitization soundly: a (source, sink)
+// pair is "sanitized" iff the sink is NOT reachable from the source once every
+// sanitizer/auth_boundary node is excluded — i.e. EVERY path from source to
+// sink crosses a sanitizer. If any sanitizer-free path exists, the pair is
+// unsanitized. This replaces the prior heuristic, which flagged a pair
+// sanitized whenever a sanitizer merely appeared anywhere in the BFS-reachable
+// set and so produced false "sanitized" verdicts when the sanitizer sat on an
+// unrelated branch.
+func (s *Store) ReachableExcluding(startID, targetID int64, direction string, edgeTypes []string, maxDepth int, exclude map[int64]bool) (bool, error) {
+	if startID == targetID {
+		return true, nil
+	}
+	if maxDepth <= 0 {
+		maxDepth = 3
+	}
+	if len(edgeTypes) == 0 {
+		edgeTypes = []string{"CALLS"}
+	}
+
+	visited := map[int64]bool{startID: true}
+	type item struct {
+		id    int64
+		depth int
+	}
+	queue := []item{{startID, 0}}
+	for len(queue) > 0 {
+		cur := queue[0]
+		queue = queue[1:]
+		if cur.depth >= maxDepth {
+			continue
+		}
+		neighbors, err := s.neighborIDs(cur.id, direction, edgeTypes)
+		if err != nil {
+			return false, err
+		}
+		for _, nid := range neighbors {
+			if nid == targetID {
+				return true, nil
+			}
+			if visited[nid] || exclude[nid] {
+				continue
+			}
+			visited[nid] = true
+			queue = append(queue, item{nid, cur.depth + 1})
+		}
+	}
+	return false, nil
+}
+
+// ShortestPath returns the node-ID sequence of a shortest path (fewest hops)
+// from startID to targetID following edges of the given types in the given
+// direction, bounded by maxDepth, or nil if no such path exists within the
+// bound. It is a BFS that records one parent pointer per discovered node and
+// reconstructs the path by walking parents back from the target. It is used to
+// produce a concrete witness path (e.g. to name the sanitizer on a sanitized
+// taint path).
+func (s *Store) ShortestPath(startID, targetID int64, direction string, edgeTypes []string, maxDepth int) ([]int64, error) {
+	if startID == targetID {
+		return []int64{startID}, nil
+	}
+	if maxDepth <= 0 {
+		maxDepth = 3
+	}
+	if len(edgeTypes) == 0 {
+		edgeTypes = []string{"CALLS"}
+	}
+
+	parent := map[int64]int64{startID: startID}
+	type item struct {
+		id    int64
+		depth int
+	}
+	queue := []item{{startID, 0}}
+	for len(queue) > 0 {
+		cur := queue[0]
+		queue = queue[1:]
+		if cur.depth >= maxDepth {
+			continue
+		}
+		neighbors, err := s.neighborIDs(cur.id, direction, edgeTypes)
+		if err != nil {
+			return nil, err
+		}
+		for _, nid := range neighbors {
+			if _, seen := parent[nid]; seen {
+				continue
+			}
+			parent[nid] = cur.id
+			if nid == targetID {
+				path := []int64{nid}
+				for path[len(path)-1] != startID {
+					path = append(path, parent[path[len(path)-1]])
+				}
+				// Reverse into source->target order.
+				for i, j := 0, len(path)-1; i < j; i, j = i+1, j-1 {
+					path[i], path[j] = path[j], path[i]
+				}
+				return path, nil
+			}
+			queue = append(queue, item{nid, cur.depth + 1})
+		}
+	}
+	return nil, nil
+}

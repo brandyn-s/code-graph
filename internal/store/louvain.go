@@ -1,6 +1,16 @@
 package store
 
-import "math/rand" // WHY: graph algorithm randomness — not cryptographic use, math/rand is correct here
+import (
+	"math/rand" // WHY: graph algorithm randomness — not cryptographic use, math/rand is correct here
+	"sort"
+)
+
+// louvainSeed fixes the RNG used for node-visit ordering so community detection
+// is reproducible across process runs. The visit order only affects the
+// convergence path, not partition correctness; a fixed seed (combined with
+// deterministic map-key iteration below) keeps community IDs — and therefore
+// the MEMBER_OF edges derived from them — stable across re-indexes.
+const louvainSeed = 1
 
 // louvainEdge represents an edge for the Louvain algorithm.
 type louvainEdge struct {
@@ -77,9 +87,10 @@ func louvain(nodes []int64, edges []louvainEdge) map[int64]int {
 	}
 
 	// Main Louvain loop
+	rng := rand.New(rand.NewSource(louvainSeed))
 	maxIter := 10
 	for iter := 0; iter < maxIter; iter++ {
-		improved := louvainLocalMoving(n, adj, weight, degree, community, totalWeight, resolution)
+		improved := louvainLocalMoving(n, adj, weight, degree, community, totalWeight, resolution, rng)
 		louvainRefine(n, adj, weight, degree, community, totalWeight, resolution)
 
 		if !improved {
@@ -96,8 +107,9 @@ func louvain(nodes []int64, edges []louvainEdge) map[int64]int {
 }
 
 // louvainLocalMoving greedily moves each node to the community that maximizes modularity gain.
-// Returns true if any node was moved.
-func louvainLocalMoving(n int, adj [][]int, weight [][]float64, degree []float64, community []int, totalWeight, resolution float64) bool {
+// Returns true if any node was moved. The supplied rng (fixed-seed) makes the
+// node-visit order deterministic across runs.
+func louvainLocalMoving(n int, adj [][]int, weight [][]float64, degree []float64, community []int, totalWeight, resolution float64, rng *rand.Rand) bool {
 	improved := false
 
 	// Community total degree
@@ -106,12 +118,12 @@ func louvainLocalMoving(n int, adj [][]int, weight [][]float64, degree []float64
 		commDegree[community[i]] += degree[i]
 	}
 
-	// Random order for convergence stability
+	// Random (but seeded) order for convergence stability
 	order := make([]int, n)
 	for i := range order {
 		order[i] = i
 	}
-	rand.Shuffle(n, func(i, j int) { order[i], order[j] = order[j], order[i] })
+	rng.Shuffle(n, func(i, j int) { order[i], order[j] = order[j], order[i] })
 
 	for _, i := range order {
 		curComm := community[i]
@@ -129,7 +141,15 @@ func louvainLocalMoving(n int, adj [][]int, weight [][]float64, degree []float64
 		bestComm := curComm
 		bestGain := 0.0
 
-		for comm, wIn := range neighborComm {
+		// Iterate candidate communities in sorted order so equal-gain ties break
+		// identically every run (Go map iteration order is randomized).
+		cands := make([]int, 0, len(neighborComm))
+		for comm := range neighborComm {
+			cands = append(cands, comm)
+		}
+		sort.Ints(cands)
+		for _, comm := range cands {
+			wIn := neighborComm[comm]
 			// Modularity gain formula
 			gain := wIn - resolution*degree[i]*commDegree[comm]/(2*totalWeight)
 			if gain > bestGain {
@@ -163,7 +183,15 @@ func louvainRefine(n int, adj [][]int, weight [][]float64, degree []float64, com
 	for i := 0; i < n; i++ {
 		commMembers[community[i]] = append(commMembers[community[i]], i)
 	}
-	for _, members := range commMembers {
+	// Process communities in sorted order so the IDs assigned to any split-out
+	// sub-communities are stable across runs.
+	comms := make([]int, 0, len(commMembers))
+	for c := range commMembers {
+		comms = append(comms, c)
+	}
+	sort.Ints(comms)
+	for _, c := range comms {
+		members := commMembers[c]
 		if len(members) <= 2 {
 			continue
 		}

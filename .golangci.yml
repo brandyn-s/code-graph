@@ -56,7 +56,30 @@ linters:
       - third_party$
       - builtin$
       - examples$
-      - internal/cbm
+    rules:
+      # internal/cbm is hand-written tree-sitter AST extraction + CGO glue — the
+      # riskiest code in the repo. It was previously excluded from ALL linting.
+      # Bring it under gosec and the safety linters (bodyclose, rowserrcheck,
+      # sqlclosecheck, makezero, nilerr, noctx, ...), but exempt the complexity
+      # and style linters: the extraction code is inherently large and branchy
+      # by design, and the C side is covered by the ASan CI job (asan.yml).
+      - path: internal/cbm
+        linters:
+          - funlen
+          - gocognit
+          - cyclop
+          - nestif
+          - gocritic
+          - prealloc
+          - unparam
+      # G103 ("audit use of unsafe") fires on every CGO marshalling site
+      # (unsafe.Pointer / unsafe.Slice over C arrays) — unavoidable and
+      # informational for tree-sitter interop. The real memory-safety check for
+      # this C-interop is the ASan CI job (asan.yml); keep the rest of gosec on.
+      - path: internal/cbm
+        text: "G103"
+        linters:
+          - gosec
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0

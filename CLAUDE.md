@@ -5,8 +5,16 @@ redacted fork of codebase-memory-mcp. Persistent code knowledge graph MCP server
 ## Key Commands
 
 ```bash
-# Build
-CGO_ENABLED=1 go build -o bin/codebase-memory-mcp.exe ./cmd/codebase-memory-mcp/
+# Build (Makefile static-links the MinGW runtime on Windows — required)
+make build
+
+# Without make on Windows: KEEP -extldflags '-static'. Omitting it makes the .exe
+# depend on libwinpthread-1.dll and die STATUS_ENTRYPOINT_NOT_FOUND (0xC0000139)
+# when spawned with a stripped PATH (e.g. Claude Code MCP stdio). See PR #98.
+CGO_ENABLED=1 go build -ldflags "-extldflags '-static'" -o bin/codebase-memory-mcp.exe ./cmd/codebase-memory-mcp/
+
+# Linux/macOS (no special linker flags needed):
+CGO_ENABLED=1 go build -o bin/codebase-memory-mcp ./cmd/codebase-memory-mcp/
 
 # Test
 go test ./... -count=1

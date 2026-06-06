@@ -47,7 +47,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
 
@@ -247,7 +247,7 @@ jobs:
       # ---------------------------------------------------------------
 
       - name: Fetch flask fixture (pinned SHA from fixtures.json)
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           repository: pallets/flask
           ref: 2ac89889f4cc330eabd50f295dcef02828522c69
@@ -255,7 +255,7 @@ jobs:
           persist-credentials: false
 
       - name: Fetch requests fixture (pinned SHA from fixtures.json)
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           repository: psf/requests
           ref: f43f750ee10addbaa13901c1017631b4d70fd6e3

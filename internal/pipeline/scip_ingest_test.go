@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/DeusData/codebase-memory-mcp/internal/discover"
@@ -30,9 +31,10 @@ import (
 //	  3:     Callee()
 //	  4: }
 //
-// The store starts with two heuristic edges: Caller->Other (WRONG — the
-// kind of fuzzy false positive SCIP replaces) in the covered file, and
-// Other->Callee in the uncovered file (must survive untouched).
+// The store starts with two heuristic edges: Callee->Caller (WRONG, both
+// endpoints in the covered file — the kind of fuzzy false positive SCIP
+// replaces) and Other->Callee (caller in the uncovered file — must
+// survive untouched).
 func buildSCIPTestWorld(t *testing.T) (p *Pipeline, s *store.Store, ids map[string]int64, indexPath string) {
 	t.Helper()
 	repo := t.TempDir()
@@ -77,10 +79,10 @@ func buildSCIPTestWorld(t *testing.T) (p *Pipeline, s *store.Store, ids map[stri
 		ids[n.name] = id
 	}
 
-	// Heuristic edges: one wrong edge in the covered file, one good edge
-	// in the uncovered file.
+	// Heuristic edges: one wrong edge with both endpoints covered, one
+	// good edge whose caller is uncovered.
 	for _, e := range []*store.Edge{
-		{Project: p.ProjectName, SourceID: ids["Caller"], TargetID: ids["Other"], Type: "CALLS"},
+		{Project: p.ProjectName, SourceID: ids["Callee"], TargetID: ids["Caller"], Type: "CALLS"},
 		{Project: p.ProjectName, SourceID: ids["Other"], TargetID: ids["Callee"], Type: "CALLS"},
 	} {
 		if _, err := s.InsertEdge(e); err != nil {
@@ -147,9 +149,9 @@ func TestSCIPIngestReplacesCoveredHeuristicEdges(t *testing.T) {
 
 	edges := callEdges(t, s, p.ProjectName)
 
-	// The wrong heuristic edge (covered file) is gone.
-	if _, ok := edges[[2]int64{ids["Caller"], ids["Other"]}]; ok {
-		t.Error("heuristic edge in SCIP-covered file survived replacement")
+	// The wrong heuristic edge (both endpoints covered) is gone.
+	if _, ok := edges[[2]int64{ids["Callee"], ids["Caller"]}]; ok {
+		t.Error("heuristic edge between SCIP-covered files survived replacement")
 	}
 	// The derived edge exists and is marked as SCIP-resolved.
 	props, ok := edges[[2]int64{ids["Caller"], ids["Callee"]}]
@@ -159,9 +161,9 @@ func TestSCIPIngestReplacesCoveredHeuristicEdges(t *testing.T) {
 	if props["resolver_rule"] != "scip-ingest" {
 		t.Errorf("derived edge resolver_rule = %v, want scip-ingest", props["resolver_rule"])
 	}
-	// The uncovered file's heuristic edge survives (fallback layer).
+	// The heuristic edge whose caller is uncovered survives (fallback layer).
 	if _, ok := edges[[2]int64{ids["Other"], ids["Callee"]}]; !ok {
-		t.Error("heuristic edge in uncovered file was deleted")
+		t.Error("heuristic edge from uncovered caller was deleted")
 	}
 	// The value reference (f := Callee) must NOT have produced a
 	// Callee-as-callee edge from the value-ref line... the call on line 3
@@ -183,7 +185,7 @@ func TestSCIPIngestInertWithoutEnv(t *testing.T) {
 	if len(edges) != 2 {
 		t.Fatalf("pass mutated edges while disabled: %v", edges)
 	}
-	if _, ok := edges[[2]int64{ids["Caller"], ids["Other"]}]; !ok {
+	if _, ok := edges[[2]int64{ids["Callee"], ids["Caller"]}]; !ok {
 		t.Error("heuristic edges should be untouched when pass is disabled")
 	}
 }
@@ -197,5 +199,75 @@ func TestSCIPIngestBadIndexIsNonFatal(t *testing.T) {
 
 	if got := len(callEdges(t, s, p.ProjectName)); got != 2 {
 		t.Fatalf("edges changed after failed ingest: %d", got)
+	}
+}
+
+// Edges from covered callers into files the index does NOT cover (CGO
+// sources, platform-gated files) must survive replacement — ground-truth
+// eval showed source-file-only deletion cost 210 real edges (the index
+// can never re-derive them). Deletion requires BOTH endpoints covered.
+func TestSCIPIngestKeepsEdgesIntoUncoveredFiles(t *testing.T) {
+	p, s, ids, indexPath := buildSCIPTestWorld(t)
+	// Heuristic edge from the covered file INTO the uncovered file: the
+	// index has no document for uncovered.go, so this must survive.
+	if _, err := s.InsertEdge(&store.Edge{
+		Project: p.ProjectName, SourceID: ids["Caller"], TargetID: ids["Other"], Type: "CALLS",
+		Properties: map[string]any{"marker": "into-uncovered"},
+	}); err != nil && !strings.Contains(err.Error(), "UNIQUE") {
+		t.Fatal(err)
+	}
+
+	if err := p.runSCIPIngest(indexPath); err != nil {
+		t.Fatalf("ingest: %v", err)
+	}
+
+	edges := callEdges(t, s, p.ProjectName)
+	if _, ok := edges[[2]int64{ids["Caller"], ids["Other"]}]; !ok {
+		t.Error("edge from covered caller into uncovered callee file was deleted; CGO-style callees must keep heuristic edges")
+	}
+}
+
+// A document whose definition sites no longer match the current node spans
+// (stale index after the file changed) is excluded from both deletion and
+// derivation — its heuristic edges stay authoritative.
+func TestSCIPIngestSkipsDriftedFiles(t *testing.T) {
+	p, s, ids, _ := buildSCIPTestWorld(t)
+
+	calleeSym := "scip-go gomod m 1.0 `m`/Callee()."
+	callerSym := "scip-go gomod m 1.0 `m`/Caller()."
+	// Same document, but every definition is shifted far off the real
+	// spans — as if covered.go was edited after indexing.
+	idx := &scip.Index{
+		Metadata: &scip.Metadata{ProjectRoot: "file:///drifted"},
+		Documents: []*scip.Document{{
+			RelativePath: "covered.go",
+			Occurrences: []*scip.Occurrence{
+				{Range: []int32{40, 5, 11}, Symbol: callerSym, SymbolRoles: int32(scip.SymbolRole_Definition)},
+				{Range: []int32{42, 1, 7}, Symbol: calleeSym},
+				{Range: []int32{50, 5, 11}, Symbol: calleeSym, SymbolRoles: int32(scip.SymbolRole_Definition)},
+			},
+		}},
+	}
+	raw, err := proto.Marshal(idx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stalePath := filepath.Join(t.TempDir(), "stale.scip")
+	if err := os.WriteFile(stalePath, raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := p.runSCIPIngest(stalePath); err != nil {
+		t.Fatalf("ingest: %v", err)
+	}
+
+	edges := callEdges(t, s, p.ProjectName)
+	// Both pre-existing heuristic edges survive: the only covered document
+	// is drifted, so nothing is deleted and nothing is derived.
+	if len(edges) != 2 {
+		t.Fatalf("drifted index changed edges: got %d, want 2 (%v)", len(edges), edges)
+	}
+	if _, ok := edges[[2]int64{ids["Callee"], ids["Caller"]}]; !ok {
+		t.Error("heuristic edge deleted despite drifted document")
 	}
 }

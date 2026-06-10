@@ -120,6 +120,8 @@ func (p *Pipeline) runSCIPIngest(path string) error {
 		line int
 	}
 	defs := make(map[string]defLoc)
+	defTotal := make(map[string]int)   // file -> function-def occurrences
+	defMatched := make(map[string]int) // file -> defs landing on a node span start
 	for _, doc := range idx.Documents {
 		for _, occ := range doc.Occurrences {
 			if occ.SymbolRoles&int32(scip.SymbolRole_Definition) == 0 || !isFuncSym(occ.Symbol) {
@@ -130,7 +132,30 @@ func (p *Pipeline) runSCIPIngest(path string) error {
 				continue
 			}
 			defs[occ.Symbol] = defLoc{file: doc.RelativePath, line: int(r.Start.Line) + 1}
+			defTotal[doc.RelativePath]++
+			if spans.atLine(doc.RelativePath, int(r.Start.Line)+1) != nil {
+				defMatched[doc.RelativePath]++
+			}
 		}
+	}
+
+	// Stale-index guard: if a document's definition sites no longer line up
+	// with the freshly-indexed node spans, the file changed after the SCIP
+	// index was generated. Replacing its edges would delete heuristic truth
+	// and re-derive from drifted positions — ground-truth eval measured
+	// recall 0.955 -> 0.847 with a 3-commit-old index. Drifted files are
+	// excluded from BOTH deletion and derivation (their heuristic edges
+	// stay authoritative); regenerate the index to cover them.
+	drifted := make(map[string]bool)
+	for file, total := range defTotal {
+		if total > 0 && defMatched[file]*2 < total {
+			drifted[file] = true
+		}
+	}
+	if len(drifted) > 0 {
+		slog.Warn("pass.scip_ingest.drifted_files",
+			"count", len(drifted),
+			"hint", "SCIP index predates current file contents; regenerate it at the indexed commit")
 	}
 
 	// Pass 2: derive call edges from call-shaped reference occurrences.
@@ -157,6 +182,9 @@ func (p *Pipeline) runSCIPIngest(path string) error {
 	var derived []*store.Edge
 	refsSeen, callShaped := 0, 0
 	for _, doc := range idx.Documents {
+		if drifted[doc.RelativePath] {
+			continue
+		}
 		for _, occ := range doc.Occurrences {
 			if occ.SymbolRoles&int32(scip.SymbolRole_Definition) != 0 || !isFuncSym(occ.Symbol) {
 				continue
@@ -164,6 +192,9 @@ func (p *Pipeline) runSCIPIngest(path string) error {
 			d, ok := defs[occ.Symbol]
 			if !ok {
 				continue // external symbol (stdlib / dependency) — out of corpus
+			}
+			if drifted[d.file] {
+				continue // callee position unreliable in a drifted file
 			}
 			refsSeen++
 			r, rErr := scip.NewRange(occ.Range)
@@ -210,15 +241,19 @@ func (p *Pipeline) runSCIPIngest(path string) error {
 		}
 	}
 
-	// Replace heuristic CALLS edges for every file the index covers, then
-	// insert the derived edges. Files outside the index keep their
-	// heuristic edges (fallback layer).
+	// Replace heuristic CALLS edges only where the index can re-derive
+	// them: BOTH endpoints must live in covered, non-drifted files. Edges
+	// into files the indexer cannot see (CGO sources, platform-gated
+	// files) and edges touching drifted files keep their heuristic
+	// fallback.
 	covered := make([]string, 0, len(idx.Documents))
 	for _, doc := range idx.Documents {
-		covered = append(covered, doc.RelativePath)
+		if !drifted[doc.RelativePath] {
+			covered = append(covered, doc.RelativePath)
+		}
 	}
 	sort.Strings(covered)
-	deleted, err := p.Store.DeleteEdgesFromFiles(p.ProjectName, "CALLS", covered)
+	deleted, err := p.Store.DeleteEdgesBetweenFiles(p.ProjectName, "CALLS", covered, covered)
 	if err != nil {
 		return fmt.Errorf("replace heuristic edges: %w", err)
 	}
@@ -229,6 +264,7 @@ func (p *Pipeline) runSCIPIngest(path string) error {
 	slog.Info("pass.scip_ingest.done",
 		"index", path,
 		"documents", len(idx.Documents),
+		"drifted_documents", len(drifted),
 		"refs_in_corpus", refsSeen,
 		"call_shaped", callShaped,
 		"heuristic_edges_replaced", deleted,

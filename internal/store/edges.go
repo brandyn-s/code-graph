@@ -664,39 +664,58 @@ func scanEdges(rows *sql.Rows) ([]*Edge, error) {
 	return result, rows.Err()
 }
 
-// DeleteEdgesFromFiles deletes edges of the given type whose SOURCE node
-// lives in one of the given files of the project. Used by the SCIP ingest
-// pass to replace heuristic CALLS edges for files a SCIP index covers
-// (precise-over-heuristic layering). Returns the number of edges deleted.
-func (s *Store) DeleteEdgesFromFiles(project, edgeType string, files []string) (int64, error) {
-	if len(files) == 0 {
+// DeleteEdgesBetweenFiles deletes edges of the given type whose SOURCE
+// node lives in srcFiles AND whose TARGET node lives in tgtFiles, for the
+// project. Used by the SCIP ingest pass to replace heuristic CALLS edges
+// only where the index can actually re-derive them: requiring BOTH
+// endpoints to be index-covered keeps heuristic edges into files the
+// indexer cannot see (CGO sources, platform-gated files) — ground-truth
+// eval showed source-only deletion cost 210 real edges on this repo.
+// Returns the number of edges deleted.
+func (s *Store) DeleteEdgesBetweenFiles(project, edgeType string, srcFiles, tgtFiles []string) (int64, error) {
+	if len(srcFiles) == 0 || len(tgtFiles) == 0 {
 		return 0, nil
 	}
-	const batchSize = 500
+	const batchSize = 450 // two IN lists share the statement's variable budget
 	var total int64
-	for i := 0; i < len(files); i += batchSize {
-		end := i + batchSize
-		if end > len(files) {
-			end = len(files)
+	for i := 0; i < len(srcFiles); i += batchSize {
+		iEnd := i + batchSize
+		if iEnd > len(srcFiles) {
+			iEnd = len(srcFiles)
 		}
-		chunk := files[i:end]
-		placeholders := make([]string, len(chunk))
-		args := make([]any, 0, len(chunk)+3)
-		args = append(args, project, edgeType, project)
-		for j, f := range chunk {
-			placeholders[j] = "?"
-			args = append(args, f)
-		}
-		query := fmt.Sprintf(
-			`DELETE FROM edges WHERE project = ? AND type = ? AND source_id IN (
-				SELECT id FROM nodes WHERE project = ? AND file_path IN (%s))`,
-			strings.Join(placeholders, ","))
-		res, err := s.q.Exec(query, args...)
-		if err != nil {
-			return total, fmt.Errorf("delete edges from files: %w", err)
-		}
-		if n, err := res.RowsAffected(); err == nil {
-			total += n
+		srcChunk := srcFiles[i:iEnd]
+		for j := 0; j < len(tgtFiles); j += batchSize {
+			jEnd := j + batchSize
+			if jEnd > len(tgtFiles) {
+				jEnd = len(tgtFiles)
+			}
+			tgtChunk := tgtFiles[j:jEnd]
+
+			args := make([]any, 0, len(srcChunk)+len(tgtChunk)+4)
+			args = append(args, project, edgeType, project)
+			srcPH := make([]string, len(srcChunk))
+			for k, f := range srcChunk {
+				srcPH[k] = "?"
+				args = append(args, f)
+			}
+			args = append(args, project)
+			tgtPH := make([]string, len(tgtChunk))
+			for k, f := range tgtChunk {
+				tgtPH[k] = "?"
+				args = append(args, f)
+			}
+			query := fmt.Sprintf(
+				`DELETE FROM edges WHERE project = ? AND type = ?
+				AND source_id IN (SELECT id FROM nodes WHERE project = ? AND file_path IN (%s))
+				AND target_id IN (SELECT id FROM nodes WHERE project = ? AND file_path IN (%s))`,
+				strings.Join(srcPH, ","), strings.Join(tgtPH, ","))
+			res, err := s.q.Exec(query, args...)
+			if err != nil {
+				return total, fmt.Errorf("delete edges between files: %w", err)
+			}
+			if n, err := res.RowsAffected(); err == nil {
+				total += n
+			}
 		}
 	}
 	return total, nil

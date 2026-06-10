@@ -682,8 +682,16 @@ func (p *Parser) parseReturn() (*ReturnClause, error) {
 		if numTok.Type != TokNumber {
 			return nil, fmt.Errorf("expected number after LIMIT, got %q", numTok.Value)
 		}
-		n, _ := strconv.Atoi(numTok.Value)
+		// The lexer emits decimals as TokNumber too; LIMIT requires an
+		// integer (openCypher rejects LIMIT 1.7). The previously ignored
+		// Atoi error silently turned a float into LIMIT 0 — which was then
+		// itself misread as "no limit".
+		n, err := strconv.Atoi(numTok.Value)
+		if err != nil {
+			return nil, fmt.Errorf("LIMIT must be a non-negative integer, got %q at pos %d", numTok.Value, numTok.Pos)
+		}
 		r.Limit = n
+		r.HasLimit = true
 	}
 
 	return r, nil

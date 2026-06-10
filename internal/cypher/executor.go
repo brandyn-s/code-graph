@@ -303,7 +303,7 @@ func (e *Executor) tryAggregateSQL(plan *Plan) (*Result, bool) {
 
 	// LIMIT
 	var trimmed bool
-	allRows, trimmed = applyLimit(allRows, plan.ReturnSpec.Limit, e.maxRows())
+	allRows, trimmed = applyLimit(allRows, plan.ReturnSpec.Limit, plan.ReturnSpec.HasLimit, e.maxRows())
 	if trimmed {
 		e.markTruncated()
 	}
@@ -1488,6 +1488,16 @@ func getNodeProperty(n *store.Node, prop string) any {
 	case "end_line":
 		return n.EndLine
 	case "id":
+		// openCypher has no built-in `id` property (id(n) is a function),
+		// so a user property named "id" must win over the internal row ID
+		// (the shadowing returned SQLite rowids for nodes that carry an
+		// `id` property). The row ID stays reachable when no such
+		// property exists, so existing queries keep working.
+		if n.Properties != nil {
+			if v, ok := n.Properties["id"]; ok {
+				return v
+			}
+		}
 		return n.ID
 	case "project":
 		return n.Project
@@ -1507,6 +1517,13 @@ func getEdgeProperty(edge *store.Edge, prop string) any {
 	case "type":
 		return edge.Type
 	case "id":
+		// Same rule as getNodeProperty: a user property named "id" wins
+		// over the internal row ID.
+		if edge.Properties != nil {
+			if v, ok := edge.Properties["id"]; ok {
+				return v
+			}
+		}
 		return edge.ID
 	case "source_id":
 		return edge.SourceID
@@ -1625,7 +1642,7 @@ func (e *Executor) simpleProjection(bindings []binding, ret *ReturnClause) (*Res
 
 	// LIMIT
 	var trimmed bool
-	rows, trimmed = applyLimit(rows, ret.Limit, e.maxRows())
+	rows, trimmed = applyLimit(rows, ret.Limit, ret.HasLimit, e.maxRows())
 	if trimmed {
 		e.markTruncated()
 	}
@@ -1758,13 +1775,14 @@ func resolveOrderColumn(orderBy string, items []ReturnItem, cols []string) strin
 	return orderBy
 }
 
-// applyLimit caps result rows. Explicit LIMIT values from the Cypher query are
-// respected; when no LIMIT is specified (limit <= 0), maxRows is used as default.
-// applyLimit trims rows to the effective cap (min of user LIMIT and maxRows).
-// Returns (trimmed, truncated) — truncated is true iff rows were dropped, so
-// the caller can surface that via Result.Truncated.
-func applyLimit(rows []map[string]any, limit, maxRows int) ([]map[string]any, bool) {
-	if limit <= 0 {
+// applyLimit caps result rows. An explicit LIMIT from the Cypher query is
+// respected verbatim — including LIMIT 0, which is a valid empty result
+// (the old `limit <= 0` check conflated it with "no LIMIT clause" and
+// returned up to maxRows rows). Without an explicit LIMIT, maxRows is the
+// default cap. Returns (trimmed, truncated) — truncated is true iff rows
+// were dropped, so the caller can surface that via Result.Truncated.
+func applyLimit(rows []map[string]any, limit int, hasLimit bool, maxRows int) ([]map[string]any, bool) {
+	if !hasLimit {
 		limit = maxRows
 	}
 	if len(rows) > limit {
@@ -1817,7 +1835,7 @@ func (e *Executor) aggregateResults(bindings []binding, ret *ReturnClause) (*Res
 
 	// LIMIT
 	var trimmed bool
-	rows, trimmed = applyLimit(rows, ret.Limit, e.maxRows())
+	rows, trimmed = applyLimit(rows, ret.Limit, ret.HasLimit, e.maxRows())
 	if trimmed {
 		e.markTruncated()
 	}

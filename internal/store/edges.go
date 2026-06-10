@@ -663,3 +663,41 @@ func scanEdges(rows *sql.Rows) ([]*Edge, error) {
 	}
 	return result, rows.Err()
 }
+
+// DeleteEdgesFromFiles deletes edges of the given type whose SOURCE node
+// lives in one of the given files of the project. Used by the SCIP ingest
+// pass to replace heuristic CALLS edges for files a SCIP index covers
+// (precise-over-heuristic layering). Returns the number of edges deleted.
+func (s *Store) DeleteEdgesFromFiles(project, edgeType string, files []string) (int64, error) {
+	if len(files) == 0 {
+		return 0, nil
+	}
+	const batchSize = 500
+	var total int64
+	for i := 0; i < len(files); i += batchSize {
+		end := i + batchSize
+		if end > len(files) {
+			end = len(files)
+		}
+		chunk := files[i:end]
+		placeholders := make([]string, len(chunk))
+		args := make([]any, 0, len(chunk)+3)
+		args = append(args, project, edgeType, project)
+		for j, f := range chunk {
+			placeholders[j] = "?"
+			args = append(args, f)
+		}
+		query := fmt.Sprintf(
+			`DELETE FROM edges WHERE project = ? AND type = ? AND source_id IN (
+				SELECT id FROM nodes WHERE project = ? AND file_path IN (%s))`,
+			strings.Join(placeholders, ","))
+		res, err := s.q.Exec(query, args...)
+		if err != nil {
+			return total, fmt.Errorf("delete edges from files: %w", err)
+		}
+		if n, err := res.RowsAffected(); err == nil {
+			total += n
+		}
+	}
+	return total, nil
+}

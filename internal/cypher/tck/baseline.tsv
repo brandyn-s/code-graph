@@ -1,0 +1,324 @@
+Match1.feature :: [10] Fail when a path has the same variable in the same pattern	SKIP_OUTLINE
+Match1.feature :: [11] Fail when matching a node variable bound to a value	SKIP_OUTLINE
+Match1.feature :: [1] Match non-existent nodes returns empty	PASS
+Match1.feature :: [2] Matching all nodes	PASS
+Match1.feature :: [3] Matching nodes using multiple labels	SKIP_SETUP
+Match1.feature :: [4] Simple node inline property predicate	PASS
+Match1.feature :: [5] Use multiple MATCH clauses to do a Cartesian product	OUT_OF_SCOPE
+Match1.feature :: [6] Fail when using parameter as node predicate in MATCH	OUT_OF_SCOPE
+Match1.feature :: [7] Fail when a relationship has the same variable in a preceding MATCH	SKIP_OUTLINE
+Match1.feature :: [8] Fail when a path has the same variable in a preceding MATCH	SKIP_OUTLINE
+Match1.feature :: [9] Fail when a relationship has the same variable in the same pattern	SKIP_OUTLINE
+Match2.feature :: [10] Fail when a path has the same variable in a preceding MATCH	SKIP_OUTLINE
+Match2.feature :: [11] Fail when a node has the same variable in the same pattern	SKIP_OUTLINE
+Match2.feature :: [12] Fail when a path has the same variable in the same pattern	SKIP_OUTLINE
+Match2.feature :: [13] Fail when matching a relationship variable bound to a value	SKIP_OUTLINE
+Match2.feature :: [1] Match non-existent relationships returns empty	PASS
+Match2.feature :: [2] Matching a relationship pattern using a label predicate on both sides	PASS
+Match2.feature :: [3] Matching a self-loop with an undirected relationship pattern	OUT_OF_SCOPE
+Match2.feature :: [4] Matching a self-loop with a directed relationship pattern	OUT_OF_SCOPE
+Match2.feature :: [5] Match relationship with inline property value	FAIL
+Match2.feature :: [6] Match relationships with multiple types	PASS
+Match2.feature :: [7] Matching twice with conflicting relationship types on same relationship	OUT_OF_SCOPE
+Match2.feature :: [8] Fail when using parameter as relationship predicate in MATCH	OUT_OF_SCOPE
+Match2.feature :: [9] Fail when a node has the same variable in a preceding MATCH	SKIP_OUTLINE
+Match3.feature :: [10] Matching using self-referencing pattern returns no result	OUT_OF_SCOPE
+Match3.feature :: [11] Undirected match in self-relationship graph	PASS
+Match3.feature :: [12] Undirected match of self-relationship in self-relationship graph	PASS
+Match3.feature :: [13] Directed match on self-relationship graph	PASS
+Match3.feature :: [14] Directed match of self-relationship on self-relationship graph	PASS
+Match3.feature :: [15] Mixing directed and undirected pattern parts with self-relationship, simple	FAIL
+Match3.feature :: [16] Mixing directed and undirected pattern parts with self-relationship, undirected	FAIL
+Match3.feature :: [17] Handling cyclic patterns	SKIP_SETUP
+Match3.feature :: [18] Handling cyclic patterns when separated into two parts	OUT_OF_SCOPE
+Match3.feature :: [19] Two bound nodes pointing to the same node	OUT_OF_SCOPE
+Match3.feature :: [1] Get neighbours	SKIP_COMPARE
+Match3.feature :: [20] Three bound nodes pointing to the same node	OUT_OF_SCOPE
+Match3.feature :: [21] Three bound nodes pointing to the same node with extra connections	OUT_OF_SCOPE
+Match3.feature :: [22] Returning bound nodes that are not part of the pattern	OUT_OF_SCOPE
+Match3.feature :: [23] Matching disconnected patterns	OUT_OF_SCOPE
+Match3.feature :: [24] Matching twice with duplicate relationship types on same relationship	OUT_OF_SCOPE
+Match3.feature :: [25] Matching twice with an additional node label	OUT_OF_SCOPE
+Match3.feature :: [26] Matching twice with a duplicate predicate	OUT_OF_SCOPE
+Match3.feature :: [27] Matching from null nodes should return no results owing to finding no matches	OUT_OF_SCOPE
+Match3.feature :: [28] Matching from null nodes should return no results owing to matches being filtered out	OUT_OF_SCOPE
+Match3.feature :: [29] Fail when re-using a relationship in the same pattern	FAIL_ERROR
+Match3.feature :: [2] Directed match of a simple relationship	PASS
+Match3.feature :: [30] Fail when using a list or nodes as a node	OUT_OF_SCOPE
+Match3.feature :: [3] Undirected match on simple relationship graph	PASS
+Match3.feature :: [4] Get two related nodes	SKIP_COMPARE
+Match3.feature :: [5] Return two subgraphs with bound undirected relationship	FAIL
+Match3.feature :: [6] Matching a relationship pattern using a label predicate	SKIP_SETUP
+Match3.feature :: [7] Matching nodes with many labels	SKIP_SETUP
+Match3.feature :: [8] Matching using relationship predicate with multiples of the same type	SKIP_SETUP
+Match3.feature :: [9] Get related to related to	SKIP_COMPARE
+Match4.feature :: [10] Fail on negative bound	OUT_OF_SCOPE
+Match4.feature :: [1] Handling fixed-length variable length pattern	FAIL
+Match4.feature :: [2] Simple variable length pattern	SKIP_SETUP
+Match4.feature :: [3] Zero-length variable length pattern in the middle of the pattern	SKIP_SETUP
+Match4.feature :: [4] Matching longer variable length paths	SKIP_SETUP
+Match4.feature :: [5] Matching variable length pattern with property predicate	SKIP_SETUP
+Match4.feature :: [6] Matching variable length patterns from a bound node	OUT_OF_SCOPE
+Match4.feature :: [7] Matching variable length patterns including a bound relationship	OUT_OF_SCOPE
+Match4.feature :: [8] Matching relationships into a list and matching variable length using the list	OUT_OF_SCOPE
+Match4.feature :: [9] Fail when asterisk operator is missing	OUT_OF_SCOPE
+Match5.feature :: [10] Handling symmetrically bounded variable length match, bounds are two	OUT_OF_SCOPE
+Match5.feature :: [11] Handling upper and lower bounded variable length match, empty interval 1	OUT_OF_SCOPE
+Match5.feature :: [12] Handling upper and lower bounded variable length match, empty interval 2	OUT_OF_SCOPE
+Match5.feature :: [13] Handling upper bounded variable length match, empty interval	OUT_OF_SCOPE
+Match5.feature :: [14] Handling upper bounded variable length match 1	OUT_OF_SCOPE
+Match5.feature :: [15] Handling upper bounded variable length match 2	OUT_OF_SCOPE
+Match5.feature :: [16] Handling lower bounded variable length match 1	OUT_OF_SCOPE
+Match5.feature :: [17] Handling lower bounded variable length match 2	OUT_OF_SCOPE
+Match5.feature :: [18] Handling lower bounded variable length match 3	OUT_OF_SCOPE
+Match5.feature :: [19] Handling a variable length relationship and a standard relationship in chain, zero length 1	OUT_OF_SCOPE
+Match5.feature :: [1] Handling unbounded variable length match	OUT_OF_SCOPE
+Match5.feature :: [20] Handling a variable length relationship and a standard relationship in chain, zero length 2	OUT_OF_SCOPE
+Match5.feature :: [21] Handling a variable length relationship and a standard relationship in chain, single length 1	OUT_OF_SCOPE
+Match5.feature :: [22] Handling a variable length relationship and a standard relationship in chain, single length 2	OUT_OF_SCOPE
+Match5.feature :: [23] Handling a variable length relationship and a standard relationship in chain, longer 1	OUT_OF_SCOPE
+Match5.feature :: [24] Handling a variable length relationship and a standard relationship in chain, longer 2	OUT_OF_SCOPE
+Match5.feature :: [25] Handling a variable length relationship and a standard relationship in chain, longer 3	OUT_OF_SCOPE
+Match5.feature :: [26] Handling mixed relationship patterns and directions 1	OUT_OF_SCOPE
+Match5.feature :: [27] Handling mixed relationship patterns and directions 2	OUT_OF_SCOPE
+Match5.feature :: [28] Handling mixed relationship patterns 1	OUT_OF_SCOPE
+Match5.feature :: [29] Handling mixed relationship patterns 2	OUT_OF_SCOPE
+Match5.feature :: [2] Handling explicitly unbounded variable length match	OUT_OF_SCOPE
+Match5.feature :: [3] Handling single bounded variable length match 1	OUT_OF_SCOPE
+Match5.feature :: [4] Handling single bounded variable length match 2	OUT_OF_SCOPE
+Match5.feature :: [5] Handling single bounded variable length match 3	OUT_OF_SCOPE
+Match5.feature :: [6] Handling upper and lower bounded variable length match 1	OUT_OF_SCOPE
+Match5.feature :: [7] Handling upper and lower bounded variable length match 2	OUT_OF_SCOPE
+Match5.feature :: [8] Handling symmetrically bounded variable length match, bounds are zero	OUT_OF_SCOPE
+Match5.feature :: [9] Handling symmetrically bounded variable length match, bounds are one	OUT_OF_SCOPE
+Match6.feature :: [10] Named path with alternating directed/undirected relationships	OUT_OF_SCOPE
+Match6.feature :: [11] Named path with multiple alternating directed/undirected relationships	OUT_OF_SCOPE
+Match6.feature :: [12] Matching path with multiple bidirectional relationships	OUT_OF_SCOPE
+Match6.feature :: [13] Matching path with both directions should respect other directions	OUT_OF_SCOPE
+Match6.feature :: [14] Named path with undirected fixed variable length pattern	OUT_OF_SCOPE
+Match6.feature :: [15] Variable-length named path	OUT_OF_SCOPE
+Match6.feature :: [16] Return a var length path	OUT_OF_SCOPE
+Match6.feature :: [17] Return a named var length path of length zero	OUT_OF_SCOPE
+Match6.feature :: [18] Undirected named path	OUT_OF_SCOPE
+Match6.feature :: [19] Variable length relationship without lower bound	OUT_OF_SCOPE
+Match6.feature :: [1] Zero-length named path	OUT_OF_SCOPE
+Match6.feature :: [20] Variable length relationship without bounds	OUT_OF_SCOPE
+Match6.feature :: [21] Fail when a node has the same variable in a preceding MATCH	SKIP_OUTLINE
+Match6.feature :: [22] Fail when a relationship has the same variable in a preceding MATCH	SKIP_OUTLINE
+Match6.feature :: [23] Fail when a node has the same variable in the same pattern	SKIP_OUTLINE
+Match6.feature :: [24] Fail when a relationship has the same variable in the same pattern	SKIP_OUTLINE
+Match6.feature :: [25] Fail when matching a path variable bound to a value	SKIP_OUTLINE
+Match6.feature :: [2] Return a simple path	OUT_OF_SCOPE
+Match6.feature :: [3] Return a three node path	OUT_OF_SCOPE
+Match6.feature :: [4] Respecting direction when matching non-existent path	OUT_OF_SCOPE
+Match6.feature :: [5] Path query should return results in written order	OUT_OF_SCOPE
+Match6.feature :: [6] Handling direction of named paths	OUT_OF_SCOPE
+Match6.feature :: [7] Respecting direction when matching existing path	OUT_OF_SCOPE
+Match6.feature :: [8] Respecting direction when matching non-existent path with multiple directions	OUT_OF_SCOPE
+Match6.feature :: [9] Longer path query should return results in written order	OUT_OF_SCOPE
+Match7.feature :: [10] Optionally matching from null nodes should return null	OUT_OF_SCOPE
+Match7.feature :: [11] Return two subgraphs with bound undirected relationship and optional relationship	OUT_OF_SCOPE
+Match7.feature :: [12] Variable length optional relationships	OUT_OF_SCOPE
+Match7.feature :: [13] Variable length optional relationships with bound nodes	OUT_OF_SCOPE
+Match7.feature :: [14] Variable length optional relationships with length predicates	OUT_OF_SCOPE
+Match7.feature :: [15] Variable length patterns and nulls	OUT_OF_SCOPE
+Match7.feature :: [16] Optionally matching named paths - null result	OUT_OF_SCOPE
+Match7.feature :: [17] Optionally matching named paths - existing result	OUT_OF_SCOPE
+Match7.feature :: [18] Named paths inside optional matches with node predicates	OUT_OF_SCOPE
+Match7.feature :: [19] Optionally matching named paths with single and variable length patterns	OUT_OF_SCOPE
+Match7.feature :: [1] Simple OPTIONAL MATCH on empty graph	OUT_OF_SCOPE
+Match7.feature :: [20] Variable length optional relationships with bound nodes, no matches	OUT_OF_SCOPE
+Match7.feature :: [21] Handling optional matches between nulls	OUT_OF_SCOPE
+Match7.feature :: [22] MATCH after OPTIONAL MATCH	OUT_OF_SCOPE
+Match7.feature :: [23] OPTIONAL MATCH with labels on the optional end node	OUT_OF_SCOPE
+Match7.feature :: [24] Optionally matching self-loops	OUT_OF_SCOPE
+Match7.feature :: [25] Optionally matching self-loops without matches	OUT_OF_SCOPE
+Match7.feature :: [26] Handling correlated optional matches; first does not match implies second does not match	OUT_OF_SCOPE
+Match7.feature :: [27] Handling optional matches between optionally matched entities	OUT_OF_SCOPE
+Match7.feature :: [28] Handling optional matches with inline label predicate	OUT_OF_SCOPE
+Match7.feature :: [29] Satisfies the open world assumption, relationships between same nodes	OUT_OF_SCOPE
+Match7.feature :: [2] OPTIONAL MATCH with previously bound nodes	OUT_OF_SCOPE
+Match7.feature :: [30] Satisfies the open world assumption, single relationship	OUT_OF_SCOPE
+Match7.feature :: [31] Satisfies the open world assumption, relationships between different nodes	OUT_OF_SCOPE
+Match7.feature :: [3] OPTIONAL MATCH and bound nodes	OUT_OF_SCOPE
+Match7.feature :: [4] Optionally matching relationship with bound nodes in reverse direction	OUT_OF_SCOPE
+Match7.feature :: [5] Optionally matching relationship with a relationship that is already bound	OUT_OF_SCOPE
+Match7.feature :: [6] Optionally matching relationship with a relationship and node that are both already bound	OUT_OF_SCOPE
+Match7.feature :: [7] MATCH with OPTIONAL MATCH in longer pattern	OUT_OF_SCOPE
+Match7.feature :: [8] Longer pattern with bound nodes without matches	OUT_OF_SCOPE
+Match7.feature :: [9] Longer pattern with bound nodes	OUT_OF_SCOPE
+Match8.feature :: [1] Pattern independent of bound variables results in cross product	OUT_OF_SCOPE
+Match8.feature :: [2] Counting rows after MATCH, MERGE, OPTIONAL MATCH	OUT_OF_SCOPE
+Match8.feature :: [3] Matching and disregarding output, then matching again	OUT_OF_SCOPE
+Match9.feature :: [1] Variable length relationship variables are lists of relationships	OUT_OF_SCOPE
+Match9.feature :: [2] Return relationships by collecting them as a list - directed, one way	FAIL
+Match9.feature :: [3] Return relationships by collecting them as a list - undirected, starting from two extremes	FAIL
+Match9.feature :: [4] Return relationships by collecting them as a list - undirected, starting from one extreme	FAIL
+Match9.feature :: [5] Variable length pattern with label predicate on both sides	SKIP_SETUP
+Match9.feature :: [6] Matching relationships into a list and matching variable length using the list, with bound nodes	OUT_OF_SCOPE
+Match9.feature :: [7] Matching relationships into a list and matching variable length using the list, with bound nodes, wrong direction	OUT_OF_SCOPE
+Match9.feature :: [8] Variable length relationship in OPTIONAL MATCH	OUT_OF_SCOPE
+Match9.feature :: [9] Optionally matching named paths with variable length patterns	OUT_OF_SCOPE
+MatchWhere1.feature :: [10] Filter node with disjunctive property predicate on single variables with multiple bindings	SKIP_COMPARE
+MatchWhere1.feature :: [11] Filter relationship with disjunctive relationship type predicate on multi variables with multiple bindings	OUT_OF_SCOPE
+MatchWhere1.feature :: [12] Filter path with path length predicate on multi variables with one binding	OUT_OF_SCOPE
+MatchWhere1.feature :: [13] Filter path with false path length predicate on multi variables with one binding	OUT_OF_SCOPE
+MatchWhere1.feature :: [14] Fail when filtering path with property predicate	OUT_OF_SCOPE
+MatchWhere1.feature :: [15] Fail on aggregation in WHERE	PASS_ERROR
+MatchWhere1.feature :: [1] Filter node with node label predicate on multi variables with multiple bindings	FAIL
+MatchWhere1.feature :: [2] Filter node with node label predicate on multi variables without any bindings	FAIL
+MatchWhere1.feature :: [3] Filter node with property predicate on a single variable with multiple bindings	PASS
+MatchWhere1.feature :: [4] Filter start node of relationship with property predicate on multi variables with multiple bindings	SKIP_SETUP
+MatchWhere1.feature :: [5] Filter end node of relationship with property predicate on multi variables with multiple bindings	PASS
+MatchWhere1.feature :: [6] Filter node with a parameter in a property predicate on multi variables with one binding	OUT_OF_SCOPE
+MatchWhere1.feature :: [7] Filter relationship with relationship type predicate on multi variables with multiple bindings	OUT_OF_SCOPE
+MatchWhere1.feature :: [8] Filter relationship with property predicate on multi variables with multiple bindings	PASS
+MatchWhere1.feature :: [9] Filter relationship with a parameter in a property predicate on multi variables with one binding	OUT_OF_SCOPE
+MatchWhere2.feature :: [1] Filter nodes with conjunctive two-part property predicate on multi variables with multiple bindings	OUT_OF_SCOPE
+MatchWhere2.feature :: [2] Filter node with conjunctive multi-part property predicates on multi variables with multiple bindings	OUT_OF_SCOPE
+MatchWhere3.feature :: [1] Join between node identities	OUT_OF_SCOPE
+MatchWhere3.feature :: [2] Join between node properties of disconnected nodes	OUT_OF_SCOPE
+MatchWhere3.feature :: [3] Join between node properties of adjacent nodes	OUT_OF_SCOPE
+MatchWhere4.feature :: [1] Join nodes on inequality	OUT_OF_SCOPE
+MatchWhere4.feature :: [2] Join with disjunctive multi-part predicates including patterns	OUT_OF_SCOPE
+MatchWhere5.feature :: [1] Filter out on null	SKIP_SETUP
+MatchWhere5.feature :: [2] Filter out on null if the AND'd predicate evaluates to false	SKIP_SETUP
+MatchWhere5.feature :: [3] Filter out on null if the AND'd predicate evaluates to true	SKIP_SETUP
+MatchWhere5.feature :: [4] Do not filter out on null if the OR'd predicate evaluates to true	SKIP_SETUP
+MatchWhere6.feature :: [1] Filter node with node label predicate on multi variables with multiple bindings after MATCH and OPTIONAL MATCH	OUT_OF_SCOPE
+MatchWhere6.feature :: [2] Filter node with false node label predicate after OPTIONAL MATCH	OUT_OF_SCOPE
+MatchWhere6.feature :: [3] Filter node with property predicate on multi variables with multiple bindings after OPTIONAL MATCH	OUT_OF_SCOPE
+MatchWhere6.feature :: [4] Do not fail when predicates on optionally matched and missed nodes are invalid	OUT_OF_SCOPE
+MatchWhere6.feature :: [5] Matching and optionally matching with unbound nodes and equality predicate in reverse direction	OUT_OF_SCOPE
+MatchWhere6.feature :: [6] Join nodes on non-equality of properties – OPTIONAL MATCH and WHERE	OUT_OF_SCOPE
+MatchWhere6.feature :: [7] Join nodes on non-equality of properties – OPTIONAL MATCH on two relationships and WHERE	OUT_OF_SCOPE
+MatchWhere6.feature :: [8] Join nodes on non-equality of properties – Two OPTIONAL MATCH clauses and WHERE	OUT_OF_SCOPE
+Return1.feature :: [1] Returning a list property	SKIP_COMPARE
+Return1.feature :: [2] Fail when returning an undefined variable	FAIL_ERROR
+Return2.feature :: [10] Return count aggregation over an empty graph	FAIL
+Return2.feature :: [11] RETURN does not lose precision on large integers	PASS
+Return2.feature :: [12] Projecting a list of nodes and relationships	SKIP_SETUP
+Return2.feature :: [13] Projecting a map of nodes and relationships	SKIP_SETUP
+Return2.feature :: [14] Do not fail when returning type of deleted relationships	OUT_OF_SCOPE
+Return2.feature :: [15] Fail when returning properties of deleted nodes	OUT_OF_SCOPE
+Return2.feature :: [16] Fail when returning labels of deleted nodes	OUT_OF_SCOPE
+Return2.feature :: [17] Fail when returning properties of deleted relationships	OUT_OF_SCOPE
+Return2.feature :: [18] Fail on projecting a non-existent function	OUT_OF_SCOPE
+Return2.feature :: [1] Arithmetic expressions should propagate null values	OUT_OF_SCOPE
+Return2.feature :: [2] Returning a node property value	PASS
+Return2.feature :: [3] Missing node property should become null	FAIL
+Return2.feature :: [4] Returning a relationship property value	PASS
+Return2.feature :: [5] Missing relationship property should become null	PASS
+Return2.feature :: [6] Adding a property and a literal in projection	OUT_OF_SCOPE
+Return2.feature :: [7] Adding list properties in projection	OUT_OF_SCOPE
+Return2.feature :: [8] Returning label predicate expression	FAIL
+Return2.feature :: [9] Returning a projected map	FAIL
+Return3.feature :: [1] Returning multiple expressions	FAIL
+Return3.feature :: [2] Returning multiple node property values	PASS
+Return3.feature :: [3] Projecting nodes and relationships	SKIP_SETUP
+Return4.feature :: [10] Fail when returning multiple columns with same name	PASS_ERROR
+Return4.feature :: [11] Reusing variable names in RETURN	OUT_OF_SCOPE
+Return4.feature :: [1] Honour the column name for RETURN items	OUT_OF_SCOPE
+Return4.feature :: [2] Support column renaming	PASS
+Return4.feature :: [3] Aliasing expressions	PASS
+Return4.feature :: [4] Keeping used expression 1	FAIL
+Return4.feature :: [5] Keeping used expression 2	OUT_OF_SCOPE
+Return4.feature :: [6] Keeping used expression 3	OUT_OF_SCOPE
+Return4.feature :: [7] Keeping used expression 4	OUT_OF_SCOPE
+Return4.feature :: [8] Support column renaming for aggregations	SKIP_SETUP
+Return4.feature :: [9] Handle subexpression in aggregation also occurring as standalone expression with nested aggregation in a literal map	OUT_OF_SCOPE
+Return5.feature :: [1] DISTINCT inside aggregation should work with lists in maps	FAIL
+Return5.feature :: [2] DISTINCT on nullable values	FAIL
+Return5.feature :: [3] DISTINCT inside aggregation should work with nested lists in maps	FAIL
+Return5.feature :: [4] DISTINCT inside aggregation should work with nested lists of maps in maps	FAIL
+Return5.feature :: [5] Aggregate on list values	SKIP_SETUP
+Return6.feature :: [10] Multiple aggregates on same variable	OUT_OF_SCOPE
+Return6.feature :: [11] Counting matches	SKIP_SETUP
+Return6.feature :: [12] Counting matches per group	SKIP_SETUP
+Return6.feature :: [13] Returning the minimum length of paths	OUT_OF_SCOPE
+Return6.feature :: [14] Aggregates in aggregates	PASS_ERROR
+Return6.feature :: [15] Using `rand()` in aggregations	OUT_OF_SCOPE
+Return6.feature :: [16] Aggregation on complex expressions	OUT_OF_SCOPE
+Return6.feature :: [17] Handle constants and parameters inside an expression which contains an aggregation expression	OUT_OF_SCOPE
+Return6.feature :: [18] Handle returned variables inside an expression which contains an aggregation expression	OUT_OF_SCOPE
+Return6.feature :: [19] Handle returned property accesses inside an expression which contains an aggregation expression	OUT_OF_SCOPE
+Return6.feature :: [1] Return count aggregation over nodes	FAIL
+Return6.feature :: [20] Fail if not returned variables are used inside an expression which contains an aggregation expression	OUT_OF_SCOPE
+Return6.feature :: [21] Fail if more complex expressions, even if returned, are used inside expression which contains an aggregation expression	OUT_OF_SCOPE
+Return6.feature :: [2] Projecting an arithmetic expression with aggregation	OUT_OF_SCOPE
+Return6.feature :: [3] Aggregating by a list property has a correct definition of equality	OUT_OF_SCOPE
+Return6.feature :: [4] Support multiple divisions in aggregate function	OUT_OF_SCOPE
+Return6.feature :: [5] Aggregates inside normal functions	OUT_OF_SCOPE
+Return6.feature :: [6] Handle aggregates inside non-aggregate expressions	OUT_OF_SCOPE
+Return6.feature :: [7] Aggregate on property	SKIP_SETUP
+Return6.feature :: [8] Handle aggregation on functions	OUT_OF_SCOPE
+Return6.feature :: [9] Aggregates with arithmetics	FAIL
+Return7.feature :: [1] Return all variables	OUT_OF_SCOPE
+Return7.feature :: [2] Fail when using RETURN * without variables in scope	PASS_ERROR
+Return8.feature :: [1] Return aggregation after With filtering	OUT_OF_SCOPE
+ReturnOrderBy1.feature :: [10] ORDER BY DESC should order lists in the expected order	OUT_OF_SCOPE
+ReturnOrderBy1.feature :: [11] ORDER BY should order distinct types in the expected order	OUT_OF_SCOPE
+ReturnOrderBy1.feature :: [12] ORDER BY DESC should order distinct types in the expected order	OUT_OF_SCOPE
+ReturnOrderBy1.feature :: [1] ORDER BY should order booleans in the expected order	OUT_OF_SCOPE
+ReturnOrderBy1.feature :: [2] ORDER BY DESC should order booleans in the expected order	OUT_OF_SCOPE
+ReturnOrderBy1.feature :: [3] ORDER BY should order strings in the expected order	OUT_OF_SCOPE
+ReturnOrderBy1.feature :: [4] ORDER BY DESC should order strings in the expected order	OUT_OF_SCOPE
+ReturnOrderBy1.feature :: [5] ORDER BY should order ints in the expected order	OUT_OF_SCOPE
+ReturnOrderBy1.feature :: [6] ORDER BY DESC should order ints in the expected order	OUT_OF_SCOPE
+ReturnOrderBy1.feature :: [7] ORDER BY should order floats in the expected order	OUT_OF_SCOPE
+ReturnOrderBy1.feature :: [8] ORDER BY DESC should order floats in the expected order	OUT_OF_SCOPE
+ReturnOrderBy1.feature :: [9] ORDER BY should order lists in the expected order	OUT_OF_SCOPE
+ReturnOrderBy2.feature :: [10] Returned columns do not change from using ORDER BY	SKIP_COMPARE
+ReturnOrderBy2.feature :: [11] Aggregates ordered by arithmetics	OUT_OF_SCOPE
+ReturnOrderBy2.feature :: [12] Aggregation of named paths	OUT_OF_SCOPE
+ReturnOrderBy2.feature :: [13] Fail when sorting on variable removed by DISTINCT	FAIL_ERROR
+ReturnOrderBy2.feature :: [14] Fail on aggregation in ORDER BY after RETURN	OUT_OF_SCOPE
+ReturnOrderBy2.feature :: [1] ORDER BY should return results in ascending order	PASS
+ReturnOrderBy2.feature :: [2] ORDER BY DESC should return results in descending order	PASS
+ReturnOrderBy2.feature :: [3] Sort on aggregated function	OUT_OF_SCOPE
+ReturnOrderBy2.feature :: [4] Support sort and distinct	PASS
+ReturnOrderBy2.feature :: [5] Support ordering by a property after being distinct-ified	PASS
+ReturnOrderBy2.feature :: [6] Count star should count everything in scope	FAIL
+ReturnOrderBy2.feature :: [7] Ordering with aggregation	PASS
+ReturnOrderBy2.feature :: [8] Returning all variables with ordering	FAIL
+ReturnOrderBy2.feature :: [9] Using aliased DISTINCT expression in ORDER BY	PASS
+ReturnOrderBy3.feature :: [1] Sort on aggregate function and normal property	SKIP_SETUP
+ReturnOrderBy4.feature :: [1] ORDER BY of a column introduced in RETURN should return salient results in ascending order	OUT_OF_SCOPE
+ReturnOrderBy4.feature :: [2] Handle projections with ORDER BY	OUT_OF_SCOPE
+ReturnOrderBy5.feature :: [1] Renaming columns before ORDER BY should return results in ascending order	OUT_OF_SCOPE
+ReturnOrderBy6.feature :: [1] Handle constants and parameters inside an order by item which contains an aggregation expression	OUT_OF_SCOPE
+ReturnOrderBy6.feature :: [2] Handle returned aliases inside an order by item which contains an aggregation expression	OUT_OF_SCOPE
+ReturnOrderBy6.feature :: [3] Handle returned property accesses inside an order by item which contains an aggregation expression	OUT_OF_SCOPE
+ReturnOrderBy6.feature :: [4] Fail if not returned variables are used inside an order by item which contains an aggregation expression	OUT_OF_SCOPE
+ReturnOrderBy6.feature :: [5] Fail if more complex expressions, even if returned, are used inside an order by item which contains an aggregation expression	OUT_OF_SCOPE
+ReturnSkipLimit1.feature :: [10] Fail when using non-constants in SKIP	OUT_OF_SCOPE
+ReturnSkipLimit1.feature :: [11] Fail when using negative value in SKIP	OUT_OF_SCOPE
+ReturnSkipLimit1.feature :: [1] Start the result from the second row	OUT_OF_SCOPE
+ReturnSkipLimit1.feature :: [2] Start the result from the second row by param	OUT_OF_SCOPE
+ReturnSkipLimit1.feature :: [3] SKIP with an expression that does not depend on variables	OUT_OF_SCOPE
+ReturnSkipLimit1.feature :: [4] Accept skip zero	OUT_OF_SCOPE
+ReturnSkipLimit1.feature :: [5] SKIP with an expression that depends on variables should fail	OUT_OF_SCOPE
+ReturnSkipLimit1.feature :: [6] Negative parameter for SKIP should fail	OUT_OF_SCOPE
+ReturnSkipLimit1.feature :: [7] Negative SKIP should fail	OUT_OF_SCOPE
+ReturnSkipLimit1.feature :: [8] Floating point parameter for SKIP should fail	OUT_OF_SCOPE
+ReturnSkipLimit1.feature :: [9] Floating point SKIP should fail	OUT_OF_SCOPE
+ReturnSkipLimit2.feature :: [10] Negative parameter for LIMIT should fail	OUT_OF_SCOPE
+ReturnSkipLimit2.feature :: [11] Negative parameter for LIMIT with ORDER BY should fail	OUT_OF_SCOPE
+ReturnSkipLimit2.feature :: [12] Fail when using negative value in LIMIT 1	PASS_ERROR
+ReturnSkipLimit2.feature :: [13] Fail when using negative value in LIMIT 2	PASS_ERROR
+ReturnSkipLimit2.feature :: [14] Floating point parameter for LIMIT should fail	OUT_OF_SCOPE
+ReturnSkipLimit2.feature :: [15] Floating point parameter for LIMIT with ORDER BY should fail	OUT_OF_SCOPE
+ReturnSkipLimit2.feature :: [16] Fail when using floating point in LIMIT 1	PASS_ERROR
+ReturnSkipLimit2.feature :: [17] Fail when using floating point in LIMIT 2	PASS_ERROR
+ReturnSkipLimit2.feature :: [1] Limit to two hits	OUT_OF_SCOPE
+ReturnSkipLimit2.feature :: [2] Limit to two hits with explicit order	PASS
+ReturnSkipLimit2.feature :: [3] LIMIT 0 should return an empty result	PASS
+ReturnSkipLimit2.feature :: [4] Handle ORDER BY with LIMIT 1	PASS
+ReturnSkipLimit2.feature :: [5] ORDER BY with LIMIT 0 should not generate errors	PASS
+ReturnSkipLimit2.feature :: [6] LIMIT with an expression that does not depend on variables	OUT_OF_SCOPE
+ReturnSkipLimit2.feature :: [7] Limit to more rows than actual results 1	PASS
+ReturnSkipLimit2.feature :: [8] Limit to more rows than actual results 2	SKIP_SETUP
+ReturnSkipLimit2.feature :: [9] Fail when using non-constants in LIMIT	PASS_ERROR
+ReturnSkipLimit3.feature :: [1] Get rows in the middle	OUT_OF_SCOPE
+ReturnSkipLimit3.feature :: [2] Get rows in the middle by param	OUT_OF_SCOPE
+ReturnSkipLimit3.feature :: [3] Limiting amount of rows when there are fewer left than the LIMIT argument	OUT_OF_SCOPE

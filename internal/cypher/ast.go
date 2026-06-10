@@ -65,7 +65,8 @@ type ReturnClause struct {
 	Items    []ReturnItem
 	OrderBy  string // "f.name" (optional)
 	OrderDir string // "ASC" or "DESC"
-	Limit    int    // 0 means no limit
+	Limit    int    // meaningful only when HasLimit; LIMIT 0 is a valid empty result
+	HasLimit bool   // true when an explicit LIMIT clause was present
 	Distinct bool
 }
 

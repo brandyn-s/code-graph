@@ -210,6 +210,38 @@ generic "unexpected trailing token" error did not surface the cause
 Full WITH/aggregation support is a separate workstream. The error-
 fast path eliminates the silent-truncation confusion until then.
 
+### Resolved 2026-06-10 (TCK survey: vendored corpus + 3 fixes)
+
+A 324-scenario subset of the openCypher TCK (clauses: match, match-where,
+return, return-orderby, return-skip-limit) is now vendored at
+`internal/cypher/tck/` and run by `tck_survey_test.go` on every test run,
+with every scenario's verdict pinned in `tck/baseline.tsv` (drift in either
+direction fails the test). Its first run found three bugs that both this
+conformance corpus and the same-day executor sweep had missed:
+
+- **`LIMIT 0` returned up to max_rows rows** — `applyLimit` conflated an
+  explicit zero with "no LIMIT clause". `ReturnClause.HasLimit` now
+  distinguishes them; `LIMIT 0` is a valid empty result.
+- **`LIMIT 1.7` was silently accepted** — the ignored `strconv.Atoi` error
+  produced `LIMIT 0` (which then meant "no limit"). Non-integer LIMIT is
+  now a parse error.
+- **`n.id` returned the internal SQLite row ID, shadowing a user property
+  named `id`** (openCypher has no built-in `id` property — `id(n)` is a
+  function). User properties named `id` now win; the row ID remains the
+  fallback when no such property exists. Same rule on edges.
+
+Current survey state (see `tck/baseline.tsv` for the per-scenario
+inventory): 42 pass (33 PASS + 9 PASS_ERROR), 27 fail — every failure is a
+known deviation: relationship isomorphism unenforced (an edge can bind two
+relationship variables in one MATCH), variable-length relationship
+variables bind nil instead of a relationship list, empty-string-as-null,
+no `WHERE n:Label` predicates, no inline relationship properties
+(`[r:T {k: 'v'}]` — node inline props ARE supported), undefined RETURN
+variables yield null instead of erroring, and COUNT-in-ORDER-BY requires
+an alias. 209 scenarios are out-of-scope features (WITH, OPTIONAL MATCH,
+expressions, functions, parameters, multi-pattern MATCH) per the subset
+definition above.
+
 ### Resolved 2026-06-10 (executor correctness sweep)
 
 An end-to-end review of the executor's optimization layer (predicate

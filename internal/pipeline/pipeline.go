@@ -701,6 +701,14 @@ func (p *Pipeline) runPostFlushPasses(files []discover.FileInfo) error {
 	p.passWriteUnresolvedCounts()
 	slog.Info("pass.timing", "pass", "unresolved_counts", "elapsed", time.Since(t))
 
+	// SCIP ingest (opt-in, CBM_SCIP_INDEX_PATH) replaces heuristic CALLS
+	// edges with compiler-grade ones BEFORE tests/communities so the
+	// downstream passes cluster and link over the corrected edge set.
+	p.reportProgress("scip_ingest", 74, "ingesting SCIP index (if configured)")
+	t = time.Now()
+	p.passSCIPIngest()
+	slog.Info("pass.timing", "pass", "scip_ingest", "elapsed", time.Since(t))
+
 	p.reportProgress("tests", 75, "resolving test edges")
 	t = time.Now()
 	p.passTests() // TESTS/TESTS_FILE edges (DB-only)

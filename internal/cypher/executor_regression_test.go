@@ -453,3 +453,70 @@ func TestExecuteDefaultProjectionTruncationSignal(t *testing.T) {
 		t.Fatal("default projection clipped rows without setting Truncated")
 	}
 }
+
+// --- 2026-06-10 TCK-survey fixes (openCypher TCK ran against the engine
+// found these; see internal/cypher/tck/) ---
+
+// LIMIT 0 is a valid empty result. applyLimit conflated it with "no LIMIT
+// clause" (limit <= 0 meant "use the default cap") and returned rows.
+func TestExecuteLimitZero(t *testing.T) {
+	s := setupTestStore(t)
+	defer s.Close()
+
+	exec := &Executor{Store: s}
+	res, err := exec.Execute(`MATCH (n:Function) RETURN n.name LIMIT 0`)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if len(res.Rows) != 0 {
+		t.Fatalf("LIMIT 0: got %d rows, want 0 (%v)", len(res.Rows), res.Rows)
+	}
+}
+
+// LIMIT with a non-integer literal was silently accepted: the ignored Atoi
+// error produced LIMIT 0, which then meant "no limit".
+func TestParseLimitNonInteger(t *testing.T) {
+	_, err := Parse(`MATCH (n) RETURN n LIMIT 1.7`)
+	if err == nil {
+		t.Fatal("LIMIT 1.7 parsed; want rejection")
+	}
+	if !strings.Contains(err.Error(), "non-negative integer") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+// A user property named "id" was shadowed by the internal SQLite row ID —
+// n.id returned the rowid instead of the stored property value.
+func TestExecuteUserIDPropertyNotShadowed(t *testing.T) {
+	s := setupTestStore(t)
+	defer s.Close()
+	if _, err := s.UpsertNode(&store.Node{
+		Project: "test", Label: "Function", Name: "WithID",
+		QualifiedName: "test.withid",
+		Properties:    map[string]any{"id": 4242},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	exec := &Executor{Store: s}
+	res, err := exec.Execute(`MATCH (n:Function {name: "WithID"}) RETURN n.id`)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if len(res.Rows) != 1 {
+		t.Fatalf("got %d rows, want 1", len(res.Rows))
+	}
+	got, ok := toFloat(res.Rows[0]["n.id"])
+	if !ok || got != 4242 {
+		t.Fatalf("n.id = %v, want user property 4242 (not the internal row ID)", res.Rows[0]["n.id"])
+	}
+
+	// And the internal row ID is still reachable when no user property exists.
+	res, err = exec.Execute(`MATCH (n:Function {name: "HandleOrder"}) RETURN n.id`)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if v, ok := toFloat(res.Rows[0]["n.id"]); !ok || v <= 0 {
+		t.Fatalf("n.id fallback to row ID broken: %v", res.Rows[0]["n.id"])
+	}
+}

@@ -1122,7 +1122,7 @@ func TestApplyLimitRespectsExplicit(t *testing.T) {
 	}
 
 	// No explicit limit — should use maxRows default (200), and truncated=true
-	got, truncated := applyLimit(rows, 0, 200)
+	got, truncated := applyLimit(rows, 0, false, 200)
 	if len(got) != 200 {
 		t.Errorf("no limit: expected 200 rows, got %d", len(got))
 	}
@@ -1130,8 +1130,18 @@ func TestApplyLimitRespectsExplicit(t *testing.T) {
 		t.Error("no limit with 300 rows > 200 cap: expected truncated=true")
 	}
 
+	// Explicit LIMIT 0 — valid empty result, NOT "no limit" (TCK
+	// ReturnSkipLimit2 [3]; the old limit<=0 check returned 200 rows).
+	got, truncated = applyLimit(rows, 0, true, 200)
+	if len(got) != 0 {
+		t.Errorf("explicit LIMIT 0: expected 0 rows, got %d", len(got))
+	}
+	if !truncated {
+		t.Error("explicit LIMIT 0 with 300 rows: expected truncated=true")
+	}
+
 	// Explicit limit below maxRows — truncated=true
-	got, truncated = applyLimit(rows, 50, 200)
+	got, truncated = applyLimit(rows, 50, true, 200)
 	if len(got) != 50 {
 		t.Errorf("limit=50: expected 50 rows, got %d", len(got))
 	}
@@ -1140,7 +1150,7 @@ func TestApplyLimitRespectsExplicit(t *testing.T) {
 	}
 
 	// Explicit limit above maxRows — must be respected (not silently capped)
-	got, truncated = applyLimit(rows, 250, 200)
+	got, truncated = applyLimit(rows, 250, true, 200)
 	if len(got) != 250 {
 		t.Errorf("limit=250: expected 250 rows, got %d", len(got))
 	}
@@ -1149,7 +1159,7 @@ func TestApplyLimitRespectsExplicit(t *testing.T) {
 	}
 
 	// Explicit limit above total rows — returns all, truncated=false
-	got, truncated = applyLimit(rows, 500, 200)
+	got, truncated = applyLimit(rows, 500, true, 200)
 	if len(got) != 300 {
 		t.Errorf("limit=500: expected 300 rows (all), got %d", len(got))
 	}

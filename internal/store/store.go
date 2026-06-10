@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -673,15 +674,63 @@ func UnmarshalProps(data string) map[string]any {
 }
 
 // unmarshalProps deserializes JSON properties.
+//
+// Numbers decode via json.Number so that integers too large for an exact
+// float64 representation (|v| > 2^53) survive the round-trip as int64 —
+// plain json.Unmarshal silently corrupted them (distinct values collapsed
+// to the same float64, breaking equality filters on e.g. snowflake IDs).
+// Everything that fits exactly in a float64 still decodes as float64, so
+// existing `.(float64)` assertions on small numerics (confidence, index,
+// coupling_score, ...) are unaffected.
 func unmarshalProps(data string) map[string]any {
 	if data == "" {
 		return map[string]any{}
 	}
+	dec := json.NewDecoder(strings.NewReader(data))
+	dec.UseNumber()
 	var m map[string]any
-	if err := json.Unmarshal([]byte(data), &m); err != nil {
+	if err := dec.Decode(&m); err != nil {
 		return map[string]any{}
 	}
+	for k, v := range m {
+		m[k] = normalizeJSONNumbers(v)
+	}
 	return m
+}
+
+// float64ExactIntLimit is 2^53: the largest magnitude at which every
+// integer is exactly representable as a float64.
+const float64ExactIntLimit = int64(1) << 53
+
+// normalizeJSONNumbers walks a decoded JSON value converting json.Number
+// leaves: float64 when exact (the historical type), int64 only when a
+// float64 would lose precision.
+func normalizeJSONNumbers(v any) any {
+	switch t := v.(type) {
+	case json.Number:
+		if i, err := t.Int64(); err == nil {
+			if i > float64ExactIntLimit || i < -float64ExactIntLimit {
+				return i
+			}
+			return float64(i)
+		}
+		if f, err := t.Float64(); err == nil {
+			return f
+		}
+		return t.String()
+	case []any:
+		for i := range t {
+			t[i] = normalizeJSONNumbers(t[i])
+		}
+		return t
+	case map[string]any:
+		for k := range t {
+			t[k] = normalizeJSONNumbers(t[k])
+		}
+		return t
+	default:
+		return v
+	}
 }
 
 // Now returns the current time in ISO 8601 format.

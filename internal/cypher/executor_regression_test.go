@@ -520,3 +520,72 @@ func TestExecuteUserIDPropertyNotShadowed(t *testing.T) {
 		t.Fatalf("n.id fallback to row ID broken: %v", res.Rows[0]["n.id"])
 	}
 }
+
+// Large integer properties (> 2^53) used to corrupt through the JSON
+// round-trip (json.Unmarshal -> float64): distinct values collapsed to the
+// same float64 and equality filters matched nothing. UnmarshalProps now
+// preserves them as int64. (Found by the TCK Comparison1 scenarios.)
+func TestExecuteLargeIntPropertyPrecision(t *testing.T) {
+	s := setupTestStore(t)
+	defer s.Close()
+	for _, n := range []struct {
+		name string
+		big  int64
+	}{{"big905", 4611686018427387905}, {"big904", 4611686018427387904}} {
+		if _, err := s.UpsertNode(&store.Node{
+			Project: "test", Label: "Big", Name: n.name,
+			QualifiedName: "test." + n.name,
+			Properties:    map[string]any{"big": n.big},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	exec := &Executor{Store: s}
+	res, err := exec.Execute(`MATCH (n:Big) WHERE n.big = 4611686018427387905 RETURN n.name`)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if len(res.Rows) != 1 || res.Rows[0]["n.name"] != "big905" {
+		t.Fatalf("large-int equality: got %v, want exactly big905", res.Rows)
+	}
+}
+
+// Mixed-type ordered comparisons used to abort the whole project's
+// execution (strconv error surfaced as a skipped project). openCypher
+// semantics: the comparison is unknown and the row is filtered.
+func TestExecuteMixedTypeComparisonFiltersNotAborts(t *testing.T) {
+	s := setupTestStore(t)
+	defer s.Close()
+
+	exec := &Executor{Store: s}
+	// n.name is a string on every node; comparing against a number must
+	// return zero rows — not error, not skip the project.
+	res, err := exec.Execute(`MATCH (n:Function) WHERE n.name > 5 RETURN n.name`)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if len(res.SkippedProjects) > 0 {
+		t.Fatalf("mixed-type comparison aborted the project: %v", res.SkippedProjects)
+	}
+	if len(res.Rows) != 0 {
+		t.Fatalf("mixed-type comparison matched rows: %v", res.Rows)
+	}
+}
+
+// String literals on ordered comparisons compare lexicographically
+// (openCypher type-aware comparison); previously they errored.
+func TestExecuteStringOrderedComparison(t *testing.T) {
+	s := setupTestStore(t)
+	defer s.Close()
+
+	exec := &Executor{Store: s}
+	res, err := exec.Execute(`MATCH (n:Function) WHERE n.name >= "S" RETURN n.name`)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	// Fixture functions: HandleOrder, ValidateOrder, SubmitOrder, LogError.
+	if len(res.Rows) != 2 { // SubmitOrder, ValidateOrder
+		t.Fatalf(`name >= "S": got %d rows, want 2 (%v)`, len(res.Rows), res.Rows)
+	}
+}

@@ -166,6 +166,9 @@ func tckOutOfScope(q string) (bool, string) {
 	u = strings.ReplaceAll(u, "STARTS WITH", "STARTSWITH_OK")
 	u = strings.ReplaceAll(u, "ENDS WITH", "ENDSWITH_OK")
 	u = strings.ReplaceAll(u, "IS NOT NULL", "ISNOTNULL_OK")
+	if !strings.HasPrefix(strings.TrimSpace(u), "MATCH") {
+		return true, "no MATCH clause (bare RETURN expressions unsupported)"
+	}
 	for _, kw := range []string{"OPTIONAL", "UNION", "UNWIND", "MERGE", "CALL", "FOREACH", "SKIP", "CREATE", "DELETE", "SET", "REMOVE", "EXISTS", "CASE", "WITH", "NOT", "XOR"} {
 		if regexp.MustCompile(`\b` + kw + `\b`).MatchString(u) {
 			return true, "keyword:" + kw

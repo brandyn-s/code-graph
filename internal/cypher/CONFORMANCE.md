@@ -210,6 +210,32 @@ generic "unexpected trailing token" error did not surface the cause
 Full WITH/aggregation support is a separate workstream. The error-
 fast path eliminates the silent-truncation confusion until then.
 
+### Resolved 2026-06-10 (TCK expression families: 3 more fixes)
+
+Extending the vendored TCK corpus with the `expressions/comparison` and
+`expressions/null` families surfaced three more issues, all fixed:
+
+- **Large-integer property corruption** (store-level): properties decoded
+  via plain `json.Unmarshal` → float64, so integers above 2^53 lost
+  precision — two distinct values collapsed to the same float64 and
+  `WHERE n.big = <literal>` matched nothing. `UnmarshalProps` now decodes
+  via `json.Number` and preserves such integers as int64; everything that
+  fits exactly in a float64 still decodes as float64, so existing
+  `.(float64)` property assertions are unaffected.
+- **Mixed-type ordered comparisons aborted the query**: one string value
+  in a `<`/`>`-compared property errored the entire project's execution
+  (surfaced as a skipped project). Per openCypher, a cross-type
+  comparison is unknown — the row is now filtered and the query
+  succeeds. String literals on ordered comparisons now compare
+  lexicographically (`WHERE n.name >= "S"`), which previously errored.
+- **Inline property maps rejected numeric values**: `{id: 42}` was a
+  parse error while `WHERE n.id = 42` worked. Numbers are now accepted
+  (compared via the same string formatting as `=`, precision-exact after
+  the int64 fix).
+
+The survey also gained a screen rule: bare `RETURN <expression>` queries
+(no MATCH clause) classify as out-of-scope instead of failures.
+
 ### Resolved 2026-06-10 (TCK survey: vendored corpus + 3 fixes)
 
 A 324-scenario subset of the openCypher TCK (clauses: match, match-where,

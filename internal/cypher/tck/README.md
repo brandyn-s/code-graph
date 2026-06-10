@@ -7,9 +7,10 @@ Feature files vendored from the openCypher Technology Compatibility Kit:
 - **License**: Apache-2.0 (each `.feature` file carries the full license
   header and the openCypher attribution notice)
 
-Only the clause families inside code-graph's read-only Cypher subset are
-vendored: `match`, `match-where`, `return`, `return-orderby`,
-`return-skip-limit`. Write clauses (CREATE/MERGE/SET/...), WITH, UNION,
+Only the families inside code-graph's read-only Cypher subset are
+vendored: clauses `match`, `match-where`, `return`, `return-orderby`,
+`return-skip-limit`, plus expressions `comparison` and `null` (they
+exercise the WHERE comparison operators). Write clauses (CREATE/MERGE/SET/...), WITH, UNION,
 UNWIND, and CALL families are intentionally absent — the engine rejects
 those at parse time by design.
 
@@ -48,6 +49,10 @@ git clone --depth 1 https://github.com/opencypher/openCypher /tmp/openCypher
 for d in match match-where return return-orderby return-skip-limit; do
   rm -rf internal/cypher/tck/features/clauses/$d
   cp -r /tmp/openCypher/tck/features/clauses/$d internal/cypher/tck/features/clauses/
+done
+for d in comparison null; do
+  rm -rf internal/cypher/tck/features/$d
+  cp -r /tmp/openCypher/tck/features/expressions/$d internal/cypher/tck/features/
 done
 # then regenerate the baseline and update the commit SHA above
 ```

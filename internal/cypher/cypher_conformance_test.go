@@ -203,6 +203,16 @@ var positiveCypherFixtures = []struct {
 		"<> was documented (CONFORMANCE.md + tool description) but never lexed (2026-06-10)",
 	},
 	{
+		"string_ordered_comparison",
+		`MATCH (f:Function) WHERE f.name >= "S" RETURN f.name`,
+		"ordered comparisons against string literals are lexicographic (2026-06-10; previously errored)",
+	},
+	{
+		"numeric_inline_property",
+		`MATCH (f:Function {start_line: 10}) RETURN f.name`,
+		"inline property maps accept numeric values (2026-06-10; previously string-only, asymmetric with WHERE)",
+	},
+	{
 		"zero_hop_variable_length",
 		`MATCH (a:Function)-[:CALLS*0..2]->(b) RETURN b.name`,
 		"*0..N includes the zero-length path (start node binds as target) (2026-06-10)",

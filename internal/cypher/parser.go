@@ -441,10 +441,12 @@ func (p *Parser) parseInlineProps() (map[string]string, error) {
 			return nil, fmt.Errorf("expected ':' after property key: %w", err)
 		}
 
-		// value (string)
+		// value (string or number — numbers compare via the same string
+		// formatting the executor uses for '=', which is precision-exact
+		// now that large integers survive the property round-trip)
 		valTok := p.advance()
-		if valTok.Type != TokString {
-			return nil, fmt.Errorf("expected string value for property %q, got %q at pos %d", keyTok.Value, valTok.Value, valTok.Pos)
+		if valTok.Type != TokString && valTok.Type != TokNumber {
+			return nil, fmt.Errorf("expected string or number value for property %q, got %q at pos %d", keyTok.Value, valTok.Value, valTok.Pos)
 		}
 
 		props[keyTok.Value] = valTok.Value
@@ -617,6 +619,7 @@ func (p *Parser) parseCondition() (Condition, error) {
 	switch valTok.Type {
 	case TokString:
 		c.Value = valTok.Value
+		c.ValueIsString = true
 	case TokNumber:
 		c.Value = valTok.Value
 	default:

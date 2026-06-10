@@ -55,6 +55,11 @@ type Condition struct {
 	Operator string // "=", "<>", "=~", "CONTAINS", "STARTS WITH", "ENDS WITH", "IS NULL", "IS NOT NULL", "IN", ">", "<", ">=", "<="
 	Value    string // the comparison value (unused for IN, IS NULL, IS NOT NULL)
 
+	// ValueIsString is true when Value came from a string literal. Ordered
+	// comparisons (<, >, <=, >=) use it to pick lexicographic vs numeric
+	// semantics, matching openCypher's type-aware comparison.
+	ValueIsString bool
+
 	// Values holds the list literal for the IN operator: WHERE n.x IN ['a','b'].
 	// Empty for all other operators.
 	Values []string

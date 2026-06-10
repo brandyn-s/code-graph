@@ -80,6 +80,11 @@ func gitRun(t *testing.T, dir string, args ...string) {
 		"GIT_AUTHOR_EMAIL=test@test.com",
 		"GIT_COMMITTER_NAME=test",
 		"GIT_COMMITTER_EMAIL=test@test.com",
+		// Isolate from the host's global/system git config: a developer or
+		// CI machine with commit.gpgsign=true (or a gpg.program wrapper)
+		// would otherwise fail every test commit in these temp repos.
+		"GIT_CONFIG_GLOBAL=/dev/null",
+		"GIT_CONFIG_SYSTEM=/dev/null",
 	)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git %v: %v\n%s", args, err, out)

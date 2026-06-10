@@ -1430,16 +1430,44 @@ func (e *Executor) evaluateCondition(b binding, c Condition) (bool, error) {
 		}
 		return false, nil
 	case ">", "<", ">=", "<=":
-		return compareNumeric(actual, c.Value, c.Operator)
+		return compareOrdered(actual, c)
 	default:
 		return false, fmt.Errorf("unsupported operator: %s", c.Operator)
 	}
 }
 
-func compareNumeric(actual any, expected, op string) (bool, error) {
-	expectedNum, err := strconv.ParseFloat(expected, 64)
+// compareOrdered evaluates <, >, <=, >= with openCypher's type-aware
+// semantics: a string literal compares lexicographically against string
+// values; a numeric literal compares numerically against numeric values
+// (or numeric strings); a type mismatch makes the comparison unknown and
+// the row is FILTERED, not an error. The previous behavior raised an error
+// when any row's value failed to parse as a number — one string value in a
+// compared property aborted the entire project's execution.
+func compareOrdered(actual any, c Condition) (bool, error) {
+	op := c.Operator
+	if c.ValueIsString {
+		s, ok := actual.(string)
+		if !ok {
+			return false, nil // mixed-type comparison is unknown -> filtered
+		}
+		switch op {
+		case ">":
+			return s > c.Value, nil
+		case "<":
+			return s < c.Value, nil
+		case ">=":
+			return s >= c.Value, nil
+		case "<=":
+			return s <= c.Value, nil
+		}
+		return false, nil
+	}
+
+	expectedNum, err := strconv.ParseFloat(c.Value, 64)
 	if err != nil {
-		return false, fmt.Errorf("invalid numeric value %q: %w", expected, err)
+		// Unreachable for parser-produced conditions (TokNumber lexes only
+		// digits), kept as a guard for hand-built Conditions.
+		return false, fmt.Errorf("invalid numeric value %q: %w", c.Value, err)
 	}
 	var actualNum float64
 	switch v := actual.(type) {
@@ -1452,7 +1480,7 @@ func compareNumeric(actual any, expected, op string) (bool, error) {
 	case string:
 		n, parseErr := strconv.ParseFloat(v, 64)
 		if parseErr != nil {
-			return false, fmt.Errorf("cannot compare %q as number: %w", v, parseErr)
+			return false, nil // non-numeric value vs numeric literal: filtered
 		}
 		actualNum = n
 	default:

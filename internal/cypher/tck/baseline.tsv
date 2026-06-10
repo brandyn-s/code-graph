@@ -1,3 +1,36 @@
+Comparison1.feature :: [10] Handling inlined equality of large integer	PASS
+Comparison1.feature :: [11] Handling explicit equality of large integer	PASS
+Comparison1.feature :: [12] Handling inlined equality of large integer, non-equal values	PASS
+Comparison1.feature :: [13] Handling explicit equality of large integer, non-equal values	PASS
+Comparison1.feature :: [14] Direction of traversed relationship is not significant for path equality, simple	OUT_OF_SCOPE
+Comparison1.feature :: [15] It is unknown - i.e. null - if a null is equal to a null	OUT_OF_SCOPE
+Comparison1.feature :: [16] It is unknown - i.e. null - if a null is not equal to a null	OUT_OF_SCOPE
+Comparison1.feature :: [17] Failing when comparing to an undefined variable	PASS_ERROR
+Comparison1.feature :: [1] Number-typed integer comparison	OUT_OF_SCOPE
+Comparison1.feature :: [2] Number-typed float comparison	OUT_OF_SCOPE
+Comparison1.feature :: [3] Any-typed string comparison	OUT_OF_SCOPE
+Comparison1.feature :: [4] Comparing nodes to nodes	OUT_OF_SCOPE
+Comparison1.feature :: [5] Comparing relationships to relationships	OUT_OF_SCOPE
+Comparison1.feature :: [6] Comparing lists to lists	SKIP_OUTLINE
+Comparison1.feature :: [7] Comparing maps to maps	SKIP_OUTLINE
+Comparison1.feature :: [8] Equality and inequality of NaN	SKIP_OUTLINE
+Comparison1.feature :: [9] Equality between strings and numbers	SKIP_OUTLINE
+Comparison2.feature :: [1] Comparing strings and integers using > in an AND'd predicate	PASS
+Comparison2.feature :: [2] Comparing strings and integers using > in a OR'd predicate	PASS
+Comparison2.feature :: [3] Comparing across types yields null, except numbers	SKIP_OUTLINE
+Comparison2.feature :: [4] Comparing lists	SKIP_OUTLINE
+Comparison2.feature :: [5] Comparing NaN	SKIP_OUTLINE
+Comparison2.feature :: [6] Comparability between numbers and strings	SKIP_OUTLINE
+Comparison3.feature :: [1] Handling numerical ranges 1	OUT_OF_SCOPE
+Comparison3.feature :: [2] Handling numerical ranges 2	OUT_OF_SCOPE
+Comparison3.feature :: [3] Handling numerical ranges 3	OUT_OF_SCOPE
+Comparison3.feature :: [4] Handling numerical ranges 4	OUT_OF_SCOPE
+Comparison3.feature :: [5] Handling string ranges 1	OUT_OF_SCOPE
+Comparison3.feature :: [6] Handling string ranges 2	OUT_OF_SCOPE
+Comparison3.feature :: [7] Handling string ranges 3	OUT_OF_SCOPE
+Comparison3.feature :: [8] Handling string ranges 4	OUT_OF_SCOPE
+Comparison3.feature :: [9] Handling empty range	OUT_OF_SCOPE
+Comparison4.feature :: [1] Handling long chains of operators	OUT_OF_SCOPE
 Match1.feature :: [10] Fail when a path has the same variable in the same pattern	SKIP_OUTLINE
 Match1.feature :: [11] Fail when matching a node variable bound to a value	SKIP_OUTLINE
 Match1.feature :: [1] Match non-existent nodes returns empty	PASS
@@ -193,6 +226,22 @@ MatchWhere6.feature :: [5] Matching and optionally matching with unbound nodes a
 MatchWhere6.feature :: [6] Join nodes on non-equality of properties – OPTIONAL MATCH and WHERE	OUT_OF_SCOPE
 MatchWhere6.feature :: [7] Join nodes on non-equality of properties – OPTIONAL MATCH on two relationships and WHERE	OUT_OF_SCOPE
 MatchWhere6.feature :: [8] Join nodes on non-equality of properties – Two OPTIONAL MATCH clauses and WHERE	OUT_OF_SCOPE
+Null1.feature :: [1] Property null check on non-null node	OUT_OF_SCOPE
+Null1.feature :: [2] Property null check on optional non-null node	OUT_OF_SCOPE
+Null1.feature :: [3] Property null check on null node	OUT_OF_SCOPE
+Null1.feature :: [4] A literal null IS null	OUT_OF_SCOPE
+Null1.feature :: [5] IS NULL on a map	SKIP_OUTLINE
+Null1.feature :: [6] IS NULL is case insensitive	FAIL
+Null2.feature :: [1] Property not null check on non-null node	OUT_OF_SCOPE
+Null2.feature :: [2] Property not null check on optional non-null node	OUT_OF_SCOPE
+Null2.feature :: [3] Property not null check on null node	OUT_OF_SCOPE
+Null2.feature :: [4] A literal null is not IS NOT null	OUT_OF_SCOPE
+Null2.feature :: [5] IS NOT NULL on a map	SKIP_OUTLINE
+Null2.feature :: [6] IS NOT NULL is case insensitive	FAIL
+Null3.feature :: [1] The inverse of a null is a null	OUT_OF_SCOPE
+Null3.feature :: [2] It is unknown - i.e. null - if a null is equal to a null	OUT_OF_SCOPE
+Null3.feature :: [3] It is unknown - i.e. null - if a null is not equal to a null	OUT_OF_SCOPE
+Null3.feature :: [4] Using null in IN	SKIP_OUTLINE
 Return1.feature :: [1] Returning a list property	SKIP_COMPARE
 Return1.feature :: [2] Fail when returning an undefined variable	FAIL_ERROR
 Return2.feature :: [10] Return count aggregation over an empty graph	FAIL
@@ -212,11 +261,11 @@ Return2.feature :: [5] Missing relationship property should become null	PASS
 Return2.feature :: [6] Adding a property and a literal in projection	OUT_OF_SCOPE
 Return2.feature :: [7] Adding list properties in projection	OUT_OF_SCOPE
 Return2.feature :: [8] Returning label predicate expression	FAIL
-Return2.feature :: [9] Returning a projected map	FAIL
+Return2.feature :: [9] Returning a projected map	OUT_OF_SCOPE
 Return3.feature :: [1] Returning multiple expressions	FAIL
 Return3.feature :: [2] Returning multiple node property values	PASS
 Return3.feature :: [3] Projecting nodes and relationships	SKIP_SETUP
-Return4.feature :: [10] Fail when returning multiple columns with same name	PASS_ERROR
+Return4.feature :: [10] Fail when returning multiple columns with same name	OUT_OF_SCOPE
 Return4.feature :: [11] Reusing variable names in RETURN	OUT_OF_SCOPE
 Return4.feature :: [1] Honour the column name for RETURN items	OUT_OF_SCOPE
 Return4.feature :: [2] Support column renaming	PASS
@@ -236,7 +285,7 @@ Return6.feature :: [10] Multiple aggregates on same variable	OUT_OF_SCOPE
 Return6.feature :: [11] Counting matches	SKIP_SETUP
 Return6.feature :: [12] Counting matches per group	SKIP_SETUP
 Return6.feature :: [13] Returning the minimum length of paths	OUT_OF_SCOPE
-Return6.feature :: [14] Aggregates in aggregates	PASS_ERROR
+Return6.feature :: [14] Aggregates in aggregates	OUT_OF_SCOPE
 Return6.feature :: [15] Using `rand()` in aggregations	OUT_OF_SCOPE
 Return6.feature :: [16] Aggregation on complex expressions	OUT_OF_SCOPE
 Return6.feature :: [17] Handle constants and parameters inside an expression which contains an aggregation expression	OUT_OF_SCOPE

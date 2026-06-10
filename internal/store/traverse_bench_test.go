@@ -178,3 +178,24 @@ func BenchmarkBFSDepthScaled(b *testing.B) {
 		})
 	}
 }
+
+// BenchmarkBFSNodes200Edges quantifies the saving from skipping the
+// edge-collection CTE (the Cypher executor's variable-length path uses
+// BFSNodes — it discards Edges). Compare against BenchmarkBFS200Edges.
+func BenchmarkBFSNodes200Edges(b *testing.B) {
+	s, rootID := populateTraverseBench(b, 14)
+	defer s.Close()
+
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		result, err := s.BFSNodes(rootID, "outbound", []string{"CALLS"}, 3, 300)
+		if err != nil {
+			b.Fatal(err)
+		}
+		if len(result.Visited) == 0 {
+			b.Fatal("expected visited nodes")
+		}
+	}
+}

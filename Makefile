@@ -1,4 +1,4 @@
-.PHONY: build test lint clean install check bench-memory bench-negative bench-negative-baseline bench-post-battery bench-rust-reqwest bench-react-fetch bench-handler-resolution
+.PHONY: build release test lint clean install check bench-memory bench-negative bench-negative-baseline bench-post-battery bench-rust-reqwest bench-react-fetch bench-handler-resolution
 
 BINARY=codebase-memory-mcp
 MODULE=github.com/DeusData/codebase-memory-mcp
@@ -20,14 +20,25 @@ VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 # because Go only honors a single -ldflags argument; the second one wins.
 ifeq ($(OS),Windows_NT)
     BUILD_LDFLAGS = -ldflags "-extldflags '-static' -X main.version=$(VERSION)"
+    RELEASE_LDFLAGS = -ldflags "-s -w -extldflags '-static' -X main.version=$(VERSION)"
     BINARY_EXT = .exe
 else
     BUILD_LDFLAGS = -ldflags "-X main.version=$(VERSION)"
+    RELEASE_LDFLAGS = -ldflags "-s -w -X main.version=$(VERSION)"
     BINARY_EXT =
 endif
 
 build:
 	CGO_ENABLED=1 go build $(BUILD_LDFLAGS) -o bin/$(BINARY)$(BINARY_EXT) ./cmd/codebase-memory-mcp/
+
+# Release build: strip the symbol table and DWARF (-s -w) and remove local
+# path prefixes (-trimpath). Saves ~10MB (151 -> 141MB measured 2026-06-10);
+# the bulk of the binary is the 64 vendored tree-sitter grammar tables,
+# which stripping cannot touch — per-language build tags would be the next
+# size lever. Keep `make build` for development (stack traces keep symbols
+# either way in Go, but debuggers want the DWARF from the default build).
+release:
+	CGO_ENABLED=1 go build -trimpath $(RELEASE_LDFLAGS) -o bin/$(BINARY)$(BINARY_EXT) ./cmd/codebase-memory-mcp/
 
 test:
 	go test ./... -v

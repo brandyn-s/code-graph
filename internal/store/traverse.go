@@ -45,6 +45,25 @@ type EdgeInfo struct {
 // caller that wants untyped traversal — Cypher variable-length patterns with
 // no relationship type — was silently narrowed.)
 func (s *Store) BFS(startNodeID int64, direction string, edgeTypes []string, maxDepth, maxResults int) (*TraverseResult, error) {
+	result, err := s.bfsVisited(startNodeID, direction, edgeTypes, maxDepth, maxResults)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.bfsCollectEdges(result, startNodeID, direction, edgeTypes, maxDepth); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// BFSNodes is BFS without the edge-collection query. The Cypher executor's
+// variable-length expansion only consumes Visited/Truncated, and the edge
+// CTE is as expensive as the node CTE — skipping it halves the per-source
+// traversal cost for `-[*..]->` patterns.
+func (s *Store) BFSNodes(startNodeID int64, direction string, edgeTypes []string, maxDepth, maxResults int) (*TraverseResult, error) {
+	return s.bfsVisited(startNodeID, direction, edgeTypes, maxDepth, maxResults)
+}
+
+func (s *Store) bfsVisited(startNodeID int64, direction string, edgeTypes []string, maxDepth, maxResults int) (*TraverseResult, error) {
 	if maxDepth <= 0 {
 		maxDepth = 3
 	}
@@ -131,8 +150,32 @@ func (s *Store) BFS(startNodeID int64, direction string, edgeTypes []string, max
 		result.Visited = result.Visited[:maxResults]
 		result.Truncated = true
 	}
+	return result, nil
+}
 
-	// Collect edge info with a second CTE query that returns actual edges
+// bfsCollectEdges runs the edge-collection CTE and fills result.Edges.
+func (s *Store) bfsCollectEdges(result *TraverseResult, startNodeID int64, direction string, edgeTypes []string, maxDepth int) error {
+	if maxDepth <= 0 {
+		maxDepth = 3
+	}
+	typeClause := ""
+	var typeArgs []any
+	if len(edgeTypes) > 0 {
+		typePlaceholders := make([]string, len(edgeTypes))
+		typeArgs = make([]any, len(edgeTypes))
+		for i, et := range edgeTypes {
+			typePlaceholders[i] = "?"
+			typeArgs[i] = et
+		}
+		typeClause = " AND e.type IN (" + strings.Join(typePlaceholders, ",") + ")"
+	}
+	var joinCol, nextCol string
+	if direction == "inbound" {
+		joinCol, nextCol = "target_id", "source_id"
+	} else {
+		joinCol, nextCol = "source_id", "target_id"
+	}
+
 	edgeQuery := fmt.Sprintf(`
 		WITH RECURSIVE bfs(node_id, hop) AS (
 			SELECT ?, 0
@@ -162,19 +205,19 @@ func (s *Store) BFS(startNodeID int64, direction string, edgeTypes []string, max
 
 	edgeRows, err := s.q.Query(edgeQuery, edgeArgs...)
 	if err != nil {
-		return nil, fmt.Errorf("bfs edges: %w", err)
+		return fmt.Errorf("bfs edges: %w", err)
 	}
 	defer edgeRows.Close()
 
 	for edgeRows.Next() {
 		var ei EdgeInfo
 		if err := edgeRows.Scan(&ei.FromName, &ei.ToName, &ei.Type, &ei.Confidence); err != nil {
-			return nil, err
+			return err
 		}
 		result.Edges = append(result.Edges, ei)
 	}
 
-	return result, edgeRows.Err()
+	return edgeRows.Err()
 }
 
 // neighborIDs returns the IDs of the nodes adjacent to nodeID along edges of the

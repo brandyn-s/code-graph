@@ -1215,7 +1215,7 @@ func (e *Executor) expandVariableLength(b binding, fromNode *store.Node, s *Expa
 	if bfsLimit <= 0 {
 		bfsLimit = e.maxRows() * 2
 	}
-	bfsResult, err := e.Store.BFS(fromNode.ID, direction, s.EdgeTypes, maxDepth, bfsLimit)
+	bfsResult, err := e.Store.BFSNodes(fromNode.ID, direction, s.EdgeTypes, maxDepth, bfsLimit)
 	if err != nil {
 		return nil, fmt.Errorf("bfs: %w", err)
 	}

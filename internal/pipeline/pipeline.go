@@ -166,13 +166,16 @@ func New(ctx context.Context, s *store.Store, repoPath string, mode discover.Ind
 // of the crate's `src/` directory.
 //
 // For a repo with layout:
-//   canstatd/Cargo.toml           (name = "canstatd")
-//   canstatd/src/main.rs
-//   canstatd/types/Cargo.toml     (name = "canstatd-types")
-//   canstatd/types/src/lib.rs
+//
+//	canstatd/Cargo.toml           (name = "canstatd")
+//	canstatd/src/main.rs
+//	canstatd/types/Cargo.toml     (name = "canstatd-types")
+//	canstatd/types/src/lib.rs
+//
 // When indexed with RepoPath = canstatd/, we build:
-//   "canstatd"       -> "src"
-//   "canstatd_types" -> "types.src"
+//
+//	"canstatd"       -> "src"
+//	"canstatd_types" -> "types.src"
 //
 // Then in passImports, `use canstatd_types::CanError` gets rewritten to
 // `types.src.CanError` (dot-prefixed) for suffix-matching against the
@@ -437,6 +440,8 @@ func (p *Pipeline) Run() error {
 	discoverOpts := &discover.Options{Mode: p.Mode}
 	if p.Mode == discover.ModeFast {
 		discoverOpts.MaxFileSize = 512 * 1024 // 512KB cutoff in fast mode
+	} else {
+		discoverOpts.MaxFileSize = fullModeMaxFileSize()
 	}
 	files, err := discover.Discover(p.ctx, p.RepoPath, discoverOpts)
 	if err != nil {
@@ -2067,22 +2072,22 @@ func (p *Pipeline) createLSPStubNodes(results [][]resolvedEdge, qnToID map[strin
 //
 // Two CALLS-edge classification axes apply here:
 //
-//   1. stubQNs marks targets that were synthesized as LSP-resolved external
-//      stubs (stdlib, vendored grammars, CGO targets). CALLS edges pointing
-//      at stubs are upgraded to CALLS_EXTERNAL so downstream consumers can
-//      opt in/out of external-stub noise. CALLS_PSEUDO (synthetic
-//      module-level caller, set at resolve time) keeps its tag because the
-//      pseudo-caller property is the dominant signal — but `external`
-//      goes in the properties for power-user filtering.
+//  1. stubQNs marks targets that were synthesized as LSP-resolved external
+//     stubs (stdlib, vendored grammars, CGO targets). CALLS edges pointing
+//     at stubs are upgraded to CALLS_EXTERNAL so downstream consumers can
+//     opt in/out of external-stub noise. CALLS_PSEUDO (synthetic
+//     module-level caller, set at resolve time) keeps its tag because the
+//     pseudo-caller property is the dominant signal — but `external`
+//     goes in the properties for power-user filtering.
 //
-//   2. labels marks the target node's label. CALLS to non-callable
-//      targets (Variable, Class, File) are re-typed as INDIRECT_CALLS
-//      rather than dropped — these are indirect-dispatch call sites
-//      (closures, function-pointer variables, stored callables) that users
-//      still want visible in the graph but marked as indirect so they
-//      don't pollute CALLS precision. `labels` can be nil to disable the
-//      filter (back-compat for callers that don't fetch labels). Stubs
-//      are always Function or Method, so they're not affected.
+//  2. labels marks the target node's label. CALLS to non-callable
+//     targets (Variable, Class, File) are re-typed as INDIRECT_CALLS
+//     rather than dropped — these are indirect-dispatch call sites
+//     (closures, function-pointer variables, stored callables) that users
+//     still want visible in the graph but marked as indirect so they
+//     don't pollute CALLS precision. `labels` can be nil to disable the
+//     filter (back-compat for callers that don't fetch labels). Stubs
+//     are always Function or Method, so they're not affected.
 //
 // Order: stub-target check first (CALLS → CALLS_EXTERNAL), then non-callable
 // check (remaining CALLS → INDIRECT_CALLS). Stubs are Function/Method-labeled
@@ -2566,10 +2571,10 @@ func hasFrameworkDecorator(decorators []string) bool {
 // name, which collides with the leading dots from the relative_import
 // node text. So:
 //
-//   from . import sibling      → mod_path=".",      full="..sibling"
-//   from .sub import helper    → mod_path=".sub",   full=".sub.helper"
-//   from .. import top         → mod_path="..",     full="...top"
-//   from ..top import x        → mod_path="..top",  full="..top.x"
+//	from . import sibling      → mod_path=".",      full="..sibling"
+//	from .sub import helper    → mod_path=".sub",   full=".sub.helper"
+//	from .. import top         → mod_path="..",     full="...top"
+//	from ..top import x        → mod_path="..top",  full="..top.x"
 //
 // To recover semantic-leading-dots from raw-leading-dots, we use the
 // fact that Python's imported `name` is always a single identifier
@@ -3109,4 +3114,30 @@ func fileHash(path string) (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+// fullModeMaxFileSize returns the per-file size cutoff for full-mode
+// discovery. Source files above ~1MB are essentially always GENERATED
+// (tree-sitter parser tables, bundled assets, generated bindings) — on this
+// very repo, 44 such files carried 96% of all indexable bytes and dominated
+// the definitions pass (~50s of an 82s index), while contributing only
+// graph noise. Fast mode has long had a 512KB cutoff; full mode previously
+// had none. 1MB matches the cutoff Sourcegraph-class indexers use.
+//
+// Override with CBM_MAX_FILE_BYTES: a positive integer sets the cutoff in
+// bytes; "0" disables the limit entirely (pre-2026-06-10 behavior); unset
+// or unparsable uses the 1MB default. Skipped files are visible as the
+// difference in pipeline.discovered counts.
+func fullModeMaxFileSize() int64 {
+	const defaultMax = 1 << 20 // 1MB
+	v := os.Getenv("CBM_MAX_FILE_BYTES")
+	if v == "" {
+		return defaultMax
+	}
+	n, err := strconv.ParseInt(v, 10, 64)
+	if err != nil || n < 0 {
+		slog.Warn("pipeline.max_file_bytes.invalid", "value", v, "using", defaultMax)
+		return defaultMax
+	}
+	return n // 0 = unlimited (discover treats 0 as no limit)
 }

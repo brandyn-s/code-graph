@@ -10,6 +10,13 @@ type TraverseResult struct {
 	Root    *Node
 	Visited []*NodeHop
 	Edges   []EdgeInfo
+
+	// Truncated is true when the visited set was clipped at maxResults —
+	// the traversal had more matching nodes than the limit allowed.
+	// Callers that aggregate over Visited (e.g. the Cypher executor's
+	// variable-length expansion) must surface this instead of silently
+	// undercounting.
+	Truncated bool
 }
 
 // NodeHop is a node with its BFS hop distance.
@@ -30,7 +37,13 @@ type EdgeInfo struct {
 // recursive CTE, replacing the previous per-node Go-side loop with a single
 // SQL round-trip.
 // direction: "outbound" follows source->target, "inbound" follows target->source.
-// maxDepth caps the BFS depth, maxResults caps total visited nodes.
+// maxDepth caps the BFS depth, maxResults caps total visited nodes (clipping
+// is reported via TraverseResult.Truncated).
+// An empty edgeTypes list traverses ALL edge types — consistent with
+// FindEdgesBySourceIDs / FindEdgesByTargetIDs. (Previously empty silently
+// defaulted to CALLS; every caller passes an explicit list, and the one
+// caller that wants untyped traversal — Cypher variable-length patterns with
+// no relationship type — was silently narrowed.)
 func (s *Store) BFS(startNodeID int64, direction string, edgeTypes []string, maxDepth, maxResults int) (*TraverseResult, error) {
 	if maxDepth <= 0 {
 		maxDepth = 3
@@ -38,18 +51,19 @@ func (s *Store) BFS(startNodeID int64, direction string, edgeTypes []string, max
 	if maxResults <= 0 {
 		maxResults = 200
 	}
-	if len(edgeTypes) == 0 {
-		edgeTypes = []string{"CALLS"}
-	}
 
-	// Build type filter placeholders
-	typePlaceholders := make([]string, len(edgeTypes))
-	typeArgs := make([]any, len(edgeTypes))
-	for i, et := range edgeTypes {
-		typePlaceholders[i] = "?"
-		typeArgs[i] = et
+	// Build optional type filter clause (empty list = all types)
+	typeClause := ""
+	var typeArgs []any
+	if len(edgeTypes) > 0 {
+		typePlaceholders := make([]string, len(edgeTypes))
+		typeArgs = make([]any, len(edgeTypes))
+		for i, et := range edgeTypes {
+			typePlaceholders[i] = "?"
+			typeArgs[i] = et
+		}
+		typeClause = " AND e.type IN (" + strings.Join(typePlaceholders, ",") + ")"
 	}
-	typeFilter := strings.Join(typePlaceholders, ",")
 
 	// Determine join columns based on direction
 	var joinCol, nextCol string
@@ -59,14 +73,20 @@ func (s *Store) BFS(startNodeID int64, direction string, edgeTypes []string, max
 		joinCol, nextCol = "source_id", "target_id"
 	}
 
-	// Recursive CTE: traverse edges up to maxDepth hops, collect node IDs + edges
+	// Recursive CTE: traverse edges up to maxDepth hops, collect node IDs +
+	// edges. UNION (not UNION ALL) dedups (node_id, hop) rows in the
+	// recursive table: with UNION ALL the row count is the number of PATHS,
+	// which explodes combinatorially on cyclic/dense graphs (the ORDER BY
+	// forces full materialization before LIMIT applies). UNION bounds the
+	// work at nodes x depth with identical final results (the outer SELECT
+	// was already DISTINCT).
 	query := fmt.Sprintf(`
 		WITH RECURSIVE bfs(node_id, hop) AS (
 			SELECT ?, 0
-			UNION ALL
+			UNION
 			SELECT e.%s, b.hop + 1
 			FROM bfs b
-			JOIN edges e ON e.%s = b.node_id AND e.type IN (%s)
+			JOIN edges e ON e.%s = b.node_id%s
 			WHERE b.hop < ?
 		)
 		SELECT DISTINCT n.id, n.project, n.label, n.name, n.qualified_name,
@@ -76,13 +96,14 @@ func (s *Store) BFS(startNodeID int64, direction string, edgeTypes []string, max
 		WHERE bfs.hop > 0
 		ORDER BY bfs.hop, n.name
 		LIMIT ?`,
-		nextCol, joinCol, typeFilter)
+		nextCol, joinCol, typeClause)
 
-	// Build args: startNodeID, ...typeArgs, maxDepth, maxResults
+	// Build args: startNodeID, ...typeArgs, maxDepth, maxResults+1.
+	// Fetch one row past the cap so truncation is detectable.
 	args := make([]any, 0, 3+len(typeArgs))
 	args = append(args, startNodeID)
 	args = append(args, typeArgs...)
-	args = append(args, maxDepth, maxResults)
+	args = append(args, maxDepth, maxResults+1)
 
 	rows, err := s.q.Query(query, args...)
 	if err != nil {
@@ -106,25 +127,30 @@ func (s *Store) BFS(startNodeID int64, direction string, edgeTypes []string, max
 		return nil, err
 	}
 
+	if len(result.Visited) > maxResults {
+		result.Visited = result.Visited[:maxResults]
+		result.Truncated = true
+	}
+
 	// Collect edge info with a second CTE query that returns actual edges
 	edgeQuery := fmt.Sprintf(`
 		WITH RECURSIVE bfs(node_id, hop) AS (
 			SELECT ?, 0
-			UNION ALL
+			UNION
 			SELECT e.%s, b.hop + 1
 			FROM bfs b
-			JOIN edges e ON e.%s = b.node_id AND e.type IN (%s)
+			JOIN edges e ON e.%s = b.node_id%s
 			WHERE b.hop < ?
 		)
 		SELECT DISTINCT src.name, tgt.name, e.type,
 			COALESCE(json_extract(e.properties, '$.confidence'), 0) as confidence
 		FROM bfs b
-		JOIN edges e ON e.%s = b.node_id AND e.type IN (%s)
+		JOIN edges e ON e.%s = b.node_id%s
 		JOIN nodes src ON src.id = e.source_id
 		JOIN nodes tgt ON tgt.id = e.target_id
 		WHERE b.hop < ?`,
-		nextCol, joinCol, typeFilter,
-		joinCol, typeFilter)
+		nextCol, joinCol, typeClause,
+		joinCol, typeClause)
 
 	// Build edge args: startNodeID, ...typeArgs, maxDepth, ...typeArgs, maxDepth
 	edgeArgs := make([]any, 0, 4+2*len(typeArgs))

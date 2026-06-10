@@ -62,6 +62,7 @@ const (
 	TokRegex    // =~
 	TokGTE      // >=
 	TokLTE      // <=
+	TokNEQ      // <>
 	TokPipe     // |
 	TokDotDot   // ..
 
@@ -204,7 +205,7 @@ func (l *Lexer) lexNextToken(ch byte) error {
 	case ch == '>':
 		l.lexTwoChar('=', TokGTE, TokGT, ">")
 	case ch == '<':
-		l.lexTwoChar('=', TokLTE, TokLT, "<")
+		l.lexLessThan()
 	case ch == '=':
 		l.lexTwoChar('~', TokRegex, TokEQ, "=")
 	case ch == '"' || ch == '\'':
@@ -228,6 +229,24 @@ func (l *Lexer) lexDot() {
 		l.emit(TokDot, ".")
 		l.pos++
 	}
+}
+
+// lexLessThan handles '<', '<=' and '<>' (not-equals).
+func (l *Lexer) lexLessThan() {
+	if l.pos+1 < len(l.input) {
+		switch l.input[l.pos+1] {
+		case '=':
+			l.emit(TokLTE, "<=")
+			l.pos += 2
+			return
+		case '>':
+			l.emit(TokNEQ, "<>")
+			l.pos += 2
+			return
+		}
+	}
+	l.emit(TokLT, "<")
+	l.pos++
 }
 
 // lexTwoChar handles two-character tokens like >=, <=, =~.

@@ -189,6 +189,44 @@ var positiveCypherFixtures = []struct {
 		`MATCH (n:Function) RETURN n.name, labels(n) AS lbls`,
 		"labels(node) AS alias (Phase B2)",
 	},
+	// 2026-06-10 executor correctness sweep: pin the query shapes whose
+	// execution paths were fixed (parse-level here; execution behavior is
+	// pinned in executor_regression_test.go).
+	{
+		"or_filter",
+		`MATCH (f:Function) WHERE f.name = "a" OR f.name = "b" RETURN f.name`,
+		"WHERE with OR — execution used to push OR conditions down as AND (2026-06-10)",
+	},
+	{
+		"not_equals",
+		`MATCH (f:Function) WHERE f.name <> "Hello" RETURN f.name`,
+		"<> was documented (CONFORMANCE.md + tool description) but never lexed (2026-06-10)",
+	},
+	{
+		"zero_hop_variable_length",
+		`MATCH (a:Function)-[:CALLS*0..2]->(b) RETURN b.name`,
+		"*0..N includes the zero-length path (start node binds as target) (2026-06-10)",
+	},
+	{
+		"untyped_variable_length",
+		`MATCH (a)-[*1..2]->(b) RETURN b.name`,
+		"untyped variable-length traverses ALL edge types (was silently CALLS-only) (2026-06-10)",
+	},
+	{
+		"anonymous_source_node",
+		`MATCH (:Module)-[:DEFINES]-(b) RETURN b.name`,
+		"anonymous source nodes chain through expansion (2026-06-10)",
+	},
+	{
+		"ungrouped_count_star_on_expand",
+		`MATCH (a:Function)-[:CALLS]->(b:Function) RETURN COUNT(*)`,
+		"ungrouped COUNT(*) on the SQL aggregate fast path (emitted invalid GROUP BY before 2026-06-10)",
+	},
+	{
+		"count_first_in_return_list",
+		`MATCH (a:Function)-[:CALLS]->(b:Function) RETURN COUNT(*) AS calls, a.name`,
+		"COUNT positioned before group items (count column was assumed last before 2026-06-10)",
+	},
 }
 
 // negativeCypherFixtures: queries that MUST fail (lex / parse / plan).
@@ -354,6 +392,37 @@ var negativeCypherFixtures = []struct {
 		"MATCH (n) RETURN size(n)",
 		"unknown function",
 		"functions other than COUNT/labels are rejected with actionable error (Phase B2)",
+	},
+	// 2026-06-10 executor correctness sweep: new parse-time rejections.
+	{
+		"mixed_and_or_rejected",
+		`MATCH (n) WHERE n.a = "1" AND n.b = "2" OR n.c = "3" RETURN n`,
+		"mixed AND/OR",
+		"flat WHERE clause has one operator and no precedence; mixing silently collapsed to OR before 2026-06-10",
+	},
+	{
+		"star_zero_rejected",
+		"MATCH (a)-[:CALLS*0]->(b) RETURN b",
+		"*0",
+		"*0 silently became unbounded under the MaxHops==0 encoding (2026-06-10)",
+	},
+	{
+		"hop_range_zero_upper_bound_rejected",
+		"MATCH (a)-[:CALLS*1..0]->(b) RETURN b",
+		"upper bound 0",
+		"explicit 0 upper bound silently became unbounded (2026-06-10)",
+	},
+	{
+		"hop_range_inverted_rejected",
+		"MATCH (a)-[:CALLS*3..1]->(b) RETURN b",
+		"less than lower",
+		"inverted hop ranges are always-empty; reject explicitly (2026-06-10)",
+	},
+	{
+		"multiple_count_rejected",
+		"MATCH (a)-[:CALLS]->(b) RETURN COUNT(a), COUNT(b)",
+		"multiple COUNT",
+		"a second COUNT item was silently dropped before 2026-06-10",
 	},
 }
 

@@ -10,12 +10,21 @@ code-graph implements a **read-only subset of openCypher** for graph
 queries against the indexed code graph. Supported features:
 
 - `MATCH (n:Label)` — node patterns with optional label
-- `WHERE` — comparison ops (=, <>, <, >, <=, >=), regex (=~), STARTS WITH, ENDS WITH, CONTAINS, AND/OR, IS NULL, IS NOT NULL, IN [list]
-- `RETURN` — projection, COUNT(*), DISTINCT, ORDER BY, LIMIT, OFFSET
-- Variable-length paths: `(a)-[:REL*1..3]->(b)`
+- `WHERE` — comparison ops (=, <>, <, >, <=, >=), regex (=~), STARTS WITH, ENDS WITH, CONTAINS, AND/OR (one operator per clause — mixing is rejected, no precedence), IS NULL, IS NOT NULL, IN [list]
+- `RETURN` — projection, COUNT(*), DISTINCT, ORDER BY, LIMIT
+- Variable-length paths: `(a)-[:REL*1..3]->(b)`, including `*0..N` (zero-length path binds the start node) and untyped `[*1..3]` (traverses all edge types)
 - Directional relationships: `-[:REL]->`, `<-[:REL]-`, `-[:REL]-`
 - Multiple relationship types: `-[:REL_A|REL_B]->`
 - Edge property filters: `r.confidence`, `r.url_path`, etc.
+
+Known dialect deviations from openCypher (deliberate, documented):
+
+- `*N` is shorthand for `*1..N`, NOT openCypher's "exactly N hops".
+- `OFFSET` / `SKIP` are not implemented (an earlier revision of this doc
+  claimed OFFSET; that was doc drift — it never parsed).
+- Variable-length expansion returns reachable nodes per BFS (deduped),
+  not one row per distinct path, and does not bind a relationship
+  variable.
 
 **Explicitly NOT supported** (out of scope for read-only graph queries):
 
@@ -31,8 +40,9 @@ queries against the indexed code graph. Supported features:
 
 ## Conformance corpus
 
-The corpus lives at `internal/cypher/conformance/` and consists of
-two parts:
+The corpus lives in `internal/cypher/cypher_conformance_test.go` (the
+`positiveCypherFixtures` / `negativeCypherFixtures` tables) and consists
+of two parts:
 
 1. **Positive fixtures** (queries that must parse + plan + execute
    successfully): each has the query text, the expected node count
@@ -200,10 +210,78 @@ generic "unexpected trailing token" error did not surface the cause
 Full WITH/aggregation support is a separate workstream. The error-
 fast path eliminates the silent-truncation confusion until then.
 
+### Resolved 2026-06-10 (executor correctness sweep)
+
+An end-to-end review of the executor's optimization layer (predicate
+pushdown, JOIN fusion, SQL aggregate fast path) found eight
+silently-wrong-results bugs, all reproduced empirically and fixed.
+Regression tests live in `executor_regression_test.go`; the common
+thread was fast paths validated for the happy shape with the fallback
+shapes never cross-checked against each other.
+
+**Execution fixes (silent wrong results):**
+
+- `WHERE a OR b` on a single-node pattern was pushed into SQL as
+  `AND a AND b` — OR queries returned the intersection (usually zero
+  rows). Pushdown now respects the operator: all-pushable OR becomes a
+  single parenthesized SQL OR group; otherwise all conditions are
+  evaluated in Go with OR.
+- The JOIN-fusion fast path mutated the shared plan (replacing the
+  expand step with a marker), so in a multi-project store every project
+  after the first skipped expansion and leaked scan-only bindings.
+  Fusion is now tracked per-execution.
+- Ungrouped `RETURN COUNT(*)` on the fused scan+expand path emitted
+  ` GROUP BY ` with no terms — invalid SQL, every project skipped,
+  empty result. GROUP BY is now conditional, and an ungrouped COUNT
+  over an empty match returns one row with 0 (openCypher) on both the
+  SQL and Go paths.
+- The SQL aggregate path assumed COUNT was the last RETURN item;
+  `RETURN COUNT(*) AS c, a.name` wrote the count into `a.name` and
+  dropped `c`. The column is now located by item position. Per-project
+  aggregate rows are also merged by group key (summing counts) to match
+  the Go path.
+- A two-hop pattern (`[scan, expand, expand]` plan) satisfied the
+  3-step fusible-aggregate shape with the middle hop silently ignored.
+  The middle step must now be a WHERE filter.
+- The batch expand path deduplicated by target node, collapsing
+  parallel edges (e.g. CALLS + INVOKES between the same pair) — so
+  multiplicity and COUNT(r) disagreed with the fused-JOIN/SQL paths.
+  Dedup is now by edge ID; all paths return one row per edge.
+- Anonymous nodes (`(:Module)-[:DEFINES]-(b)`, anonymous chain
+  intermediates) produced empty results on the non-fused path: the
+  binding was never stored, so expansion found no source. Anonymous
+  bindings now chain through expansion (and are excluded from default
+  projection).
+- Untyped variable-length patterns (`-[*1..3]->`) silently traversed
+  CALLS edges only; they now traverse all edge types, consistent with
+  untyped fixed-length expansion. `*0..N` now binds the start node at
+  hop 0. BFS reports truncation (`TraverseResult.Truncated`) instead
+  of silently clipping aggregates, uses the per-query binding cap
+  rather than max_rows, and its recursive CTE uses UNION (frontier
+  dedup) so cyclic graphs can't explode the path count.
+
+**New parse-time rejections (previously silently misinterpreted):**
+
+- Mixed `AND`/`OR` in one WHERE clause (was: collapsed to flat OR).
+- `*0` (was: silently unbounded), explicit `..0` upper bounds, and
+  inverted ranges like `*3..1`.
+- Multiple COUNT items in RETURN (was: all but the last dropped).
+
+**Documentation accuracy:**
+
+- `<>` (not-equals) was documented here and in the `query_graph` tool
+  description but never implemented (it lexed as `<` then `>` and
+  produced a parse error). Now implemented end-to-end (lexer token,
+  parser, Go evaluation, SQL pushdown on both scan and aggregate
+  paths).
+- The OFFSET claim in this doc was drift — removed (never parsed).
+- Fixture-location references updated: the corpus lives in
+  `cypher_conformance_test.go`, not a `conformance/` directory.
+
 ## Adding a fixture
 
-1. Create the query text + expected outcome in
-   `internal/cypher/conformance/fixtures.go`.
+1. Add the query text + expected outcome to the fixture tables in
+   `internal/cypher/cypher_conformance_test.go`.
 2. Run `go test ./internal/cypher/ -run TestCypherConformance -v`
    to verify it passes against the current planner.
 3. Commit. The CI runs on every PR that touches `internal/cypher/`.

@@ -324,19 +324,37 @@ func (p *Parser) parseHopRange(rel *RelPattern) error {
 
 	switch p.peek().Type {
 	case TokNumber:
-		n, _ := strconv.Atoi(p.advance().Value)
+		nTok := p.advance()
+		n, _ := strconv.Atoi(nTok.Value)
 		if p.peek().Type == TokDotDot {
 			// *N..M or *N..
 			rel.MinHops = n
 			p.advance() // consume ..
 			if p.peek().Type == TokNumber {
-				m, _ := strconv.Atoi(p.advance().Value)
+				mTok := p.advance()
+				m, _ := strconv.Atoi(mTok.Value)
+				// MaxHops == 0 is the internal encoding for "unbounded",
+				// so an explicit 0 upper bound cannot be represented —
+				// and *N..0 is always-empty anyway. Same for inverted
+				// ranges. Reject both instead of silently traversing
+				// unbounded.
+				if m == 0 {
+					return fmt.Errorf("invalid hop range: explicit upper bound 0 at pos %d (use *N.. for unbounded)", mTok.Pos)
+				}
+				if m < n {
+					return fmt.Errorf("invalid hop range *%d..%d: upper bound less than lower bound (pos %d)", n, m, mTok.Pos)
+				}
 				rel.MaxHops = m
 			} else {
 				rel.MaxHops = 0 // unbounded
 			}
 		} else {
-			// *N (shorthand for *1..N)
+			// *N (shorthand for *1..N in this subset — NOT openCypher's
+			// "exactly N"). *0 would silently become unbounded under the
+			// MaxHops==0 encoding; reject it.
+			if n == 0 {
+				return fmt.Errorf("*0 (zero hops) is not supported at pos %d; use *0..N to include the zero-length path", nTok.Pos)
+			}
 			rel.MinHops = 1
 			rel.MaxHops = n
 		}
@@ -345,7 +363,11 @@ func (p *Parser) parseHopRange(rel *RelPattern) error {
 		p.advance() // consume ..
 		rel.MinHops = 1
 		if p.peek().Type == TokNumber {
-			m, _ := strconv.Atoi(p.advance().Value)
+			mTok := p.advance()
+			m, _ := strconv.Atoi(mTok.Value)
+			if m == 0 {
+				return fmt.Errorf("invalid hop range: explicit upper bound 0 at pos %d (use * for unbounded)", mTok.Pos)
+			}
 			rel.MaxHops = m
 		} else {
 			rel.MaxHops = 0
@@ -442,10 +464,26 @@ func (p *Parser) parseWhere() (*WhereClause, error) {
 	}
 	w.Conditions = append(w.Conditions, cond)
 
+	// The WHERE clause is modeled as a flat condition list under a single
+	// boolean operator — there is no precedence or grouping. Mixing AND and
+	// OR in one clause therefore cannot be represented faithfully (the old
+	// behavior silently collapsed `a AND b OR c` into `a OR b OR c`), so it
+	// is rejected with an actionable error instead.
+	seenAnd, seenOr := false, false
 	for p.peek().Type == TokAnd || p.peek().Type == TokOr {
 		op := p.advance()
 		if op.Type == TokOr {
+			seenOr = true
 			w.Operator = "OR"
+		} else {
+			seenAnd = true
+		}
+		if seenAnd && seenOr {
+			return nil, fmt.Errorf(
+				"mixed AND/OR in WHERE is not supported in this Cypher subset "+
+					"(no operator precedence or parentheses) (pos %d). "+
+					"Use a single operator throughout, or split into separate queries",
+				op.Pos)
 		}
 		cond, err := p.parseCondition()
 		if err != nil {
@@ -482,6 +520,9 @@ func (p *Parser) parseCondition() (Condition, error) {
 	switch op.Type {
 	case TokEQ:
 		c.Operator = "="
+		p.advance()
+	case TokNEQ:
+		c.Operator = "<>"
 		p.advance()
 	case TokRegex:
 		c.Operator = "=~"
@@ -609,6 +650,19 @@ func (p *Parser) parseReturn() (*ReturnClause, error) {
 			return nil, err
 		}
 		r.Items = append(r.Items, item)
+	}
+
+	// The executor supports exactly one aggregation per query (the
+	// remaining items become GROUP BY keys). A second COUNT used to be
+	// silently dropped — reject it instead.
+	countItems := 0
+	for _, it := range r.Items {
+		if it.Func == "COUNT" {
+			countItems++
+		}
+	}
+	if countItems > 1 {
+		return nil, fmt.Errorf("multiple COUNT items in RETURN are not supported (one aggregation per query)")
 	}
 
 	// Optional ORDER BY

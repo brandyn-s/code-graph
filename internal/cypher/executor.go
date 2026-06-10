@@ -34,12 +34,12 @@ type Executor struct {
 	// their `*` was clipped.
 	MaxUnboundedPathDepth int
 
-	regexCache       map[string]*regexp.Regexp
-	ctx              context.Context // set by Execute, used for DB queries
-	expandLimit      int             // binding cap for current query (set per-execution)
-	truncated        bool            // set to true when ANY clipping step drops results; propagated to Result
-	skippedProjects  []SkippedProject
-	unboundedCapHit  int // depth used when an unbounded `*` was capped; 0 means not used
+	regexCache      map[string]*regexp.Regexp
+	ctx             context.Context // set by Execute, used for DB queries
+	expandLimit     int             // binding cap for current query (set per-execution)
+	truncated       bool            // set to true when ANY clipping step drops results; propagated to Result
+	skippedProjects []SkippedProject
+	unboundedCapHit int // depth used when an unbounded `*` was capped; 0 means not used
 }
 
 // markTruncated records that an intermediate or final cap trimmed results.
@@ -232,7 +232,7 @@ func (e *Executor) tryAggregateSQL(plan *Plan) (*Result, bool) {
 		return nil, false
 	}
 
-	countItem, groupItems := classifyCountItems(plan.ReturnSpec.Items)
+	countItem, countIdx, groupItems := classifyCountItems(plan.ReturnSpec.Items)
 	if countItem == nil {
 		return nil, false
 	}
@@ -265,7 +265,11 @@ func (e *Executor) tryAggregateSQL(plan *Plan) (*Result, bool) {
 
 	sqlCtx := newAggregateSQLContext(scan, expand, groupItems)
 	cols := buildColumnNames(plan.ReturnSpec.Items)
-	countCol := cols[len(cols)-1] // COUNT column is last
+	// The COUNT output column is located by the item's position in the
+	// RETURN list — NOT assumed last. (`RETURN COUNT(*) AS c, a.name` used
+	// to write the count into the "a.name" column, clobbering the group
+	// value and leaving "c" absent.)
+	countCol := cols[countIdx]
 
 	allRows := make([]map[string]any, 0)
 	for _, proj := range projects {
@@ -277,6 +281,18 @@ func (e *Executor) tryAggregateSQL(plan *Plan) (*Result, bool) {
 			continue
 		}
 		allRows = append(allRows, projRows...)
+	}
+
+	// Merge per-project rows by group key, summing counts. The Go path
+	// aggregates over the merged binding set from all projects, so the SQL
+	// path must merge too — plain concatenation emits duplicate group rows
+	// when the same group key appears in more than one project.
+	allRows = mergeAggregateRows(allRows, groupItems, countCol)
+
+	// An ungrouped COUNT over an empty match yields one row with value 0
+	// (openCypher semantics), not zero rows.
+	if len(groupItems) == 0 && len(allRows) == 0 {
+		allRows = append(allRows, map[string]any{countCol: 0})
 	}
 
 	// ORDER BY
@@ -295,17 +311,73 @@ func (e *Executor) tryAggregateSQL(plan *Plan) (*Result, bool) {
 	return &Result{Columns: cols, Rows: allRows}, true
 }
 
-// classifyCountItems separates return items into the COUNT item and group-by items.
-func classifyCountItems(items []ReturnItem) (countItem *ReturnItem, groupItems []ReturnItem) {
+// classifyCountItems separates return items into the COUNT item (with its
+// position in the original RETURN list) and the group-by items. The parser
+// rejects multiple COUNT items, so at most one is present.
+func classifyCountItems(items []ReturnItem) (countItem *ReturnItem, countIdx int, groupItems []ReturnItem) {
+	countIdx = -1
 	for i := range items {
 		item := &items[i]
 		if item.Func == "COUNT" {
 			countItem = item
+			countIdx = i
 		} else {
 			groupItems = append(groupItems, *item)
 		}
 	}
 	return
+}
+
+// mergeAggregateRows merges per-project aggregate rows that share the same
+// group-key values, summing their counts. Row order follows first
+// appearance. With zero or one project (the production shape) this is a
+// pass-through.
+func mergeAggregateRows(rows []map[string]any, groupItems []ReturnItem, countCol string) []map[string]any {
+	if len(rows) <= 1 {
+		return rows
+	}
+	groupCols := make([]string, len(groupItems))
+	for i, gi := range groupItems {
+		col := gi.Variable + "." + gi.Property
+		if gi.Alias != "" {
+			col = gi.Alias
+		}
+		groupCols[i] = col
+	}
+	merged := make(map[string]map[string]any, len(rows))
+	order := make([]string, 0, len(rows))
+	for _, row := range rows {
+		keyParts := make([]string, len(groupCols))
+		for i, gc := range groupCols {
+			keyParts[i] = fmt.Sprintf("%v", row[gc])
+		}
+		key := strings.Join(keyParts, "\x00")
+		if existing, ok := merged[key]; ok {
+			existing[countCol] = countAsInt(existing[countCol]) + countAsInt(row[countCol])
+		} else {
+			merged[key] = row
+			order = append(order, key)
+		}
+	}
+	out := make([]map[string]any, 0, len(order))
+	for _, k := range order {
+		out = append(out, merged[k])
+	}
+	return out
+}
+
+// countAsInt coerces a count cell (int / int64 from the SQL scan) to int.
+func countAsInt(v any) int {
+	switch n := v.(type) {
+	case int:
+		return n
+	case int64:
+		return int(n)
+	case float64:
+		return int(n)
+	default:
+		return 0
+	}
 }
 
 // parseFusibleSteps identifies the ScanNodes + optional FilterWhere + ExpandRelationship
@@ -320,17 +392,19 @@ func parseFusibleSteps(steps []PlanStep) (*ScanNodes, *ExpandRelationship, *Filt
 		}
 		return s, ex, nil, true
 	case 3:
+		// The middle step MUST be a FilterWhere. Accepting any 3-step plan
+		// whose first/last steps type-assert (the old `!ok1 || !ok3` check)
+		// let two-hop patterns ([scan, expand, expand]) through with the
+		// first hop silently ignored — the SQL joined the scan label
+		// directly against the second hop's edge type and returned wrong
+		// (usually empty) aggregates.
 		s, ok1 := steps[0].(*ScanNodes)
 		f, ok2 := steps[1].(*FilterWhere)
 		ex, ok3 := steps[2].(*ExpandRelationship)
-		if !ok1 || !ok3 {
+		if !ok1 || !ok2 || !ok3 {
 			return nil, nil, nil, false
 		}
-		var filter *FilterWhere
-		if ok2 {
-			filter = f
-		}
-		return s, ex, filter, true
+		return s, ex, f, true
 	default:
 		return nil, nil, nil, false
 	}
@@ -359,12 +433,19 @@ func validatePushability(scan *ScanNodes, expand *ExpandRelationship, filter *Fi
 	}
 
 	if filter != nil {
+		// appendFilterConditions joins conditions with AND; an OR filter
+		// cannot be pushed that way. The planner only emits AND for the
+		// early (scan-adjacent) filter today — this guard is defense in
+		// depth against that invariant changing.
+		if filter.Operator == "OR" {
+			return false
+		}
 		for _, c := range filter.Conditions {
 			if _, ok := sqlPushableColumns[c.Property]; !ok {
 				return false
 			}
 			switch c.Operator {
-			case "=", "CONTAINS", "STARTS WITH", "ENDS WITH":
+			case "=", "<>", "CONTAINS", "STARTS WITH", "ENDS WITH":
 				// OK
 			default:
 				return false
@@ -506,7 +587,12 @@ func buildProjectAggregateSQL(
 		appendFilterConditions(&sb, &args, filter, scan.Variable, ctx.srcAlias, ctx.tgtAlias)
 	}
 
-	sb.WriteString(" GROUP BY " + strings.Join(ctx.groupByParts, ", "))
+	// Ungrouped COUNT (e.g. `RETURN COUNT(*)`) has no group-by parts; an
+	// unconditional " GROUP BY " emitted invalid SQL ("incomplete input")
+	// and silently skipped every project.
+	if len(ctx.groupByParts) > 0 {
+		sb.WriteString(" GROUP BY " + strings.Join(ctx.groupByParts, ", "))
+	}
 	query = sb.String()
 	return
 }
@@ -522,6 +608,9 @@ func appendFilterConditions(sb *strings.Builder, args *[]any, filter *FilterWher
 		switch c.Operator {
 		case "=":
 			fmt.Fprintf(sb, " AND %s.%s = ?", alias, col)
+			*args = append(*args, c.Value)
+		case "<>":
+			fmt.Fprintf(sb, " AND %s.%s <> ?", alias, col)
 			*args = append(*args, c.Value)
 		case "CONTAINS":
 			fmt.Fprintf(sb, " AND %s.%s LIKE ?", alias, col)
@@ -540,7 +629,19 @@ func appendFilterConditions(sb *strings.Builder, args *[]any, filter *FilterWher
 func (e *Executor) executeStepsForProject(project string, steps []PlanStep) ([]binding, error) {
 	var bindings []binding
 
+	// skipNext marks the ExpandRelationship consumed by JOIN fusion with
+	// the preceding ScanNodes. It MUST be tracked locally: the plan is
+	// shared across the per-project loop in executePlan, so the previous
+	// approach (overwriting steps[i+1] with a marker) corrupted execution
+	// for every project after the first — fusion no longer matched and the
+	// expand step was skipped outright, leaking scan-only bindings with
+	// unbound target variables into the merged result.
+	skipNext := false
 	for i, step := range steps {
+		if skipNext {
+			skipNext = false
+			continue
+		}
 		var err error
 		switch s := step.(type) {
 		case *ScanNodes:
@@ -552,9 +653,7 @@ func (e *Executor) executeStepsForProject(project string, steps []PlanStep) ([]b
 					if err != nil {
 						return nil, err
 					}
-					// Mark next step as consumed by incrementing i via a skip flag
-					// We'll handle this below.
-					steps[i+1] = &fusedExpandMarker{}
+					skipNext = true
 					break
 				}
 			}
@@ -569,8 +668,6 @@ func (e *Executor) executeStepsForProject(project string, steps []PlanStep) ([]b
 			bindings, err = e.execScan(project, s, pushDown)
 		case *ExpandRelationship:
 			bindings, err = e.execExpand(s, bindings)
-		case *fusedExpandMarker:
-			continue // already handled by JOIN fusion
 		case *FilterWhere:
 			// Skip if this was already consumed by push-down
 			if i > 0 {
@@ -601,12 +698,6 @@ func (e *Executor) executeStepsForProject(project string, steps []PlanStep) ([]b
 
 	return bindings, nil
 }
-
-// fusedExpandMarker is a placeholder step marking an ExpandRelationship
-// that was already handled by JOIN fusion with the preceding ScanNodes.
-type fusedExpandMarker struct{}
-
-func (*fusedExpandMarker) stepType() string { return "fused" }
 
 // canFuseJoin returns true if a ScanNodes + ExpandRelationship pair can be
 // replaced by a single SQL JOIN. Requirements: fixed-length (1 hop), known
@@ -713,12 +804,10 @@ func (e *Executor) execJoinScanExpand(project string, scan *ScanNodes, expand *E
 		}
 
 		b := newBinding()
-		if scan.Variable != "" {
-			b.nodes[scan.Variable] = &srcN
-		}
-		if expand.ToVar != "" {
-			b.nodes[expand.ToVar] = &tgtN
-		}
+		// Nodes bind unconditionally: anonymous nodes use the "" key so a
+		// following expand step (FromVar == "") can chain from the target.
+		b.nodes[scan.Variable] = &srcN
+		b.nodes[expand.ToVar] = &tgtN
 		if expand.RelVar != "" {
 			b.edges[expand.RelVar] = &edge
 		}
@@ -746,6 +835,39 @@ var sqlPushableColumns = map[string]string{
 	"file_path":      "file_path",
 }
 
+// scanPushdownSQL returns the SQL fragment (no leading AND) and bind arg for
+// a single WHERE condition that SQLite can evaluate against the scanned
+// node's columns, or ok=false when the condition must be evaluated in Go.
+// Only conditions on the scan variable itself are pushable — a condition on
+// any other (unbound) variable evaluates against no binding and must go
+// through evaluateConditions, which treats it as a non-match.
+func scanPushdownSQL(scanVar string, c Condition) (clause string, arg any, ok bool) {
+	if c.Variable != scanVar {
+		return "", nil, false
+	}
+	col, canPush := sqlPushableColumns[c.Property]
+	if !canPush {
+		return "", nil, false
+	}
+	switch c.Operator {
+	case "=":
+		return col + "=?", c.Value, true
+	case "<>":
+		// The pushable columns are all NOT NULL in the schema, so SQL's
+		// NULL-excluding <> matches the Go path's string comparison.
+		return col + "<>?", c.Value, true
+	case "CONTAINS":
+		return col + " LIKE ?", "%" + c.Value + "%", true
+	case "STARTS WITH":
+		return col + " LIKE ?", c.Value + "%", true
+	case "ENDS WITH":
+		return col + " LIKE ?", "%" + c.Value, true
+	default:
+		// =~, numeric comparisons, IS NULL, IN: can't push to SQL easily
+		return "", nil, false
+	}
+}
+
 func (e *Executor) execScan(project string, s *ScanNodes, pushDown *FilterWhere) ([]binding, error) {
 	// Build dynamic SQL query with optional push-down conditions
 	query := `SELECT id, project, label, name, qualified_name, file_path, start_line, end_line, properties FROM nodes WHERE project=?`
@@ -756,33 +878,62 @@ func (e *Executor) execScan(project string, s *ScanNodes, pushDown *FilterWhere)
 		args = append(args, s.Label)
 	}
 
-	// Push down WHERE conditions into SQL where possible
+	// Push WHERE conditions into SQL where possible — respecting the
+	// filter's boolean operator. AND conditions can be pushed piecemeal
+	// (SQL evaluates the pushed ones, Go evaluates the rest). OR is
+	// all-or-nothing: pushing a subset as `AND c1 AND c2` silently turns
+	// the union into an intersection, which is exactly the bug this guard
+	// fixes — `WHERE a OR b` used to return only rows matching BOTH.
+	evalOp := "AND"
 	var unpushedConditions []Condition
 	if pushDown != nil {
-		for _, c := range pushDown.Conditions {
-			col, canPush := sqlPushableColumns[c.Property]
-			if !canPush {
-				unpushedConditions = append(unpushedConditions, c)
-				continue
+		if pushDown.Operator == "OR" {
+			evalOp = "OR"
+			orClauses := make([]string, 0, len(pushDown.Conditions))
+			orArgs := make([]any, 0, len(pushDown.Conditions))
+			allPushable := true
+			for _, c := range pushDown.Conditions {
+				clause, arg, ok := scanPushdownSQL(s.Variable, c)
+				if !ok {
+					allPushable = false
+					break
+				}
+				orClauses = append(orClauses, clause)
+				orArgs = append(orArgs, arg)
 			}
-			switch c.Operator {
-			case "=":
-				query += " AND " + col + "=?"
-				args = append(args, c.Value)
-			case "CONTAINS":
-				query += " AND " + col + " LIKE ?"
-				args = append(args, "%"+c.Value+"%")
-			case "STARTS WITH":
-				query += " AND " + col + " LIKE ?"
-				args = append(args, c.Value+"%")
-			case "ENDS WITH":
-				query += " AND " + col + " LIKE ?"
-				args = append(args, "%"+c.Value)
-			default:
-				// =~, numeric comparisons, IS NULL: can't push to SQL easily
-				unpushedConditions = append(unpushedConditions, c)
+			if allPushable {
+				query += " AND (" + strings.Join(orClauses, " OR ") + ")"
+				args = append(args, orArgs...)
+			} else {
+				unpushedConditions = pushDown.Conditions
+			}
+		} else {
+			for _, c := range pushDown.Conditions {
+				clause, arg, ok := scanPushdownSQL(s.Variable, c)
+				if !ok {
+					unpushedConditions = append(unpushedConditions, c)
+					continue
+				}
+				query += " AND " + clause
+				args = append(args, arg)
 			}
 		}
+	}
+
+	// When no Go-side filtering remains, cap the scan in SQL so a broad
+	// MATCH doesn't load the entire node table into memory; fetch cap+1 so
+	// truncation is detected and signaled. With Go-side filtering pending
+	// (inline props or unpushed conditions), the SQL rows are a superset of
+	// the result, so a SQL cap would silently drop matching rows — the
+	// post-step binding cap in executeStepsForProject applies instead.
+	scanCap := e.expandLimit
+	if scanCap <= 0 {
+		scanCap = e.maxRows() * 2
+	}
+	canLimitSQL := len(s.Props) == 0 && len(unpushedConditions) == 0
+	if canLimitSQL {
+		query += " LIMIT ?"
+		args = append(args, scanCap+1)
 	}
 
 	rows, err := e.Store.DB().QueryContext(e.ctx, query, args...)
@@ -803,6 +954,11 @@ func (e *Executor) execScan(project string, s *ScanNodes, pushDown *FilterWhere)
 		return nil, err
 	}
 
+	if canLimitSQL && len(nodes) > scanCap {
+		nodes = nodes[:scanCap]
+		e.markTruncated()
+	}
+
 	// Apply inline property filters
 	if len(s.Props) > 0 {
 		nodes = filterNodesByProps(nodes, s.Props)
@@ -814,7 +970,7 @@ func (e *Executor) execScan(project string, s *ScanNodes, pushDown *FilterWhere)
 		if len(unpushedConditions) > 0 {
 			b := newBinding()
 			b.nodes[s.Variable] = n
-			match, evalErr := e.evaluateConditions(b, unpushedConditions, "AND")
+			match, evalErr := e.evaluateConditions(b, unpushedConditions, evalOp)
 			if evalErr != nil {
 				return nil, evalErr
 			}
@@ -823,9 +979,9 @@ func (e *Executor) execScan(project string, s *ScanNodes, pushDown *FilterWhere)
 			}
 		}
 		b := newBinding()
-		if s.Variable != "" {
-			b.nodes[s.Variable] = n
-		}
+		// Bind unconditionally: anonymous nodes use the "" key so a
+		// following expand step (FromVar == "") can chain from them.
+		b.nodes[s.Variable] = n
 		bindings = append(bindings, b)
 	}
 	return bindings, nil
@@ -850,7 +1006,14 @@ func (e *Executor) execExpand(s *ExpandRelationship, bindings []binding) ([]bind
 	isVariableLength := s.MinHops != 1 || s.MaxHops != 1
 
 	if isVariableLength {
-		// Variable-length: use BFS per binding (already uses recursive CTE)
+		// Variable-length: use BFS per binding (already uses recursive CTE).
+		// The cap is the per-query binding cap (raised to 100k for
+		// aggregations) — clipping at maxRows*2 silently undercounted
+		// COUNT() over variable-length paths.
+		expandCap := e.expandLimit
+		if expandCap <= 0 {
+			expandCap = e.maxRows() * 2
+		}
 		result := make([]binding, 0, len(bindings))
 		for _, b := range bindings {
 			fromNode, ok := b.nodes[s.FromVar]
@@ -862,8 +1025,8 @@ func (e *Executor) execExpand(s *ExpandRelationship, bindings []binding) ([]bind
 				return nil, err
 			}
 			result = append(result, expanded...)
-			if len(result) > e.maxRows()*2 {
-				result = result[:e.maxRows()*2]
+			if len(result) > expandCap {
+				result = result[:expandCap]
 				e.markTruncated()
 				break
 			}
@@ -980,14 +1143,21 @@ func buildExpandedBindings(bindings []binding, s *ExpandRelationship, edgesByNod
 			continue
 		}
 		edges := edgesByNode[fromNode.ID]
-		seen := make(map[int64]bool)
+		// Dedup by edge ID: the same edge can appear twice in the merged
+		// "any"-direction lists (a self-loop is in both the outbound and
+		// inbound batches). Parallel edges between the same node pair are
+		// distinct matches and MUST each produce a binding — the previous
+		// dedup keyed on target ID collapsed them, so row multiplicity and
+		// COUNT(r) disagreed with the fused-JOIN and SQL-aggregate paths
+		// (one row per edge).
+		seenEdges := make(map[int64]bool)
 
 		for _, edge := range edges {
-			targetID := edgeTargetID(edge, fromNode.ID, direction)
-			if seen[targetID] {
+			if seenEdges[edge.ID] {
 				continue
 			}
-			seen[targetID] = true
+			seenEdges[edge.ID] = true
+			targetID := edgeTargetID(edge, fromNode.ID, direction)
 
 			node, exists := nodeMap[targetID]
 			if !exists || (s.ToLabel != "" && node.Label != s.ToLabel) {
@@ -997,9 +1167,7 @@ func buildExpandedBindings(bindings []binding, s *ExpandRelationship, edgesByNod
 				continue
 			}
 			newB := copyBinding(b)
-			if s.ToVar != "" {
-				newB.nodes[s.ToVar] = node
-			}
+			newB.nodes[s.ToVar] = node
 			if s.RelVar != "" {
 				newB.edges[s.RelVar] = edge
 			}
@@ -1034,17 +1202,41 @@ func (e *Executor) expandVariableLength(b binding, fromNode *store.Node, s *Expa
 		direction = "outbound"
 	}
 
-	edgeTypes := s.EdgeTypes
-	if len(edgeTypes) == 0 {
-		edgeTypes = []string{"CALLS"} // default
+	// Empty edge types traverse ALL types — consistent with fixed-length
+	// expansion (FindEdgesBySourceIDs treats an empty list as unfiltered).
+	// The previous behavior silently narrowed an untyped `-[*1..3]->` to
+	// CALLS-only traversal.
+	//
+	// The BFS limit is the per-query binding cap (not maxRows): COUNT()
+	// over variable-length paths needs the full visited set, and BFS now
+	// reports truncation so the clip is surfaced instead of silently
+	// undercounting.
+	bfsLimit := e.expandLimit
+	if bfsLimit <= 0 {
+		bfsLimit = e.maxRows() * 2
 	}
-
-	bfsResult, err := e.Store.BFS(fromNode.ID, direction, edgeTypes, maxDepth, e.maxRows())
+	bfsResult, err := e.Store.BFS(fromNode.ID, direction, s.EdgeTypes, maxDepth, bfsLimit)
 	if err != nil {
 		return nil, fmt.Errorf("bfs: %w", err)
 	}
+	if bfsResult.Truncated {
+		e.markTruncated()
+	}
 
 	result := make([]binding, 0, len(bfsResult.Visited))
+
+	// Zero-length path: `*0..N` binds the start node itself (subject to
+	// the target's label/property filters), per openCypher semantics. BFS
+	// rows all have hop >= 1, so hop 0 is synthesized here.
+	if s.MinHops == 0 {
+		if (s.ToLabel == "" || fromNode.Label == s.ToLabel) &&
+			(len(s.ToProps) == 0 || nodeMatchesProps(fromNode, s.ToProps)) {
+			newB := copyBinding(b)
+			newB.nodes[s.ToVar] = fromNode
+			result = append(result, newB)
+		}
+	}
+
 	for _, nh := range bfsResult.Visited {
 		if nh.Hop < s.MinHops {
 			continue
@@ -1059,9 +1251,7 @@ func (e *Executor) expandVariableLength(b binding, fromNode *store.Node, s *Expa
 			continue
 		}
 		newB := copyBinding(b)
-		if s.ToVar != "" {
-			newB.nodes[s.ToVar] = nh.Node
-		}
+		newB.nodes[s.ToVar] = nh.Node
 		// Note: variable-length BFS doesn't bind individual edges
 		result = append(result, newB)
 	}
@@ -1154,6 +1344,8 @@ func (e *Executor) evaluateCondition(b binding, c Condition) (bool, error) {
 	switch c.Operator {
 	case "=":
 		return fmt.Sprintf("%v", actual) == c.Value, nil
+	case "<>":
+		return fmt.Sprintf("%v", actual) != c.Value, nil
 	case "=~":
 		s, ok := actual.(string)
 		if !ok {
@@ -1356,11 +1548,15 @@ func (e *Executor) defaultProjection(bindings []binding) (*Result, error) {
 		return &Result{Columns: []string{}, Rows: []map[string]any{}}, nil
 	}
 
-	// Collect all variable names from nodes and edges
+	// Collect all variable names from nodes and edges. Anonymous bindings
+	// (the "" key, used internally for chain expansion) are not projected.
 	varSet := make(map[string]bool)
 	edgeVarSet := make(map[string]bool)
 	for _, b := range bindings {
 		for k := range b.nodes {
+			if k == "" {
+				continue
+			}
 			varSet[k] = true
 		}
 		for k := range b.edges {
@@ -1380,6 +1576,9 @@ func (e *Executor) defaultProjection(bindings []binding) (*Result, error) {
 	for _, b := range bindings {
 		row := make(map[string]any)
 		for varName, node := range b.nodes {
+			if varName == "" {
+				continue
+			}
 			row[varName+".name"] = node.Name
 			row[varName+".qualified_name"] = node.QualifiedName
 			row[varName+".label"] = node.Label
@@ -1392,6 +1591,7 @@ func (e *Executor) defaultProjection(bindings []binding) (*Result, error) {
 
 	if len(rows) > e.maxRows() {
 		rows = rows[:e.maxRows()]
+		e.markTruncated()
 	}
 
 	return &Result{Columns: cols, Rows: rows}, nil
@@ -1601,6 +1801,12 @@ func (e *Executor) aggregateResults(bindings []binding, ret *ReturnClause) (*Res
 		row := g.row
 		row[countCol] = g.count
 		rows = append(rows, row)
+	}
+
+	// An ungrouped COUNT over an empty match yields one row with value 0
+	// (openCypher semantics), not zero rows.
+	if len(groupItems) == 0 && len(rows) == 0 {
+		rows = append(rows, map[string]any{countCol: 0})
 	}
 
 	// ORDER BY

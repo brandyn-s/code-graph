@@ -52,7 +52,7 @@ type WhereClause struct {
 type Condition struct {
 	Variable string // "f"
 	Property string // "name"
-	Operator string // "=", "=~", "CONTAINS", "STARTS WITH", "ENDS WITH", "IS NULL", "IS NOT NULL", "IN", ">", "<", ">=", "<="
+	Operator string // "=", "<>", "=~", "CONTAINS", "STARTS WITH", "ENDS WITH", "IS NULL", "IS NOT NULL", "IN", ">", "<", ">=", "<="
 	Value    string // the comparison value (unused for IN, IS NULL, IS NOT NULL)
 
 	// Values holds the list literal for the IN operator: WHERE n.x IN ['a','b'].

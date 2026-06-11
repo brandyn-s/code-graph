@@ -416,7 +416,19 @@ func runCLI(args []string) int {
 
 	toolName := positional[0]
 
-	srv := tools.NewServer(router)
+	// Attach the config store so CLI invocations honor the same persisted
+	// settings as the MCP server (the sticky report.skip.<project>
+	// preference was invisible to `cli index_repository` without this —
+	// 2026-06-11). A config-open failure degrades to defaults with a
+	// warning rather than failing the CLI.
+	var srvOpts []tools.ServerOption
+	if cfg, cfgErr := store.OpenConfig(); cfgErr == nil {
+		defer cfg.Close()
+		srvOpts = append(srvOpts, tools.WithConfig(cfg))
+	} else {
+		fmt.Fprintf(os.Stderr, "warning: config store unavailable (%v); using defaults\n", cfgErr)
+	}
+	srv := tools.NewServer(router, srvOpts...)
 
 	// In CLI mode, try to set session root from cwd
 	if cwd, cwdErr := os.Getwd(); cwdErr == nil {

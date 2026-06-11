@@ -44,7 +44,7 @@ func writeFixtureRepo(t *testing.T) string {
 def caller():
     return helper()
 `
-	if err := os.WriteFile(filepath.Join(repo, "app.py"), []byte(src), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(repo, "app.py"), []byte(src), 0o600); err != nil {
 		t.Fatalf("write fixture: %v", err)
 	}
 	return repo

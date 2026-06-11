@@ -129,22 +129,14 @@ func configSet(key, value string) int {
 		}
 	}
 
-	// Validate bool keys
-	if key == store.ConfigAutoIndex {
-		v := strings.ToLower(value)
-		if v != "true" && v != "false" && v != "on" && v != "off" && v != "1" && v != "0" {
+	// Validate bool keys (auto_index and the report.skip.<project> class)
+	if key == store.ConfigAutoIndex || strings.HasPrefix(key, store.ConfigReportSkipPrefix) {
+		normalized, ok := normalizeBoolValue(value)
+		if !ok {
 			fmt.Fprintf(os.Stderr, "Invalid value for %s: %q (expected true/false)\n", key, value)
 			return 1
 		}
-		// Normalize
-		switch v {
-		case "on", "1":
-			value = "true"
-		case "off", "0":
-			value = "false"
-		default:
-			value = v
-		}
+		value = normalized
 	}
 
 	cfg, err := store.OpenConfig()
@@ -197,6 +189,7 @@ Examples:
   codebase-memory-mcp config set auto_index true     Enable auto-indexing on session start
   codebase-memory-mcp config set auto_index false    Disable auto-indexing (default)
   codebase-memory-mcp config set auto_index_limit 20000
+  codebase-memory-mcp config set report.skip.<project> true   Sticky skip_report for one project
   codebase-memory-mcp config list                    Show all settings
 `)
 }
@@ -219,11 +212,29 @@ func configDescription(key string) string {
 	return ""
 }
 
+// normalizeBoolValue accepts true/false/on/off/1/0 (any case) and returns
+// the canonical "true"/"false" stored form.
+func normalizeBoolValue(value string) (string, bool) {
+	switch strings.ToLower(value) {
+	case "true", "on", "1":
+		return "true", true
+	case "false", "off", "0":
+		return "false", true
+	}
+	return "", false
+}
+
 func isKnownConfigKey(key string) bool {
 	for _, d := range configDefaults {
 		if d.Key == key {
 			return true
 		}
+	}
+	// Per-project sticky skip_report preferences are a dynamic key class:
+	// report.skip.<project>. Anything after the prefix is a project name.
+	if strings.HasPrefix(key, store.ConfigReportSkipPrefix) &&
+		len(key) > len(store.ConfigReportSkipPrefix) {
+		return true
 	}
 	return false
 }

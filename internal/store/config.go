@@ -135,6 +135,12 @@ const (
 	// Default: false (off). Enable with: codebase-memory-mcp config set auto_index true
 	ConfigAutoIndex = "auto_index"
 
+	// ConfigReportSkipPrefix prefixes per-project sticky skip_report
+	// preferences ("report.skip.<project>" = "true"/"false"), persisted by
+	// handleIndexRepository when skip_report is explicitly provided and
+	// inherited by calls that omit the argument.
+	ConfigReportSkipPrefix = "report.skip."
+
 	// ConfigAutoIndexLimit is the max file count for auto-indexing new projects.
 	// Default: 50000. Projects above this limit require explicit index_repository.
 	ConfigAutoIndexLimit = "auto_index_limit"

@@ -141,7 +141,7 @@ func (s *Server) handleIndexRepository(ctx context.Context, req *mcp.CallToolReq
 	// always-write override.
 	_, skipProvided := args["skip_report"]
 	skipReport := getBoolArg(args, "skip_report")
-	prefKey := "report.skip." + projectName
+	prefKey := store.ConfigReportSkipPrefix + projectName
 	if skipProvided {
 		if s.config != nil {
 			if err := s.config.Set(prefKey, strconv.FormatBool(skipReport)); err != nil {

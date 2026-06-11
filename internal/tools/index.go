@@ -71,11 +71,28 @@ func (s *Server) handleIndexRepository(ctx context.Context, req *mcp.CallToolReq
 	s.indexMu.Lock()
 	defer s.indexMu.Unlock()
 
-	// Get per-project store
-	st, err := s.router.ForProject(projectName)
+	// Acquire the per-project store with a ref held for the whole index.
+	// ForProject returns an UNPROTECTED handle: the router's evictor closes
+	// stores idle > idleTimeout (30s) with refs == 0, and a long index never
+	// goes back through the router to refresh lastUsed. 2026-06-11 incident:
+	// every index_repository call crossing ~30s wall time had its *sql.DB
+	// closed mid-run — the in-flight transaction still committed (data
+	// intact on disk), but every post-commit read failed silently, so the
+	// response reported nodes=0/edges=0, action_outcome="created", and a
+	// fabricated indexed_at. AcquireStore blocks eviction until release.
+	st, release, err := s.router.AcquireStore(projectName)
 	if err != nil {
 		return errResult(fmt.Sprintf("store: %v", err)), nil
 	}
+	defer release()
+
+	// Snapshot project existence BEFORE the run. GetProject after Run()
+	// always finds the record (runPasses upserts it at the start), so a
+	// post-Run read can only answer "what is indexed_at", never "did this
+	// call create the project" — reading it post-Run made every successful
+	// first-time index report action_outcome="updated".
+	preProj, _ := st.GetProject(projectName)
+	existedBefore := preProj != nil
 
 	// If force=true, delete cached file hashes so classifyFiles treats all files as changed.
 	// This ensures post-flush enrichment passes (security tags, communities) run on all files.
@@ -127,31 +144,35 @@ func (s *Server) handleIndexRepository(ctx context.Context, req *mcp.CallToolReq
 		s.indexStatus.Store("ready")
 	}
 
-	// Gather stats from the pipeline directly, NOT via a fresh
-	// st.CountNodes() call. Post-bulk-write + post-WAL-checkpoint reads via
-	// the outer `st` reference were observed to return 0 even when nodes had
-	// committed (code-search 2026-05-26: fast-mode wrote 5,640 nodes; the
-	// response blob reported nodes=0/edges=0 because CountNodes called here
-	// returned 0). The Pipeline populates LastNodeCount/LastEdgeCount during
-	// Run() using its own connection state (which sees the just-committed
-	// data) and exposes the values via fields. Reading the fields preserves
-	// the truth instead of re-querying with potentially stale visibility.
+	// Gather stats from the pipeline's LastNodeCount/LastEdgeCount fields,
+	// populated at the end of Run(). The 2026-05-26 zero-counts incident
+	// (code-search fast-mode wrote 5,640 nodes, response reported 0/0) was
+	// originally attributed to post-bulk-write read visibility and "fixed"
+	// by moving the count read into the pipeline — but the pipeline read
+	// the counts through the same store handle, so nothing changed. The
+	// actual cause (confirmed 2026-06-11) was the router's evictor closing
+	// the store's *sql.DB mid-index once the run crossed idleTimeout; the
+	// AcquireStore ref above is the real fix. The pipeline fields remain
+	// the source of truth here to keep the count adjacent to the commit.
 	nodeCount := p.LastNodeCount
 	edgeCount := p.LastEdgeCount
 
-	proj, _ := st.GetProject(projectName)
+	proj, projErr := st.GetProject(projectName)
 	indexedAt := store.Now()
-	if proj != nil {
+	if projErr != nil {
+		// With the ref held this should be unreachable; if it fires anyway,
+		// surface it instead of silently fabricating indexed_at.
+		slog.Warn("index.get_project.err", "project", projectName, "err", projErr)
+	} else if proj != nil {
 		indexedAt = proj.IndexedAt
 	}
 
-	// Distinguish first-time index (Created) from re-index (Updated).
-	// proj is non-nil only when the project record already existed
-	// before this Run() call. forceReindex=true is treated as Updated
-	// because the project record persists through file-hash deletion.
-	outcome := ActionOutcomeCreated
-	if proj != nil {
-		outcome = ActionOutcomeUpdated
+	// Distinguish first-time index (Created) from re-index (Updated) using
+	// the pre-Run snapshot. forceReindex=true is treated as Updated because
+	// the project record persists through file-hash deletion.
+	outcome := ActionOutcomeUpdated
+	if !existedBefore {
+		outcome = ActionOutcomeCreated
 	}
 
 	result := map[string]any{

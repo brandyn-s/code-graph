@@ -100,8 +100,12 @@ func (r *StoreRouter) OnDelete(fn func(name string)) {
 }
 
 // ForProject returns the Store for the given project, opening it lazily.
-// Updates lastUsed and increments the ref count. Callers SHOULD use
-// UseStore or AcquireStore instead for automatic ref management.
+// Updates lastUsed but does NOT hold a ref: the evictor may close the
+// returned store once it sits idle past idleTimeout (30s). Only safe for
+// short-lived use that completes well inside that window. Operations that
+// can run longer — indexing, agent loops, report generation on large
+// graphs — MUST use AcquireStore/UseStore so the ref blocks eviction for
+// their full duration (see the 2026-06-11 incident note in tools/index.go).
 func (r *StoreRouter) ForProject(name string) (*Store, error) {
 	if name == "*" || name == "all" {
 		return nil, fmt.Errorf("invalid project name: %q", name)

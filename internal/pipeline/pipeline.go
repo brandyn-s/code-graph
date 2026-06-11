@@ -478,8 +478,16 @@ func (p *Pipeline) Run() error {
 		slog.Info("wal.checkpoint", "before_mb", walBefore/(1<<20), "after_mb", walAfter/(1<<20))
 	}
 
-	nc, _ := p.Store.CountNodes(p.ProjectName)
-	ec, _ := p.Store.CountEdges(p.ProjectName)
+	nc, ncErr := p.Store.CountNodes(p.ProjectName)
+	ec, ecErr := p.Store.CountEdges(p.ProjectName)
+	if ncErr != nil || ecErr != nil {
+		// A failed count must not masquerade as a real zero. Silently
+		// discarding these errors is what hid the 2026-06-11 evictor
+		// incident (store *sql.DB closed mid-index → "sql: database is
+		// closed" → responses reported nodes=0/edges=0 with no signal).
+		slog.Warn("pipeline.count.err", "project", p.ProjectName,
+			"node_err", ncErr, "edge_err", ecErr)
+	}
 	p.LastNodeCount = nc
 	p.LastEdgeCount = ec
 	logHeapStats("post_index")

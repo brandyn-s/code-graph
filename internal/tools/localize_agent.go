@@ -73,10 +73,16 @@ func (s *Server) handleCodeLocalizeAgent(ctx context.Context, req *mcp.CallToolR
 	topK := getIntArg(args, "top_k", 10)
 	includeTranscript := getBoolArg(args, "include_transcript")
 
-	st, err := s.router.ForProject(project)
+	// Hold a ref for the agent loop's full duration (30-60s measured wall
+	// time — well past the router's 30s idle eviction). A bare ForProject
+	// handle can have its *sql.DB closed by the evictor mid-loop, failing
+	// every graph query the agent issues after that point. Same failure
+	// class as the 2026-06-11 index_repository incident (see index.go).
+	st, release, err := s.router.AcquireStore(project)
 	if err != nil {
 		return errResult(fmt.Sprintf("resolve store: %v", err)), nil
 	}
+	defer release()
 
 	res, err := locagent.Run(ctx, st, project, issue, topK)
 	if err != nil {

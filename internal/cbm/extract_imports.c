@@ -11,10 +11,7 @@ static void parse_es_imports(CBMExtractCtx* ctx);
 static void parse_java_imports(CBMExtractCtx* ctx);
 static void parse_rust_imports(CBMExtractCtx* ctx);
 static void parse_c_imports(CBMExtractCtx* ctx);
-static void parse_ruby_imports(CBMExtractCtx* ctx);
-static void parse_lua_imports(CBMExtractCtx* ctx);
 static void parse_generic_imports(CBMExtractCtx* ctx, const char* node_type);
-static void parse_wolfram_imports(CBMExtractCtx* ctx);
 
 // Helper: strip quotes from a string literal
 static char* strip_quotes(CBMArena* a, const char* s) {
@@ -575,98 +572,6 @@ static void parse_c_imports(CBMExtractCtx* ctx) {
     }
 }
 
-// --- Ruby imports ---
-// call nodes: require("X"), require_relative("X")
-
-static void parse_ruby_imports(CBMExtractCtx* ctx) {
-    CBMArena* a = ctx->arena;
-
-    // Walk for call nodes with "require" or "require_relative"
-    // Simple: walk top-level children
-    uint32_t count = ts_node_child_count(ctx->root);
-    for (uint32_t i = 0; i < count; i++) {
-        TSNode node = ts_node_child(ctx->root, i);
-        const char* kind = ts_node_type(node);
-        if (strcmp(kind, "call") != 0 && strcmp(kind, "command_call") != 0) continue;
-
-        TSNode method = ts_node_child_by_field_name(node, "method", 6);
-        if (ts_node_is_null(method) && ts_node_child_count(node) > 0) {
-            method = ts_node_child(node, 0);
-        }
-        if (ts_node_is_null(method)) continue;
-
-        char* name = cbm_node_text(a, method, ctx->source);
-        if (!name || (strcmp(name, "require") != 0 && strcmp(name, "require_relative") != 0)) continue;
-
-        // Get the argument (string literal)
-        TSNode args = ts_node_child_by_field_name(node, "arguments", 9);
-        if (ts_node_is_null(args)) {
-            // Try second child
-            if (ts_node_child_count(node) > 1) args = ts_node_child(node, 1);
-        }
-        if (ts_node_is_null(args)) continue;
-
-        // Find string literal in args
-        char* arg_text = NULL;
-        uint32_t ac = ts_node_child_count(args);
-        for (uint32_t j = 0; j < ac; j++) {
-            TSNode c = ts_node_child(args, j);
-            const char* ck = ts_node_type(c);
-            if (strcmp(ck, "string") == 0 || strcmp(ck, "string_literal") == 0) {
-                arg_text = strip_quotes(a, cbm_node_text(a, c, ctx->source));
-                break;
-            }
-        }
-        if (!arg_text) {
-            arg_text = strip_quotes(a, cbm_node_text(a, args, ctx->source));
-        }
-        if (!arg_text || !arg_text[0]) continue;
-
-        CBMImport imp = {.local_name = path_last(a, arg_text), .module_path = arg_text};
-        cbm_imports_push(&ctx->result->imports, a, imp);
-    }
-}
-
-// --- Lua imports ---
-// function_call: require("X")
-
-static void parse_lua_imports(CBMExtractCtx* ctx) {
-    CBMArena* a = ctx->arena;
-
-    uint32_t count = ts_node_child_count(ctx->root);
-    for (uint32_t i = 0; i < count; i++) {
-        TSNode node = ts_node_child(ctx->root, i);
-        // Lua: local X = require("Y") → assignment_statement or variable_declaration
-        // containing function_call(require, "Y")
-        char* text = cbm_node_text(a, node, ctx->source);
-        if (!text) continue;
-        if (strstr(text, "require") == NULL) continue;
-
-        // Simple extraction: find require("...") pattern in node text
-        const char* req = strstr(text, "require");
-        if (!req) continue;
-
-        // Find the string argument
-        const char* open = strchr(req, '(');
-        if (!open) open = strchr(req, '"');
-        if (!open) open = strchr(req, '\'');
-        if (!open) continue;
-
-        const char* q1 = strchr(open, '"');
-        const char* q2 = strchr(open, '\'');
-        if (!q1 && !q2) continue;
-        const char* start = q1 && (!q2 || q1 < q2) ? q1 : q2;
-        char delim = *start;
-        start++;
-        const char* end = strchr(start, delim);
-        if (!end) continue;
-
-        char* mod = cbm_arena_strndup(a, start, (size_t)(end - start));
-        CBMImport imp = {.local_name = path_last(a, mod), .module_path = mod};
-        cbm_imports_push(&ctx->result->imports, a, imp);
-    }
-}
-
 // --- Generic import parsing for languages with simple import_declaration ---
 
 static void parse_generic_imports(CBMExtractCtx* ctx, const char* node_type) {
@@ -710,61 +615,6 @@ static void parse_generic_imports(CBMExtractCtx* ctx, const char* node_type) {
     }
 }
 
-// --- Wolfram imports ---
-// get_top: << "package" (Get["file"])
-// apply where first child is builtin_symbol "Needs" with string arg
-
-static void walk_wolfram_imports(CBMExtractCtx* ctx, TSNode node) {
-    CBMArena* a = ctx->arena;
-    const char* kind = ts_node_type(node);
-
-    // get_top: << "path" → import
-    if (strcmp(kind, "get_top") == 0) {
-        uint32_t nc = ts_node_named_child_count(node);
-        for (uint32_t i = 0; i < nc; i++) {
-            TSNode child = ts_node_named_child(node, i);
-            const char* ck = ts_node_type(child);
-            if (strcmp(ck, "string") == 0 || strcmp(ck, "user_symbol") == 0) {
-                char* text = cbm_node_text(a, child, ctx->source);
-                if (text && text[0]) {
-                    char* path = strip_quotes(a, text);
-                    CBMImport imp = {.local_name = path_last(a, path), .module_path = path};
-                    cbm_imports_push(&ctx->result->imports, a, imp);
-                }
-                break;
-            }
-        }
-    }
-
-    // Needs["package`"] — apply where head is builtin_symbol "Needs"
-    if (strcmp(kind, "apply") == 0 && ts_node_named_child_count(node) >= 2) {
-        TSNode head = ts_node_named_child(node, 0);
-        if (strcmp(ts_node_type(head), "builtin_symbol") == 0) {
-            char* name = cbm_node_text(a, head, ctx->source);
-            if (name && strcmp(name, "Needs") == 0) {
-                // Second named child should be the string argument
-                TSNode arg = ts_node_named_child(node, 1);
-                char* text = cbm_node_text(a, arg, ctx->source);
-                if (text && text[0]) {
-                    char* path = strip_quotes(a, text);
-                    CBMImport imp = {.local_name = path_last(a, path), .module_path = path};
-                    cbm_imports_push(&ctx->result->imports, a, imp);
-                }
-            }
-        }
-    }
-
-    // Recurse
-    uint32_t count = ts_node_child_count(node);
-    for (uint32_t i = 0; i < count; i++) {
-        walk_wolfram_imports(ctx, ts_node_child(node, i));
-    }
-}
-
-static void parse_wolfram_imports(CBMExtractCtx* ctx) {
-    walk_wolfram_imports(ctx, ctx->root);
-}
-
 // --- Main dispatch ---
 
 void cbm_extract_imports(CBMExtractCtx* ctx) {
@@ -783,78 +633,20 @@ void cbm_extract_imports(CBMExtractCtx* ctx) {
         case CBM_LANG_JAVA:
             parse_java_imports(ctx);
             break;
-        case CBM_LANG_KOTLIN:
-            parse_generic_imports(ctx, "import");
-            break;
-        case CBM_LANG_SCALA:
-            parse_generic_imports(ctx, "import_declaration");
-            break;
-        case CBM_LANG_CSHARP:
-            parse_generic_imports(ctx, "using_directive");
-            break;
         case CBM_LANG_RUST:
             parse_rust_imports(ctx);
             break;
         case CBM_LANG_C:
         case CBM_LANG_CPP:
-        case CBM_LANG_OBJC:
             parse_c_imports(ctx);
-            break;
-        case CBM_LANG_PHP:
-            // PHP uses require/include calls, similar to Ruby
-            parse_generic_imports(ctx, "expression_statement");
-            break;
-        case CBM_LANG_RUBY:
-            parse_ruby_imports(ctx);
-            break;
-        case CBM_LANG_LUA:
-            parse_lua_imports(ctx);
-            break;
-        case CBM_LANG_ELIXIR:
-            // Elixir: import/use/alias/require are call nodes
-            parse_generic_imports(ctx, "call");
             break;
         case CBM_LANG_BASH:
             // source/. commands
             parse_generic_imports(ctx, "command");
             break;
-        case CBM_LANG_ZIG:
-            parse_generic_imports(ctx, "builtin_function");
-            break;
-        case CBM_LANG_ERLANG:
-            parse_generic_imports(ctx, "module_attribute");
-            break;
-        case CBM_LANG_HASKELL:
-            parse_generic_imports(ctx, "import");
-            break;
-        case CBM_LANG_OCAML:
-            parse_generic_imports(ctx, "open_module");
-            break;
         case CBM_LANG_CSS:
         case CBM_LANG_SCSS:
             parse_generic_imports(ctx, "import_statement");
-            break;
-        case CBM_LANG_PERL:
-            parse_generic_imports(ctx, "use_statement");
-            break;
-        case CBM_LANG_GROOVY:
-            parse_generic_imports(ctx, "groovy_import");
-            break;
-        case CBM_LANG_SWIFT:
-        case CBM_LANG_DART:
-            parse_generic_imports(ctx, "import_declaration");
-            break;
-        case CBM_LANG_LEAN:
-            parse_generic_imports(ctx, "import");
-            break;
-        case CBM_LANG_FORM:
-            parse_generic_imports(ctx, "include_directive");
-            break;
-        case CBM_LANG_MAGMA:
-            parse_generic_imports(ctx, "load_statement");
-            break;
-        case CBM_LANG_WOLFRAM:
-            parse_wolfram_imports(ctx);
             break;
         default:
             break;

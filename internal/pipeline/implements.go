@@ -260,10 +260,6 @@ var explicitImplementsExts = map[lang.Language]string{
 	lang.TypeScript: ".ts",
 	lang.TSX:        ".tsx",
 	lang.Java:       ".java",
-	lang.CSharp:     ".cs",
-	lang.Kotlin:     ".kt",
-	lang.Scala:      ".scala",
-	lang.PHP:        ".php",
 }
 
 // implementsExplicitCBM detects explicit implements/extends relationships

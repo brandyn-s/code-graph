@@ -51,48 +51,9 @@ var testFilePatterns = map[lang.Language]testFilePattern{
 		stripExtSuffixes: []string{"_test"},
 		testDirs:         []string{"test", "tests"},
 	},
-	lang.PHP: {
-		suffixes: []string{"Test.php"},
-		testDirs: []string{"tests"},
-	},
-	lang.Scala: {
-		stripExtSuffixes: []string{"Spec", "Test"},
-		testDirs:         []string{"src/test"},
-	},
-	lang.CSharp: {
-		stripExtSuffixes: []string{"Test", "Tests"},
-		testDirs:         []string{"Tests", "tests"},
-	},
-	lang.Kotlin: {
-		stripExtSuffixes: []string{"Test", "Tests", "Spec"},
-		testDirs:         []string{"src/test"},
-	},
-	lang.Lua: {
-		suffixes: []string{"_test.lua", "_spec.lua"},
-		prefixes: []string{"test_"},
-		testDirs: []string{"spec"},
-	},
-	lang.Julia: {
-		testDirs: []string{"test"},
-	},
-	lang.FSharp: {
-		stripExtSuffixes: []string{"Test", "Tests"},
-		testDirs:         []string{"tests"},
-	},
-	lang.Elm: {
-		testDirs: []string{"tests"},
-	},
-	lang.Fortran: {
-		prefixes: []string{"test_"},
-		testDirs: []string{"test", "tests"},
-	},
 	lang.CUDA: {
 		stripExtSuffixes: []string{"_test"},
 		testDirs:         []string{"test", "tests"},
-	},
-	lang.Verilog: {
-		suffixes: []string{"_tb.v", "_tb.sv"},
-		testDirs: []string{"testbench", "tb"},
 	},
 }
 
@@ -142,28 +103,17 @@ func containsTestDir(dir string, patterns ...string) bool {
 
 // testFuncPrefixes maps language → accepted test function name prefixes.
 var testFuncPrefixes = map[lang.Language][]string{
-	lang.Go:      {"Test", "Benchmark", "Example"},
-	lang.Python:  {"test_", "Test"},
-	lang.Java:    {"test"},
-	lang.Rust:    {"test_", "Test"},
-	lang.CPP:     {"Test", "test_"},
-	lang.CSharp:  {"Test"},
-	lang.PHP:     {"test", "Test"},
-	lang.Scala:   {"test"},
-	lang.Kotlin:  {"test"},
-	lang.Lua:     {"test_", "test"},
-	lang.FSharp:  {"test"},
-	lang.Fortran: {"test_", "Test"},
-	lang.CUDA:    {"Test", "test_"},
+	lang.Go:     {"Test", "Benchmark", "Example"},
+	lang.Python: {"test_", "Test"},
+	lang.Java:   {"test"},
+	lang.Rust:   {"test_", "Test"},
+	lang.CPP:    {"Test", "test_"},
+	lang.CUDA:   {"Test", "test_"},
 }
 
 // testFuncSuffixes maps language → accepted test function name suffixes.
 var testFuncSuffixes = map[lang.Language][]string{
-	lang.Java:   {"Test"},
-	lang.Scala:  {"Spec"},
-	lang.CSharp: {"Test"},
-	lang.Kotlin: {"Test"},
-	lang.FSharp: {"Test"},
+	lang.Java: {"Test"},
 }
 
 // isTestFunction returns true if the function name indicates a test entry point
@@ -186,8 +136,6 @@ func isTestFunction(funcName string, language lang.Language) bool {
 		case "describe", "it", "test", "beforeAll", "afterAll", "beforeEach", "afterEach":
 			return true
 		}
-	case lang.Julia:
-		return funcName == "@testset" || funcName == "@test"
 	}
 	return false
 }

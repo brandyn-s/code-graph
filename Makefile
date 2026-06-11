@@ -33,7 +33,7 @@ build:
 
 # Release build: strip the symbol table and DWARF (-s -w) and remove local
 # path prefixes (-trimpath). Saves ~10MB (151 -> 141MB measured 2026-06-10);
-# the bulk of the binary is the 64 vendored tree-sitter grammar tables,
+# the bulk of the binary is the 26 vendored tree-sitter grammar tables,
 # which stripping cannot touch — per-language build tags would be the next
 # size lever. Keep `make build` for development (stack traces keep symbols
 # either way in Go, but debuggers want the DWARF from the default build).

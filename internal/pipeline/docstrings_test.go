@@ -52,12 +52,6 @@ func TestDocstringIntegration(t *testing.T) {
 			"Method", "compute", "Computes result.",
 		},
 		{
-			"Kotlin_function",
-			lang.Kotlin, ".kt",
-			"/** Computes result. */\nfun compute() {}\n",
-			"Function", "compute", "Computes result.",
-		},
-		{
 			"Go_class",
 			lang.Go, ".go",
 			"package main\n\n// MyStruct is documented.\ntype MyStruct struct{}\n",

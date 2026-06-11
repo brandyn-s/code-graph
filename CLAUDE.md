@@ -29,7 +29,7 @@ gofmt -w .
 ## Architecture
 
 - **Graph storage**: SQLite WAL mode at `~/.cache/codebase-memory-mcp/`. Louvain community detection for clustering.
-- **Parsing**: tree-sitter AST for 64 languages via vendored C grammars (CGO). Go gets enhanced LSP-style type resolution.
+- **Parsing**: tree-sitter AST for 27 languages via vendored C grammars (CGO). Go gets enhanced LSP-style type resolution. 38 unused grammars were cut on 2026-06-10 (usage audit: none of the 38 appeared in any redacted repo; the 10 largest grammars were all unused — ~390MB of 770MB vendored source). PowerShell was added in the same change (airbus-cert/tree-sitter-powershell @ d3984418, MIT) — used by 2 redacted repos that previously had no coverage. Restoring a cut language = restore its four files from git history at that commit: `internal/cbm/vendored/grammars/<dir>/`, `internal/cbm/grammar_<name>.c`, `internal/lang/<name>.go`, plus the enum/spec/switch entries in `internal/cbm/cbm.h`, `internal/cbm/lang_specs.c`, `internal/cbm/cbm.go`, and `internal/lang/lang.go`.
 - **Pipeline**: Multi-pass indexing (structure -> definitions -> calls -> HTTP links -> OPA policy -> communities -> tests)
 - **Cypher engine**: Custom lexer/parser/planner/executor. Read-only subset with variable-length paths.
 - **Auto-sync**: Background watcher polls mtime+size, triggers incremental reindex. Adaptive polling intervals.

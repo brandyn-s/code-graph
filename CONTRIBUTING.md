@@ -44,7 +44,7 @@ cmd/codebase-memory-mcp/       Entry point (MCP server + CLI + install/update)
   assets/skills/               4 task-specific skills
 internal/
   store/                       SQLite graph storage (WAL mode, Louvain clustering)
-  lang/                        Language specs (64 languages, tree-sitter node types)
+  lang/                        Language specs (27 languages, tree-sitter node types)
   cbm/                         Vendored tree-sitter C grammars, AST extraction
   pipeline/                    Multi-pass indexing pipeline
   httplink/                    Cross-service HTTP route matching

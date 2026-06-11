@@ -21,11 +21,6 @@ func TestIsTestFileAllLanguages(t *testing.T) {
 		{"Java", lang.Java, "OrderTest.java", "Order.java"},
 		{"Rust", lang.Rust, "handler_test.rs", "handler.rs"},
 		{"CPP", lang.CPP, "handler_test.cpp", "handler.cpp"},
-		{"CSharp", lang.CSharp, "OrderTest.cs", "Order.cs"},
-		{"PHP", lang.PHP, "OrderTest.php", "Order.php"},
-		{"Scala", lang.Scala, "OrderSpec.scala", "Order.scala"},
-		{"Kotlin", lang.Kotlin, "OrderTest.kt", "Order.kt"},
-		{"Lua", lang.Lua, "handler_test.lua", "handler.lua"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -54,11 +49,6 @@ func TestIsTestFunctionAllLanguages(t *testing.T) {
 		{"Java", lang.Java, "testCreate", "create"},
 		{"Rust", lang.Rust, "test_create", "create"},
 		{"CPP", lang.CPP, "TestCreate", "create"},
-		{"CSharp", lang.CSharp, "TestCreate", "create"},
-		{"PHP", lang.PHP, "testCreate", "create"},
-		{"Scala", lang.Scala, "testCreate", "create"},
-		{"Kotlin", lang.Kotlin, "testCreate", "create"},
-		{"Lua", lang.Lua, "test_create", "create"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

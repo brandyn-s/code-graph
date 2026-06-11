@@ -101,9 +101,7 @@ bool cbm_is_keyword(const char* name, CBMLanguage lang) {
         case CBM_LANG_TYPESCRIPT:
         case CBM_LANG_TSX:        keywords = js_keywords; break;
         case CBM_LANG_RUST:       keywords = rust_keywords; break;
-        case CBM_LANG_JAVA:
-        case CBM_LANG_KOTLIN:
-        case CBM_LANG_SCALA:      keywords = java_keywords; break;
+        case CBM_LANG_JAVA:       keywords = java_keywords; break;
         default:                  keywords = generic_keywords; break;
     }
 
@@ -123,8 +121,6 @@ bool cbm_is_exported(const char* name, CBMLanguage lang) {
         case CBM_LANG_PYTHON:
             return name[0] != '_';
         case CBM_LANG_JAVA:
-        case CBM_LANG_CSHARP:
-        case CBM_LANG_KOTLIN:
             return name[0] >= 'A' && name[0] <= 'Z';
         default:
             return true;
@@ -182,28 +178,15 @@ bool cbm_is_test_file(const char* rel_path, CBMLanguage lang) {
                    has_prefix(base, "test_");
         }
         case CBM_LANG_JAVA:
-        case CBM_LANG_KOTLIN:
-        case CBM_LANG_SCALA:
             return has_suffix(base, "Test.java") || has_suffix(base, "Tests.java") ||
-                   has_suffix(base, "Spec.java") || has_suffix(base, "Test.kt") ||
-                   has_suffix(base, "Spec.kt") || has_suffix(base, "Test.scala") ||
-                   has_suffix(base, "Spec.scala");
+                   has_suffix(base, "Spec.java");
         case CBM_LANG_RUST:
             // Rust tests are typically mod tests inside the file, but test files too
             return has_suffix(base, "_test.rs") || has_prefix(base, "test_");
-        case CBM_LANG_RUBY:
-            return has_suffix(base, "_test.rb") || has_suffix(base, "_spec.rb") ||
-                   has_prefix(base, "test_");
-        case CBM_LANG_PHP:
-            return has_suffix(base, "Test.php");
-        case CBM_LANG_CSHARP:
-            return has_suffix(base, "Tests.cs") || has_suffix(base, "Test.cs");
         case CBM_LANG_CPP:
         case CBM_LANG_C:
             return has_suffix(base, "_test.c") || has_suffix(base, "_test.cc") ||
                    has_suffix(base, "_test.cpp") || has_prefix(base, "test_");
-        case CBM_LANG_MATLAB:
-            return has_prefix(base, "test_") || has_prefix(base, "Test");
         default:
             return false;
     }
@@ -274,23 +257,8 @@ static const char* func_kinds_js[] = {"function_declaration","method_definition"
 static const char* func_kinds_rust[] = {"function_item",NULL};
 static const char* func_kinds_java[] = {"method_declaration","constructor_declaration",NULL};
 static const char* func_kinds_cpp[] = {"function_definition",NULL};
-static const char* func_kinds_ruby[] = {"method","singleton_method",NULL};
-static const char* func_kinds_php[] = {"function_definition","method_declaration",NULL};
-static const char* func_kinds_lua[] = {"function_declaration","function_definition",NULL};
-static const char* func_kinds_scala[] = {"function_definition",NULL};
-static const char* func_kinds_kotlin[] = {"function_declaration",NULL};
-static const char* func_kinds_elixir[] = {"call",NULL}; // def/defp are call nodes
-static const char* func_kinds_haskell[] = {"function","value_definition",NULL};
-static const char* func_kinds_ocaml[] = {"value_definition","let_binding",NULL};
-static const char* func_kinds_zig[] = {"function_declaration","test_declaration",NULL};
 static const char* func_kinds_bash[] = {"function_definition",NULL};
-static const char* func_kinds_erlang[] = {"function_clause",NULL};
-static const char* func_kinds_csharp[] = {"method_declaration","constructor_declaration",NULL};
-static const char* func_kinds_matlab[] = {"function_definition",NULL};
-static const char* func_kinds_lean[] = {"def","theorem","instance","abbrev",NULL};
-static const char* func_kinds_form[] = {"procedure_definition",NULL};
-static const char* func_kinds_magma[] = {"function_definition","procedure_definition","intrinsic_definition",NULL};
-static const char* func_kinds_wolfram[] = {"set_delayed_top","set_top","set_delayed","set",NULL};
+static const char* func_kinds_powershell[] = {"function_statement","class_method_definition",NULL};
 static const char* func_kinds_generic[] = {"function_declaration","function_definition","method_declaration","method_definition",NULL};
 
 static const char** func_kinds_for_lang(CBMLanguage lang) {
@@ -304,23 +272,8 @@ static const char** func_kinds_for_lang(CBMLanguage lang) {
         case CBM_LANG_JAVA:       return func_kinds_java;
         case CBM_LANG_CPP:
         case CBM_LANG_C:          return func_kinds_cpp;
-        case CBM_LANG_RUBY:       return func_kinds_ruby;
-        case CBM_LANG_PHP:        return func_kinds_php;
-        case CBM_LANG_LUA:        return func_kinds_lua;
-        case CBM_LANG_SCALA:      return func_kinds_scala;
-        case CBM_LANG_KOTLIN:     return func_kinds_kotlin;
-        case CBM_LANG_ELIXIR:     return func_kinds_elixir;
-        case CBM_LANG_HASKELL:    return func_kinds_haskell;
-        case CBM_LANG_OCAML:      return func_kinds_ocaml;
-        case CBM_LANG_ZIG:        return func_kinds_zig;
         case CBM_LANG_BASH:       return func_kinds_bash;
-        case CBM_LANG_ERLANG:     return func_kinds_erlang;
-        case CBM_LANG_CSHARP:     return func_kinds_csharp;
-        case CBM_LANG_MATLAB:     return func_kinds_matlab;
-        case CBM_LANG_LEAN:       return func_kinds_lean;
-        case CBM_LANG_FORM:       return func_kinds_form;
-        case CBM_LANG_MAGMA:      return func_kinds_magma;
-        case CBM_LANG_WOLFRAM:    return func_kinds_wolfram;
+        case CBM_LANG_POWERSHELL: return func_kinds_powershell;
         default:                  return func_kinds_generic;
     }
 }
@@ -343,26 +296,20 @@ TSNode cbm_find_enclosing_func(TSNode node, CBMLanguage lang) {
 
 // Get the name of a function node (basic: try "name" field)
 static const char* func_node_name(CBMArena* a, TSNode func_node, const char* source, CBMLanguage lang) {
-    // Wolfram: set_delayed_top/set_top/set_delayed/set — LHS is apply(user_symbol("f"), ...)
-    if (lang == CBM_LANG_WOLFRAM) {
-        const char* nk = ts_node_type(func_node);
-        if (strcmp(nk, "set_delayed_top") == 0 || strcmp(nk, "set_top") == 0 ||
-            strcmp(nk, "set_delayed") == 0     || strcmp(nk, "set") == 0) {
-            if (ts_node_named_child_count(func_node) > 0) {
-                TSNode lhs = ts_node_named_child(func_node, 0);
-                if (strcmp(ts_node_type(lhs), "apply") == 0 && ts_node_named_child_count(lhs) > 0) {
-                    TSNode head = ts_node_named_child(lhs, 0);
-                    if (strcmp(ts_node_type(head), "user_symbol") == 0)
-                        return cbm_node_text(a, head, source);
-                }
-            }
-            return NULL;
-        }
-    }
-
     TSNode name_node = ts_node_child_by_field_name(func_node, "name", 4);
     if (!ts_node_is_null(name_node)) {
         return cbm_node_text(a, name_node, source);
+    }
+    // PowerShell: no named fields in the grammar — function_statement names
+    // are `function_name`-typed children; class methods use `simple_name`.
+    if (lang == CBM_LANG_POWERSHELL) {
+        TSNode fn = cbm_find_child_by_kind(func_node, "function_name");
+        if (ts_node_is_null(fn)) {
+            fn = cbm_find_child_by_kind(func_node, "simple_name");
+        }
+        if (!ts_node_is_null(fn)) {
+            return cbm_node_text(a, fn, source);
+        }
     }
     // Arrow functions: check parent variable_declarator
     if (strcmp(ts_node_type(func_node), "arrow_function") == 0) {
@@ -429,6 +376,9 @@ const char* cbm_enclosing_func_qn(CBMArena* a, TSNode node, CBMLanguage lang,
         while (!ts_node_is_null(cur)) {
             if (cbm_kind_in_set(cur, spec->class_node_types)) {
                 TSNode class_name = ts_node_child_by_field_name(cur, "name", 4);
+                if (ts_node_is_null(class_name) && lang == CBM_LANG_POWERSHELL) {
+                    class_name = cbm_find_child_by_kind(cur, "simple_name");
+                }
                 if (!ts_node_is_null(class_name)) {
                     char* cname = cbm_node_text(a, class_name, source);
                     if (cname && cname[0]) {
@@ -481,18 +431,8 @@ const char* cbm_enclosing_func_qn_cached(CBMExtractCtx* ctx, TSNode node) {
 static const char* module_parents_go[] = {"source_file",NULL};
 static const char* module_parents_rust[] = {"source_file","mod_item",NULL};
 static const char* module_parents_java[] = {"program","class_body",NULL};
-static const char* module_parents_kotlin[] = {"source_file","class_body",NULL};
-static const char* module_parents_scala[] = {"compilation_unit","template_body",NULL};
-static const char* module_parents_csharp[] = {"compilation_unit","class_declaration","namespace_declaration",NULL};
-static const char* module_parents_php[] = {"program",NULL};
-static const char* module_parents_ruby[] = {"program","class","module",NULL};
 static const char* module_parents_c[] = {"translation_unit",NULL};
-static const char* module_parents_zig[] = {"source_file",NULL};
 static const char* module_parents_bash[] = {"program",NULL};
-static const char* module_parents_erlang[] = {"source","source_file",NULL};
-static const char* module_parents_haskell[] = {"declarations",NULL};
-static const char* module_parents_ocaml[] = {"compilation_unit",NULL};
-static const char* module_parents_elixir[] = {"source",NULL};
 static const char* module_parents_html[] = {"document",NULL};
 static const char* module_parents_css[] = {"stylesheet",NULL};
 static const char* module_parents_sql[] = {"source_file","program","statement",NULL};
@@ -500,10 +440,6 @@ static const char* module_parents_toml[] = {"document","table","table_array_elem
 static const char* module_parents_config[] = {"document","table","table_array_element","section","object","element","array",NULL};
 static const char* module_parents_hcl[] = {"config_file",NULL};
 static const char* module_parents_makefile[] = {"makefile",NULL};
-static const char* module_parents_commonlisp[] = {"source",NULL};
-static const char* module_parents_matlab[] = {"source_file",NULL};
-static const char* module_parents_form[] = {"source_file",NULL};
-static const char* module_parents_magma[] = {"source_file",NULL};
 
 bool cbm_is_module_level(TSNode node, CBMLanguage lang) {
     TSNode parent = ts_node_parent(node);
@@ -530,17 +466,6 @@ bool cbm_is_module_level(TSNode node, CBMLanguage lang) {
         return false;
     }
 
-    // Lua: chunk
-    if (lang == CBM_LANG_LUA) {
-        if (strcmp(pk, "chunk") == 0) return true;
-        // assignment_statement -> chunk
-        if (strcmp(pk, "assignment_statement") == 0) {
-            TSNode gp = ts_node_parent(parent);
-            return !ts_node_is_null(gp) && strcmp(ts_node_type(gp), "chunk") == 0;
-        }
-        return false;
-    }
-
     // YAML: document or stream
     if (lang == CBM_LANG_YAML) {
         return strcmp(pk, "document") == 0 || strcmp(pk, "stream") == 0 ||
@@ -553,20 +478,9 @@ bool cbm_is_module_level(TSNode node, CBMLanguage lang) {
         case CBM_LANG_GO:       parents = module_parents_go; break;
         case CBM_LANG_RUST:     parents = module_parents_rust; break;
         case CBM_LANG_JAVA:     parents = module_parents_java; break;
-        case CBM_LANG_KOTLIN:   parents = module_parents_kotlin; break;
-        case CBM_LANG_SCALA:    parents = module_parents_scala; break;
-        case CBM_LANG_CSHARP:   parents = module_parents_csharp; break;
-        case CBM_LANG_PHP:      parents = module_parents_php; break;
-        case CBM_LANG_RUBY:     parents = module_parents_ruby; break;
         case CBM_LANG_C:
-        case CBM_LANG_CPP:
-        case CBM_LANG_OBJC:     parents = module_parents_c; break;
-        case CBM_LANG_ZIG:      parents = module_parents_zig; break;
+        case CBM_LANG_CPP:      parents = module_parents_c; break;
         case CBM_LANG_BASH:     parents = module_parents_bash; break;
-        case CBM_LANG_ERLANG:   parents = module_parents_erlang; break;
-        case CBM_LANG_HASKELL:  parents = module_parents_haskell; break;
-        case CBM_LANG_OCAML:    parents = module_parents_ocaml; break;
-        case CBM_LANG_ELIXIR:   parents = module_parents_elixir; break;
         case CBM_LANG_HTML:     parents = module_parents_html; break;
         case CBM_LANG_CSS:
         case CBM_LANG_SCSS:     parents = module_parents_css; break;
@@ -574,20 +488,9 @@ bool cbm_is_module_level(TSNode node, CBMLanguage lang) {
         case CBM_LANG_TOML:     parents = module_parents_toml; break;
         case CBM_LANG_HCL:      parents = module_parents_hcl; break;
         case CBM_LANG_JSON:
-        case CBM_LANG_INI:
         case CBM_LANG_XML:
         case CBM_LANG_MARKDOWN: parents = module_parents_config; break;
-        case CBM_LANG_SWIFT:    parents = module_parents_zig; break;  // source_file
-        case CBM_LANG_DART:     parents = module_parents_php; break;  // program
-        case CBM_LANG_PERL:     parents = module_parents_zig; break;  // source_file
-        case CBM_LANG_GROOVY:   parents = module_parents_zig; break;  // source_file
-        case CBM_LANG_R:        parents = module_parents_php; break;  // program
         case CBM_LANG_MAKEFILE: parents = module_parents_makefile; break;
-        case CBM_LANG_COMMONLISP: parents = module_parents_commonlisp; break;
-        case CBM_LANG_MATLAB:     parents = module_parents_matlab; break;
-        case CBM_LANG_LEAN:       parents = module_parents_zig; break;  // source_file
-        case CBM_LANG_FORM:       parents = module_parents_form; break;
-        case CBM_LANG_MAGMA:      parents = module_parents_magma; break;
         default:                return false;
     }
     if (parents) {

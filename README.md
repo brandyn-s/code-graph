@@ -60,11 +60,11 @@ flowchart TD
 
 7. **Test linking pass**: Identifies test files and creates `TESTS` edges from test functions to the production code they exercise.
 
-### 64 Languages via Tree-Sitter
+### 27 Languages via Tree-Sitter
 
 Every language is parsed using vendored tree-sitter C grammars compiled via CGO. Language specs in `internal/lang/` map tree-sitter node types to graph concepts (which AST nodes become Function nodes, which become Class nodes, etc.).
 
-The full list: Python, Go, JavaScript, TypeScript, TSX, JSX, Rust, Java, C, C++, C#, Kotlin, Scala, Swift, Ruby, PHP, Perl, Lua, Bash, Zig, Dart, R, Elixir, Erlang, Haskell, OCaml, Objective-C, Groovy, and 36 more including config languages (YAML, TOML, HCL, Dockerfile, SQL, CSS, SCSS, HTML).
+The full list: Python, Go, JavaScript, TypeScript, TSX, Rust, Java, C, C++, CUDA, Bash, and the config/markup languages (YAML, TOML, HCL, Nix, Dockerfile, SQL, CSS, SCSS, HTML, JSON, XML, Markdown, Makefile, CMake, Protobuf). 38 unused grammars were removed on 2026-06-10 after a usage audit (see CLAUDE.md).
 
 ### Cypher Query Engine
 
@@ -484,7 +484,7 @@ cmd/codebase-memory-mcp/       Entry point (MCP stdio server + CLI mode + instal
   assets/skills/               4 task-specific skills (exploring, tracing, quality, reference)
 internal/
   store/                       SQLite graph storage (WAL mode, Louvain clustering)
-  lang/                        Language specs (64 languages, tree-sitter node types)
+  lang/                        Language specs (27 languages, tree-sitter node types)
   cbm/                         Vendored tree-sitter C grammars, AST extraction, Go LSP hybrid
   pipeline/                    Multi-pass indexing (structure -> definitions -> calls -> HTTP -> OPA -> communities)
   httplink/                    Cross-service HTTP route/call-site matching

@@ -230,14 +230,11 @@ func printHelpUsage() {
 Supported MCP clients:
   Claude Code, Codex CLI, Cursor, Windsurf, Gemini CLI, VS Code, Zed
 
-Language support (64 languages):
+Language support (27 languages):
   Tree-sitter AST parsing for: Python, Go, JavaScript, TypeScript, TSX, Rust,
-  Java, C++, C#, C, PHP, Lua, Scala, Kotlin, Ruby, Bash, Zig, Elixir, Haskell,
-  OCaml, Objective-C, Swift, Dart, Perl, Groovy, Erlang, R, Clojure, F#, Julia,
-  Vim Script, Nix, Common Lisp, Elm, Fortran, CUDA, COBOL, Verilog, Emacs Lisp,
-  MATLAB, Lean 4, FORM, Magma, Wolfram, HTML, CSS, SCSS, YAML, TOML, HCL, SQL,
-  Dockerfile, JSON, XML, Markdown, Makefile, CMake, Protobuf, GraphQL, Vue,
-  Svelte, Meson, GLSL, INI
+  Java, C++, C, CUDA, Bash, PowerShell, HCL, Nix, HTML, CSS, SCSS, SQL,
+  Dockerfile, JSON,
+  TOML, YAML, Markdown, XML, Protobuf, Makefile, CMake
 
   Go uses a tree-sitter + LSP hybrid methodology for enhanced cross-file type
   resolution and call graph accuracy. This hybrid approach is coming soon for

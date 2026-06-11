@@ -417,3 +417,78 @@ def create_app():
 		}
 	}
 }
+
+// PowerShell (added 2026-06-10, traded in from the 38-grammar cut; grammar:
+// airbus-cert/tree-sitter-powershell). The grammar has NO named fields, so
+// extraction relies on typed-child fallbacks: function_statement names are
+// `function_name` children, classes/methods use `simple_name`, command
+// callees come from the `command_name` field, and class members are direct
+// children (no body wrapper). This test pins all of those paths.
+func TestPowerShellExtraction(t *testing.T) {
+	source := []byte(`function Get-BuildInfo {
+    param([string]$Path)
+    $info = Get-Content $Path
+    return $info
+}
+
+class Deployer {
+    [string]$Target
+
+    [void] Deploy([string]$env) {
+        Write-Host "deploying"
+        Invoke-Build $env
+    }
+}
+
+function Invoke-Build {
+    param([string]$env)
+    $build = Get-BuildInfo -Path "build.json"
+    Write-Output $build
+}
+
+Invoke-Build "prod"
+`)
+	result, err := ExtractFile(source, lang.PowerShell, "test", "deploy.ps1")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	wantDefs := map[string]string{
+		"Get-BuildInfo": "Function",
+		"Deployer":      "Class",
+		"Deploy":        "Method",
+		"Invoke-Build":  "Function",
+	}
+	gotDefs := map[string]string{}
+	gotQNs := map[string]string{}
+	for _, d := range result.Definitions {
+		gotDefs[d.Name] = d.Label
+		gotQNs[d.Name] = d.QualifiedName
+	}
+	for name, label := range wantDefs {
+		if gotDefs[name] != label {
+			t.Errorf("def %q: label = %q, want %q (defs: %v)", name, gotDefs[name], label, gotDefs)
+		}
+	}
+	// Method QN nests under the class.
+	if gotQNs["Deploy"] != "test.deploy.Deployer.Deploy" {
+		t.Errorf("Deploy QN = %q, want test.deploy.Deployer.Deploy", gotQNs["Deploy"])
+	}
+
+	// Calls attribute to their true enclosing scope.
+	wantCalls := map[[2]string]bool{
+		{"Get-Content", "test.deploy.Get-BuildInfo"}:    true,
+		{"Invoke-Build", "test.deploy.Deployer.Deploy"}: true,
+		{"Get-BuildInfo", "test.deploy.Invoke-Build"}:   true,
+		{"Invoke-Build", "test.deploy"}:                 true, // top-level call -> module
+	}
+	got := map[[2]string]bool{}
+	for _, c := range result.Calls {
+		got[[2]string{c.CalleeName, c.EnclosingFuncQN}] = true
+	}
+	for k := range wantCalls {
+		if !got[k] {
+			t.Errorf("missing call %v (got %v)", k, got)
+		}
+	}
+}

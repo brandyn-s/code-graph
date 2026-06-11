@@ -52,47 +52,22 @@ static const char* cbm_python_flask_hook_label(const char* callee) {
     return NULL;
 }
 
-// Lean 4: check if an apply node is inside a type annotation.
-// Strategy: walk up to the nearest declaration boundary; if the apply falls
-// inside that declaration's explicit_binder/implicit_binder, or before the
-// body field, it's a type annotation. We check byte ranges: a call is valid
-// only if it overlaps the body range of the enclosing declaration.
-static bool lean_is_in_type_position(TSNode node) {
-    TSNode cur = ts_node_parent(node);
-    for (int depth = 0; depth < 20; depth++) {
-        if (ts_node_is_null(cur)) return false;
-        const char* pk = ts_node_type(cur);
-        // Inside a binder — definitely type position
-        if (strcmp(pk, "explicit_binder") == 0 ||
-            strcmp(pk, "implicit_binder") == 0 ||
-            strcmp(pk, "instance_binder") == 0) return true;
-        // At a declaration boundary: check if apply is inside the body field
-        if (strcmp(pk, "def") == 0 || strcmp(pk, "theorem") == 0 ||
-            strcmp(pk, "instance") == 0 || strcmp(pk, "abbrev") == 0 ||
-            strcmp(pk, "structure") == 0 || strcmp(pk, "inductive") == 0) {
-            // Check if apply comes after the type annotation.
-            // Strategy: if the node starts after the end of the "type" field, it's in value position.
-            // If there's no "type" field, allow the call (no annotation to filter).
-            TSNode type_field = ts_node_child_by_field_name(cur, "type", 4);
-            if (ts_node_is_null(type_field)) return false; // no type annotation → allow call
-            uint32_t type_end  = ts_node_end_byte(type_field);
-            uint32_t node_start = ts_node_start_byte(node);
-            // If apply starts after the type annotation ends, it's a value (call)
-            if (node_start > type_end) return false;
-            return true; // apply is within or before type annotation → type position
-        }
-        cur = ts_node_parent(cur);
-    }
-    return false;
-}
-
 // Extract callee name from a call node
 static char* extract_callee_name(CBMArena* a, TSNode node, const char* source, CBMLanguage lang) {
-    // Lean 4: apply — name field is callee. Skip if in a type annotation position.
-    // Must be checked before the generic "name" field handler below.
-    if (lang == CBM_LANG_LEAN && strcmp(ts_node_type(node), "apply") == 0) {
-        if (lean_is_in_type_position(node)) return NULL;
-        // Fall through to generic handler
+    // PowerShell: `command` carries the callee in a `command_name` FIELD
+    // (bash's equivalent field is `name`, so the generic probes miss it);
+    // `invokation_expression` method calls name the member via a
+    // `member_name`-typed child.
+    if (lang == CBM_LANG_POWERSHELL) {
+        const char* k = ts_node_type(node);
+        if (strcmp(k, "command") == 0) {
+            TSNode cn = ts_node_child_by_field_name(node, "command_name", 12);
+            if (!ts_node_is_null(cn)) return cbm_node_text(a, cn, source);
+        }
+        if (strcmp(k, "invokation_expression") == 0) {
+            TSNode mn = cbm_find_child_by_kind(node, "member_name");
+            if (!ts_node_is_null(mn)) return cbm_node_text(a, mn, source);
+        }
     }
 
     // Try "function" field (most languages: call_expression, etc.)
@@ -152,112 +127,6 @@ static char* extract_callee_name(CBMArena* a, TSNode node, const char* source, C
             }
         }
         return method;
-    }
-
-    // ObjC message_expression: [receiver message]
-    if (lang == CBM_LANG_OBJC && strcmp(ts_node_type(node), "message_expression") == 0) {
-        TSNode selector = ts_node_child_by_field_name(node, "selector", 8);
-        if (!ts_node_is_null(selector)) {
-            return cbm_node_text(a, selector, source);
-        }
-    }
-
-    // Erlang: call -> first child is module:function or just function
-    if (lang == CBM_LANG_ERLANG && strcmp(ts_node_type(node), "call") == 0) {
-        if (ts_node_child_count(node) > 0) {
-            return cbm_node_text(a, ts_node_child(node, 0), source);
-        }
-    }
-
-    // Haskell/OCaml: application_expression, infix, apply
-    if (lang == CBM_LANG_HASKELL || lang == CBM_LANG_OCAML) {
-        const char* nk = ts_node_type(node);
-        if (strcmp(nk, "apply") == 0 || strcmp(nk, "application_expression") == 0) {
-            if (ts_node_child_count(node) > 0) {
-                TSNode callee = ts_node_child(node, 0);
-                if (strcmp(ts_node_type(callee), "identifier") == 0 ||
-                    strcmp(ts_node_type(callee), "variable") == 0 ||
-                    strcmp(ts_node_type(callee), "constructor") == 0 ||
-                    strcmp(ts_node_type(callee), "value_path") == 0) {
-                    return cbm_node_text(a, callee, source);
-                }
-            }
-        }
-        if (strcmp(nk, "infix") == 0 || strcmp(nk, "infix_expression") == 0) {
-            TSNode op = ts_node_child_by_field_name(node, "operator", 8);
-            if (!ts_node_is_null(op)) {
-                return cbm_node_text(a, op, source);
-            }
-            // Fallback: second child is usually the operator
-            if (ts_node_child_count(node) >= 3) {
-                return cbm_node_text(a, ts_node_child(node, 1), source);
-            }
-        }
-    }
-
-    // Elixir: first child of call is the function name
-    if (lang == CBM_LANG_ELIXIR && strcmp(ts_node_type(node), "call") == 0) {
-        if (ts_node_child_count(node) > 0) {
-            TSNode first = ts_node_child(node, 0);
-            const char* fk = ts_node_type(first);
-            if (strcmp(fk, "identifier") == 0 || strcmp(fk, "dot") == 0) {
-                return cbm_node_text(a, first, source);
-            }
-        }
-    }
-
-    // Perl: various call expression types
-    if (lang == CBM_LANG_PERL) {
-        if (ts_node_child_count(node) > 0) {
-            return cbm_node_text(a, ts_node_child(node, 0), source);
-        }
-    }
-
-    // PHP: function_call_expression, member_call_expression, etc.
-    if (lang == CBM_LANG_PHP) {
-        func_node = ts_node_child_by_field_name(node, "function", 8);
-        if (ts_node_is_null(func_node)) {
-            func_node = ts_node_child_by_field_name(node, "name", 4);
-        }
-        if (!ts_node_is_null(func_node)) {
-            return cbm_node_text(a, func_node, source);
-        }
-    }
-
-    // Kotlin: navigation_expression, call_expression
-    if (lang == CBM_LANG_KOTLIN) {
-        if (ts_node_child_count(node) > 0) {
-            return cbm_node_text(a, ts_node_child(node, 0), source);
-        }
-    }
-
-    // MATLAB: command node — first child is command_name (not identifier)
-    if (lang == CBM_LANG_MATLAB && strcmp(ts_node_type(node), "command") == 0) {
-        if (ts_node_child_count(node) > 0) {
-            return cbm_node_text(a, ts_node_child(node, 0), source);
-        }
-    }
-
-    // Wolfram: apply — first named child is callee (user_symbol or builtin_symbol)
-    // Skip if this apply is the LHS of a set/set_delayed definition (top or nested)
-    if (lang == CBM_LANG_WOLFRAM && strcmp(ts_node_type(node), "apply") == 0) {
-        TSNode parent = ts_node_parent(node);
-        if (!ts_node_is_null(parent)) {
-            const char* pk = ts_node_type(parent);
-            if ((strcmp(pk, "set_delayed_top") == 0 || strcmp(pk, "set_top") == 0 ||
-                 strcmp(pk, "set_delayed") == 0 || strcmp(pk, "set") == 0) &&
-                ts_node_named_child_count(parent) > 0 &&
-                ts_node_eq(ts_node_named_child(parent, 0), node)) {
-                return NULL;
-            }
-        }
-        if (ts_node_named_child_count(node) > 0) {
-            TSNode head = ts_node_named_child(node, 0);
-            const char* hk = ts_node_type(head);
-            if (strcmp(hk, "user_symbol") == 0 || strcmp(hk, "builtin_symbol") == 0)
-                return cbm_node_text(a, head, source);
-        }
-        return NULL;
     }
 
     // Generic fallback: first child

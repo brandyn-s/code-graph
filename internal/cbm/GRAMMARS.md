@@ -1,6 +1,6 @@
 # Tree-sitter Grammar Vendoring
 
-This directory (`internal/cbm/vendored/grammars/`) contains 64 vendored
+This directory (`internal/cbm/vendored/grammars/`) contains 27 vendored
 tree-sitter grammars compiled into the binary via CGO.
 
 ## Vendoring strategy
@@ -88,3 +88,13 @@ Adding a language: drop `canary.<ext>` in
 - Roundtable finding (HIGH confidence, 3-of-3): `~/Documents/roundtables/2026-05-05-code-graph/results/META_SYNTHESIS.md` convergent finding 5
 - Surface in `index_health` MCP tool (Phase B4): grammar version + parse-error rate
 - Schema metadata: `internal/tools/METADATA_SCHEMA.md` — `provenance.grammar_versions` field
+
+## PowerShell provenance (2026-06-10)
+
+Unlike the legacy grammars, `powershell/` has recorded provenance:
+vendored from https://github.com/airbus-cert/tree-sitter-powershell at
+commit `d398441825243b00e317e87e1829b9d6a3e54ce0` (MIT license), traded
+in during the 38-grammar cut. The grammar has no named fields; the
+extraction fallbacks live in extract_defs.c / extract_calls.c /
+extract_unified.c / helpers.c gated on CBM_LANG_POWERSHELL, and are
+pinned by TestPowerShellExtraction.

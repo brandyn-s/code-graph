@@ -48,27 +48,16 @@ static void recompute_state(WalkState* state, const char* module_qn) {
 // Compute function QN for scope tracking (mirrors cbm_enclosing_func_qn logic).
 static const char* compute_func_qn(CBMExtractCtx* ctx, TSNode node,
                                      const CBMLangSpec* spec, WalkState* state) {
-    // Wolfram: set_delayed_top/set_top/set_delayed/set — LHS is apply(user_symbol("f"), ...)
-    if (ctx->language == CBM_LANG_WOLFRAM) {
-        const char* nk = ts_node_type(node);
-        if (strcmp(nk, "set_delayed_top") == 0 || strcmp(nk, "set_top") == 0 ||
-            strcmp(nk, "set_delayed") == 0     || strcmp(nk, "set") == 0) {
-            if (ts_node_named_child_count(node) > 0) {
-                TSNode lhs = ts_node_named_child(node, 0);
-                if (strcmp(ts_node_type(lhs), "apply") == 0 && ts_node_named_child_count(lhs) > 0) {
-                    TSNode head = ts_node_named_child(lhs, 0);
-                    if (strcmp(ts_node_type(head), "user_symbol") == 0) {
-                        char* name = cbm_node_text(ctx->arena, head, ctx->source);
-                        if (name && name[0])
-                            return cbm_fqn_compute(ctx->arena, ctx->project, ctx->rel_path, name);
-                    }
-                }
-            }
-            return NULL;
+    TSNode name_node = ts_node_child_by_field_name(node, "name", 4);
+
+    // PowerShell: no named fields — function_statement names are
+    // `function_name`-typed children; class methods use `simple_name`.
+    if (ts_node_is_null(name_node) && ctx->language == CBM_LANG_POWERSHELL) {
+        name_node = cbm_find_child_by_kind(node, "function_name");
+        if (ts_node_is_null(name_node)) {
+            name_node = cbm_find_child_by_kind(node, "simple_name");
         }
     }
-
-    TSNode name_node = ts_node_child_by_field_name(node, "name", 4);
 
     // Arrow function: name from parent variable_declarator
     if (ts_node_is_null(name_node) && strcmp(ts_node_type(node), "arrow_function") == 0) {
@@ -129,6 +118,10 @@ static const char* compute_func_qn(CBMExtractCtx* ctx, TSNode node,
 // Compute class QN for scope tracking.
 static const char* compute_class_qn(CBMExtractCtx* ctx, TSNode node) {
     TSNode name_node = ts_node_child_by_field_name(node, "name", 4);
+    // PowerShell: class_statement's name is a `simple_name`-typed child.
+    if (ts_node_is_null(name_node) && ctx->language == CBM_LANG_POWERSHELL) {
+        name_node = cbm_find_child_by_kind(node, "simple_name");
+    }
     if (ts_node_is_null(name_node)) return NULL;
 
     char* name = cbm_node_text(ctx->arena, name_node, ctx->source);

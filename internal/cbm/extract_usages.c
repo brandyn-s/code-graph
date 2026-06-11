@@ -54,15 +54,6 @@ static bool is_reference_node(TSNode node, CBMLanguage lang) {
         case CBM_LANG_RUST:
             return strcmp(kind, "field_identifier") == 0 ||
                    strcmp(kind, "scoped_identifier") == 0;
-        case CBM_LANG_HASKELL:
-            return strcmp(kind, "variable") == 0 ||
-                   strcmp(kind, "constructor") == 0;
-        case CBM_LANG_OCAML:
-            return strcmp(kind, "value_path") == 0 ||
-                   strcmp(kind, "constructor_path") == 0;
-        case CBM_LANG_ERLANG:
-            return strcmp(kind, "atom") == 0 ||
-                   strcmp(kind, "var") == 0;
         default:
             return false;
     }

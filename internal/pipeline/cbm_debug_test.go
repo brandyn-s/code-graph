@@ -34,14 +34,6 @@ func TestCBMVariableDebug(t *testing.T) {
 		src  string
 	}{
 		{"Java", lang.Java, "class OwnerController {\n    @GetMapping(\"/owners\")\n    public void listOwners() {}\n\n    @PostMapping(\"/owners\")\n    public void createOwner() {}\n}\n"},
-		{"Groovy", lang.Groovy, "class Calculator {\n    int add(int a, int b) {\n        return a + b\n    }\n    int multiply(int a, int b) {\n        return a * b\n    }\n}\n"},
-		{"Dart", lang.Dart, "class Counter {\n  int _count = 0;\n\n  void increment() {\n    _count++;\n  }\n\n  int getCount() {\n    return _count;\n  }\n}\n"},
-		{"ObjC", lang.ObjectiveC, "@interface Greeter : NSObject\n- (void)greet:(NSString *)name;\n@end\n\n@implementation Greeter\n- (void)greet:(NSString *)name {\n    NSLog(@\"Hello %@\", name);\n}\n\n- (void)run {\n    [self greet:@\"World\"];\n}\n@end\n"},
-		{"Swift", lang.Swift, "class Animal {\n    var name: String = \"\"\n}\n\nclass Dog: Animal {\n    func bark() -> String {\n        return \"Woof\"\n    }\n}\n"},
-		{"Lua", lang.Lua, "local function named_func()\n    return 1\nend\n\nlocal run_before_filter = function()\n    return 2\nend\n\nlocal run_after_filter = function()\n    return 3\nend\n"},
-		{"Elixir", lang.Elixir, "defmodule Greeter do\n  def greet(name) do\n    \"Hello \"\n  end\n\n  defp internal_work(x) do\n    x * 2\n  end\nend\n"},
-		{"R", lang.R, "mutate <- function(x) {\n  x + 1\n}\n\nsquare <- function(n) {\n  n * n\n}\n"},
-		{"Erlang", lang.Erlang, "-module(mymod).\n-define(TIMEOUT, 5000).\n-record(person, {name, age}).\n"},
 		{"SQL_Table", lang.SQL, "CREATE TABLE users (\n    id INTEGER PRIMARY KEY,\n    name TEXT NOT NULL\n);\nCREATE VIEW active_users AS SELECT * FROM users WHERE active = true;\n"},
 		{"SQL_Func", lang.SQL, "CREATE FUNCTION add(a INT, b INT) RETURNS INT AS $$ SELECT a + b; $$ LANGUAGE SQL;\n"},
 		{"YAML", lang.YAML, "name: myapp\nversion: \"1.0\"\nservices:\n  web:\n    image: nginx\n"},

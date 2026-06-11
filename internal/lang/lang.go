@@ -12,46 +12,12 @@ const (
 	Java       Language = "java"
 	CPP        Language = "cpp"
 	TSX        Language = "tsx"
-	CSharp     Language = "c-sharp"
-	PHP        Language = "php"
-	Lua        Language = "lua"
-	Scala      Language = "scala"
-	Kotlin     Language = "kotlin"
 	// Programming languages (Tier 1)
-	Ruby       Language = "ruby"
 	C          Language = "c"
 	Bash       Language = "bash"
-	Zig        Language = "zig"
-	Elixir     Language = "elixir"
-	Haskell    Language = "haskell"
-	OCaml      Language = "ocaml"
-	ObjectiveC Language = "objective-c"
-	Swift      Language = "swift"
-	Dart       Language = "dart"
-	Perl       Language = "perl"
-	Groovy     Language = "groovy"
-	Erlang     Language = "erlang"
-	R          Language = "r"
-
-	Clojure    Language = "clojure"
-	FSharp     Language = "fsharp"
-	Julia      Language = "julia"
-	VimScript  Language = "vimscript"
+	PowerShell Language = "powershell"
 	Nix        Language = "nix"
-	CommonLisp Language = "commonlisp"
-	Elm        Language = "elm"
-	Fortran    Language = "fortran"
 	CUDA       Language = "cuda"
-	COBOL      Language = "cobol"
-	Verilog    Language = "verilog"
-	EmacsLisp  Language = "emacslisp"
-
-	// Scientific/math languages
-	MATLAB  Language = "matlab"
-	Lean    Language = "lean"
-	FORM    Language = "form"
-	Magma   Language = "magma"
-	Wolfram Language = "wolfram"
 
 	// Helper languages (Tier 2)
 	HTML       Language = "html"
@@ -68,26 +34,15 @@ const (
 	Makefile   Language = "makefile"
 	CMake      Language = "cmake"
 	Protobuf   Language = "protobuf"
-	GraphQL    Language = "graphql"
-	Vue        Language = "vue"
-	Svelte     Language = "svelte"
-	Meson      Language = "meson"
-	GLSL       Language = "glsl"
-	INI        Language = "ini"
 )
 
 // AllLanguages returns all supported languages.
 func AllLanguages() []Language {
 	return []Language{
-		Python, JavaScript, TypeScript, TSX, Go, Rust, Java, CPP, CSharp, PHP, Lua, Scala, Kotlin,
-		Ruby, C, Bash, Zig, Elixir, Haskell, OCaml, ObjectiveC,
-		Swift, Dart, Perl, Groovy, Erlang, R,
-		Clojure, FSharp, Julia, VimScript, Nix, CommonLisp, Elm, Fortran,
-		CUDA, COBOL, Verilog, EmacsLisp,
-		MATLAB, Lean, FORM, Magma, Wolfram,
+		Python, JavaScript, TypeScript, TSX, Go, Rust, Java, CPP,
+		C, Bash, PowerShell, Nix, CUDA,
 		HTML, CSS, SCSS, YAML, TOML, HCL, SQL, Dockerfile,
-		JSON, XML, Markdown, Makefile, CMake, Protobuf, GraphQL,
-		Vue, Svelte, Meson, GLSL, INI,
+		JSON, XML, Markdown, Makefile, CMake, Protobuf,
 	}
 }
 
@@ -158,15 +113,11 @@ func LanguageForExtension(ext string) (Language, bool) {
 
 // filenameToLanguage maps exact filenames to languages (for extensionless files).
 var filenameToLanguage = map[string]Language{
-	"Makefile":          Makefile,
-	"GNUmakefile":       Makefile,
-	"makefile":          Makefile,
-	"CMakeLists.txt":    CMake,
-	"Dockerfile":        Dockerfile,
-	"meson.build":       Meson,
-	"meson.options":     Meson,
-	"meson_options.txt": Meson,
-	".vimrc":            VimScript,
+	"Makefile":       Makefile,
+	"GNUmakefile":    Makefile,
+	"makefile":       Makefile,
+	"CMakeLists.txt": CMake,
+	"Dockerfile":     Dockerfile,
 }
 
 // LanguageForFilename returns the Language for an exact filename match.

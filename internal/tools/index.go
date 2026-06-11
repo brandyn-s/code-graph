@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	"github.com/DeusData/codebase-memory-mcp/internal/discover"
 	"github.com/DeusData/codebase-memory-mcp/internal/pipeline"
@@ -126,10 +127,36 @@ func (s *Server) handleIndexRepository(ctx context.Context, req *mcp.CallToolReq
 	//
 	// skip_report=true opts out of the write entirely. Required when indexing
 	// read-only repos (bench fixtures, vendored code, protected paths) where
-	// any write — even a generated doc — violates policy. Default is false so
-	// normal usage is unchanged.
-	if getBoolArg(args, "skip_report") {
-		slog.Info("index.report.skipped", "project", projectName, "reason", "skip_report=true")
+	// any write — even a generated doc — violates policy. Default for a
+	// project with NO recorded preference is false so normal usage is
+	// unchanged.
+	//
+	// The choice is STICKY per project (2026-06-11): an explicitly provided
+	// skip_report is persisted to the config store, and calls that OMIT the
+	// argument inherit the recorded choice instead of silently reverting to
+	// report-writing. Before this, one explicit call without the flag — from
+	// any session, tool, or future caller — re-created the report in a repo
+	// whose owner had opted out on every prior index, and the write was
+	// unattributable after the fact. generate_report remains an explicit
+	// always-write override.
+	_, skipProvided := args["skip_report"]
+	skipReport := getBoolArg(args, "skip_report")
+	prefKey := "report.skip." + projectName
+	if skipProvided {
+		if s.config != nil {
+			if err := s.config.Set(prefKey, strconv.FormatBool(skipReport)); err != nil {
+				slog.Warn("index.report.pref_persist_err", "project", projectName, "err", err)
+			}
+		}
+	} else if s.config != nil {
+		skipReport = s.config.GetBool(prefKey, false)
+	}
+	if skipReport {
+		reason := "skip_report=true"
+		if !skipProvided {
+			reason = "persisted_preference"
+		}
+		slog.Info("index.report.skipped", "project", projectName, "reason", reason)
 	} else if reportResult, reportErr := s.generateOrientationReport(projectName); reportErr != nil {
 		slog.Warn("index.report.err", "project", projectName, "err", reportErr)
 	} else {

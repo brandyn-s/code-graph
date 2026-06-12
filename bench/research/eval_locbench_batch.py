@@ -60,8 +60,11 @@ import pandas as pd
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PARQUET = REPO_ROOT / "bench/research/locbench.parquet"
-EVAL_BIN = REPO_ROOT / "bench/research/eval_rank_localize/eval.exe"
-INDEX_BIN = REPO_ROOT / "bin/codebase-memory-mcp.exe"
+# Binary names are platform-dependent (the harness originally ran on
+# Windows; .exe-less names are the macOS/Linux builds of the same code).
+_BIN_EXT = ".exe" if os.name == "nt" else ""
+EVAL_BIN = REPO_ROOT / f"bench/research/eval_rank_localize/eval{_BIN_EXT}"
+INDEX_BIN = REPO_ROOT / f"bin/codebase-memory-mcp{_BIN_EXT}"
 CACHE_DIR = Path.home() / ".cache" / "codebase-memory-mcp"
 
 # Estimated $/M tokens for Haiku 4.5 (input + output averaged over typical
@@ -259,7 +262,10 @@ def index_repo(path: Path) -> bool:
         )
         if result.returncode != 0:
             err = result.stderr.decode("utf-8", errors="replace")
-            print(f"  index failed (exit {result.returncode}): {err[:200]}")
+            # Tail, not head: the actionable error (panic, locked DB, OOM) is
+            # at the END of stderr; the head is startup noise. 200-char head
+            # truncation hid the real jax failure during the 2026-06-11 pilot.
+            print(f"  index failed (exit {result.returncode}): ...{err[-1500:]}")
             return False
         return True
     except subprocess.TimeoutExpired:
@@ -436,6 +442,18 @@ def evaluate_instance(row: dict[str, Any], workdir: Path, json_mode: bool = Fals
     if not index_repo(repo_dir):
         res.note = "index failed"
         shutil.rmtree(repo_dir, ignore_errors=True)
+        # Clean the (possibly half-written) DB on the FAILURE path too. A
+        # killed BulkWrite leaves a .bulkwrite-crash-marker; the next index
+        # of the same path then refuses with Mode 7 corruption (exit 1) —
+        # one crashed instance permanently poisons its own retries
+        # (observed 2026-06-11: jax SIGTERM -> marker -> every retry
+        # failed instantly until the DB + marker were removed).
+        failed_db = db_path_for(repo_dir)
+        for suffix in ("", "-shm", "-wal", ".bulkwrite-crash-marker"):
+            try:
+                Path(str(failed_db) + suffix).unlink(missing_ok=True)
+            except OSError:
+                pass
         res.duration_s = time.time() - t0
         return res
     res.indexed = True
@@ -455,7 +473,16 @@ def evaluate_instance(row: dict[str, Any], workdir: Path, json_mode: bool = Fals
     res.input_tokens = parsed.get("input_tokens", 0)
     res.output_tokens = parsed.get("output_tokens", 0)
     res.turns = parsed.get("turns", 0)
-    res.cost_estimate_usd = COST_PER_QUERY_USD_ESTIMATE if res.agent_ran else 0.0
+    # Token-metered cost (Haiku 4.5: $1/M input, $5/M output — the agent's
+    # default model). The flat $0.05 estimate underbooked heavy instances
+    # ~20x (jax, 2026-06-11: 989K input tokens ≈ $1.02 actual), which made
+    # the --budget-usd gate blind to real spend. Cache reads aren't
+    # decomposed in the envelope, so this bills them at the full input
+    # rate — a conservative overestimate.
+    if res.agent_ran and (res.input_tokens or res.output_tokens):
+        res.cost_estimate_usd = res.input_tokens * 1.00 / 1e6 + res.output_tokens * 5.00 / 1e6
+    else:
+        res.cost_estimate_usd = COST_PER_QUERY_USD_ESTIMATE if res.agent_ran else 0.0
 
     if json_mode and "agent_json" in parsed:
         res.agent_json = parsed["agent_json"]
@@ -631,6 +658,12 @@ def main() -> int:
         help="Run a FIXED instance set from a pin JSON (locbench_reachability.py "
              "output; reads pinned_instance_ids) instead of a fresh random sample, "
              "so re-baselines are apples-to-apples over time. Ignores --n/--seed.")
+    ap.add_argument(
+        "--parquet", type=Path, default=None,
+        help="Override the Loc-Bench parquet path (default: bench/research/"
+             "locbench.parquet). Used by the SweRank pre-filter pilot to feed "
+             "an arm-B parquet whose problem_statement has a retrieval "
+             "candidate block prepended, keeping every other knob identical.")
     ap.add_argument("--budget-usd", type=float, default=3.0, help="Hard abort threshold")
     ap.add_argument("--workdir", type=Path, default=Path(r"C:/tmp/locbench-batch"))
     ap.add_argument(
@@ -657,11 +690,12 @@ def main() -> int:
     if not os.environ.get("VOYAGE_API_KEY"):
         print("WARNING: VOYAGE_API_KEY not set — embedding seeds disabled, hybrid falls back to substring", file=sys.stderr)
 
-    if not PARQUET.exists():
-        print(f"ERROR: parquet not at {PARQUET}", file=sys.stderr)
+    parquet = args.parquet or PARQUET
+    if not parquet.exists():
+        print(f"ERROR: parquet not at {parquet}", file=sys.stderr)
         return 2
 
-    df = pd.read_parquet(PARQUET)
+    df = pd.read_parquet(parquet)
     if args.instances:
         # Pinned-subset mode: run a FIXED instance set (e.g. the reachable
         # subset from locbench_reachability.py) so re-baselines compare the same

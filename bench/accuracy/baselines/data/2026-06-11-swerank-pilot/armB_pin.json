@@ -1,0 +1,18 @@
+{
+  "purpose": "armB on all C-indexed (2026-06-12)",
+  "pinned_instance_ids": [
+    "Chainlit__chainlit-1441",
+    "django__django-17984",
+    "django__django-18158",
+    "django__django-18435",
+    "django__django-18846",
+    "gammasim__simtools-1183",
+    "mathesar-foundation__mathesar-3117",
+    "matplotlib__matplotlib-25887",
+    "modin-project__modin-3438",
+    "modin-project__modin-6836",
+    "okta__okta-jwt-verifier-python-59",
+    "pypa__pip-13085",
+    "sympy__sympy-27051"
+  ]
+}

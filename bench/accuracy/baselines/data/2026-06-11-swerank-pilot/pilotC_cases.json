@@ -1,0 +1,482 @@
+{
+  "est_voyage_usd": 8.03,
+  "aborted_reason": "",
+  "cases": [
+    {
+      "instance_id": "huggingface__transformers-22496",
+      "repo": "huggingface/transformers",
+      "category": "Feature Request",
+      "ground_truth": [
+        "src/transformers/models/whisper/modeling_whisper.py:WhisperForConditionalGeneration.generate",
+        "src/transformers/models/whisper/tokenization_whisper.py:WhisperTokenizer._decode",
+        "src/transformers/models/whisper/tokenization_whisper_fast.py:WhisperTokenizerFast._decode"
+      ],
+      "indexed": false,
+      "file_hit": false,
+      "class_hit": false,
+      "func_hit": false,
+      "top_files": [],
+      "chunks_added": 22635,
+      "note": "index failed: 3 embedding batch(es) failed; indexed 22635/25635 chunks. Snapshot NOT advanced \u2014 the next indexing run will retry.",
+      "duration_s": 4761.7
+    },
+    {
+      "instance_id": "modin-project__modin-6836",
+      "repo": "modin-project/modin",
+      "category": "Feature Request",
+      "ground_truth": [
+        "modin/core/dataframe/algebra/binary.py:Binary.register",
+        "modin/core/dataframe/pandas/dataframe/dataframe.py:PandasDataframe.map",
+        "modin/core/dataframe/pandas/partitioning/partition_manager.py:PandasDataframePartitionManager.map_partitions",
+        "modin/core/dataframe/pandas/partitioning/partition_manager.py:PandasDataframePartitionManager.lazy_map_partitions",
+        "modin/core/execution/ray/common/engine_wrapper.py:RayWrapper.put"
+      ],
+      "indexed": true,
+      "file_hit": true,
+      "class_hit": true,
+      "func_hit": true,
+      "top_files": [
+        "modin/core/storage_formats/base/query_compiler.py",
+        "modin/core/dataframe/algebra/binary.py",
+        "modin/core/execution/ray/implementations/pandas_on_ray/partitioning/partition.py",
+        "modin/core/execution/ray/common/engine_wrapper.py",
+        "modin/core/execution/ray/implementations/cudf_on_ray/partitioning/partition_manager.py",
+        "modin/core/dataframe/algebra/default2pandas/binary.py",
+        "modin/pandas/test/dataframe/test_binary.py",
+        "modin/core/storage_formats/base/doc_utils.py",
+        "modin/core/execution/ray/implementations/pandas_on_ray/partitioning/partition_manager.py",
+        "modin/core/execution/ray/implementations/cudf_on_ray/partitioning/partition.py",
+        "modin/pandas/utils.py",
+        "modin/core/execution/ray/implementations/pandas_on_ray/partitioning/virtual_partition.py",
+        "asv_bench/benchmarks/benchmarks.py",
+        "modin/core/dataframe/pandas/partitioning/partition_manager.py",
+        "modin/experimental/core/execution/ray/implementations/__init__.py"
+      ],
+      "chunks_added": 2603,
+      "note": "",
+      "duration_s": 847.8
+    },
+    {
+      "instance_id": "modin-project__modin-3438",
+      "repo": "modin-project/modin",
+      "category": "Feature Request",
+      "ground_truth": [
+        "modin/backends/pandas/parsers.py:PandasParser.get_dtypes"
+      ],
+      "indexed": true,
+      "file_hit": true,
+      "class_hit": true,
+      "func_hit": true,
+      "top_files": [
+        "modin/pandas/io.py",
+        "modin/engines/base/io/io.py",
+        "modin/experimental/engines/omnisci_on_native/io.py",
+        "modin/engines/base/io/text/csv_dispatcher.py",
+        "modin/pandas/test/test_io.py",
+        "modin/engines/base/io/text/csv_glob_dispatcher.py",
+        "modin/experimental/pandas/io_exp.py",
+        "modin/experimental/engines/omnisci_on_native/test/test_dataframe.py",
+        "asv_bench/benchmarks/io/csv.py",
+        "modin/engines/base/io/text/text_file_dispatcher.py",
+        "modin/backends/pandas/parsers.py",
+        "modin/backends/cudf/parser.py",
+        "examples/docker/modin-omnisci/census-omnisci.py",
+        "modin/experimental/cloud/rayscale.py",
+        "modin/pandas/test/utils.py"
+      ],
+      "chunks_added": 1739,
+      "note": "",
+      "duration_s": 400.3
+    },
+    {
+      "instance_id": "dmlc__dgl-5240",
+      "repo": "dmlc/dgl",
+      "category": "Performance Issue",
+      "ground_truth": [
+        "python/dgl/frame.py:Column.record_stream"
+      ],
+      "indexed": false,
+      "file_hit": false,
+      "class_hit": false,
+      "func_hit": false,
+      "top_files": [],
+      "chunks_added": 5046,
+      "note": "index failed: 1 embedding batch(es) failed; indexed 5046/6046 chunks. Snapshot NOT advanced \u2014 the next indexing run will retry.",
+      "duration_s": 1531.5
+    },
+    {
+      "instance_id": "pypa__pip-13085",
+      "repo": "pypa/pip",
+      "category": "Security Vulnerability",
+      "ground_truth": [
+        "src/pip/_internal/commands/install.py:InstallCommand.run"
+      ],
+      "indexed": true,
+      "file_hit": true,
+      "class_hit": true,
+      "func_hit": true,
+      "top_files": [
+        "src/pip/_internal/self_outdated_check.py",
+        "src/pip/_internal/operations/install/wheel.py",
+        "src/pip/_internal/commands/install.py",
+        "src/pip/_internal/metadata/importlib/_dists.py",
+        "tests/functional/test_install_wheel.py",
+        "src/pip/_internal/metadata/importlib/_envs.py",
+        "src/pip/_internal/distributions/wheel.py",
+        "src/pip/_internal/metadata/base.py",
+        "src/pip/_vendor/distlib/wheel.py",
+        "tests/unit/test_self_check_outdated.py",
+        "src/pip/_vendor/pkg_resources/__init__.py",
+        "src/pip/_internal/metadata/importlib/_compat.py",
+        "tests/functional/test_wheel.py",
+        "src/pip/_internal/utils/wheel.py",
+        "src/pip/_internal/exceptions.py"
+      ],
+      "chunks_added": 4241,
+      "note": "",
+      "duration_s": 390.9
+    },
+    {
+      "instance_id": "gammasim__simtools-1183",
+      "repo": "gammasim/simtools",
+      "category": "Performance Issue",
+      "ground_truth": [
+        "simtools/applications/db_get_parameter_from_db.py:main",
+        "simtools/db/db_array_elements.py:get_array_elements",
+        "simtools/db/db_array_elements.py:get_array_element_list_for_db_query",
+        "simtools/db/db_array_elements.py:get_array_elements_of_type",
+        "simtools/db/db_handler.py:DatabaseHandler.get_model_parameters",
+        "simtools/db/db_handler.py:DatabaseHandler.get_simulation_configuration_parameters",
+        "simtools/db/db_handler.py:DatabaseHandler.get_sim_telarray_configuration_parameters",
+        "simtools/db/db_handler.py:DatabaseHandler._parameter_cache_key"
+      ],
+      "indexed": true,
+      "file_hit": true,
+      "class_hit": true,
+      "func_hit": true,
+      "top_files": [
+        "simtools/model/array_model.py",
+        "tests/unit_tests/model/test_array_model.py",
+        "tests/conftest.py",
+        "simtools/db/db_handler.py",
+        "tests/unit_tests/model/test_model_parameter.py",
+        "tests/unit_tests/db/test_db_handler.py",
+        "tests/unit_tests/model/test_site_model.py",
+        "tests/unit_tests/db/test_db_array_elements.py",
+        "tests/unit_tests/db/test_db_from_repo_handler.py",
+        "tests/unit_tests/corsika/test_corsika_config.py",
+        "simtools/layout/array_layout.py",
+        "simtools/applications/db_get_parameter_from_db.py",
+        "tests/unit_tests/layout/test_array_layout.py",
+        "simtools/model/site_model.py",
+        "tests/unit_tests/test_camera_efficiency.py"
+      ],
+      "chunks_added": 1447,
+      "note": "",
+      "duration_s": 166.8
+    },
+    {
+      "instance_id": "matplotlib__matplotlib-25887",
+      "repo": "matplotlib/matplotlib",
+      "category": "Performance Issue",
+      "ground_truth": [
+        "lib/matplotlib/cbook.py:_unpack_to_numpy"
+      ],
+      "indexed": true,
+      "file_hit": true,
+      "class_hit": false,
+      "func_hit": true,
+      "top_files": [
+        "lib/matplotlib/cbook.py",
+        "lib/matplotlib/pyplot.py",
+        "lib/matplotlib/tests/test_cbook.py",
+        "lib/matplotlib/tests/test_units.py",
+        "lib/matplotlib/tests/test_datetime.py",
+        "lib/matplotlib/tests/test_axes.py",
+        "galleries/plot_types/stats/hist_plot.py",
+        "galleries/examples/lines_bars_and_markers/filled_step.py",
+        "lib/matplotlib/rcsetup.py",
+        "galleries/examples/misc/histogram_path.py",
+        "lib/matplotlib/tests/test_backend_tk.py",
+        "lib/matplotlib/tests/test_collections.py",
+        "lib/matplotlib/collections.py",
+        "galleries/examples/statistics/hist.py",
+        "lib/matplotlib/tests/test_dates.py"
+      ],
+      "chunks_added": 5416,
+      "note": "",
+      "duration_s": 548.7
+    },
+    {
+      "instance_id": "okta__okta-jwt-verifier-python-59",
+      "repo": "okta/okta-jwt-verifier-python",
+      "category": "Security Vulnerability",
+      "ground_truth": [
+        "okta_jwt_verifier/jwt_utils.py:JWTUtils.parse_token",
+        "okta_jwt_verifier/jwt_utils.py:JWTUtils.verify_claims",
+        "okta_jwt_verifier/jwt_utils.py:JWTUtils.verify_signature"
+      ],
+      "indexed": true,
+      "file_hit": true,
+      "class_hit": true,
+      "func_hit": true,
+      "top_files": [
+        "setup.py",
+        "okta_jwt_verifier/jwt_utils.py",
+        "okta_jwt_verifier/jwt_verifier.py",
+        "README.md",
+        "tests/unit/test_jwt_verifier.py",
+        "CHANGELOG.md",
+        "okta_jwt_verifier/__init__.py",
+        "okta_jwt_verifier/config_validator.py",
+        "okta_jwt_verifier/exceptions.py",
+        "tests/unit/test_request_executor.py",
+        "okta_jwt_verifier/request_executor.py",
+        "LONG_DESCRIPTION.md",
+        "tests/unit/test_config_validator.py",
+        "okta_jwt_verifier/error_messages.py",
+        "tests/unit/test_jwt_utils.py"
+      ],
+      "chunks_added": 61,
+      "note": "",
+      "duration_s": 10.4
+    },
+    {
+      "instance_id": "Chainlit__chainlit-1441",
+      "repo": "Chainlit/chainlit",
+      "category": "Security Vulnerability",
+      "ground_truth": [
+        "backend/chainlit/server.py:upload_file",
+        "backend/chainlit/server.py:get_file"
+      ],
+      "indexed": true,
+      "file_hit": true,
+      "class_hit": false,
+      "func_hit": true,
+      "top_files": [
+        "backend/chainlit/server.py",
+        "backend/chainlit/auth.py",
+        "backend/tests/test_server.py",
+        "backend/chainlit/callbacks.py",
+        "libs/react-client/src/api/index.tsx",
+        "backend/chainlit/config.py",
+        "backend/chainlit/utils.py",
+        "cypress/e2e/llama_index_cb/.chainlit/config.toml",
+        "cypress/e2e/password_auth/main.py",
+        "cypress/e2e/step/.chainlit/config.toml",
+        "cypress/e2e/upload_attachments/.chainlit/config.toml",
+        "cypress/e2e/chat_settings/.chainlit/config.toml",
+        "CHANGELOG.md",
+        "cypress/e2e/copilot/.chainlit/config.toml",
+        "backend/chainlit/cli/__init__.py"
+      ],
+      "chunks_added": 956,
+      "note": "",
+      "duration_s": 89.3
+    },
+    {
+      "instance_id": "django__django-18435",
+      "repo": "django/django",
+      "category": "Feature Request",
+      "ground_truth": [
+        "django/core/management/commands/runserver.py:Command.on_bind"
+      ],
+      "indexed": true,
+      "file_hit": true,
+      "class_hit": true,
+      "func_hit": true,
+      "top_files": [
+        "django/core/management/commands/runserver.py",
+        "django/contrib/staticfiles/management/commands/runserver.py",
+        "django/core/servers/basehttp.py",
+        "django/core/management/commands/testserver.py",
+        "django/core/checks/registry.py",
+        "django/core/management/commands/check.py",
+        "tests/admin_scripts/tests.py",
+        "django/core/management/__init__.py",
+        "tests/staticfiles_tests/test_management.py",
+        "tests/servers/test_basehttp.py",
+        "django/core/management/base.py",
+        "docs/conf.py",
+        "django/core/management/commands/squashmigrations.py",
+        "tests/servers/tests.py",
+        "django/core/wsgi.py"
+      ],
+      "chunks_added": 14941,
+      "note": "",
+      "duration_s": 1289.0
+    },
+    {
+      "instance_id": "django__django-18158",
+      "repo": "django/django",
+      "category": "Feature Request",
+      "ground_truth": [
+        "django/core/management/commands/shell.py:Command.add_arguments",
+        "django/core/management/commands/shell.py:Command.ipython",
+        "django/core/management/commands/shell.py:Command.bpython",
+        "django/core/management/commands/shell.py:Command.python",
+        "django/core/management/commands/shell.py:Command.handle"
+      ],
+      "indexed": true,
+      "file_hit": true,
+      "class_hit": true,
+      "func_hit": true,
+      "top_files": [
+        "django/core/management/commands/shell.py",
+        "tests/shell/tests.py",
+        "django/apps/config.py",
+        "django/core/management/commands/dbshell.py",
+        "django/db/backends/base/client.py",
+        "django/core/management/__init__.py",
+        "django/core/management/base.py",
+        "tests/bash_completion/tests.py",
+        "django/core/management/commands/inspectdb.py",
+        "tests/admin_scripts/management/commands/app_command.py",
+        "tests/user_commands/models.py",
+        "tests/bash_completion/management/commands/test_command.py",
+        "tests/admin_scripts/tests.py",
+        "django/db/models/fields/files.py",
+        "tests/admin_scripts/app_with_import/models.py"
+      ],
+      "chunks_added": 6179,
+      "note": "",
+      "duration_s": 274.2
+    },
+    {
+      "instance_id": "django__django-18846",
+      "repo": "django/django",
+      "category": "Bug Report",
+      "ground_truth": [
+        "django/core/management/commands/sqlmigrate.py:Command.execute"
+      ],
+      "indexed": true,
+      "file_hit": true,
+      "class_hit": true,
+      "func_hit": true,
+      "top_files": [
+        "django/core/management/commands/sqlmigrate.py",
+        "django/core/management/base.py",
+        "django/core/management/color.py",
+        "tests/migrations/test_commands.py",
+        "tests/admin_scripts/tests.py",
+        "django/utils/termcolors.py",
+        "django/core/management/commands/migrate.py",
+        "tests/check_framework/tests.py",
+        "django/core/management/commands/check.py",
+        "tests/empty_models/test_commands.py"
+      ],
+      "chunks_added": 2857,
+      "note": "",
+      "duration_s": 74.2
+    },
+    {
+      "instance_id": "django__django-17984",
+      "repo": "django/django",
+      "category": "Performance Issue",
+      "ground_truth": [
+        "django/db/models/fields/related_descriptors.py:ForwardManyToOneDescriptor.get_prefetch_querysets",
+        "django/db/models/fields/related_descriptors.py:ReverseOneToOneDescriptor.get_prefetch_querysets"
+      ],
+      "indexed": true,
+      "file_hit": true,
+      "class_hit": true,
+      "func_hit": true,
+      "top_files": [
+        "django/db/models/fields/related_descriptors.py",
+        "tests/prefetch_related/tests.py",
+        "tests/prefetch_related/test_prefetch_related_objects.py",
+        "tests/known_related_objects/tests.py",
+        "tests/one_to_one/tests.py",
+        "django/db/models/query.py",
+        "tests/prefetch_related/models.py",
+        "tests/many_to_one/tests.py",
+        "django/db/models/sql/query.py",
+        "tests/many_to_many/models.py",
+        "tests/admin_filters/tests.py"
+      ],
+      "chunks_added": 14793,
+      "note": "",
+      "duration_s": 192.4
+    },
+    {
+      "instance_id": "mathesar-foundation__mathesar-3117",
+      "repo": "mathesar-foundation/mathesar",
+      "category": "Security Vulnerability",
+      "ground_truth": [
+        "db/install.py:_create_database"
+      ],
+      "indexed": true,
+      "file_hit": true,
+      "class_hit": false,
+      "func_hit": true,
+      "top_files": [
+        "mathesar/api/ui/permissions/database_role.py",
+        "docs/docs/installation/build-from-source/index.md",
+        "mathesar/tests/api/test_user_api.py",
+        "mathesar/api/db/permissions/database.py",
+        "docs/docs/user-guide/users.md",
+        "db/install.py",
+        "mathesar/api/db/permissions/table_settings.py",
+        "mathesar/api/db/permissions/schema.py",
+        "mathesar/api/permission_utils.py",
+        "mathesar/tests/conftest.py",
+        "mathesar/database/base.py",
+        "docs/docs/installation/docker/index.md",
+        "mathesar/api/ui/permissions/schema_role.py",
+        "docs/docs/installation/guided-install/under-the-hood.md",
+        "docs/docs/snippets/docker-compose-prerequisites.md"
+      ],
+      "chunks_added": 2867,
+      "note": "",
+      "duration_s": 297.8
+    },
+    {
+      "instance_id": "python__cpython-7926",
+      "repo": "python/cpython",
+      "category": "Performance Issue",
+      "ground_truth": [
+        "Lib/idlelib/macosx.py:overrideRootMenu"
+      ],
+      "indexed": false,
+      "file_hit": false,
+      "class_hit": false,
+      "func_hit": false,
+      "top_files": [],
+      "chunks_added": 0,
+      "note": "index failed: index timed out",
+      "duration_s": 2480.1
+    },
+    {
+      "instance_id": "sympy__sympy-27051",
+      "repo": "sympy/sympy",
+      "category": "Performance Issue",
+      "ground_truth": [
+        "sympy/ntheory/generate.py:prime"
+      ],
+      "indexed": true,
+      "file_hit": true,
+      "class_hit": false,
+      "func_hit": true,
+      "top_files": [
+        "sympy/ntheory/generate.py",
+        "sympy/ntheory/tests/test_generate.py",
+        "sympy/ntheory/primetest.py",
+        "sympy/functions/combinatorial/numbers.py",
+        "sympy/functions/combinatorial/tests/test_comb_numbers.py",
+        "sympy/ntheory/tests/test_primetest.py",
+        "sympy/physics/quantum/qubit.py",
+        "sympy/combinatorics/tests/test_group_numbers.py",
+        "sympy/core/benchmarks/bench_numbers.py",
+        "sympy/external/ntheory.py",
+        "sympy/ntheory/partitions_.py",
+        "sympy/combinatorics/tests/test_coset_table.py",
+        "sympy/parsing/autolev/_antlr/autolevparser.py",
+        "sympy/core/tests/test_args.py",
+        "sympy/core/numbers.py"
+      ],
+      "chunks_added": 14534,
+      "note": "",
+      "duration_s": 1438.7
+    }
+  ]
+}

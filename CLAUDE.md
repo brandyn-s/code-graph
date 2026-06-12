@@ -60,7 +60,7 @@ go test ./internal/pipeline/ -run TestPipeline -v
 | `query_security_surfaces` | `internal/tools/security.go` | Auth, crypto, input validation patterns with taint analysis (source subtypes, sanitizer nodes) |
 | `trace_data_flow` | `internal/tools/dataflow.go` | Sensitive data path analysis with env var propagation tracking |
 | `query_stig_evidence` | `internal/tools/stig_evidence.go` | STIG control → code evidence mapping |
-| `index_health` | `internal/tools/health.go` | Graph coverage and quality report |
+| `index_health` | `internal/tools/health.go` | Graph coverage and quality report. Includes unsupported-extension telemetry (2026-06-11): `cut_language_files` (extensions from the 2026-06-10 grammar cut, reported at any count — the language-adoption canary; hint map in `internal/discover/cut_languages.go`), `unknown_extensions` (top 10 other extensions with ≥ 3 files), `unsupported_extension_files` (total). Tallied in `discover.Discover` via `Options.UnsupportedTally` — counts only files that survived every ignore filter. |
 
 ### Service Understanding Tools
 | Tool | Source File | Purpose |

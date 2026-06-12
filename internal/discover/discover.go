@@ -80,6 +80,13 @@ type Options struct {
 	IgnoreFile  string    // path to .cgrignore file (optional)
 	Mode        IndexMode // indexing mode (full or fast)
 	MaxFileSize int64     // max file size in bytes (0 = no limit)
+	// UnsupportedTally, when non-nil, counts files that pass every ignore
+	// filter but have no supported language — exactly the population that
+	// would have been indexed if a grammar existed. Keyed by lowercased
+	// extension (or lowercased bare filename when there is no extension).
+	// Discover's walk is single-goroutine (filepath.Walk), so a plain map
+	// is safe.
+	UnsupportedTally map[string]int
 }
 
 // fastIgnoreDirs are additional directories skipped in fast mode.
@@ -248,6 +255,13 @@ func classifyFile(path, rel string, info os.FileInfo, opts *Options) *FileInfo {
 		l, ok = lang.LanguageForFilename(info.Name())
 	}
 	if !ok {
+		if opts != nil && opts.UnsupportedTally != nil {
+			key := strings.ToLower(ext)
+			if key == "" {
+				key = strings.ToLower(info.Name())
+			}
+			opts.UnsupportedTally[key]++
+		}
 		return nil
 	}
 

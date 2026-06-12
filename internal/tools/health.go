@@ -63,8 +63,11 @@ func (s *Server) handleIndexHealth(ctx context.Context, req *mcp.CallToolRequest
 		return errResult("project has no root_path — reindex with repo_path"), nil
 	}
 
-	// Discover files on disk
-	diskFiles, err := discover.Discover(ctx, proj.RootPath, &discover.Options{Mode: discover.ModeFull})
+	// Discover files on disk; tally unsupported extensions while walking
+	// (2026-06-10 grammar-cut visibility — files with no grammar otherwise
+	// vanish from coverage stats by construction, see cut_languages.go).
+	unsupportedTally := make(map[string]int)
+	diskFiles, err := discover.Discover(ctx, proj.RootPath, &discover.Options{Mode: discover.ModeFull, UnsupportedTally: unsupportedTally})
 	if err != nil {
 		return errResult(fmt.Sprintf("discover files: %v", err)), nil
 	}
@@ -147,6 +150,16 @@ func (s *Server) handleIndexHealth(ctx context.Context, req *mcp.CallToolRequest
 	if len(confidenceTierCounts) > 0 {
 		responseData["calls_by_confidence_tier"] = confidenceTierCounts
 	}
+	unsupportedTotal, cutLanguageFiles, unknownExtensions := buildUnsupportedTelemetry(unsupportedTally)
+	if unsupportedTotal > 0 {
+		responseData["unsupported_extension_files"] = unsupportedTotal
+	}
+	if len(cutLanguageFiles) > 0 {
+		responseData["cut_language_files"] = cutLanguageFiles
+	}
+	if len(unknownExtensions) > 0 {
+		responseData["unknown_extensions"] = unknownExtensions
+	}
 
 	// Include file lists if small enough to be useful
 	const maxListSize = 20
@@ -171,4 +184,46 @@ func (s *Server) handleIndexHealth(ctx context.Context, req *mcp.CallToolRequest
 	result := jsonResult(responseData)
 	s.addUpdateNotice(result)
 	return result, nil
+}
+
+// buildUnsupportedTelemetry splits an UnsupportedTally into two reporting
+// tiers with different signal-to-noise: cut_language_files covers extensions
+// from the 2026-06-10 grammar cut and is reported at ANY count — a single
+// Kotlin file appearing in a redacted repo is the adoption-lag signal the cut
+// created. unknown_extensions is informational: top 10 remaining extensions
+// with >= 3 files (filters one-off junk like a stray .bak). The returned
+// total counts every tallied file regardless of tier.
+func buildUnsupportedTelemetry(tally map[string]int) (total int, cut map[string]map[string]any, unknown []map[string]any) {
+	if len(tally) == 0 {
+		return 0, nil, nil
+	}
+	type extCount struct {
+		ext   string
+		count int
+	}
+	var unknownCounts []extCount
+	for ext, count := range tally {
+		total += count
+		if hint, ok := discover.CutLanguageHints[ext]; ok {
+			if cut == nil {
+				cut = make(map[string]map[string]any)
+			}
+			cut[ext] = map[string]any{"count": count, "language": hint}
+		} else if count >= 3 {
+			unknownCounts = append(unknownCounts, extCount{ext, count})
+		}
+	}
+	sort.Slice(unknownCounts, func(i, j int) bool {
+		if unknownCounts[i].count != unknownCounts[j].count {
+			return unknownCounts[i].count > unknownCounts[j].count
+		}
+		return unknownCounts[i].ext < unknownCounts[j].ext
+	})
+	if len(unknownCounts) > 10 {
+		unknownCounts = unknownCounts[:10]
+	}
+	for _, ec := range unknownCounts {
+		unknown = append(unknown, map[string]any{"extension": ec.ext, "count": ec.count})
+	}
+	return total, cut, unknown
 }

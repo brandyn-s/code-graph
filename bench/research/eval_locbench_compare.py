@@ -883,7 +883,15 @@ def run_mode(
         res.turns = int(agent.get("turns") or 0)
         res.input_tokens = int(agent.get("input_tokens") or 0)
         res.output_tokens = int(agent.get("output_tokens") or 0)
-        res.cost_usd = COST_PER_AGENT_QUERY_USD if entities else 0.0
+        # Token-metered cost (Haiku 4.5 $1/$5 per MTok; cache reads billed
+        # at full input rate — deliberately conservative). The legacy flat
+        # $0.05/query estimate underbooked heavy instances ~20x (jax in the
+        # 2026-06-11 SweRank pilot: 989K input tokens ≈ $1.02). Falls back
+        # to the flat estimate when the envelope carries no token counts.
+        if res.input_tokens or res.output_tokens:
+            res.cost_usd = (res.input_tokens * 1.00 + res.output_tokens * 5.00) / 1e6
+        else:
+            res.cost_usd = COST_PER_AGENT_QUERY_USD if entities else 0.0
     else:
         # Primitives modes: union of rank_by_query + code_localize
         entities = list(data.get("rank_by_query") or []) + list(data.get("code_localize") or [])
@@ -1121,7 +1129,12 @@ def _compute_provenance_manifest(
         "eval_bin_sha": _file_sha256_short(eval_bin),
         "index_bin_sha": _file_sha256_short(index_bin),
         "dataset_sha": _file_sha256_short(PARQUET),
-        "agent_iterations": os.environ.get("LOCAGENT_ITERATIONS", "1"),
+        # Fallback must mirror the BINARY's default (internal/locagent/
+        # agent.go Run: iters := 2 when the env var is unset). The old "1"
+        # fallback mis-reported every default-config run as single-shot —
+        # caught on the 2026-06-12 n=200 re-baseline, whose manifest claimed
+        # iter=1 for a run the binary executed at iter=2.
+        "agent_iterations": os.environ.get("LOCAGENT_ITERATIONS", "2"),
         "modes": ",".join(modes),
         "max_mb": str(int(max_mb)),
         "n_attempted": str(n_attempted),
@@ -1682,6 +1695,18 @@ def main() -> int:
         default=1,
         help="Parallel worker count (1 = sequential). Each worker gets its own clone subdir.",
     )
+    ap.add_argument(
+        "--budget-usd",
+        type=float,
+        default=0.0,
+        help="Hard spend gate (token-metered, conservative): stop dispatching "
+             "new instances once the accumulated agent cost crosses this "
+             "value. 0 disables. With N parallel workers the overshoot is "
+             "bounded by the N in-flight instances (running futures can't be "
+             "cancelled). Per eval-shipping-discipline: meter gates in the "
+             "units they cap — the flat $0.05/query estimate underbooked "
+             "heavy instances ~20x in the 2026-06-11 SweRank pilot.",
+    )
 
     # Family C — mechanical refusal gate flags
     ap.add_argument(
@@ -1698,7 +1723,7 @@ def main() -> int:
         "--allow-unexplained-cells",
         action="store_true",
         help=(
-            "Bypass cell-mass dominant-cell check (≥30% of misses in one "
+            "Bypass cell-mass dominant-cell check (≥30%% of misses in one "
             "category × column). Only valid for exploratory runs, NOT for "
             "any published comparison. Per verify-instrument-before-fix, "
             "dominant cells should be sampled and classified before publication."
@@ -1837,6 +1862,19 @@ def main() -> int:
     if args.workers <= 1:
         # Sequential path
         for row in rows:
+            if args.budget_usd > 0:
+                spent = sum(
+                    mr.cost_usd for r in results for mr in r.mode_results
+                )
+                if spent >= args.budget_usd:
+                    print(
+                        f"\n[BUDGET] metered spend ${spent:.2f} crossed "
+                        f"--budget-usd ${args.budget_usd:.2f} after "
+                        f"{len(results)} instances; stopping.",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+                    break
             try:
                 res = evaluate_instance(
                     row, args.workdir, modes,
@@ -1935,6 +1973,28 @@ def main() -> int:
                             f"Diagnose with `git ls-remote` on a sample failed instance, "
                             f"check GitHub status, or re-run with "
                             f"--abort-on-clone-fail-rate=1.0 to disable this gate.",
+                            file=sys.stderr,
+                            flush=True,
+                        )
+                        for f in futures:
+                            f.cancel()
+                        aborted = True
+                        break
+
+                # Budget gate (same cancel-pending shape as Fix A). Metered
+                # conservative; in-flight futures finish, so overshoot is
+                # bounded by workers x per-instance cost.
+                if args.budget_usd > 0:
+                    spent = sum(
+                        mr.cost_usd for r in results for mr in r.mode_results
+                    )
+                    if spent >= args.budget_usd:
+                        print(
+                            f"\n[BUDGET] metered spend ${spent:.2f} crossed "
+                            f"--budget-usd ${args.budget_usd:.2f} after "
+                            f"{len(results)} instances. Cancelling remaining "
+                            f"{len(worker_args) - len(results)} pending workers; "
+                            f"in-flight instances will complete.",
                             file=sys.stderr,
                             flush=True,
                         )

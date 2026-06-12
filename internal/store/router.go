@@ -259,7 +259,13 @@ func (r *StoreRouter) ListProjects() ([]*ProjectInfo, error) {
 	return result, nil
 }
 
-// DeleteProject closes the Store connection and removes the .db + WAL/SHM files.
+// DeleteProject closes the Store connection and removes the .db, WAL/SHM
+// sidecars, and the BulkWrite crash marker. The marker must be in this set:
+// it survives a SIGTERM'd indexing run, and leaving it orphaned means the
+// documented Mode 7 recovery (delete_project + index_repository force=true)
+// can still trip the crash-marker check on the recreated DB (observed
+// 2026-06-11 on a Loc-Bench eval instance — every retry failed until the
+// marker was removed by hand).
 func (r *StoreRouter) DeleteProject(name string) error {
 	if err := validateProjectName(name); err != nil {
 		return err
@@ -272,8 +278,7 @@ func (r *StoreRouter) DeleteProject(name string) error {
 	r.mu.Unlock()
 
 	dbPath := filepath.Join(r.dir, name+".db")
-	for _, suffix := range []string{"", "-wal", "-shm"} {
-		p := dbPath + suffix
+	for _, p := range []string{dbPath, dbPath + "-wal", dbPath + "-shm", bulkWriteMarkerPath(dbPath)} {
 		if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
 			return fmt.Errorf("remove %s: %w", p, err)
 		}

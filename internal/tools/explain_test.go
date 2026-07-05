@@ -8,23 +8,29 @@ import (
 
 func TestExtractPackageFromQN(t *testing.T) {
 	tests := []struct {
-		name string
-		qn   string
-		want string
+		name    string
+		qn      string
+		project string
+		want    string
 	}{
-		{"3+ segments extracts middle", "project.auth.authenticate", "auth"},
-		{"4 segments extracts middle two", "project.pkg.subpkg.func", "pkg.subpkg"},
-		{"2 segments returns empty", "project.func", ""},
-		{"1 segment returns empty", "func", ""},
-		{"5 segments extracts middle three", "project.a.b.c.func", "a.b.c"},
-		{"empty returns empty", "", ""},
+		{"3+ segments extracts middle", "project.auth.authenticate", "project", "auth"},
+		{"4 segments extracts middle two", "project.pkg.subpkg.func", "project", "pkg.subpkg"},
+		{"2 segments returns empty", "project.func", "project", ""},
+		{"1 segment returns empty", "func", "project", ""},
+		{"5 segments extracts middle three", "project.a.b.c.func", "project", "a.b.c"},
+		{"empty returns empty", "", "project", ""},
+		// Symptom (e), observed live 2026-07-04: a project name that
+		// contains a dot (home-dir path) must be stripped as a whole, not
+		// split — the old code returned "schult-...pipeline" as the package.
+		{"dotted project name", "Users-brandyn.schult-Documents-GitHub-code-graph.internal.pipeline.pipeline.Pipeline", "Users-brandyn.schult-Documents-GitHub-code-graph", "internal.pipeline.pipeline"},
+		{"external non-project QN", "github.com/foo/bar.Server.AddTool", "project", ""},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := extractPackageFromQN(tt.qn)
+			got := extractPackageFromQN(tt.qn, tt.project)
 			if got != tt.want {
-				t.Errorf("extractPackageFromQN(%q) = %q, want %q", tt.qn, got, tt.want)
+				t.Errorf("extractPackageFromQN(%q, %q) = %q, want %q", tt.qn, tt.project, got, tt.want)
 			}
 		})
 	}

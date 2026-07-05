@@ -209,7 +209,7 @@ var vendoredPathPatterns = []string{
 // string check is intentionally NOT included here — first-party Package
 // nodes have file_path set, lockfile-parsed third-party Package nodes do
 // not, so callers that want to distinguish first-party vs dep-tree
-// should add `AND <column> != ''` themselves.
+// should add `AND <column> != ”` themselves.
 func vendoredPathSQLClause(column string) string {
 	parts := make([]string, 0, len(vendoredPathPatterns))
 	for _, p := range vendoredPathPatterns {
@@ -489,7 +489,10 @@ func (s *Store) archPackageFanCountsByFilePath(project string) (map[string]int, 
 
 // archPackagesByQN groups nodes by the sub-package segment of their qualified name.
 func (s *Store) archPackagesByQN(project string) ([]PackageSummary, error) {
-	rows, err := s.q.Query(`SELECT id, qualified_name FROM nodes WHERE project=? AND label IN ('Function','Method','Class')`, project)
+	// file_path != '' excludes external-dependency stub nodes (CALLS_EXTERNAL
+	// targets carry Function/Method labels but no file), which otherwise
+	// manufacture phantom packages named after receiver types / import paths.
+	rows, err := s.q.Query(`SELECT id, qualified_name FROM nodes WHERE project=? AND label IN ('Function','Method','Class') AND file_path != ''`, project)
 	if err != nil {
 		return nil, err
 	}
@@ -503,7 +506,7 @@ func (s *Store) archPackagesByQN(project string) ([]PackageSummary, error) {
 		if err := rows.Scan(&id, &qn); err != nil {
 			return nil, err
 		}
-		pkg := qnToPackage(qn)
+		pkg := qnToPackage(qn, project)
 		if pkg == "" {
 			continue
 		}
@@ -684,7 +687,7 @@ func (s *Store) archBoundaries(project string) ([]CrossPkgBoundary, error) {
 		if err := nodeRows.Scan(&id, &qn); err != nil {
 			return nil, err
 		}
-		nodePkg[id] = qnToPackage(qn)
+		nodePkg[id] = qnToPackage(qn, project)
 	}
 	if err := nodeRows.Err(); err != nil {
 		return nil, err
@@ -790,7 +793,7 @@ func (s *Store) archLayers(project string) ([]PackageLayer, error) {
 		if err := routeRows.Scan(&qn); err != nil {
 			return nil, err
 		}
-		routePkgs[qnToPackage(qn)] = true
+		routePkgs[qnToPackage(qn, project)] = true
 	}
 	if err := routeRows.Err(); err != nil {
 		return nil, err
@@ -810,7 +813,7 @@ func (s *Store) archLayers(project string) ([]PackageLayer, error) {
 		if err := entryRows.Scan(&qn); err != nil {
 			return nil, err
 		}
-		entryPkgs[qnToPackage(qn)] = true
+		entryPkgs[qnToPackage(qn, project)] = true
 	}
 	if err := entryRows.Err(); err != nil {
 		return nil, err
@@ -964,18 +967,18 @@ func (s *Store) archClusters(project string) ([]ClusterInfo, error) {
 		fanIn[e.dst]++
 	}
 
-	clusters := buildClusterInfos(communities, edges, commEdgeTypes, fanIn, nodeByID)
+	clusters := buildClusterInfos(communities, edges, commEdgeTypes, fanIn, nodeByID, project)
 	return clusters, nil
 }
 
 // buildClusterInfos converts community assignments into sorted, capped ClusterInfo slices.
-func buildClusterInfos(communities map[int][]int64, edges []louvainEdge, commEdgeTypes map[int]map[string]bool, fanIn map[int64]int, nodeByID map[int64]clusterNodeInfo) []ClusterInfo {
+func buildClusterInfos(communities map[int][]int64, edges []louvainEdge, commEdgeTypes map[int]map[string]bool, fanIn map[int64]int, nodeByID map[int64]clusterNodeInfo, project string) []ClusterInfo {
 	var clusters []ClusterInfo
 	for commID, members := range communities {
 		if len(members) < 2 {
 			continue
 		}
-		ci := buildOneCluster(commID, members, edges, commEdgeTypes[commID], fanIn, nodeByID)
+		ci := buildOneCluster(commID, members, edges, commEdgeTypes[commID], fanIn, nodeByID, project)
 		clusters = append(clusters, ci)
 	}
 	sort.Slice(clusters, func(i, j int) bool { return clusters[i].Members > clusters[j].Members })
@@ -989,7 +992,7 @@ func buildClusterInfos(communities map[int][]int64, edges []louvainEdge, commEdg
 }
 
 // buildOneCluster computes a ClusterInfo for a single community.
-func buildOneCluster(commID int, members []int64, edges []louvainEdge, edgeTypes map[string]bool, fanIn map[int64]int, nodeByID map[int64]clusterNodeInfo) ClusterInfo {
+func buildOneCluster(commID int, members []int64, edges []louvainEdge, edgeTypes map[string]bool, fanIn map[int64]int, nodeByID map[int64]clusterNodeInfo, project string) ClusterInfo {
 	memberSet := map[int64]bool{}
 	for _, id := range members {
 		memberSet[id] = true
@@ -1023,7 +1026,7 @@ func buildOneCluster(commID int, members []int64, edges []louvainEdge, edgeTypes
 
 	pkgSet := map[string]bool{}
 	for _, id := range members {
-		if pkg := qnToPackage(nodeByID[id].qn); pkg != "" {
+		if pkg := qnToPackage(nodeByID[id].qn, project); pkg != "" {
 			pkgSet[pkg] = true
 		}
 	}
@@ -1041,7 +1044,7 @@ func buildOneCluster(commID int, members []int64, edges []louvainEdge, edgeTypes
 
 	return ClusterInfo{
 		ID:        commID,
-		Label:     autoNameCluster(members, nodeByID),
+		Label:     autoNameCluster(members, nodeByID, project),
 		Members:   len(members),
 		Cohesion:  cohesion,
 		TopNodes:  topNodes,
@@ -1050,10 +1053,10 @@ func buildOneCluster(commID int, members []int64, edges []louvainEdge, edgeTypes
 	}
 }
 
-func autoNameCluster(members []int64, nodeByID map[int64]clusterNodeInfo) string {
+func autoNameCluster(members []int64, nodeByID map[int64]clusterNodeInfo, project string) string {
 	pkgCounts := map[string]int{}
 	for _, id := range members {
-		pkg := qnToPackage(nodeByID[id].qn)
+		pkg := qnToPackage(nodeByID[id].qn, project)
 		if pkg != "" {
 			pkgCounts[pkg]++
 		}
@@ -1167,33 +1170,62 @@ func (s *Store) loadNodePackageMap(project string) (map[int64]string, error) {
 		if err := rows.Scan(&id, &qn); err != nil {
 			return nil, err
 		}
-		nodePkg[id] = qnToTopPackage(qn)
+		nodePkg[id] = qnToTopPackage(qn, project)
 	}
 	return nodePkg, rows.Err()
 }
 
-// qnToPackage extracts the meaningful sub-package from a qualified name.
-// QN format: project.dir1.dir2.filestem.Symbol — segment[2] is the sub-package.
-// For shallow layouts (project.dir.symbol), falls back to segment[1].
-func qnToPackage(qn string) string {
-	parts := strings.SplitN(qn, ".", 5)
-	if len(parts) >= 4 {
-		return parts[2] // sub-package (e.g., "store" from "project.internal.store.search.Search")
+// stripProjectPrefix removes the "<project>." prefix from a qualified name.
+//
+// Project names are path-mangled and CAN contain dots — e.g. a repo under
+// /Users/brandyn.schult/... yields project
+// "Users-brandyn.schult-Documents-GitHub-code-graph". Splitting a QN on "."
+// and assuming the project occupies a fixed number of leading segments then
+// corrupts every downstream package/module parse (the dot in "brandyn.schult"
+// reads as a package separator). Stripping the KNOWN project prefix is the
+// only robust split. Returns (rest, true) when the prefix matched; (qn,
+// false) for QNs that don't carry it — e.g. external-dependency stubs
+// qualified by import path ("github.com/foo/bar.Fn").
+func stripProjectPrefix(qn, project string) (string, bool) {
+	if project != "" && strings.HasPrefix(qn, project+".") {
+		return qn[len(project)+1:], true
 	}
-	if len(parts) >= 2 {
-		return parts[1] // flat layout fallback
+	return qn, false
+}
+
+// qnToPackage extracts the meaningful sub-package from a qualified name,
+// given the owning project. For "<project>.internal.store.search.Search" the
+// module path after the prefix is "internal.store.search.Search" and the
+// sub-package is its second segment ("store"). QNs that don't carry the
+// project prefix (external stubs) return "" — they are not first-party
+// packages and must not manufacture phantom package rows.
+func qnToPackage(qn, project string) string {
+	rest, ok := stripProjectPrefix(qn, project)
+	if !ok {
+		return ""
+	}
+	// Preserve the original segment semantics on the (correctly) stripped
+	// module path: deep layouts return the sub-package (segment[1]), flat
+	// layouts return segment[0].
+	seg := strings.Split(rest, ".")
+	if len(seg) >= 3 {
+		return seg[1] // sub-package (e.g. "store" from "internal.store.search.Search")
+	}
+	if seg[0] != "" {
+		return seg[0] // flat layout
 	}
 	return ""
 }
 
-// qnToTopPackage extracts the top-level directory from a qualified name (segment[1]).
-// Used for coarse-grained grouping in service detection.
-func qnToTopPackage(qn string) string {
-	parts := strings.SplitN(qn, ".", 3)
-	if len(parts) >= 2 {
-		return parts[1]
+// qnToTopPackage extracts the top-level directory (first module segment)
+// from a qualified name, given the owning project. Used for coarse-grained
+// grouping in service detection.
+func qnToTopPackage(qn, project string) string {
+	rest, ok := stripProjectPrefix(qn, project)
+	if !ok || rest == "" {
+		return ""
 	}
-	return ""
+	return strings.Split(rest, ".")[0]
 }
 
 // --- Architecture Decision Record (ADR) ---

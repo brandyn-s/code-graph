@@ -481,18 +481,20 @@ func TestArchPackagesByQNPopulatesFanInFanOut(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// NO Package nodes — forces the qnToPackage fallback path.
+	// NO Package nodes — forces the qnToPackage fallback path. First-party
+	// nodes carry a file_path (external stubs, which archPackagesByQN now
+	// filters out, do not).
 	idMain, _ := s.UpsertNode(&Node{
 		Project: "qn-test", Label: "Function", Name: "main",
-		QualifiedName: "qn-test.cmd.server.main",
+		QualifiedName: "qn-test.cmd.server.main", FilePath: "cmd/server/main.go",
 	})
 	idHandler, _ := s.UpsertNode(&Node{
 		Project: "qn-test", Label: "Function", Name: "HandleRequest",
-		QualifiedName: "qn-test.internal.handler.HandleRequest",
+		QualifiedName: "qn-test.internal.handler.HandleRequest", FilePath: "internal/handler/handler.go",
 	})
 	idService, _ := s.UpsertNode(&Node{
 		Project: "qn-test", Label: "Function", Name: "ProcessOrder",
-		QualifiedName: "qn-test.internal.service.ProcessOrder",
+		QualifiedName: "qn-test.internal.service.ProcessOrder", FilePath: "internal/service/service.go",
 	})
 
 	// Cross-package: server → handler → service
@@ -1220,43 +1222,54 @@ func TestLouvainConverges(t *testing.T) {
 
 func TestQnToPackage(t *testing.T) {
 	tests := []struct {
-		qn   string
-		want string
+		qn      string
+		project string
+		want    string
 	}{
-		// 4+ segment QNs — returns segment[2] (sub-package)
-		{"project.internal.store.search.Search", "store"},
-		{"project.src.utils.helper.foo", "utils"},
-		{"project.src.components.Button.render", "components"},
-		{"project.cmd.server.main", "server"},
-		// 3-segment QNs — falls back to segment[1]
-		{"project.main.foo", "main"},
-		{"project.cmd", "cmd"},
-		// Edge cases
-		{"standalone", ""},
-		{"", ""},
+		// 4+ segment QNs — returns the sub-package (module segment[1]).
+		{"project.internal.store.search.Search", "project", "store"},
+		{"project.src.utils.helper.foo", "project", "utils"},
+		{"project.src.components.Button.render", "project", "components"},
+		{"project.cmd.server.main", "project", "server"},
+		// 3-segment QNs — falls back to the top module segment.
+		{"project.main.foo", "project", "main"},
+		{"project.cmd", "project", "cmd"},
+		// Project name CONTAINS DOTS (path-mangled home dir) — the whole
+		// dotted name is the prefix, not just its first segment. This is
+		// the symptom-(e) regression: the old parts[2] split returned
+		// "schult-..." fragments as the package.
+		{"Users-brandyn.schult-Documents-GitHub-code-graph.internal.store.search.Search", "Users-brandyn.schult-Documents-GitHub-code-graph", "store"},
+		{"a.b.svc.mod.Fn", "a.b", "mod"},
+		// External / non-project-prefixed QNs — not a first-party package.
+		{"github.com/foo/bar.Server.AddTool", "project", ""},
+		{"standalone", "project", ""},
+		{"", "project", ""},
 	}
 	for _, tt := range tests {
-		got := qnToPackage(tt.qn)
+		got := qnToPackage(tt.qn, tt.project)
 		if got != tt.want {
-			t.Errorf("qnToPackage(%q) = %q, want %q", tt.qn, got, tt.want)
+			t.Errorf("qnToPackage(%q, %q) = %q, want %q", tt.qn, tt.project, got, tt.want)
 		}
 	}
 }
 
 func TestQnToTopPackage(t *testing.T) {
 	tests := []struct {
-		qn   string
-		want string
+		qn      string
+		project string
+		want    string
 	}{
-		{"project.internal.store.search.Search", "internal"},
-		{"project.src.components.Button", "src"},
-		{"project.cmd", "cmd"},
-		{"standalone", ""},
+		{"project.internal.store.search.Search", "project", "internal"},
+		{"project.src.components.Button", "project", "src"},
+		{"project.cmd", "project", "cmd"},
+		{"Users-brandyn.schult-x.internal.store.Search", "Users-brandyn.schult-x", "internal"},
+		{"github.com/foo/bar.Fn", "project", ""},
+		{"standalone", "project", ""},
 	}
 	for _, tt := range tests {
-		got := qnToTopPackage(tt.qn)
+		got := qnToTopPackage(tt.qn, tt.project)
 		if got != tt.want {
-			t.Errorf("qnToTopPackage(%q) = %q, want %q", tt.qn, got, tt.want)
+			t.Errorf("qnToTopPackage(%q, %q) = %q, want %q", tt.qn, tt.project, got, tt.want)
 		}
 	}
 }

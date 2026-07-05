@@ -98,7 +98,7 @@ func (s *Server) handleExplainSymbol(_ context.Context, req *mcp.CallToolRequest
 }
 
 //nolint:cyclop // aggregates many optional graph queries into one response — splitting would scatter the logic
-func buildExplanation(st *store.Store, node *store.Node, _ string) map[string]any {
+func buildExplanation(st *store.Store, node *store.Node, projName string) map[string]any {
 	result := map[string]any{
 		"name":           node.Name,
 		"qualified_name": node.QualifiedName,
@@ -223,7 +223,7 @@ func buildExplanation(st *store.Store, node *store.Node, _ string) map[string]an
 	}
 
 	// Package context (extract from QN)
-	pkg := extractPackageFromQN(node.QualifiedName)
+	pkg := extractPackageFromQN(node.QualifiedName, projName)
 	if pkg != "" {
 		result["package"] = pkg
 	}
@@ -261,16 +261,24 @@ func buildExplanation(st *store.Store, node *store.Node, _ string) map[string]an
 }
 
 // extractPackageFromQN extracts the package path from a qualified name.
-func extractPackageFromQN(qn string) string {
-	parts := strings.Split(qn, ".")
-	if len(parts) <= 2 {
+func extractPackageFromQN(qn, project string) string {
+	// Strip the KNOWN project prefix rather than assuming it is a single
+	// dot-segment. Project names are path-mangled and can contain dots
+	// (e.g. "Users-brandyn.schult-Documents-GitHub-code-graph"), so the old
+	// parts[1:end] slice folded fragments of the project name into the
+	// package path — explain_symbol reported package
+	// "schult-Documents-GitHub-code-graph.internal.pipeline.pipeline" for a
+	// node under /Users/brandyn.schult/. When the QN doesn't carry the
+	// project prefix (external stub), there is no first-party package.
+	if project != "" && strings.HasPrefix(qn, project+".") {
+		qn = qn[len(project)+1:]
+	} else if project != "" {
 		return ""
 	}
-	// Skip project prefix (first segment) and symbol name (last segment)
-	// Join the middle as the package path
-	end := len(parts) - 1
-	if end > 1 {
-		return strings.Join(parts[1:end], ".")
+	parts := strings.Split(qn, ".")
+	if len(parts) <= 1 {
+		return "" // bare symbol, no module path
 	}
-	return ""
+	// Drop the trailing symbol name; the rest is the module/package path.
+	return strings.Join(parts[:len(parts)-1], ".")
 }

@@ -32,7 +32,13 @@ var Version = "dev"
 func SetVersion(v string) { Version = v }
 
 // releaseURL is the GitHub API endpoint for latest release. Package-level var for test injection.
-var releaseURL = "https://api.github.com/repos/DeusData/codebase-memory-mcp/releases/latest"
+//
+// Points at the redacted fork, NOT upstream DeusData: this build carries the
+// redacted security/tooling additions, and an upstream release tag (0.8.x)
+// compares newer than our 0.7.0-redacted.x scheme — an upstream-pointed check
+// would prompt `codebase-memory-mcp update`, which replaces the binary with
+// an upstream build and silently drops every fork addition.
+var releaseURL = "https://api.github.com/repos/redacted-org/code-graph/releases/latest"
 
 // Server wraps the MCP server with tool handlers.
 type Server struct {
@@ -480,11 +486,23 @@ func (s *Server) checkForUpdate() {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		slog.Warn("update check: bad status", "status", resp.StatusCode)
+		// 403/429 are GitHub's unauthenticated per-IP rate limit and 404 is
+		// no-releases-yet — expected background conditions, not actionable.
+		// Logging them at Warn produced hundreds of noise lines (one per
+		// server start, 491 in the 2026-07-04 server.log census).
+		if resp.StatusCode == 403 || resp.StatusCode == 404 || resp.StatusCode == 429 {
+			slog.Debug("update check: skipped", "status", resp.StatusCode)
+		} else {
+			slog.Warn("update check: bad status", "status", resp.StatusCode)
+		}
 		return
 	}
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
+	// 1MB cap, matching selfupdate.FetchLatestRelease. The previous 64KB cap
+	// truncated release JSON with long release notes mid-escape, producing
+	// the "unexpected end of JSON input" / "invalid character in string
+	// escape code" parse failures seen at every server start.
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
 		slog.Warn("update check: body read failed", "err", err)
 		return

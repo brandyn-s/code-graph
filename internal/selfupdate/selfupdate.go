@@ -13,7 +13,13 @@ import (
 )
 
 // ReleaseURL is the GitHub API endpoint for latest release. Exported for test injection.
-var ReleaseURL = "https://api.github.com/repos/DeusData/codebase-memory-mcp/releases/latest"
+//
+// Points at the redacted fork, NOT upstream DeusData — `codebase-memory-mcp
+// update` replaces the running binary with whatever this URL serves, and an
+// upstream binary would silently drop every redacted addition (security
+// tools, resolver gates, SCIP ingest). See tools.releaseURL for the
+// matching update-notice endpoint.
+var ReleaseURL = "https://api.github.com/repos/redacted-org/code-graph/releases/latest"
 
 // Release holds parsed GitHub release metadata.
 type Release struct {

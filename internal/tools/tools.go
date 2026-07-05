@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -103,18 +104,31 @@ func (s *Server) StartWatcher(ctx context.Context) {
 	go s.watcher.Run(ctx)
 }
 
+// errSyncBusy signals the watcher that a sync was skipped because another
+// index operation holds indexMu. It MUST be an error, not nil: the watcher
+// commits its new snapshot only on a nil return, and a nil here marked the
+// detected change as synced with no reindex having run — the change was
+// then never retried (git strategy never forces full snapshots).
+var errSyncBusy = errors.New("sync skipped: index in progress")
+
 // syncProject is called by the watcher when file changes are detected.
 // Uses TryLock to skip if an index operation is already in progress.
 func (s *Server) syncProject(ctx context.Context, projectName, rootPath string) error {
 	if !s.indexMu.TryLock() {
 		slog.Debug("watcher.skip", "path", rootPath, "reason", "index_in_progress")
-		return nil
+		return errSyncBusy
 	}
 	defer s.indexMu.Unlock()
-	st, err := s.router.ForProject(projectName)
+	// Hold a ref for the whole pipeline run. ForProject is unprotected:
+	// the router's evictor closes refs==0 stores idle >30s, and a watcher
+	// reindex crossing that window had its *sql.DB closed mid-run — the
+	// same 2026-06-11 incident class index_repository already guards
+	// against with AcquireStore (see tools/index.go).
+	st, release, err := s.router.AcquireStore(projectName)
 	if err != nil {
 		return fmt.Errorf("store for %s: %w", projectName, err)
 	}
+	defer release()
 	p := pipeline.New(ctx, st, rootPath, discover.ModeFull)
 	if err := p.Run(); err != nil {
 		return err

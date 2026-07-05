@@ -407,7 +407,15 @@ func (w *Watcher) checkSentinel(proj *store.Project, state *projectState) (chang
 			slog.Warn("watcher.git.err", "project", proj.Name, "err", err)
 			return false, true
 		}
-		state.lastGitHead = newHead
+		// Advance the sentinel only when nothing changed. On a change, the
+		// head advances after the reindex outcome is known (see
+		// fullSnapshotAndIndex). Advancing here made a failed or skipped
+		// reindex permanent: git strategy never forces full snapshots, so
+		// the next poll compared head==lastGitHead, saw no change, and the
+		// missed content stayed unindexed until the next commit.
+		if !changed {
+			state.lastGitHead = newHead
+		}
 		return changed, false
 
 	case strategyFSNotify:
@@ -512,6 +520,11 @@ func (w *Watcher) fullSnapshotAndIndex(proj *store.Project, state *projectState)
 	state.pollsSinceFull = 0
 
 	if snapshotsEqual(state.snapshot, snap) {
+		// Content-neutral change (e.g. a commit of already-indexed content
+		// only touches .git). Advance the git sentinel so the same no-op
+		// isn't re-detected every poll — checkSentinel deliberately leaves
+		// lastGitHead un-advanced on changed=true.
+		w.advanceGitHead(proj, state)
 		state.interval = interval
 		state.nextPoll = time.Now().Add(interval)
 		return
@@ -519,6 +532,8 @@ func (w *Watcher) fullSnapshotAndIndex(proj *store.Project, state *projectState)
 
 	slog.Info("watcher.changed", "project", proj.Name, "strategy", state.strategy.String(), "files", len(snap))
 	if err := w.indexFn(w.ctx, proj.Name, proj.RootPath); err != nil {
+		// Snapshot and git head stay un-advanced: the next poll re-detects
+		// the same change and retries the index.
 		slog.Warn("watcher.index", "project", proj.Name, "err", err)
 		state.nextPoll = time.Now().Add(interval)
 		return
@@ -528,11 +543,20 @@ func (w *Watcher) fullSnapshotAndIndex(proj *store.Project, state *projectState)
 	state.interval = pollInterval(len(snap))
 	state.nextPoll = time.Now().Add(state.interval)
 
-	// Update git HEAD after successful index.
-	if state.strategy == strategyGit {
-		if head, err := gitHead(w.ctx, proj.RootPath); err == nil {
-			state.lastGitHead = head
-		}
+	// Update git HEAD only now that the index succeeded.
+	w.advanceGitHead(proj, state)
+}
+
+// advanceGitHead refreshes lastGitHead for git-strategy projects. Call only
+// after a detected change has been fully handled — indexed successfully, or
+// proven content-neutral — never before (a pre-advance turns a failed
+// reindex into a permanently missed change).
+func (w *Watcher) advanceGitHead(proj *store.Project, state *projectState) {
+	if state.strategy != strategyGit {
+		return
+	}
+	if head, err := gitHead(w.ctx, proj.RootPath); err == nil {
+		state.lastGitHead = head
 	}
 }
 

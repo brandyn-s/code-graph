@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/DeusData/codebase-memory-mcp/internal/anthropic"
 	"github.com/DeusData/codebase-memory-mcp/internal/locagent"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -119,7 +120,7 @@ func (s *Server) handleCodeLocalizeAgent(ctx context.Context, req *mcp.CallToolR
 	out.Metadata = NewMetadataBuilder().
 		WithFreshness(freshnessStateFromIndexedAt(indexedAt), indexedAt).
 		WithProvenance("", "graph_db").
-		WithModel(envOrDefault("ANTHROPIC_MODEL", "claude-haiku-4-5-20251001")).
+		WithModel(anthropic.SanitizeModelID(envOrDefault("ANTHROPIC_MODEL", "claude-haiku-4-5-20251001"))).
 		WithConfidence(stopReasonToBand(res.StopReason), "stop_reason="+res.StopReason).
 		Build()
 

@@ -117,7 +117,11 @@ func (s *Server) handleSearchCodeSemantic(ctx context.Context, req *mcp.CallTool
 	metadata := NewMetadataBuilder().
 		WithFreshness(freshnessStateFromIndexedAt(indexedAt), indexedAt).
 		WithProvenance("", "graph_db").
-		WithModel("voyage-4-large").
+		// Report the model actually used for the query embedding — the
+		// stored document embeddings' model is upserted alongside them and
+		// has always been this client's model. A hardcoded "voyage-4-large"
+		// here shipped false provenance (real default: voyage-code-3).
+		WithModel(vc.Model()).
 		Build()
 
 	out, _ := json.MarshalIndent(struct {

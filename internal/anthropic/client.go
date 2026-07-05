@@ -16,6 +16,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -42,7 +43,7 @@ func NewClient() *Client {
 	if key == "" {
 		return nil
 	}
-	model := os.Getenv("ANTHROPIC_MODEL")
+	model := SanitizeModelID(os.Getenv("ANTHROPIC_MODEL"))
 	if model == "" {
 		model = defaultModel
 	}
@@ -51,6 +52,22 @@ func NewClient() *Client {
 		model:  model,
 		client: &http.Client{Timeout: defaultTimeout},
 	}
+}
+
+// SanitizeModelID strips Claude Code session-notation suffixes from an
+// inherited model id. Claude Code launchers pin ANTHROPIC_MODEL for the
+// host session using bracket beta markers (e.g. "claude-sonnet-5[1m]" for
+// the 1M-context variant); MCP servers spawned by that session inherit the
+// env verbatim, and the raw string 404s against the Messages API
+// (observed live 2026-07-04: not_found_error "model: claude-sonnet-5[1m]"
+// broke every code_localize_agent call on the host). The base id before
+// the bracket is the valid API model.
+func SanitizeModelID(model string) string {
+	model = strings.TrimSpace(model)
+	if i := strings.IndexByte(model, '['); i > 0 {
+		model = strings.TrimSpace(model[:i])
+	}
+	return model
 }
 
 // Model returns the configured model name.
@@ -65,8 +82,8 @@ type Tool struct {
 
 // Message is a single conversation turn.
 type Message struct {
-	Role    string           `json:"role"` // "user" | "assistant"
-	Content []ContentBlock   `json:"content"`
+	Role    string         `json:"role"` // "user" | "assistant"
+	Content []ContentBlock `json:"content"`
 }
 
 // ContentBlock is one element of message content. Either Text, ToolUse,

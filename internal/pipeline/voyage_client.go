@@ -65,6 +65,12 @@ func NewVoyageClient() *VoyageClient {
 	}
 }
 
+// Model returns the embedding model this client sends to the API
+// (VOYAGE_EMBED_MODEL or the package default). Exposed so tool responses
+// can report the real model in provenance metadata instead of a hardcoded
+// name.
+func (vc *VoyageClient) Model() string { return vc.model }
+
 // EmbedBatch embeds a batch of texts and returns their vectors.
 // inputType should be "document" for indexing, "query" for search.
 // Honors ctx cancellation: returns ctx.Err() promptly instead of continuing

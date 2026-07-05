@@ -114,9 +114,19 @@ func (s *Server) handleSurfacesQuery(st *store.Store, projName string, args map[
 			continue
 		}
 		entries := make([]surfaceEntry, 0, len(nodes))
-		for i, n := range nodes {
-			if i >= limit {
-				break
+		roleCount := 0
+		for _, n := range nodes {
+			// passSecurityTags tags by name pattern with no external/file
+			// guard, so external CALLS stubs (os.WriteFile,
+			// github.com/.../Execute) carry security_role tags but have no
+			// file_path. They are not code in this repo — exclude them so
+			// query_security_surfaces reports only openable surfaces.
+			if !store.IsSurfaceableCodeNode(n.Label, n.FilePath) {
+				continue
+			}
+			roleCount++
+			if len(entries) >= limit {
+				continue // keep counting real surfaces, but stop adding entries
 			}
 			callers, callees := st.NodeDegree(n.ID)
 			subtype, _ := n.Properties["security_subtype"].(string)
@@ -133,7 +143,7 @@ func (s *Server) handleSurfacesQuery(st *store.Store, projName string, args map[
 		}
 		if len(entries) > 0 {
 			results[role] = entries
-			totalCount += len(nodes)
+			totalCount += roleCount
 		}
 	}
 

@@ -140,17 +140,24 @@ func RankByQueryWithStrategy(ctx context.Context, st *store.Store, project, quer
 	// into them.
 	reverse := runPageRank(n, edges, idxOf, seedIdx, true)
 
-	// Sum scores. Indices [0, n) align with `nodes`.
-	combined := make([]RankedNode, n)
+	// Sum scores. Indices [0, n) align with `nodes`. Community pseudo-nodes
+	// and external stubs (empty file_path) are dropped from the ranked
+	// output — they accumulate PageRank from seeded callers but are not
+	// openable code (trace.go's findSimilarNodes already excludes Community
+	// for the same reason).
+	combined := make([]RankedNode, 0, n)
 	for i := 0; i < n; i++ {
-		combined[i] = RankedNode{
+		if !store.IsSurfaceableCodeNode(nodes[i].Label, nodes[i].FilePath) {
+			continue
+		}
+		combined = append(combined, RankedNode{
 			ID:            nodes[i].ID,
 			Label:         nodes[i].Label,
 			Name:          nodes[i].Name,
 			QualifiedName: nodes[i].QualifiedName,
 			FilePath:      nodes[i].FilePath,
 			Score:         forward[i] + reverse[i],
-		}
+		})
 	}
 
 	sort.Slice(combined, func(i, j int) bool { return combined[i].Score > combined[j].Score })

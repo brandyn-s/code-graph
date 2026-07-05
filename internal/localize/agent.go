@@ -42,8 +42,8 @@ type LocalizedEntity struct {
 	StartLine     int      `json:"start_line"`
 	EndLine       int      `json:"end_line"`
 	Score         float64  `json:"score"`
-	Distance      int      `json:"distance"`        // shortest distance from any seed (0 = seed itself)
-	ReachedVia    []string `json:"reached_via"`     // edge types traversed to reach this node
+	Distance      int      `json:"distance"`    // shortest distance from any seed (0 = seed itself)
+	ReachedVia    []string `json:"reached_via"` // edge types traversed to reach this node
 }
 
 // AllowedEdgeTypes lists the edge types BFS will traverse. Restricted to
@@ -51,15 +51,15 @@ type LocalizedEntity struct {
 // (TESTS, FILE_CHANGES_WITH, HTTP_CALLS) are intentionally excluded to
 // avoid bringing in test files and infrastructure noise.
 var AllowedEdgeTypes = map[string]bool{
-	"CALLS":           true,
-	"DEFINES":         true,
-	"DEFINES_METHOD":  true,
-	"IMPORTS":         true,
-	"CONTAINS":        true,
-	"MEMBER_OF":       true,
-	"USES_TYPE":       true,
-	"IMPLEMENTS":      true,
-	"OVERRIDE":        true,
+	"CALLS":          true,
+	"DEFINES":        true,
+	"DEFINES_METHOD": true,
+	"IMPORTS":        true,
+	"CONTAINS":       true,
+	"MEMBER_OF":      true,
+	"USES_TYPE":      true,
+	"IMPLEMENTS":     true,
+	"OVERRIDE":       true,
 }
 
 // Default values matching the MCP tool schema.
@@ -178,6 +178,11 @@ func CodeLocalizeWithStrategy(ctx context.Context, st *store.Store, project, iss
 		if !ok {
 			continue
 		}
+		// BFS reaches Community pseudo-nodes (via MEMBER_OF) and external
+		// stubs (via CALLS_EXTERNAL); neither is an openable code location.
+		if !store.IsSurfaceableCodeNode(node.Label, node.FilePath) {
+			continue
+		}
 		results = append(results, LocalizedEntity{
 			ID:            node.ID,
 			Label:         node.Label,
@@ -202,8 +207,8 @@ func CodeLocalizeWithStrategy(ctx context.Context, st *store.Store, project, iss
 // localizedAccumulator tracks the running state for a node across BFS expansions.
 type localizedAccumulator struct {
 	score     float64
-	distance  int               // min distance from any seed
-	edgeTypes map[string]bool   // edge types traversed across all paths reaching this node
+	distance  int             // min distance from any seed
+	edgeTypes map[string]bool // edge types traversed across all paths reaching this node
 }
 
 type edgeRef struct {
@@ -216,9 +221,9 @@ type edgeRef struct {
 // The seed itself is included with distance=0.
 func bfsExpand(seed ranking.RankedNode, depth int, outAdj, inAdj map[int64][]edgeRef, visited map[int64]*localizedAccumulator) {
 	type frontier struct {
-		id         int64
-		dist       int
-		edgeUsed   string // edge type that reached this node ("" for seed)
+		id       int64
+		dist     int
+		edgeUsed string // edge type that reached this node ("" for seed)
 	}
 
 	updateAcc := func(id int64, dist int, edgeType string, scoreContrib float64) {

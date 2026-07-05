@@ -1027,6 +1027,14 @@ func (p *Pipeline) runIncrementalPasses(
 	p.passZenoh()
 	p.passNixServices()
 
+	// Re-embed nodes whose embeddings were destroyed by this run's
+	// DeleteNodesByFile (node_embeddings cascades on node deletion) and
+	// backfill any historical gaps. Missing-only, so cost tracks the change
+	// set — see passEmbeddingsMissing for the decay incident this prevents.
+	t := time.Now()
+	p.passEmbeddingsMissing()
+	slog.Info("pass.timing", "pass", "embeddings_missing", "elapsed", time.Since(t))
+
 	p.updateFileHashes(allFiles)
 
 	// Observability

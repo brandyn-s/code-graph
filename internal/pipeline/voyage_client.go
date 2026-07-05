@@ -14,11 +14,14 @@ import (
 )
 
 const (
-	voyageEmbedURL  = "https://api.voyageai.com/v1/embeddings"
-	voyageModel     = "voyage-code-3"
-	voyageBatchSize = 64 // Voyage rate limit: 64 texts per batch is safe
+	voyageModel      = "voyage-code-3"
+	voyageBatchSize  = 64 // Voyage rate limit: 64 texts per batch is safe
 	voyageBatchDelay = 1 * time.Second
 )
+
+// voyageEmbedURL is the Voyage embeddings endpoint. Package-level var for
+// test injection (same pattern as tools.releaseURL).
+var voyageEmbedURL = "https://api.voyageai.com/v1/embeddings"
 
 // voyageEmbedRequest is the request body for Voyage /v1/embeddings.
 type voyageEmbedRequest struct {

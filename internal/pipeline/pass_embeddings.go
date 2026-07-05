@@ -40,16 +40,42 @@ var embeddableLabels = map[string]bool{
 // Bounded runtime: the whole pass runs under a context.WithTimeout so a
 // misbehaving upstream (slow Voyage API, stalled HTTP connection) can't hang
 // the indexer indefinitely. Any batches completed before timeout are
-// persisted; the next incremental run resumes the rest.
+// persisted; the next run (full, or incremental via passEmbeddingsMissing)
+// resumes the rest.
 //
 // Env overrides:
-//   CODE_GRAPH_SKIP_EMBEDDINGS=1  — skip the pass entirely regardless of
-//                                   VOYAGE_API_KEY. Useful for baseline/CI
-//                                   runs or when semantic_search is not
-//                                   needed.
-//   CODE_GRAPH_EMBEDDINGS_TIMEOUT_SEC=<n>
-//                                 — override the default 600s overall cap.
+//
+//	CODE_GRAPH_SKIP_EMBEDDINGS=1  — skip the pass entirely regardless of
+//	                                VOYAGE_API_KEY. Useful for baseline/CI
+//	                                runs or when semantic_search is not
+//	                                needed.
+//	CODE_GRAPH_EMBEDDINGS_TIMEOUT_SEC=<n>
+//	                              — override the default 600s overall cap.
 func (p *Pipeline) passEmbeddings() {
+	p.runEmbeddingsPass(false)
+}
+
+// passEmbeddingsMissing embeds only nodes that have no row in
+// node_embeddings. This is the incremental-path complement to
+// passEmbeddings: runIncrementalPasses deletes and re-creates the nodes of
+// every changed file (DeleteNodesByFile), and node_embeddings rows die with
+// them via ON DELETE CASCADE — so without this pass every incremental index
+// permanently destroys the embeddings of changed files and semantic search
+// decays toward zero coverage (observed fleet-wide 2026-07-04: 16 of 18
+// project DBs had no embeddings left; the nightly reindexes all took the
+// incremental path, which never re-embedded).
+//
+// Missing-only keeps the incremental cost proportional to the change set
+// (plus a one-time backfill of any historical bleed) instead of re-embedding
+// the whole project on every file save.
+func (p *Pipeline) passEmbeddingsMissing() {
+	p.runEmbeddingsPass(true)
+}
+
+// runEmbeddingsPass is the shared implementation. missingOnly=false embeds
+// every embeddable node (full-index behavior); missingOnly=true embeds only
+// nodes without an existing node_embeddings row.
+func (p *Pipeline) runEmbeddingsPass(missingOnly bool) {
 	if skip := os.Getenv("CODE_GRAPH_SKIP_EMBEDDINGS"); skip == "1" || strings.EqualFold(skip, "true") {
 		slog.Info("pass.embeddings.skip", "reason", "CODE_GRAPH_SKIP_EMBEDDINGS set")
 		return
@@ -83,11 +109,19 @@ func (p *Pipeline) passEmbeddings() {
 	// deadlock was the root cause of TestMemoryStability hanging on main and
 	// of observed multi-minute stalls at "phase=embeddings pct=97" during
 	// live indexing runs (2026-04-22).
-	rows, err := p.Store.Q().QueryContext(ctx,
-		`SELECT id, label, name, qualified_name, file_path, properties
+	query := `SELECT id, label, name, qualified_name, file_path, properties
 		 FROM nodes
 		 WHERE project = ? AND label IN (?, ?, ?, ?, ?, ?, ?, ?, ?)
-		 ORDER BY id`,
+		 ORDER BY id`
+	if missingOnly {
+		query = `SELECT n.id, n.label, n.name, n.qualified_name, n.file_path, n.properties
+		 FROM nodes n
+		 LEFT JOIN node_embeddings e ON e.node_id = n.id
+		 WHERE n.project = ? AND n.label IN (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		   AND e.node_id IS NULL
+		 ORDER BY n.id`
+	}
+	rows, err := p.Store.Q().QueryContext(ctx, query,
 		p.ProjectName,
 		"Function", "Method", "Class", "Struct", "Interface",
 		"Trait", "Enum", "Module", "Type")
@@ -118,11 +152,15 @@ func (p *Pipeline) passEmbeddings() {
 	}
 
 	if len(nodes) == 0 {
-		slog.Info("pass.embeddings.skip", "reason", "no embeddable nodes")
+		if missingOnly {
+			slog.Info("pass.embeddings.skip", "reason", "no nodes missing embeddings")
+		} else {
+			slog.Info("pass.embeddings.skip", "reason", "no embeddable nodes")
+		}
 		return
 	}
 
-	slog.Info("pass.embeddings.start", "nodes", len(nodes), "timeout", timeout.String())
+	slog.Info("pass.embeddings.start", "nodes", len(nodes), "missing_only", missingOnly, "timeout", timeout.String())
 
 	// Batch embed.
 	//

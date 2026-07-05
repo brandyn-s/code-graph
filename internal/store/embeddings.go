@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"encoding/binary"
+	"fmt"
 	"math"
 	"sort"
 	"sync"
@@ -21,19 +22,46 @@ type EmbeddingResult struct {
 // embeddingCache is an in-memory cache of all embeddings for a project.
 // Loaded lazily on first semantic search, invalidated on reindex.
 type embeddingCache struct {
-	mu       sync.RWMutex
-	project  string
-	nodeIDs  []int64
-	names    []string
-	qnames   []string
-	labels   []string
-	files    []string
-	vectors  [][]float32 // [N][dim]
-	dim      int
-	loaded   bool
+	mu      sync.RWMutex
+	project string
+	nodeIDs []int64
+	names   []string
+	qnames  []string
+	labels  []string
+	files   []string
+	vectors [][]float32 // [N][dim]
+	dim     int
+	loaded  bool
 }
 
 var embedCache = &embeddingCache{}
+
+// acquireEmbedCache returns with embedCache.mu READ-LOCKED and the
+// single-slot cache loaded for project; the caller must RUnlock (defer).
+// On error, no lock is held.
+//
+// The naive load-then-relock sequence this replaces was a TOCTOU race:
+// between loadEmbeddingCache(project) returning and the read lock being
+// re-acquired, a concurrent call could load a DIFFERENT project into the
+// slot — the caller then computed similarity over the wrong project's
+// vectors and returned those nodes as results, with no error. Re-checking
+// the loaded project under the read lock closes the race; the bounded
+// retry converts a pathological ping-pong between concurrent cross-project
+// callers into an explicit error instead of a livelock.
+func (s *Store) acquireEmbedCache(project string) error {
+	const maxAttempts = 5
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		embedCache.mu.RLock()
+		if embedCache.loaded && embedCache.project == project {
+			return nil // read lock intentionally held for the caller
+		}
+		embedCache.mu.RUnlock()
+		if err := s.loadEmbeddingCache(project); err != nil {
+			return err
+		}
+	}
+	return fmt.Errorf("embedding cache contention: project %q displaced %d times during acquisition", project, maxAttempts)
+}
 
 // UpsertEmbedding stores or updates the embedding vector for a node.
 // Uses s.q (the active Querier) so this can run inside Store.WithTransaction
@@ -86,13 +114,8 @@ func (s *Store) UpsertEmbeddingBatch(nodeIDs []int64, model string, vecs [][]flo
 // CosineSearch finds the top-k nodes most similar to the query vector.
 // Uses in-memory dot product (vectors are L2-normalized).
 func (s *Store) CosineSearch(project string, queryVec []float32, limit int) ([]EmbeddingResult, error) {
-	embedCache.mu.RLock()
-	if !embedCache.loaded || embedCache.project != project {
-		embedCache.mu.RUnlock()
-		if err := s.loadEmbeddingCache(project); err != nil {
-			return nil, err
-		}
-		embedCache.mu.RLock()
+	if err := s.acquireEmbedCache(project); err != nil {
+		return nil, err
 	}
 	defer embedCache.mu.RUnlock()
 
@@ -161,13 +184,8 @@ func (s *Store) CosineSearch(project string, queryVec []float32, limit int) ([]E
 // nodes in the project — ~546 nodes × 2048-dim embeddings on rmf-corsair
 // measures at <1ms per query on a modern CPU.
 func (s *Store) FindSimilarNodes(project string, nodeID int64, limit int) ([]EmbeddingResult, error) {
-	embedCache.mu.RLock()
-	if !embedCache.loaded || embedCache.project != project {
-		embedCache.mu.RUnlock()
-		if err := s.loadEmbeddingCache(project); err != nil {
-			return nil, err
-		}
-		embedCache.mu.RLock()
+	if err := s.acquireEmbedCache(project); err != nil {
+		return nil, err
 	}
 	defer embedCache.mu.RUnlock()
 
@@ -235,13 +253,8 @@ func (s *Store) FindSimilarNodes(project string, nodeID int64, limit int) ([]Emb
 // similarity pass to enumerate every embedded node without re-querying
 // SQLite.
 func (s *Store) IterEmbeddedNodeIDs(project string) ([]int64, error) {
-	embedCache.mu.RLock()
-	if !embedCache.loaded || embedCache.project != project {
-		embedCache.mu.RUnlock()
-		if err := s.loadEmbeddingCache(project); err != nil {
-			return nil, err
-		}
-		embedCache.mu.RLock()
+	if err := s.acquireEmbedCache(project); err != nil {
+		return nil, err
 	}
 	defer embedCache.mu.RUnlock()
 

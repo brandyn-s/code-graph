@@ -3145,15 +3145,8 @@ func fileHash(path string) (string, error) {
 // or unparsable uses the 1MB default. Skipped files are visible as the
 // difference in pipeline.discovered counts.
 func fullModeMaxFileSize() int64 {
-	const defaultMax = 1 << 20 // 1MB
-	v := os.Getenv("CBM_MAX_FILE_BYTES")
-	if v == "" {
-		return defaultMax
-	}
-	n, err := strconv.ParseInt(v, 10, 64)
-	if err != nil || n < 0 {
-		slog.Warn("pipeline.max_file_bytes.invalid", "value", v, "using", defaultMax)
-		return defaultMax
-	}
-	return n // 0 = unlimited (discover treats 0 as no limit)
+	// Single source of truth lives in discover so index_health and the
+	// watcher apply the identical cutoff (they discover through the same
+	// package but don't import pipeline). See discover.FullModeMaxFileSize.
+	return discover.FullModeMaxFileSize()
 }

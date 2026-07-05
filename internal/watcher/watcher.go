@@ -722,7 +722,14 @@ func dirMtimesEqual(a, b map[string]time.Time) bool {
 // captureSnapshot walks the file tree using discover.Discover and captures
 // mtime+size for each file.
 func captureSnapshot(ctx context.Context, rootPath string) (map[string]fileSnapshot, error) {
-	files, err := discover.Discover(ctx, rootPath, nil)
+	// Apply the same full-mode size cutoff the indexing pipeline uses.
+	// With nil Options the snapshot tracked >1MB generated files the
+	// indexer skips, so every regeneration of such a file (parser tables,
+	// bundled assets) flipped the snapshot and triggered a reindex that
+	// then never indexed it — steady-state thrash.
+	files, err := discover.Discover(ctx, rootPath, &discover.Options{
+		MaxFileSize: discover.FullModeMaxFileSize(),
+	})
 	if err != nil {
 		return nil, err
 	}

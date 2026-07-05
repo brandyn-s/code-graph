@@ -66,8 +66,18 @@ func (s *Server) handleIndexHealth(ctx context.Context, req *mcp.CallToolRequest
 	// Discover files on disk; tally unsupported extensions while walking
 	// (2026-06-10 grammar-cut visibility — files with no grammar otherwise
 	// vanish from coverage stats by construction, see cut_languages.go).
+	// MaxFileSize MUST match the pipeline's full-mode cutoff, or every
+	// deliberately-skipped >1MB generated file (parser tables, bundled
+	// assets) lands in diskSet-minus-indexedSet and is reported as a
+	// "missing" file — the index looks incomplete when the skip was
+	// intentional (observed live 2026-07-04: 15 vendored grammar parser.c
+	// files reported under missing_from_index).
 	unsupportedTally := make(map[string]int)
-	diskFiles, err := discover.Discover(ctx, proj.RootPath, &discover.Options{Mode: discover.ModeFull, UnsupportedTally: unsupportedTally})
+	diskFiles, err := discover.Discover(ctx, proj.RootPath, &discover.Options{
+		Mode:             discover.ModeFull,
+		MaxFileSize:      discover.FullModeMaxFileSize(),
+		UnsupportedTally: unsupportedTally,
+	})
 	if err != nil {
 		return errResult(fmt.Sprintf("discover files: %v", err)), nil
 	}

@@ -6,10 +6,40 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/DeusData/codebase-memory-mcp/internal/lang"
 )
+
+// FullModeMaxFileSize returns the per-file size cutoff for full-mode
+// discovery. Source files above ~1MB are essentially always GENERATED
+// (tree-sitter parser tables, bundled assets, generated bindings) and are
+// deliberately skipped by the indexing pipeline. This helper is the single
+// source of truth for that cutoff so every consumer that must agree with
+// what the indexer indexed — the pipeline itself, index_health's disk-vs-
+// index comparison, and the watcher's change snapshot — applies the SAME
+// threshold. When they disagree (health/watcher discovering with no limit
+// while the pipeline skips >1MB files), health reports deliberately-skipped
+// giant files as "missing", and the watcher thrashes a reindex on every
+// touch of a file the indexer will never index.
+//
+// Override with CBM_MAX_FILE_BYTES: a positive integer sets the cutoff in
+// bytes; "0" disables the limit entirely; unset or unparsable uses the 1MB
+// default. Discover treats a MaxFileSize of 0 as "no limit".
+func FullModeMaxFileSize() int64 {
+	const defaultMax = 1 << 20 // 1MB
+	v := os.Getenv("CBM_MAX_FILE_BYTES")
+	if v == "" {
+		return defaultMax
+	}
+	n, err := strconv.ParseInt(v, 10, 64)
+	if err != nil || n < 0 {
+		slog.Warn("discover.max_file_bytes.invalid", "value", v, "using", defaultMax)
+		return defaultMax
+	}
+	return n // 0 = unlimited
+}
 
 // IGNORE_PATTERNS are directory names to skip during discovery.
 var IGNORE_PATTERNS = map[string]bool{

@@ -151,6 +151,7 @@ func TestToolOutputInvariants(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRouterWithDir: %v", err)
 	}
+	t.Cleanup(router.CloseAll)
 	srv := NewServer(router)
 	repo, proj := writeInvariantFixture(t)
 
@@ -241,6 +242,7 @@ func TestToolOutputInvariantsSemantic(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRouterWithDir: %v", err)
 	}
+	t.Cleanup(router.CloseAll)
 	srv := NewServer(router)
 	repo, proj := writeInvariantFixture(t)
 

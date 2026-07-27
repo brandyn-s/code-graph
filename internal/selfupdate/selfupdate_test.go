@@ -27,6 +27,9 @@ func TestCompareVersions(t *testing.T) {
 		{"0.2.1-dev", "0.2.1-dev", 0},
 		{"0.3.0", "0.2.1-dev", 1},
 		{"0.2.0", "0.2.1-dev", -1},
+		{"0.7.0-redacted.2", "0.7.0-redacted.1", 1},
+		{"0.7.0-redacted.10", "0.7.0-redacted.2", 1},
+		{"0.7.0-redacted.1", "0.7.0-redacted.1", 0},
 	}
 	for _, tt := range tests {
 		t.Run(fmt.Sprintf("%s_vs_%s", tt.a, tt.b), func(t *testing.T) {

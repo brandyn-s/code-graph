@@ -75,7 +75,7 @@ func initCommittedFixtureRepo(t *testing.T, repo string) string {
 	t.Helper()
 	run := func(args ...string) string {
 		t.Helper()
-		cmd := exec.Command("git", args...)
+		cmd := exec.CommandContext(t.Context(), "git", args...)
 		cmd.Dir = repo
 		cmd.Env = append(os.Environ(), "LC_ALL=C")
 		out, err := cmd.CombinedOutput()
@@ -440,7 +440,7 @@ func TestIndexRepositoryPersistsTerminalIdentityErrorWhenForceResetFails(t *test
 	if err != nil {
 		t.Fatalf("ForProject: %v", err)
 	}
-	if _, err := st.DB().Exec(`
+	if _, err := st.DB().ExecContext(t.Context(), `
 		CREATE TRIGGER fail_file_hash_reset
 		BEFORE DELETE ON file_hashes
 		BEGIN
@@ -501,7 +501,7 @@ func TestIndexRepositoryPersistsTerminalIdentityErrorWhenPostPipelineStateWriteF
 	if err != nil {
 		t.Fatalf("ForProject: %v", err)
 	}
-	if _, err := st.DB().Exec(`
+	if _, err := st.DB().ExecContext(t.Context(), `
 		CREATE TRIGGER fail_completed_pending_state
 		BEFORE UPDATE ON index_identity
 		WHEN NEW.identity_status = 'pending'
@@ -559,7 +559,7 @@ func TestFirstIndexPersistsTerminalIdentityErrorWhenPostPipelineStateWriteFails(
 	if err != nil {
 		t.Fatalf("ForProject: %v", err)
 	}
-	if _, err := st.DB().Exec(`
+	if _, err := st.DB().ExecContext(t.Context(), `
 		CREATE TRIGGER fail_first_completed_pending_state
 		BEFORE INSERT ON index_identity
 		WHEN NEW.identity_status = 'pending'

@@ -96,9 +96,10 @@ func CompareVersions(a, b string) int {
 	a = strings.TrimPrefix(a, "v")
 	b = strings.TrimPrefix(b, "v")
 
-	// Strip pre-release suffixes for comparison (e.g. "0.2.1-dev" → "0.2.1")
-	aBase := strings.SplitN(a, "-", 2)[0]
-	bBase := strings.SplitN(b, "-", 2)[0]
+	aVersion := strings.SplitN(a, "-", 2)
+	bVersion := strings.SplitN(b, "-", 2)
+	aBase := aVersion[0]
+	bBase := bVersion[0]
 
 	aParts := strings.Split(aBase, ".")
 	bParts := strings.Split(bBase, ".")
@@ -114,13 +115,24 @@ func CompareVersions(a, b string) int {
 	}
 
 	// Same base version — non-dev beats dev (e.g. "0.2.1" > "0.2.1-dev")
-	aHasPre := strings.Contains(a, "-")
-	bHasPre := strings.Contains(b, "-")
+	aHasPre := len(aVersion) == 2
+	bHasPre := len(bVersion) == 2
 	if aHasPre && !bHasPre {
 		return -1
 	}
 	if !aHasPre && bHasPre {
 		return 1
+	}
+	if aHasPre && bHasPre {
+		aredacted, aOK := strings.CutPrefix(aVersion[1], "redacted.")
+		bredacted, bOK := strings.CutPrefix(bVersion[1], "redacted.")
+		if aOK && bOK {
+			aRevision, aErr := strconv.Atoi(aredacted)
+			bRevision, bErr := strconv.Atoi(bredacted)
+			if aErr == nil && bErr == nil {
+				return aRevision - bRevision
+			}
+		}
 	}
 	return 0
 }

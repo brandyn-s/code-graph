@@ -11,11 +11,16 @@ on:
         description: "Release notes (optional — auto-generated from commits if empty)"
         required: false
         type: string
-      replace:
-        description: "Replace existing release if it exists"
-        required: false
-        type: boolean
-        default: false
+
+concurrency:
+  group: code-graph-release
+  cancel-in-progress: false
+
+env:
+  # Full-repository lint currently contains inherited debt. This accepted
+  # ancestor is fixed, and the blocking gate below rejects findings added
+  # after it. Move this baseline only through a reviewed debt-baseline change.
+  LINT_BASELINE: 832bede03d6118827919fc8727f3c17854047d06
 
 # Workflow-level default. Lint/build jobs are read-only; the release job
 # declares its own contents:write to publish the GitHub release.
@@ -23,7 +28,7 @@ permissions:
   contents: read
 
 jobs:
-  lint:
+  preflight:
     if: github.repository_owner != 'redacted-brandyn'
     runs-on: ubuntu-latest
     steps:
@@ -33,12 +38,79 @@ jobs:
           egress-policy: audit
 
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Verify immutable release inputs
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          expected_ref="refs/heads/$DEFAULT_BRANCH"
+          if [ "$GITHUB_REF" != "$expected_ref" ]; then
+            echo "::error::Release must be dispatched from $expected_ref, got $GITHUB_REF"
+            exit 1
+          fi
+          actual_sha=$(git rev-parse HEAD)
+          if [ "$actual_sha" != "$GITHUB_SHA" ]; then
+            echo "::error::Checkout HEAD $actual_sha does not match event SHA $GITHUB_SHA"
+            exit 1
+          fi
+
+          latest_version=$(gh release view \
+            --repo "$GITHUB_REPOSITORY" \
+            --json tagName \
+            --jq .tagName)
+          python3 scripts/release_version.py "$VERSION" "$latest_version"
+
+          tag_count=$(gh api \
+            "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/$VERSION" \
+            --jq "[.[] | select(.ref == \"refs/tags/$VERSION\")] | length")
+          if [ "$tag_count" -ne 0 ]; then
+            echo "::error::Tag $VERSION already exists"
+            exit 1
+          fi
+
+          release_ids=$(gh api --paginate \
+            "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            --jq ".[] | select(.tag_name == \"$VERSION\") | .id")
+          if [ -n "$release_ids" ]; then
+            echo "::error::Release $VERSION already exists"
+            exit 1
+          fi
+
+  lint:
+    if: github.repository_owner != 'redacted-brandyn'
+    needs: [preflight]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify lint baseline ancestry
+        run: git merge-base --is-ancestor "$LINT_BASELINE" "$GITHUB_SHA"
 
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: "1.26"
 
       - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: v2.10
+          args: --timeout=10m --new-from-rev=${{ env.LINT_BASELINE }}
+
+      - name: Report full lint debt
+        continue-on-error: true
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           version: v2.10
           args: --timeout=10m
@@ -172,28 +244,71 @@ jobs:
           merge-multiple: true
 
       - name: Generate checksums
-        run: sha256sum *.tar.gz *.zip > checksums.txt
+        run: sha256sum -- *.tar.gz *.zip > checksums.txt
 
-      - name: Delete existing release
-        if: ${{ inputs.replace }}
+      - name: Recheck immutable release inputs
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          GH_TOKEN: ${{ github.token }}
           VERSION: ${{ inputs.version }}
-        run: gh release delete "$VERSION" --yes --cleanup-tag || true
+        run: |
+          set -euo pipefail
+          expected_ref="refs/heads/$DEFAULT_BRANCH"
+          if [ "$GITHUB_REF" != "$expected_ref" ]; then
+            echo "::error::Release must be dispatched from $expected_ref, got $GITHUB_REF"
+            exit 1
+          fi
+          actual_sha=$(git rev-parse HEAD)
+          if [ "$actual_sha" != "$GITHUB_SHA" ]; then
+            echo "::error::Checkout HEAD $actual_sha does not match event SHA $GITHUB_SHA"
+            exit 1
+          fi
 
-      - name: Create tag
+          latest_version=$(gh release view \
+            --repo "$GITHUB_REPOSITORY" \
+            --json tagName \
+            --jq .tagName)
+          python3 scripts/release_version.py "$VERSION" "$latest_version"
+
+          tag_count=$(gh api \
+            "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/$VERSION" \
+            --jq "[.[] | select(.ref == \"refs/tags/$VERSION\")] | length")
+          if [ "$tag_count" -ne 0 ]; then
+            echo "::error::Tag $VERSION already exists"
+            exit 1
+          fi
+
+          release_ids=$(gh api --paginate \
+            "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            --jq ".[] | select(.tag_name == \"$VERSION\") | .id")
+          if [ -n "$release_ids" ]; then
+            echo "::error::Release $VERSION already exists"
+            exit 1
+          fi
+
+      - name: Create immutable tag
         env:
           VERSION: ${{ inputs.version }}
         run: |
-          git tag -f "$VERSION"
-          git push origin "$VERSION" --force
+          git tag "$VERSION" "$GITHUB_SHA"
+          git push origin "refs/tags/$VERSION:refs/tags/$VERSION"
 
-      - uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v2
-        with:
-          tag_name: ${{ inputs.version }}
-          files: |
-            *.tar.gz
-            *.zip
-            checksums.txt
-          body: ${{ inputs.release_notes || '' }}
-          generate_release_notes: ${{ inputs.release_notes == '' }}
+      - name: Create immutable release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_NOTES: ${{ inputs.release_notes }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          if [ -n "$RELEASE_NOTES" ]; then
+            gh release create "$VERSION" \
+              --repo "$GITHUB_REPOSITORY" \
+              --verify-tag \
+              --notes "$RELEASE_NOTES" \
+              ./*.tar.gz ./*.zip ./checksums.txt
+          else
+            gh release create "$VERSION" \
+              --repo "$GITHUB_REPOSITORY" \
+              --verify-tag \
+              --generate-notes \
+              ./*.tar.gz ./*.zip ./checksums.txt
+          fi

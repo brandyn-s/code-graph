@@ -50,7 +50,7 @@ func readIdentityVectors(t *testing.T) identityVectors {
 
 func runGit(t *testing.T, root string, args ...string) []byte {
 	t.Helper()
-	cmd := exec.Command("git", args...)
+	cmd := exec.CommandContext(t.Context(), "git", args...)
 	cmd.Dir = root
 	cmd.Env = withCEnvironment(os.Environ())
 	out, err := cmd.Output()
@@ -437,6 +437,7 @@ if [ "$1" = "-C" ] && [ "$2" = "$SUBMODULE_FAILURE_ROOT" ] && [ "$3" = "rev-pars
 fi
 exec "$SUBMODULE_FAILURE_REAL_GIT" "$@"
 `
+	//nolint:gosec // The test Git shim must be executable to inject the failure.
 	if err := os.WriteFile(wrapperPath, []byte(wrapper), 0o700); err != nil {
 		t.Fatalf("write git wrapper: %v", err)
 	}
@@ -517,6 +518,7 @@ if [ "$1" = "-C" ] && [ "$2" = "$CAPTURE_TEST_ROOT" ] && [ "$3" = "status" ] && 
 fi
 exec "$CAPTURE_TEST_REAL_GIT" "$@"
 `
+	//nolint:gosec // The test Git shim must be executable to move HEAD mid-capture.
 	if err := os.WriteFile(wrapperPath, []byte(wrapper), 0o700); err != nil {
 		t.Fatalf("write git wrapper: %v", err)
 	}
@@ -734,7 +736,7 @@ func TestCaptureInitializedUnbornRepositoryUsesEmptyTreeDiffBase(t *testing.T) {
 
 func TestCaptureInitializedUnbornSHA256RepositoryUsesNativeEmptyTreeDiffBase(t *testing.T) {
 	root := t.TempDir()
-	initCmd := exec.Command("git", "init", "--object-format=sha256")
+	initCmd := exec.CommandContext(t.Context(), "git", "init", "--object-format=sha256")
 	initCmd.Dir = root
 	initCmd.Env = withCEnvironment(os.Environ())
 	if output, err := initCmd.CombinedOutput(); err != nil {

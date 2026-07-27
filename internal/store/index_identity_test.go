@@ -17,7 +17,7 @@ func createPreIdentityDatabase(t *testing.T) string {
 	if err != nil {
 		t.Fatalf("open legacy database: %v", err)
 	}
-	if _, err := db.Exec(`
+	if _, err := db.ExecContext(t.Context(), `
 		CREATE TABLE projects (
 			name TEXT PRIMARY KEY,
 			indexed_at TEXT NOT NULL,
@@ -59,7 +59,7 @@ func TestOpenPathMigratesLegacyDatabaseWithoutSynthesizingIdentity(t *testing.T)
 	}
 
 	var tableCount int
-	if err := st.DB().QueryRow(`
+	if err := st.DB().QueryRowContext(t.Context(), `
 		SELECT COUNT(*) FROM sqlite_master
 		WHERE type='table' AND name='index_identity'`).Scan(&tableCount); err != nil {
 		t.Fatalf("query migrated schema: %v", err)
@@ -78,7 +78,7 @@ func TestGetIndexIdentityRejectsIncompleteCapturedRow(t *testing.T) {
 	if err := st.UpsertProject("test", "/work/test"); err != nil {
 		t.Fatalf("UpsertProject: %v", err)
 	}
-	if _, err := st.DB().Exec(`
+	if _, err := st.DB().ExecContext(t.Context(), `
 		INSERT INTO index_identity (
 			project, schema_version, repository_id, checkout_id, source_revision,
 			dirty_fingerprint, index_generation, captured_at, identity_status, identity_reason

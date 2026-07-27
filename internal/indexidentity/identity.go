@@ -2,6 +2,7 @@ package indexidentity
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
@@ -493,7 +494,7 @@ func writeFingerprintFrame(buf *bytes.Buffer, label string, payload []byte) {
 
 func gitOutput(root string, args ...string) ([]byte, error) {
 	cmdArgs := append([]string{"-C", root}, args...)
-	cmd := exec.Command("git", cmdArgs...)
+	cmd := exec.CommandContext(context.Background(), "git", cmdArgs...)
 	cmd.Env = withCEnvironment(os.Environ())
 	out, err := cmd.Output()
 	if err != nil {

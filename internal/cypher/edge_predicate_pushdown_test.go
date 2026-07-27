@@ -164,14 +164,23 @@ func TestEdgePredicateNonMatchStillEmpty(t *testing.T) {
 // branches match here, and the union is every CALLS edge in the fixture
 // (3 decoys + 1 needle = 4).
 //
-// Scoped to edge-OR-edge deliberately. An OR mixing an edge predicate with a
-// TARGET-NODE predicate returns too few rows, but that is a SEPARATE
-// pre-existing defect, not a pushdown regression — verified by running this
-// file's probes against origin/main's executor with the pushdown stashed:
-// `b.name = X OR b.name = Y` on a (a)-[r]->(b) pattern returns 1 row instead of
-// 2 with no pushdown involved at all, while edge-OR-edge returns the correct 4.
-// So target-node OR on a fused JOIN drops a branch independently of this change.
-// Tracked separately; not pinned here so this test stays a pushdown test.
+// CORRECTION (2026-07-27): an earlier version of this comment claimed a
+// "separate pre-existing defect" where an OR mixing an edge predicate with a
+// TARGET-NODE predicate dropped a branch. That was wrong — the executor is
+// correct and there is no such bug. The claim came from a probe of mine that
+// queried `b.name = "decoyA0"`, but setupStoreWithManyTaggedEdges names every
+// decoy node plain "decoy" and only varies the QUALIFIED name. So that branch
+// matched zero nodes by construction, `needle OR decoyA0` correctly returned 1
+// row, and I read the right answer as a defect.
+//
+// Stashing the pushdown and re-running "confirmed" it only because the fault was
+// in the query, not the code — so it reproduced identically either way. A
+// stash-test shows "my change didn't cause this"; it cannot show that "this" is
+// real. Verified after the fact: target-node OR returns 4/4 rows, source-node OR
+// returns 4/4, and each branch alone returns 1 and 3.
+//
+// TestTargetNodeORReturnsUnion below pins the correct behavior so the false
+// claim cannot be reintroduced from this comment's history.
 func TestEdgePredicateORNotPushed(t *testing.T) {
 	s := setupStoreWithManyTaggedEdges(t, 3)
 	defer s.Close()
@@ -221,5 +230,65 @@ func TestEdgePredicateAbsentPropertyExcluded(t *testing.T) {
 	if len(res.Rows) != 0 {
 		t.Errorf("edges without the property matched: got %d rows, want 0 (%v)",
 			len(res.Rows), res.Rows)
+	}
+}
+
+// TestTargetNodeORReturnsUnion pins that an OR on the TARGET node of a fused
+// scan+expand returns the union, not a subset.
+//
+// This exists because I briefly recorded a nonexistent bug here (see the
+// CORRECTION above): a probe used `b.name = "decoyA0"`, but the fixture varies
+// only the QUALIFIED name — every decoy's `name` is plain "decoy" — so the
+// branch matched nothing and the correct 1-row answer looked like a dropped
+// branch. Asserting against BOTH fields keeps a future reader from repeating it:
+// if the two disagree, the fixture's shape is the explanation, not the executor.
+func TestTargetNodeORReturnsUnion(t *testing.T) {
+	s := setupStoreWithManyTaggedEdges(t, 3)
+	defer s.Close()
+	exec := &Executor{Store: s}
+
+	// Branches alone, so the expected union is derived rather than hardcoded.
+	needle, err := exec.Execute(`MATCH (a)-[r:CALLS]->(b) WHERE b.name = "needle" RETURN b.name`)
+	if err != nil {
+		t.Fatalf("needle branch: %v", err)
+	}
+	decoy, err := exec.Execute(`MATCH (a)-[r:CALLS]->(b) WHERE b.name = "decoy" RETURN b.name`)
+	if err != nil {
+		t.Fatalf("decoy branch: %v", err)
+	}
+	want := len(needle.Rows) + len(decoy.Rows) // disjoint by construction
+	if want != 4 {
+		t.Fatalf("fixture changed shape: branches gave %d+%d, expected 1+3",
+			len(needle.Rows), len(decoy.Rows))
+	}
+
+	got, err := exec.Execute(
+		`MATCH (a)-[r:CALLS]->(b) WHERE b.name = "needle" OR b.name = "decoy" RETURN b.name`)
+	if err != nil {
+		t.Fatalf("OR: %v", err)
+	}
+	if len(got.Rows) != want {
+		t.Errorf("target-node OR returned %d rows, want the union %d — an OR must "+
+			"not collapse to an intersection (%v)", len(got.Rows), want, got.Rows)
+	}
+
+	// The name-vs-QN distinction that caused the false report: a QN-suffixed
+	// value is NOT a node name. Both must behave, and differently.
+	byName, err := exec.Execute(`MATCH (a)-[r:CALLS]->(b) WHERE b.name = "decoyA0" RETURN b.name`)
+	if err != nil {
+		t.Fatalf("name probe: %v", err)
+	}
+	if len(byName.Rows) != 0 {
+		t.Errorf("b.name = \"decoyA0\" matched %d rows; the fixture puts that "+
+			"suffix only in the qualified_name", len(byName.Rows))
+	}
+	byQN, err := exec.Execute(
+		`MATCH (a)-[r:CALLS]->(b) WHERE b.qualified_name = "test.m.decoyA0" RETURN b.name`)
+	if err != nil {
+		t.Fatalf("qn probe: %v", err)
+	}
+	if len(byQN.Rows) != 1 {
+		t.Errorf("b.qualified_name = \"test.m.decoyA0\" matched %d rows, want 1",
+			len(byQN.Rows))
 	}
 }

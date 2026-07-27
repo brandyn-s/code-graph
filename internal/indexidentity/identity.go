@@ -6,7 +6,9 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
+	"errors"
 	"fmt"
+	"io/fs"
 	"net/url"
 	"os"
 	"os/exec"
@@ -117,8 +119,23 @@ func Capture(root string) (*Envelope, error) {
 		return nil, fmt.Errorf("resolve checkout symlinks: %w", err)
 	}
 	pathID := "path:" + filepath.ToSlash(resolvedRoot)
+	// Distinguish "git could not be RUN" from "this is not a repository".
+	// Collapsing both into "not a Git repository" sent operators to inspect a
+	// checkout that was perfectly valid: under a sandbox that denies process
+	// execution, every capture reported "not a Git repository: <path>" for
+	// paths with a .git/ directory and a resolvable HEAD. The index still built
+	// at full coverage — only the identity record was lost — so the misleading
+	// message was the entire diagnostic surface. Observed 2026-07-27 across 19
+	// projects re-indexed inside the Claude Code Bash sandbox.
 	insideWorktree, err := gitOutput(resolvedRoot, "rev-parse", "--is-inside-work-tree")
-	if err != nil || strings.TrimSpace(string(insideWorktree)) != "true" {
+	if err != nil {
+		if execErr := classifyGitExecFailure(err); execErr != nil {
+			return nil, fmt.Errorf("cannot run git at %s: %w", filepath.ToSlash(resolvedRoot), execErr)
+		}
+		// git ran and exited non-zero — the genuine not-a-repository signal.
+		return nil, fmt.Errorf("not a Git repository: %s", filepath.ToSlash(resolvedRoot))
+	}
+	if strings.TrimSpace(string(insideWorktree)) != "true" {
 		return nil, fmt.Errorf("not a Git repository: %s", filepath.ToSlash(resolvedRoot))
 	}
 
@@ -501,6 +518,48 @@ func gitOutput(root string, args ...string) ([]byte, error) {
 		return nil, fmt.Errorf("git %s: %w", strings.Join(args, " "), err)
 	}
 	return out, nil
+}
+
+// classifyGitExecFailure reports whether err means git could not be EXECUTED
+// (binary absent from PATH, sandbox/seccomp denial, permission error) as
+// opposed to git having run and exited non-zero.
+//
+// The distinction is the whole point: an *exec.ExitError means git ran and
+// answered, so a non-zero exit on `rev-parse --is-inside-work-tree` genuinely
+// indicates a non-repository. Every other error class means we never got an
+// answer, and reporting that as "not a Git repository" points the operator at
+// the wrong thing entirely.
+//
+// Returns nil when err is an ordinary non-zero exit (caller should treat it as
+// a real repository-shape answer), and a descriptive error otherwise.
+func classifyGitExecFailure(err error) error {
+	if err == nil {
+		return nil
+	}
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		// git ran and exited non-zero: a real answer, not an exec failure.
+		return nil
+	}
+	var pathErr *exec.Error
+	if errors.As(err, &pathErr) {
+		// Includes exec.ErrNotFound (git absent from PATH) and permission
+		// errors from a sandbox that blocks process execution.
+		return fmt.Errorf("git could not be executed (%w) — if this is running "+
+			"under a sandbox that blocks subprocesses, identity capture needs "+
+			"an unsandboxed environment; the index itself is unaffected", pathErr.Err)
+	}
+	if errors.Is(err, exec.ErrNotFound) {
+		return fmt.Errorf("git not found on PATH: %w", err)
+	}
+	if errors.Is(err, fs.ErrPermission) {
+		return fmt.Errorf("permission denied executing git: %w", err)
+	}
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+		return fmt.Errorf("git invocation did not complete: %w", err)
+	}
+	// Unknown class: surface it rather than mislabeling it a non-repository.
+	return err
 }
 
 func withCEnvironment(env []string) []string {

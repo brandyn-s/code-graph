@@ -133,7 +133,15 @@ func (s *Server) handleIndexHealth(ctx context.Context, req *mcp.CallToolRequest
 	// bench/research/grammar_canaries/baselines.json (see GRAMMARS.md);
 	// surface it here so MCP consumers can call index_health and get
 	// drift visibility without running the script themselves.
-	grammarVersions, grammarVersionsAge, _ := loadGrammarVersionsAge()
+	//
+	// grammarVersionsSource is reported UNCONDITIONALLY (2026-07-27). The two
+	// data fields below are still conditional — but when they were the only
+	// signal, a release binary that could not locate baselines.json omitted
+	// them entirely, and their absence was indistinguishable from "nothing to
+	// report". A staleness field that disappears silently is worse than no
+	// field, so the provenance string always says which source was used or
+	// why there is none.
+	grammarVersions, grammarVersionsAge, grammarVersionsSource, _ := loadGrammarVersionsAgeSource()
 
 	responseData := map[string]any{
 		"project":            effectiveProject,
@@ -148,11 +156,15 @@ func (s *Server) handleIndexHealth(ctx context.Context, req *mcp.CallToolRequest
 		"enrichment_stale":   enrichmentStale,
 		"indexed_at":         proj.IndexedAt,
 	}
+	responseData["grammar_versions_source"] = grammarVersionsSource
 	if len(grammarVersions) > 0 {
 		responseData["grammar_versions"] = grammarVersions
 	}
 	if grammarVersionsAge >= 0 {
+		// Age of the BASELINES FILE (mtime), not of the vendored grammars.
+		// Named explicitly because the field name reads the other way.
 		responseData["grammar_versions_age_days"] = grammarVersionsAge
+		responseData["grammar_versions_age_means"] = "days since the baselines file was last written; not the age of the vendored grammars"
 	}
 	if len(resolverRuleCounts) > 0 {
 		responseData["calls_by_resolver_rule"] = resolverRuleCounts

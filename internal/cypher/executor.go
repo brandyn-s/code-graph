@@ -649,7 +649,24 @@ func (e *Executor) executeStepsForProject(project string, steps []PlanStep) ([]b
 			// into a single SQL JOIN, avoiding N+1 queries.
 			if i+1 < len(steps) {
 				if expand, ok := steps[i+1].(*ExpandRelationship); ok && canFuseJoin(s, expand) {
-					bindings, err = e.execJoinScanExpand(project, s, expand)
+					// Hand the following FilterWhere (if any) to the fused JOIN
+					// so edge/node predicates are evaluated by SQLite BEFORE
+					// the expandLimit row cap. Without this the filter ran in
+					// Go over an already-truncated window, and a predicate
+					// whose matches sat past the cap returned an empty result
+					// indistinguishable from "no such edges exist".
+					//
+					// The step is NOT consumed — execFilter still runs it
+					// afterward. That keeps results correct for conditions SQL
+					// cannot express (regex, numeric, IS NULL, IN) and makes
+					// this a pure candidate-narrowing optimization.
+					var joinPushDown *FilterWhere
+					if i+2 < len(steps) {
+						if fw, isFilter := steps[i+2].(*FilterWhere); isFilter {
+							joinPushDown = fw
+						}
+					}
+					bindings, err = e.execJoinScanExpand(project, s, expand, joinPushDown)
 					if err != nil {
 						return nil, err
 					}
@@ -720,7 +737,12 @@ func canFuseJoin(scan *ScanNodes, expand *ExpandRelationship) bool {
 
 // execJoinScanExpand executes a fused ScanNodes→ExpandRelationship step using
 // a single SQL JOIN, avoiding N+1 queries.
-func (e *Executor) execJoinScanExpand(project string, scan *ScanNodes, expand *ExpandRelationship) ([]binding, error) {
+func (e *Executor) execJoinScanExpand(
+	project string,
+	scan *ScanNodes,
+	expand *ExpandRelationship,
+	pushDown *FilterWhere,
+) ([]binding, error) {
 	// Build type filter: type IN (?, ?, ...)
 	typePlaceholders := make([]string, len(expand.EdgeTypes))
 	args := make([]any, 0, len(expand.EdgeTypes)+2)
@@ -754,6 +776,28 @@ func (e *Executor) execJoinScanExpand(project string, scan *ScanNodes, expand *E
 		args = append(args, expand.ToLabel)
 	}
 
+	// Push WHERE conditions into SQL so they run BEFORE the row cap below.
+	// AND-only: with OR, pushing a subset as `AND c1 AND c2` would turn the
+	// union into an intersection and silently drop matching rows — the same
+	// all-or-nothing rule execScan applies.
+	var pushClause string
+	pushArgs := make([]any, 0, 4)
+	if pushDown != nil && !strings.EqualFold(pushDown.Operator, "OR") {
+		for _, c := range pushDown.Conditions {
+			// Edge predicates (the case that motivated this — see
+			// edgePushdownSQL), then source-node predicates.
+			if frag, arg, ok := edgePushdownSQL(expand.RelVar, c); ok {
+				pushClause += " AND " + frag
+				pushArgs = append(pushArgs, arg)
+				continue
+			}
+			if frag, arg, ok := scanPushdownSQL(scan.Variable, c); ok {
+				pushClause += " AND src." + frag
+				pushArgs = append(pushArgs, arg)
+			}
+		}
+	}
+
 	query := fmt.Sprintf(`
 		SELECT
 			src.id, src.project, src.label, src.name, src.qualified_name, src.file_path, src.start_line, src.end_line, src.properties,
@@ -762,9 +806,13 @@ func (e *Executor) execJoinScanExpand(project string, scan *ScanNodes, expand *E
 		FROM edges e
 		JOIN nodes src ON src.id = e.%s
 		JOIN nodes tgt ON tgt.id = e.%s
-		WHERE e.project = ? AND e.type IN (%s)%s%s
+		WHERE e.project = ? AND e.type IN (%s)%s%s%s
 		LIMIT ?`,
-		srcCol, tgtCol, typeFilter, srcLabelClause, tgtLabelClause)
+		srcCol, tgtCol, typeFilter, srcLabelClause, tgtLabelClause, pushClause)
+
+	// Bind args must follow SQL text order: project, types, labels, then the
+	// pushed predicates, then LIMIT.
+	args = append(args, pushArgs...)
 
 	sqlLimit := e.expandLimit
 	if sqlLimit <= 0 {
@@ -833,6 +881,89 @@ var sqlPushableColumns = map[string]string{
 	"qualified_name": "qualified_name",
 	"label":          "label",
 	"file_path":      "file_path",
+}
+
+// edgeSQLColumns are relationship properties stored as real columns on `edges`.
+// Everything else on an edge lives in the JSON `properties` blob and is reached
+// with json_extract (see edgePushdownSQL).
+var edgeSQLColumns = map[string]string{
+	"type":      "type",
+	"source_id": "source_id",
+	"target_id": "target_id",
+	"project":   "project",
+}
+
+// edgePushdownSQL returns a SQL fragment + bind arg for a WHERE condition on a
+// relationship variable, so the predicate is evaluated by SQLite BEFORE the
+// row cap rather than in Go afterward.
+//
+// WHY THIS EXISTS (2026-07-27): execJoinScanExpand fetches only expandLimit
+// rows, and edge predicates were then applied in Go over that already-truncated
+// set. A predicate matching only rows beyond the cap therefore returned an
+// EMPTY result that was indistinguishable from "no such edges exist" —
+// silently, and with `total: 0`.
+//
+// Measured on a real index: the same query for
+// `r.resolver_rule = 'scip-ingest'` returned
+//
+//	max_rows=200   -> total 0     (nothing matched inside the window)
+//	max_rows=2000  -> total 5
+//
+// while the identical filter in SQLite matched 2,638 rows the whole time. The
+// answer depended on the row cap, and the zero looked authoritative. Pushing
+// the predicate into SQL makes the filter see every candidate row.
+//
+// Returns ok=false when the condition can't be expressed in SQL (regex,
+// numeric comparisons, IS NULL, IN); those still fall through to the Go
+// evaluator, which remains correct for anything inside the fetched window.
+// Condition is passed by value to mirror scanPushdownSQL's signature exactly —
+// these are sibling pushdown helpers called from the same loop, and diverging
+// on pointer-vs-value would obscure that. gocritic's hugeParam fires on both
+// for the same reason.
+//
+//nolint:gocritic // hugeParam: intentional parity with scanPushdownSQL
+func edgePushdownSQL(relVar string, c Condition) (clause string, arg any, ok bool) {
+	if relVar == "" || c.Variable != relVar {
+		return "", nil, false
+	}
+	// Real column, or JSON blob member.
+	var expr string
+	if col, isCol := edgeSQLColumns[c.Property]; isCol {
+		expr = "e." + col
+	} else {
+		// json_extract returns NULL for a missing key, which correctly fails
+		// = / CONTAINS / STARTS WITH / ENDS WITH — matching the Go path where
+		// getEdgeProperty returns nil for an absent property.
+		expr = "json_extract(e.properties, '$." + c.Property + "')"
+		// Defensive: a property name is an identifier from the parser, but
+		// refuse anything that could break out of the JSON path literal.
+		if strings.ContainsAny(c.Property, "'\"\\") {
+			return "", nil, false
+		}
+	}
+	switch c.Operator {
+	case "=":
+		// The Go path compares fmt.Sprintf("%v", actual) to the literal, so a
+		// numeric JSON value matches its decimal text. CAST keeps SQL aligned
+		// with that behavior instead of failing on type mismatch.
+		return "CAST(" + expr + " AS TEXT)=?", c.Value, true
+	case "<>":
+		// Only rows that HAVE the property and differ — json_extract IS NOT
+		// NULL guards against NULL<>x being NULL (never true) silently
+		// dropping rows the Go path would also drop (nil != value → true).
+		// Keeping SQL stricter than Go here would lose rows, so require
+		// presence explicitly and let the Go evaluator handle absent-property
+		// rows identically.
+		return "(" + expr + " IS NOT NULL AND CAST(" + expr + " AS TEXT)<>?)", c.Value, true
+	case "CONTAINS":
+		return "CAST(" + expr + " AS TEXT) LIKE ?", "%" + c.Value + "%", true
+	case "STARTS WITH":
+		return "CAST(" + expr + " AS TEXT) LIKE ?", c.Value + "%", true
+	case "ENDS WITH":
+		return "CAST(" + expr + " AS TEXT) LIKE ?", "%" + c.Value, true
+	default:
+		return "", nil, false
+	}
 }
 
 // scanPushdownSQL returns the SQL fragment (no leading AND) and bind arg for

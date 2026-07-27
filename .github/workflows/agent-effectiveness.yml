@@ -91,20 +91,20 @@ jobs:
 
       - name: Clone ripgrep fixture
         run: |
-          mkdir -p $HOME/fixture
-          git clone --depth=1 https://github.com/BurntSushi/ripgrep.git $HOME/fixture/ripgrep
+          mkdir -p "$HOME/fixture"
+          git clone --depth=1 https://github.com/BurntSushi/ripgrep.git "$HOME/fixture/ripgrep"
 
       - name: Index ripgrep
         env:
           CODE_GRAPH_BIN: ${{ github.workspace }}/bin/codebase-memory-mcp
         run: |
-          $CODE_GRAPH_BIN cli index_repository "{\"path\":\"$HOME/fixture/ripgrep\"}"
+          "$CODE_GRAPH_BIN" cli index_repository "{\"path\":\"$HOME/fixture/ripgrep\"}"
 
       - name: Verify ANTHROPIC_API_KEY available
         run: |
           if [ -z "$ANTHROPIC_API_KEY" ]; then
             echo "ANTHROPIC_API_KEY secret not configured for this repo. Skipping LLM categories."
-            echo "ANTHROPIC_SKIP=1" >> $GITHUB_ENV
+            echo "ANTHROPIC_SKIP=1" >> "$GITHUB_ENV"
           else
             echo "ANTHROPIC_API_KEY: SET (length: ${#ANTHROPIC_API_KEY})"
           fi
@@ -137,7 +137,7 @@ jobs:
           # Schema questions are PSM-only by default; for CI, swap to ripgrep
           # by passing --filter-target ripgrep. Tools without ripgrep-friendly
           # args are skipped via the runner's target match.
-          python run_battery.py --filter-category 6 --filter-target ripgrep || true
+          python run_battery.py --filter-category 6 --filter-target ripgrep
 
       - name: Run category 1 (banner; ~$2 on ripgrep)
         if: env.ANTHROPIC_SKIP != '1'

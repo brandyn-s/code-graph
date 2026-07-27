@@ -44,14 +44,15 @@ var fetchRelease = selfupdate.FetchRelease
 
 // Server wraps the MCP server with tool handlers.
 type Server struct {
-	mcp        *mcp.Server
-	router     *store.StoreRouter
-	config     *store.ConfigStore
-	watcher    *watcher.Watcher
-	queryCache *store.QueryCache
-	ctx        context.Context // server lifetime context — cancelled on shutdown
-	indexMu    sync.Mutex
-	handlers   map[string]mcp.ToolHandler
+	mcp             *mcp.Server
+	router          *store.StoreRouter
+	config          *store.ConfigStore
+	watcher         *watcher.Watcher
+	queryCache      *store.QueryCache
+	ctx             context.Context // server lifetime context — cancelled on shutdown
+	indexMu         sync.Mutex
+	handlers        map[string]mcp.ToolHandler
+	toolDefinitions map[string]*mcp.Tool
 
 	// Test seam for deterministic start/end checkout coherence checks.
 	captureIndexIdentity func(string) (*indexidentity.Envelope, error)
@@ -77,9 +78,10 @@ func WithConfig(c *store.ConfigStore) ServerOption {
 // NewServer creates a new MCP server with all tools registered.
 func NewServer(r *store.StoreRouter, opts ...ServerOption) *Server {
 	srv := &Server{
-		router:     r,
-		queryCache: store.NewQueryCache(200, 5*time.Minute),
-		handlers:   make(map[string]mcp.ToolHandler),
+		router:          r,
+		queryCache:      store.NewQueryCache(200, 5*time.Minute),
+		handlers:        make(map[string]mcp.ToolHandler),
+		toolDefinitions: make(map[string]*mcp.Tool),
 	}
 	for _, opt := range opts {
 		opt(srv)
@@ -616,8 +618,21 @@ func compareVersions(a, b string) int {
 // --- Tool registration ---
 
 func (s *Server) addTool(tool *mcp.Tool, handler mcp.ToolHandler) {
-	s.mcp.AddTool(tool, handler)
-	s.handlers[tool.Name] = handler
+	_, definitionExists := s.toolDefinitions[tool.Name]
+	_, handlerExists := s.handlers[tool.Name]
+	if definitionExists || handlerExists {
+		panic(fmt.Sprintf("duplicate MCP tool registration %q", tool.Name))
+	}
+	if s.mcp != nil {
+		s.mcp.AddTool(tool, handler)
+	}
+	if s.handlers != nil {
+		s.handlers[tool.Name] = handler
+	}
+	if s.toolDefinitions == nil {
+		s.toolDefinitions = make(map[string]*mcp.Tool)
+	}
+	s.toolDefinitions[tool.Name] = tool
 }
 
 func withTraceEdgeTypes(schemaJSON json.RawMessage) map[string]any {
@@ -672,6 +687,44 @@ func (s *Server) ToolNames() []string {
 	}
 	sort.Strings(names)
 	return names
+}
+
+// RegisteredToolDefinitionsJSON returns the canonical JSON representation of
+// the MCP tool definitions registered by the server. Registration only builds
+// in-memory definitions: it does not start a transport, create a store, access
+// the network, or invoke any tool handler.
+func RegisteredToolDefinitionsJSON() ([]byte, error) {
+	definitionServer := &Server{
+		toolDefinitions: make(map[string]*mcp.Tool),
+	}
+	definitionServer.registerTools()
+
+	names := make([]string, 0, len(definitionServer.toolDefinitions))
+	for name := range definitionServer.toolDefinitions {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	// Round-trip each SDK definition through generic JSON values so schemas
+	// backed by json.RawMessage and schemas backed by maps serialize identically.
+	definitions := make([]any, 0, len(names))
+	for _, name := range names {
+		encoded, err := json.Marshal(definitionServer.toolDefinitions[name])
+		if err != nil {
+			return nil, fmt.Errorf("marshal registered tool %q: %w", name, err)
+		}
+		var canonical any
+		if err := json.Unmarshal(encoded, &canonical); err != nil {
+			return nil, fmt.Errorf("canonicalize registered tool %q: %w", name, err)
+		}
+		definitions = append(definitions, canonical)
+	}
+
+	encoded, err := json.MarshalIndent(definitions, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("marshal canonical registered tool definitions: %w", err)
+	}
+	return append(encoded, '\n'), nil
 }
 
 func (s *Server) registerTools() {

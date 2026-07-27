@@ -18,11 +18,13 @@ Usage:
     python run_battery.py --filter-question 12,13  # specific question IDs
     python run_battery.py --budget-usd 5           # abort if total cost exceeds $5
     python run_battery.py --no-skip                # re-run already-completed Qs
+    python run_battery.py --strict-contract         # fail on any category-6 issue
     python run_battery.py --quiet                  # only print summary
 """
 from __future__ import annotations
 
 import argparse
+from dataclasses import dataclass
 import json
 import os
 import subprocess
@@ -41,15 +43,19 @@ except (AttributeError, OSError):
 HERE = Path(__file__).parent
 ARXIV = HERE.parent / "arxiv-bench"
 
-# Reuse arxiv-bench primitives
+# Make arxiv-bench primitives importable. The Anthropic-dependent modules are
+# imported lazily by run_llm_question so category 6 remains dependency-free.
 sys.path.insert(0, str(ARXIV))
-from agent_runner import run_question  # type: ignore  # noqa: E402
-from scorer import score_response  # type: ignore  # noqa: E402
 
 # Local
 from category_judges import run_category_judge, judge_output_shape  # type: ignore  # noqa: E402
 
-RESULTS_FILE = HERE / "results.jsonl"
+RESULTS_FILE = Path(
+    os.environ.get(
+        "AGENT_EFFECTIVENESS_RESULTS_FILE",
+        HERE / "results.jsonl",
+    )
+)
 QUESTIONS_FILE = HERE / "questions.json"
 CORPUS_FILE = HERE / "corpus.json"
 ALLOWLIST_FILE = ARXIV / "tool_allowlist.json"
@@ -154,21 +160,35 @@ BINARY = Path(os.environ.get(
 ))
 
 
-def invoke_tool_cli(tool: str, args: dict) -> str:
-    """Direct CLI invocation, no agent loop. Returns raw stdout text."""
+@dataclass(frozen=True)
+class ToolCLIResult:
+    stdout: str
+    stderr: str
+    returncode: int
+
+
+def invoke_tool_cli(tool: str, args: dict) -> ToolCLIResult:
+    """Direct CLI invocation, preserving stdout, stderr, and process status."""
     json_args = json.dumps(args)
     result = subprocess.run(
         [str(BINARY), "cli", "--raw", tool, json_args],
         capture_output=True,
         timeout=60,
     )
-    return result.stdout.decode("utf-8", errors="replace")
+    return ToolCLIResult(
+        stdout=result.stdout.decode("utf-8", errors="replace"),
+        stderr=result.stderr.decode("utf-8", errors="replace"),
+        returncode=result.returncode,
+    )
 
 
 # --- Question runners ---
 
 def run_llm_question(q: dict, target: dict, allowlist: list[str]) -> dict:
     """Run an LLM-graded question. Returns full results row."""
+    from agent_runner import run_question  # type: ignore
+    from scorer import score_response  # type: ignore
+
     project_id = target["project_id"]
     start = time.time()
 
@@ -263,25 +283,40 @@ def run_schema_question(q: dict, target: dict) -> dict:
     args = dict(q["args"])
     if "project" in args:
         args["project"] = target["project_id"]
-    raw = invoke_tool_cli(q["tool"], args)
+    invocation = invoke_tool_cli(q["tool"], args)
     elapsed = round(time.time() - start, 2)
 
-    judge = judge_output_shape(q, raw)
-    return {
+    judge = judge_output_shape(q, invocation.stdout)
+    process_failed = invocation.returncode != 0
+    evidence = judge["evidence"]
+    agent_error = None
+    if process_failed:
+        agent_error = f"tool process exited {invocation.returncode}"
+        stderr = invocation.stderr.strip()
+        if stderr:
+            agent_error += f" (stderr={stderr[:300]!r})"
+        evidence = f"{agent_error}; {evidence}"
+
+    row = {
         "question_id": q["id"],
         "target_id": target["id"],
         "category": q["category"],
         "kind": "schema",
         "tool": q["tool"],
-        "raw_response_bytes": len(raw),
-        "raw_response_head": raw[:300],
-        "signal_caught": judge["signal_caught"],
-        "evidence": judge["evidence"],
-        "agent_status": "ok",
+        "raw_response_bytes": len(invocation.stdout),
+        "raw_response_head": invocation.stdout[:300],
+        "tool_exit_code": invocation.returncode,
+        "tool_stderr": invocation.stderr,
+        "signal_caught": process_failed or judge["signal_caught"],
+        "evidence": evidence,
+        "agent_status": "fail" if process_failed else "ok",
         "judge_status": "ok",
         "elapsed_s": elapsed,
         "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
+    if agent_error is not None:
+        row["agent_error"] = agent_error
+    return row
 
 
 # --- Main ---
@@ -298,8 +333,19 @@ def main() -> int:
                         help="Abort run if accumulated cost exceeds this")
     parser.add_argument("--no-skip", action="store_true",
                         help="Re-run already-completed questions")
+    parser.add_argument(
+        "--strict-contract",
+        action="store_true",
+        default=os.environ.get("AGENT_EFFECTIVENESS_STRICT_CONTRACT") == "1",
+        help=(
+            "Category 6 only: fail on zero selected/executed checks, skips, "
+            "runner failures, or any schema signal"
+        ),
+    )
     parser.add_argument("--quiet", action="store_true")
     args = parser.parse_args()
+    if args.strict_contract and args.filter_category != 6:
+        parser.error("--strict-contract requires --filter-category 6")
 
     data = load_questions()
     targets = load_targets()
@@ -448,6 +494,31 @@ def main() -> int:
     if category_floor_failed:
         exit_code = 2
         print(f"\n[FAIL] At least one category dropped below 60% pass rate.")
+
+    if args.strict_contract:
+        strict_failures: list[str] = []
+        if not work:
+            strict_failures.append("zero selected checks")
+        if ok + fail == 0:
+            strict_failures.append("zero executed checks")
+        if skip:
+            strict_failures.append(f"{skip} skipped checks")
+        if fail:
+            strict_failures.append(f"{fail} runner failures")
+        if signals:
+            strict_failures.append(
+                f"{signals} category-6 signal"
+                f"{'s' if signals != 1 else ''}"
+            )
+        if strict_failures:
+            exit_code = 3
+            print(
+                "\n[FAIL] Strict category-6 contract: "
+                + "; ".join(strict_failures)
+                + "."
+            )
+        else:
+            print(f"\n[OK] Strict category-6 contract: {ok}/{len(work)} checks passed.")
 
     return exit_code
 

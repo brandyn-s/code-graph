@@ -279,7 +279,7 @@
       "expected_keys": [
         "projects"
       ],
-      "scoring_criteria": "Direct schema validation: response must be a JSON object with `projects` array; each project entry must have `schema.node_labels` and `schema.edge_types`."
+      "scoring_criteria": "Direct schema validation: response must be a JSON object with `projects` array; each project entry must have `schema.node_labels` and `schema.relationship_types`."
     },
     {
       "id": 31,

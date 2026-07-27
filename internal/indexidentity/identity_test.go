@@ -2,17 +2,172 @@ package indexidentity
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"testing"
 )
+
+const (
+	gitShimEnabledEnv       = "CODE_GRAPH_INDEXIDENTITY_GIT_SHIM"
+	gitShimRealGitEnv       = "CODE_GRAPH_INDEXIDENTITY_REAL_GIT"
+	gitShimSubmoduleRootEnv = "SUBMODULE_FAILURE_ROOT"
+	gitShimCaptureRootEnv   = "CAPTURE_TEST_ROOT"
+	gitShimMarkerEnv        = "CAPTURE_TEST_MARKER"
+	gitShimNextRevisionEnv  = "CAPTURE_TEST_NEXT_REVISION"
+)
+
+// TestMain lets the test binary act as a native Git shim when a test copies it
+// into PATH as git (or git.exe on Windows). This keeps failure injection
+// portable without changing production command execution.
+func TestMain(m *testing.M) {
+	if os.Getenv(gitShimEnabledEnv) == "1" {
+		os.Exit(runNativeGitShim())
+	}
+	os.Exit(m.Run())
+}
+
+func runNativeGitShim() int {
+	args := os.Args[1:]
+	if gitShimInvocationMatches(
+		args,
+		os.Getenv(gitShimSubmoduleRootEnv),
+		"rev-parse",
+		"--verify",
+		"HEAD",
+	) {
+		return 97
+	}
+
+	if gitShimInvocationMatches(
+		args,
+		os.Getenv(gitShimCaptureRootEnv),
+		"status",
+		"--porcelain=v1",
+		"-z",
+		"--untracked-files=all",
+	) {
+		marker := os.Getenv(gitShimMarkerEnv)
+		if marker != "" {
+			//nolint:gosec // The parent test creates and supplies this isolated marker path.
+			if _, err := os.Stat(marker); os.IsNotExist(err) {
+				//nolint:gosec // The parent test creates and supplies this isolated marker path.
+				if err := os.WriteFile(marker, []byte("moved\n"), 0o600); err != nil {
+					_, _ = os.Stderr.WriteString("git shim marker: " + err.Error() + "\n")
+					return 98
+				}
+				if code := runRealGit(
+					"-C",
+					os.Getenv(gitShimCaptureRootEnv),
+					"update-ref",
+					"HEAD",
+					os.Getenv(gitShimNextRevisionEnv),
+				); code != 0 {
+					return code
+				}
+			} else if err != nil {
+				_, _ = os.Stderr.WriteString("git shim marker stat: " + err.Error() + "\n")
+				return 98
+			}
+		}
+	}
+
+	return runRealGit(args...)
+}
+
+func runRealGit(args ...string) int {
+	realGit := os.Getenv(gitShimRealGitEnv)
+	if realGit == "" {
+		_, _ = os.Stderr.WriteString("git shim: real Git path is empty\n")
+		return 127
+	}
+	//nolint:gosec // The parent resolves realGit before adding the test shim to PATH.
+	cmd := exec.CommandContext(context.Background(), realGit, args...)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			return exitErr.ExitCode()
+		}
+		_, _ = os.Stderr.WriteString("git shim: " + err.Error() + "\n")
+		return 126
+	}
+	return 0
+}
+
+func gitShimInvocationMatches(args []string, root string, command ...string) bool {
+	if root == "" || len(args) != len(command)+2 || args[0] != "-C" {
+		return false
+	}
+	if !sameTestPath(args[1], root) {
+		return false
+	}
+	for i, want := range command {
+		if args[i+2] != want {
+			return false
+		}
+	}
+	return true
+}
+
+func sameTestPath(left, right string) bool {
+	left = filepath.Clean(left)
+	right = filepath.Clean(right)
+	if runtime.GOOS == "windows" {
+		return strings.EqualFold(left, right)
+	}
+	return left == right
+}
+
+func installNativeGitShim(t *testing.T) {
+	t.Helper()
+	realGit, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatalf("find git: %v", err)
+	}
+	testBinary, err := os.Executable()
+	if err != nil {
+		t.Fatalf("find test binary: %v", err)
+	}
+	source, err := os.Open(testBinary)
+	if err != nil {
+		t.Fatalf("open test binary: %v", err)
+	}
+	defer source.Close()
+
+	name := "git"
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	shimDir := t.TempDir()
+	shimPath := filepath.Join(shimDir, name)
+	//nolint:gosec // The copied test binary must be executable as the Git shim.
+	destination, err := os.OpenFile(shimPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o700)
+	if err != nil {
+		t.Fatalf("create Git shim: %v", err)
+	}
+	if _, err := io.Copy(destination, source); err != nil {
+		_ = destination.Close()
+		t.Fatalf("copy Git shim: %v", err)
+	}
+	if err := destination.Close(); err != nil {
+		t.Fatalf("close Git shim: %v", err)
+	}
+
+	t.Setenv(gitShimEnabledEnv, "1")
+	t.Setenv(gitShimRealGitEnv, realGit)
+	t.Setenv("PATH", shimDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
 
 type identityVectors struct {
 	OriginNormalization []struct {
@@ -425,25 +580,8 @@ func TestCaptureFailsClosedWhenInitializedSubmoduleCannotBeInspected(t *testing.
 	if err != nil {
 		t.Fatalf("resolve submodule root: %v", err)
 	}
-	realGit, err := exec.LookPath("git")
-	if err != nil {
-		t.Fatalf("find git: %v", err)
-	}
-	wrapperDir := t.TempDir()
-	wrapperPath := filepath.Join(wrapperDir, "git")
-	const wrapper = `#!/bin/sh
-if [ "$1" = "-C" ] && [ "$2" = "$SUBMODULE_FAILURE_ROOT" ] && [ "$3" = "rev-parse" ] && [ "$4" = "--verify" ] && [ "$5" = "HEAD" ]; then
-  exit 97
-fi
-exec "$SUBMODULE_FAILURE_REAL_GIT" "$@"
-`
-	//nolint:gosec // The test Git shim must be executable to inject the failure.
-	if err := os.WriteFile(wrapperPath, []byte(wrapper), 0o700); err != nil {
-		t.Fatalf("write git wrapper: %v", err)
-	}
-	t.Setenv("SUBMODULE_FAILURE_ROOT", submoduleRoot)
-	t.Setenv("SUBMODULE_FAILURE_REAL_GIT", realGit)
-	t.Setenv("PATH", wrapperDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	installNativeGitShim(t)
+	t.Setenv(gitShimSubmoduleRootEnv, submoduleRoot)
 
 	_, err = Capture(parent)
 
@@ -505,32 +643,14 @@ func TestCaptureDirtyCheckoutDiffsAgainstCapturedRevision(t *testing.T) {
 		t.Fatalf("write dirty worktree: %v", err)
 	}
 
-	realGit, err := exec.LookPath("git")
-	if err != nil {
-		t.Fatalf("find git: %v", err)
-	}
-	wrapperDir := t.TempDir()
-	wrapperPath := filepath.Join(wrapperDir, "git")
-	const wrapper = `#!/bin/sh
-if [ "$1" = "-C" ] && [ "$2" = "$CAPTURE_TEST_ROOT" ] && [ "$3" = "status" ] && [ ! -e "$CAPTURE_TEST_MARKER" ]; then
-  : > "$CAPTURE_TEST_MARKER"
-  "$CAPTURE_TEST_REAL_GIT" -C "$CAPTURE_TEST_ROOT" update-ref HEAD "$CAPTURE_TEST_NEXT_REVISION" || exit $?
-fi
-exec "$CAPTURE_TEST_REAL_GIT" "$@"
-`
-	//nolint:gosec // The test Git shim must be executable to move HEAD mid-capture.
-	if err := os.WriteFile(wrapperPath, []byte(wrapper), 0o700); err != nil {
-		t.Fatalf("write git wrapper: %v", err)
-	}
 	resolvedRoot, err := filepath.EvalSymlinks(root)
 	if err != nil {
 		t.Fatalf("resolve test root: %v", err)
 	}
-	t.Setenv("CAPTURE_TEST_ROOT", resolvedRoot)
-	t.Setenv("CAPTURE_TEST_MARKER", filepath.Join(wrapperDir, "head-moved"))
-	t.Setenv("CAPTURE_TEST_REAL_GIT", realGit)
-	t.Setenv("CAPTURE_TEST_NEXT_REVISION", secondRevision)
-	t.Setenv("PATH", wrapperDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	installNativeGitShim(t)
+	t.Setenv(gitShimCaptureRootEnv, resolvedRoot)
+	t.Setenv(gitShimMarkerEnv, filepath.Join(t.TempDir(), "head-moved"))
+	t.Setenv(gitShimNextRevisionEnv, secondRevision)
 
 	identity, err := Capture(root)
 	if err != nil {

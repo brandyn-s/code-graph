@@ -175,6 +175,7 @@ func TestIndexRepositoryPersistsCleanIndexIdentityForStatus(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRouterWithDir: %v", err)
 	}
+	t.Cleanup(router.CloseAll)
 	srv := NewServer(router)
 	repo := writeFixtureRepo(t)
 	revision := initCommittedFixtureRepo(t, repo)
@@ -201,6 +202,7 @@ func TestIndexRepositoryDegradesWhenSourceChangesDuringIndex(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRouterWithDir: %v", err)
 	}
+	t.Cleanup(router.CloseAll)
 	srv := NewServer(router)
 	repo := writeFixtureRepo(t)
 	initCommittedFixtureRepo(t, repo)
@@ -253,6 +255,7 @@ func TestIndexRepositoryDegradesWhenCheckoutChangesWithSameGeneration(t *testing
 	if err != nil {
 		t.Fatalf("NewRouterWithDir: %v", err)
 	}
+	t.Cleanup(router.CloseAll)
 	srv := NewServer(router)
 	repo := writeFixtureRepo(t)
 	initCommittedFixtureRepo(t, repo)
@@ -305,6 +308,7 @@ func TestIndexRepositoryIncludesGeneratedReportInEndCoherenceCheck(t *testing.T)
 	if err != nil {
 		t.Fatalf("NewRouterWithDir: %v", err)
 	}
+	t.Cleanup(router.CloseAll)
 	srv := NewServer(router)
 	repo := writeFixtureRepo(t)
 	initCommittedFixtureRepo(t, repo)
@@ -333,6 +337,7 @@ func TestWatcherIncrementalReindexRefreshesIndexIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRouterWithDir: %v", err)
 	}
+	t.Cleanup(router.CloseAll)
 	srv := NewServer(router)
 	repo := writeFixtureRepo(t)
 	initCommittedFixtureRepo(t, repo)
@@ -387,6 +392,7 @@ func TestIndexRepositoryPersistsTerminalIdentityErrorWhenPipelineFails(t *testin
 	if err != nil {
 		t.Fatalf("NewRouterWithDir: %v", err)
 	}
+	t.Cleanup(router.CloseAll)
 	srv := NewServer(router)
 	repo := writeFixtureRepo(t)
 	initCommittedFixtureRepo(t, repo)
@@ -429,6 +435,7 @@ func TestIndexRepositoryPersistsTerminalIdentityErrorWhenForceResetFails(t *test
 	if err != nil {
 		t.Fatalf("NewRouterWithDir: %v", err)
 	}
+	t.Cleanup(router.CloseAll)
 	srv := NewServer(router)
 	repo := writeFixtureRepo(t)
 	initCommittedFixtureRepo(t, repo)
@@ -490,6 +497,7 @@ func TestIndexRepositoryPersistsTerminalIdentityErrorWhenPostPipelineStateWriteF
 	if err != nil {
 		t.Fatalf("NewRouterWithDir: %v", err)
 	}
+	t.Cleanup(router.CloseAll)
 	srv := NewServer(router)
 	repo := writeFixtureRepo(t)
 	initCommittedFixtureRepo(t, repo)
@@ -547,6 +555,7 @@ func TestFirstIndexPersistsTerminalIdentityErrorWhenPostPipelineStateWriteFails(
 	if err != nil {
 		t.Fatalf("NewRouterWithDir: %v", err)
 	}
+	t.Cleanup(router.CloseAll)
 	srv := NewServer(router)
 	repo := writeFixtureRepo(t)
 	initCommittedFixtureRepo(t, repo)
@@ -603,6 +612,7 @@ func TestWatcherPersistsTerminalIdentityErrorWhenPipelineFails(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRouterWithDir: %v", err)
 	}
+	t.Cleanup(router.CloseAll)
 	srv := NewServer(router)
 	repo := writeFixtureRepo(t)
 	initCommittedFixtureRepo(t, repo)
@@ -646,6 +656,7 @@ func TestAutoIndexRefreshesIndexIdentityForNewAndExistingProject(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRouterWithDir: %v", err)
 	}
+	t.Cleanup(router.CloseAll)
 	srv := NewServer(router)
 	repo := writeFixtureRepo(t)
 	initCommittedFixtureRepo(t, repo)
@@ -707,6 +718,7 @@ func TestStatusAndListReportStaleSourceWithoutReindex(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRouterWithDir: %v", err)
 	}
+	t.Cleanup(router.CloseAll)
 	srv := NewServer(router)
 	repo := writeFixtureRepo(t)
 	initCommittedFixtureRepo(t, repo)
@@ -769,6 +781,7 @@ func TestStatusDegradesWhenLiveCheckoutChangesWithSameGeneration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRouterWithDir: %v", err)
 	}
+	t.Cleanup(router.CloseAll)
 	srv := NewServer(router)
 	repo := writeFixtureRepo(t)
 	initCommittedFixtureRepo(t, repo)
@@ -804,6 +817,7 @@ func TestIndexRepositoryFirstIndexReportsCreatedWithCounts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRouterWithDir: %v", err)
 	}
+	t.Cleanup(router.CloseAll)
 	srv := NewServer(router)
 	repo := writeFixtureRepo(t)
 

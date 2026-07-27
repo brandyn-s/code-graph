@@ -694,6 +694,9 @@ func TestTCKSurvey(t *testing.T) {
 	}
 	baseline := map[string]string{}
 	for _, line := range strings.Split(string(baseRaw), "\n") {
+		// Git may check the fixture out with CRLF on Windows. Normalize the
+		// line ending so the pinned verdict is identical on every platform.
+		line = strings.TrimSuffix(line, "\r")
 		if line == "" {
 			continue
 		}

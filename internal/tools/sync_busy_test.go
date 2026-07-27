@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"testing"
-	"time"
 
 	"github.com/DeusData/codebase-memory-mcp/internal/store"
 )
@@ -18,6 +17,7 @@ func TestSyncProjectBusyReturnsError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("router: %v", err)
 	}
+	t.Cleanup(router.CloseAll)
 	srv := NewServer(router)
 
 	srv.indexMu.Lock()
@@ -29,11 +29,12 @@ func TestSyncProjectBusyReturnsError(t *testing.T) {
 	}
 }
 
-func TestStartAutoIndexPreservesStatusWhenIndexLockIsBusy(t *testing.T) {
+func TestRunAutoIndexPreservesStatusWhenIndexLockIsBusy(t *testing.T) {
 	router, err := store.NewRouterWithDir(t.TempDir())
 	if err != nil {
 		t.Fatalf("router: %v", err)
 	}
+	t.Cleanup(router.CloseAll)
 	const project = "busy-auto-index"
 	if _, err := router.ForProject(project); err != nil {
 		t.Fatalf("create existing project store: %v", err)
@@ -46,16 +47,12 @@ func TestStartAutoIndexPreservesStatusWhenIndexLockIsBusy(t *testing.T) {
 	srv.indexMu.Lock()
 	defer srv.indexMu.Unlock()
 
-	srv.startAutoIndex()
-
-	deadline := time.Now().Add(time.Second)
-	for time.Now().Before(deadline) {
-		status, _ := srv.indexStatus.Load().(string)
-		if status == "ready" {
-			return
-		}
-		time.Sleep(time.Millisecond)
+	err = srv.runAutoIndex(true)
+	if !errors.Is(err, errSyncBusy) {
+		t.Fatalf("expected errSyncBusy while indexMu is held, got %v", err)
 	}
 	status, _ := srv.indexStatus.Load().(string)
-	t.Fatalf("auto-index status = %q, want preserved previous status %q", status, "ready")
+	if status != "ready" {
+		t.Fatalf("auto-index status = %q, want preserved previous status %q", status, "ready")
+	}
 }

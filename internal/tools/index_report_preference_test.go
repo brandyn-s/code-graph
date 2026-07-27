@@ -32,11 +32,12 @@ func TestSkipReportPreferenceIsSticky(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRouterWithDir: %v", err)
 	}
+	t.Cleanup(router.CloseAll)
 	cfg, err := store.OpenConfigInDir(t.TempDir())
 	if err != nil {
 		t.Fatalf("OpenConfigInDir: %v", err)
 	}
-	defer cfg.Close()
+	t.Cleanup(func() { _ = cfg.Close() })
 	srv := NewServer(router, WithConfig(cfg))
 
 	repo := writeFixtureRepo(t)
@@ -85,6 +86,7 @@ func TestSkipReportDefaultUnchangedWithoutPreference(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRouterWithDir: %v", err)
 	}
+	t.Cleanup(router.CloseAll)
 	srv := NewServer(router)
 
 	repo := writeFixtureRepo(t)

@@ -2,10 +2,13 @@
 set -euo pipefail
 
 # codebase-memory-mcp setup script (macOS + Linux)
+# INTERNAL: this installer requires an authenticated GitHub CLI session with
+# access to the private redacted-org/code-graph repository.
 # Default: download pre-built binary from GitHub Release
 # --from-source: build from source (requires Go + C compiler)
 
-REPO="DeusData/codebase-memory-mcp"
+REPO="redacted-org/code-graph"
+HISTORICAL_NO_PROVENANCE_TAG="v0.7.0-redacted.2"
 INSTALL_DIR="$HOME/.local/bin"
 BINARY_NAME="codebase-memory-mcp"
 SOURCE_DIR="$HOME/.local/share/codebase-memory-mcp"
@@ -45,6 +48,7 @@ for arg in "$@"; do
             echo ""
             echo "  Default:        Download pre-built binary from GitHub Release"
             echo "  --from-source:  Clone and build from source (requires Go 1.23+ and a C compiler)"
+            echo "  Both modes require an authenticated GitHub CLI with private repository access."
             exit 0
             ;;
         *) die "Unknown argument: $arg" ;;
@@ -83,14 +87,17 @@ detect_platform() {
 
 # --- Prerequisite checks ---
 
-check_download_tool() {
-    if command -v curl &>/dev/null; then
-        echo "curl"
-    elif command -v wget &>/dev/null; then
-        echo "wget"
-    else
-        die "Neither curl nor wget found. Install one and retry."
+check_gh_auth() {
+    if ! command -v gh &>/dev/null; then
+        die "GitHub CLI (gh) not found. Install it from https://cli.github.com/ and run: gh auth login --hostname github.com"
     fi
+    if ! gh auth status --hostname github.com &>/dev/null; then
+        die "GitHub CLI is not authenticated. Run: gh auth login --hostname github.com"
+    fi
+    if ! gh repo view "$REPO" &>/dev/null; then
+        die "Authenticated GitHub account cannot access the private ${REPO} repository."
+    fi
+    ok "GitHub CLI authenticated with access to ${REPO}"
 }
 
 check_go_version() {
@@ -133,40 +140,67 @@ check_git() {
     ok "Git found"
 }
 
-# --- Download binary ---
+ensure_private_source_remote() {
+    local expected_origin="https://github.com/${REPO}.git"
+    local current_origin
+    current_origin=$(git -C "$SOURCE_DIR" remote get-url origin 2>/dev/null || true)
 
-fetch() {
-    local url="$1" tool="$2"
-    if [ "$tool" = "curl" ]; then
-        curl -fsSL "$url"
+    if [ "$current_origin" = "$expected_origin" ]; then
+        return
+    fi
+
+    if [ -z "$current_origin" ]; then
+        git -C "$SOURCE_DIR" remote add origin "$expected_origin"
     else
-        wget -qO- "$url"
+        git -C "$SOURCE_DIR" remote set-url origin "$expected_origin"
     fi
 }
 
-download_binary() {
-    local platform="$1" tool="$2"
+# --- Download binary ---
 
+download_binary() {
+    local platform="$1"
     echo ""
     echo "${BOLD}Fetching latest release...${RESET}"
     local tag
-    tag=$(fetch "https://api.github.com/repos/${REPO}/releases/latest" "$tool" | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": *"//;s/".*//')
+    if ! tag=$(gh release view --repo "$REPO" --json tagName --jq .tagName); then
+        die "Could not read releases for private repository ${REPO}. Confirm your GitHub access."
+    fi
 
     if [ -z "$tag" ]; then
-        die "Could not determine latest release. Check https://github.com/${REPO}/releases"
+        die "Could not determine latest release for private repository ${REPO}."
     fi
     ok "Latest release: $tag"
 
     local asset="codebase-memory-mcp-${platform}.tar.gz"
-    local url="https://github.com/${REPO}/releases/download/${tag}/${asset}"
 
     echo "${BOLD}Downloading ${asset}...${RESET}"
     CLEANUP_DIR=$(mktemp -d)
     trap 'rm -rf "$CLEANUP_DIR"' EXIT
     local tmpdir="$CLEANUP_DIR"
 
-    fetch "$url" "$tool" > "${tmpdir}/${asset}"
-    tar -xzf "${tmpdir}/${asset}" -C "$tmpdir"
+    if ! gh release download "$tag" --repo "$REPO" --pattern "$asset" --dir "$tmpdir"; then
+        die "Could not download ${asset} from private release ${tag}."
+    fi
+    local archive_path="${tmpdir}/${asset}"
+
+    echo "${BOLD}Verifying immutable release membership...${RESET}"
+    if ! gh release verify-asset "$tag" "$archive_path" --repo "$REPO"; then
+        die "Downloaded ${asset} is not a verified member of immutable release ${tag}."
+    fi
+
+    if [ "$tag" = "$HISTORICAL_NO_PROVENANCE_TAG" ]; then
+        warn "${tag} has no build provenance; immutable release membership verified"
+    else
+        echo "${BOLD}Verifying SLSA build provenance...${RESET}"
+        if ! gh attestation verify "$archive_path" --repo "$REPO" \
+            --predicate-type "https://slsa.dev/provenance/v1"; then
+            die "SLSA build provenance verification failed for ${asset}."
+        fi
+        ok "SLSA build provenance verified"
+    fi
+
+    tar -xzf "$archive_path" -C "$tmpdir"
 
     mkdir -p "$INSTALL_DIR"
     mv "${tmpdir}/${BINARY_NAME}" "${INSTALL_DIR}/${BINARY_NAME}"
@@ -183,15 +217,19 @@ build_from_source() {
     check_go_version
     check_c_compiler
     check_git
+    check_gh_auth
 
     echo ""
     if [ -d "$SOURCE_DIR/.git" ]; then
         echo "${BOLD}Updating source...${RESET}"
+        gh auth setup-git
+        ensure_private_source_remote
+        ok "Source remote configured for private repository ${REPO}"
         git -C "$SOURCE_DIR" pull --ff-only
     else
         echo "${BOLD}Cloning repository...${RESET}"
         mkdir -p "$(dirname "$SOURCE_DIR")"
-        git clone "https://github.com/${REPO}.git" "$SOURCE_DIR"
+        gh repo clone "$REPO" "$SOURCE_DIR"
     fi
     ok "Source at ${SOURCE_DIR}"
 
@@ -304,9 +342,8 @@ if [ "$FROM_SOURCE" = true ]; then
 else
     platform=$(detect_platform)
     ok "Platform: ${platform}"
-    tool=$(check_download_tool)
-    ok "Download tool: ${tool}"
-    download_binary "$platform" "$tool"
+    check_gh_auth
+    download_binary "$platform"
 fi
 
 # Verify binary

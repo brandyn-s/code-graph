@@ -1,4 +1,6 @@
 # codebase-memory-mcp setup script (Windows)
+# INTERNAL: requires an authenticated GitHub CLI session with access to the
+# private redacted-org/code-graph repository.
 # Default: download pre-built native Windows binary
 # -FromSource: build from source inside WSL (requires Go + gcc in WSL)
 
@@ -9,7 +11,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$Repo = "DeusData/codebase-memory-mcp"
+$Repo = "redacted-org/code-graph"
+$HistoricalNoProvenanceTag = "v0.7.0-redacted.2"
 $BinaryName = "codebase-memory-mcp"
 $InstallDir = Join-Path $env:LOCALAPPDATA "codebase-memory-mcp"
 
@@ -18,6 +21,28 @@ $InstallDir = Join-Path $env:LOCALAPPDATA "codebase-memory-mcp"
 function Write-Ok($msg)   { Write-Host "  $msg" -ForegroundColor Green }
 function Write-Fail($msg)  { Write-Host "  $msg" -ForegroundColor Red }
 function Write-Warn($msg)  { Write-Host "  $msg" -ForegroundColor Yellow }
+
+function Assert-GitHubAccess {
+    if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
+        Write-Fail "GitHub CLI (gh) not found."
+        Write-Host "  Install it from https://cli.github.com/ and run:" -ForegroundColor Yellow
+        Write-Host "    gh auth login --hostname github.com" -ForegroundColor Yellow
+        exit 1
+    }
+
+    & gh auth status --hostname github.com *> $null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Fail "GitHub CLI is not authenticated. Run: gh auth login --hostname github.com"
+        exit 1
+    }
+
+    & gh repo view $Repo *> $null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Fail "Authenticated GitHub account cannot access the private $Repo repository."
+        exit 1
+    }
+    Write-Ok "GitHub CLI authenticated with access to $Repo"
+}
 
 function Read-SettingsJson($Path) {
     # PS5.1-compatible: ConvertFrom-Json returns PSCustomObject, not Hashtable.
@@ -117,6 +142,26 @@ function Invoke-WSL {
     return $result
 }
 
+function Set-PrivateSourceRemote {
+    param([string]$SourceDir)
+
+    $expectedOrigin = "https://github.com/$Repo.git"
+    $currentOrigin = $null
+    try {
+        $currentOrigin = (Invoke-WSL "git -C $SourceDir remote get-url origin").Trim()
+    } catch {
+        # Existing legacy installs may not have an origin remote.
+    }
+
+    if (-not $currentOrigin) {
+        Invoke-WSL "git -C $SourceDir remote add origin $expectedOrigin" | Out-Null
+        Write-Ok "Source remote configured for private repository $Repo"
+    } elseif ($currentOrigin -ne $expectedOrigin) {
+        Invoke-WSL "git -C $SourceDir remote set-url origin $expectedOrigin" | Out-Null
+        Write-Ok "Source remote configured for private repository $Repo"
+    }
+}
+
 # --- Main ---
 
 if ($Help) {
@@ -125,6 +170,7 @@ if ($Help) {
     Write-Host ""
     Write-Host "  Default:      Download pre-built Windows binary"
     Write-Host "  -FromSource:  Build from source inside WSL (requires Go 1.23+ and gcc in WSL)"
+    Write-Host "  Both modes require GitHub CLI authentication for the private repository."
     Write-Host ""
     exit 0
 }
@@ -196,16 +242,47 @@ if ($FromSource) {
         exit 1
     }
 
+    # The source clone runs inside WSL, so WSL needs its own authenticated gh session.
+    try {
+        Invoke-WSL "command -v gh" | Out-Null
+    } catch {
+        Write-Fail "GitHub CLI (gh) not found in WSL."
+        Write-Host "  Install gh in WSL, then run:" -ForegroundColor Yellow
+        Write-Host "    wsl.exe -- gh auth login --hostname github.com" -ForegroundColor Yellow
+        exit 1
+    }
+    try {
+        Invoke-WSL "gh auth status --hostname github.com" | Out-Null
+    } catch {
+        Write-Fail "GitHub CLI is not authenticated in WSL. Run: wsl.exe -- gh auth login --hostname github.com"
+        exit 1
+    }
+    try {
+        Invoke-WSL "gh repo view $Repo" | Out-Null
+    } catch {
+        Write-Fail "Authenticated GitHub account in WSL cannot access the private $Repo repository."
+        exit 1
+    }
+    Write-Ok "GitHub CLI in WSL is authenticated with access to $Repo"
+
     # Clone or update
     Write-Host ""
     $sourceDir = "/home/$wslUser/.local/share/codebase-memory-mcp"
+    $sourceExists = $true
     try {
         Invoke-WSL "test -d $sourceDir/.git" | Out-Null
-        Write-Host "Updating source..." -ForegroundColor White
-        Invoke-WSL "git -C $sourceDir pull --ff-only"
     } catch {
+        $sourceExists = $false
+    }
+
+    if ($sourceExists) {
+        Write-Host "Updating source..." -ForegroundColor White
+        Invoke-WSL "gh auth setup-git" | Out-Null
+        Set-PrivateSourceRemote $sourceDir
+        Invoke-WSL "git -C $sourceDir pull --ff-only"
+    } else {
         Write-Host "Cloning repository..." -ForegroundColor White
-        Invoke-WSL "mkdir -p /home/$wslUser/.local/share && git clone https://github.com/$Repo.git $sourceDir"
+        Invoke-WSL "mkdir -p /home/$wslUser/.local/share && gh repo clone $Repo $sourceDir"
     }
     Write-Ok "Source at $sourceDir"
 
@@ -244,21 +321,20 @@ if ($FromSource) {
 
 } else {
     # --- Download pre-built native Windows binary ---
+    Assert-GitHubAccess
+
     Write-Host "Fetching latest release..." -ForegroundColor White
 
-    $releaseUrl = "https://api.github.com/repos/$Repo/releases/latest"
-    $release = Invoke-RestMethod -Uri $releaseUrl -Headers @{ "User-Agent" = "codebase-memory-mcp-setup" }
-    $tag = $release.tag_name
+    $tag = & gh release view --repo $Repo --json tagName --jq ".tagName"
 
-    if (-not $tag) {
-        Write-Fail "Could not determine latest release."
-        Write-Host "  Check: https://github.com/$Repo/releases"
+    if ($LASTEXITCODE -ne 0 -or -not $tag) {
+        Write-Fail "Could not determine latest release for private repository $Repo."
         exit 1
     }
+    $tag = ($tag | Out-String).Trim()
     Write-Ok "Latest release: $tag"
 
     $asset = "codebase-memory-mcp-windows-amd64.zip"
-    $downloadUrl = "https://github.com/$Repo/releases/download/$tag/$asset"
 
     Write-Host "Downloading $asset..." -ForegroundColor White
 
@@ -267,12 +343,40 @@ if ($FromSource) {
         New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
     }
 
-    $tmpZip = Join-Path $env:TEMP $asset
-    Invoke-WebRequest -Uri $downloadUrl -OutFile $tmpZip -UseBasicParsing
+    $tmpDir = Join-Path $env:TEMP ("codebase-memory-mcp-" + [guid]::NewGuid().ToString("N"))
+    New-Item -ItemType Directory -Path $tmpDir -Force | Out-Null
+    & gh release download $tag --repo $Repo --pattern $asset --dir $tmpDir
+    if ($LASTEXITCODE -ne 0) {
+        Remove-Item -Recurse -Force $tmpDir
+        Write-Fail "Could not download $asset from private release $tag."
+        exit 1
+    }
+    $tmpZip = Join-Path $tmpDir $asset
+
+    Write-Host "Verifying immutable release membership..." -ForegroundColor White
+    & gh release verify-asset $tag $tmpZip --repo $Repo
+    if ($LASTEXITCODE -ne 0) {
+        Remove-Item -Recurse -Force $tmpDir
+        Write-Fail "Downloaded $asset is not a verified member of immutable release $tag."
+        exit 1
+    }
+
+    if ($tag -eq $HistoricalNoProvenanceTag) {
+        Write-Warn "$tag has no build provenance; immutable release membership verified"
+    } else {
+        Write-Host "Verifying SLSA build provenance..." -ForegroundColor White
+        & gh attestation verify $tmpZip --repo $Repo --predicate-type "https://slsa.dev/provenance/v1"
+        if ($LASTEXITCODE -ne 0) {
+            Remove-Item -Recurse -Force $tmpDir
+            Write-Fail "SLSA build provenance verification failed for $asset."
+            exit 1
+        }
+        Write-Ok "SLSA build provenance verified"
+    }
 
     # Extract
     Expand-Archive -Path $tmpZip -DestinationPath $InstallDir -Force
-    Remove-Item $tmpZip -Force
+    Remove-Item -Recurse -Force $tmpDir
 
     $binaryPath = Join-Path $InstallDir "$BinaryName.exe"
 

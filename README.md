@@ -469,6 +469,9 @@ No API keys, no Docker, no external databases. Single binary, zero infrastructur
 
 Releases are built via `workflow_dispatch` on `release.yml`. Download them from
 [redacted releases](https://github.com/redacted-org/code-graph/releases).
+This is an internal package in a private repository. It is not published to the public MCP Registry,
+which does not support private package downloads. The setup scripts therefore
+require an authenticated GitHub CLI session with access to the repository.
 The workflow tests every supported platform, generates GitHub build-provenance
 attestations for each archive, stages all assets on a draft, and only then
 publishes the immutable release.

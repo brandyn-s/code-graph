@@ -10,8 +10,27 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
+var traceDefaultEdgeTypes = [...]string{
+	"CALLS",
+	"HTTP_CALLS",
+	"ASYNC_CALLS",
+}
+
+var traceSupportedEdgeTypes = [...]string{
+	"CALLS",
+	"HTTP_CALLS",
+	"ASYNC_CALLS",
+	"USAGE",
+	"OVERRIDE",
+}
+
 func (s *Server) handleTraceCallPath(_ context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	args, err := parseArgs(req)
+	if err != nil {
+		return errResult(err.Error()), nil
+	}
+
+	edgeTypes, err := parseTraceEdgeTypes(args)
 	if err != nil {
 		return errResult(err.Error()), nil
 	}
@@ -41,7 +60,10 @@ func (s *Server) handleTraceCallPath(_ context.Context, req *mcp.CallToolRequest
 	// 14-line function — wrong crates, same method name). Users who want
 	// the full unfiltered trace can pass min_confidence=0 explicitly.
 	// Bands: high (>=0.7), medium (>=0.45), speculative (<0.45).
-	minConfidence := getFloatArg(args, "min_confidence", 0.45)
+	minConfidence, err := parseTraceMinConfidence(args)
+	if err != nil {
+		return errResult(err.Error()), nil
+	}
 	includeSource := getBoolArg(args, "include_source")
 
 	project := getStringArg(args, "project")
@@ -110,8 +132,6 @@ func (s *Server) handleTraceCallPath(_ context.Context, req *mcp.CallToolRequest
 		return errResult(fmt.Sprintf("store: %v", err)), nil
 	}
 
-	edgeTypes := []string{"CALLS", "HTTP_CALLS", "ASYNC_CALLS"}
-
 	allVisited, allEdges, bfsErr := runTraceBFS(st, rootNode.ID, direction, edgeTypes, depth, minConfidence)
 	if bfsErr != nil {
 		return errResult(fmt.Sprintf("bfs err: %v", bfsErr)), nil
@@ -128,7 +148,7 @@ func (s *Server) handleTraceCallPath(_ context.Context, req *mcp.CallToolRequest
 		hops = buildHops(allVisited)
 	}
 
-	responseData := buildTraceResponse(st, rootNode, foundProject, hops, allVisited, allEdges)
+	responseData := buildTraceResponse(st, rootNode, foundProject, hops, allVisited, allEdges, edgeTypes, minConfidence)
 	if riskLabels {
 		responseData["impact_summary"] = store.BuildImpactSummary(allVisited, allEdges)
 	}
@@ -148,49 +168,77 @@ func (s *Server) handleTraceCallPath(_ context.Context, req *mcp.CallToolRequest
 	return result, nil
 }
 
+func parseTraceEdgeTypes(args map[string]any) ([]string, error) {
+	raw, present := args["edge_types"]
+	if !present {
+		return append([]string(nil), traceDefaultEdgeTypes[:]...), nil
+	}
+	items, ok := raw.([]any)
+	if !ok || len(items) == 0 {
+		return nil, fmt.Errorf("edge_types must be a non-empty array")
+	}
+
+	allowed := make(map[string]bool, len(traceSupportedEdgeTypes))
+	for _, edgeType := range traceSupportedEdgeTypes {
+		allowed[edgeType] = true
+	}
+	selected := make([]string, 0, len(items))
+	seen := make(map[string]bool, len(items))
+	for _, item := range items {
+		edgeType, ok := item.(string)
+		if !ok || !allowed[edgeType] {
+			return nil, fmt.Errorf(
+				"edge_types entries must be one of: %s",
+				strings.Join(traceSupportedEdgeTypes[:], ", "),
+			)
+		}
+		if seen[edgeType] {
+			return nil, fmt.Errorf("edge_types must not contain duplicate %q", edgeType)
+		}
+		seen[edgeType] = true
+		selected = append(selected, edgeType)
+	}
+	return selected, nil
+}
+
+func parseTraceMinConfidence(args map[string]any) (float64, error) {
+	raw, present := args["min_confidence"]
+	if !present {
+		return 0.45, nil
+	}
+	value, ok := raw.(float64)
+	if !ok || value < 0 || value > 1 {
+		return 0, fmt.Errorf("min_confidence must be a number between 0 and 1")
+	}
+	return value, nil
+}
+
 func runTraceBFS(st *store.Store, rootID int64, direction string, edgeTypes []string, depth int, minConfidence float64) ([]*store.NodeHop, []store.EdgeInfo, error) {
 	if direction == "both" {
 		var allVisited []*store.NodeHop
 		var allEdges []store.EdgeInfo
-		outResult, outErr := st.BFS(rootID, "outbound", edgeTypes, depth, 200)
-		if outErr == nil {
-			allVisited = append(allVisited, outResult.Visited...)
-			allEdges = append(allEdges, outResult.Edges...)
+		outResult, outErr := st.BFSWithMinConfidence(rootID, "outbound", edgeTypes, depth, 200, minConfidence)
+		if outErr != nil {
+			return nil, nil, fmt.Errorf("outbound bfs: %w", outErr)
 		}
-		inResult, inErr := st.BFS(rootID, "inbound", edgeTypes, depth, 200)
-		if inErr == nil {
-			allVisited = append(allVisited, inResult.Visited...)
-			allEdges = append(allEdges, inResult.Edges...)
+		inResult, inErr := st.BFSWithMinConfidence(rootID, "inbound", edgeTypes, depth, 200, minConfidence)
+		if inErr != nil {
+			return nil, nil, fmt.Errorf("inbound bfs: %w", inErr)
 		}
-		if minConfidence > 0 {
-			allEdges = filterEdgesByConfidence(allEdges, minConfidence)
-		}
+		allVisited = append(allVisited, outResult.Visited...)
+		allVisited = append(allVisited, inResult.Visited...)
+		allEdges = append(allEdges, outResult.Edges...)
+		allEdges = append(allEdges, inResult.Edges...)
 		return allVisited, allEdges, nil
 	}
-	result, err := st.BFS(rootID, direction, edgeTypes, depth, 200)
+	result, err := st.BFSWithMinConfidence(rootID, direction, edgeTypes, depth, 200, minConfidence)
 	if err != nil {
 		return nil, nil, err
 	}
-	edges := result.Edges
-	if minConfidence > 0 {
-		edges = filterEdgesByConfidence(edges, minConfidence)
-	}
-	return result.Visited, edges, nil
+	return result.Visited, result.Edges, nil
 }
 
-// filterEdgesByConfidence removes edges below the threshold.
-// Edges with confidence=0 (no confidence set, e.g. HTTP_CALLS) are kept.
-func filterEdgesByConfidence(edges []store.EdgeInfo, minConfidence float64) []store.EdgeInfo {
-	filtered := make([]store.EdgeInfo, 0, len(edges))
-	for _, e := range edges {
-		if e.Confidence == 0 || e.Confidence >= minConfidence {
-			filtered = append(filtered, e)
-		}
-	}
-	return filtered
-}
-
-func buildTraceResponse(st *store.Store, rootNode *store.Node, project string, hops []hopEntry, visited []*store.NodeHop, edges []store.EdgeInfo) map[string]any {
+func buildTraceResponse(st *store.Store, rootNode *store.Node, project string, hops []hopEntry, visited []*store.NodeHop, edges []store.EdgeInfo, edgeTypes []string, minConfidence float64) map[string]any {
 	proj, _ := st.GetProject(project)
 	indexedAt := ""
 	if proj != nil {
@@ -210,22 +258,30 @@ func buildTraceResponse(st *store.Store, rootNode *store.Node, project string, h
 		}
 	}
 
-	// confidence_band classifies the trace by resolved/(resolved+unresolved).
-	// "high" — extractor bound the call sites well; trust the edges
-	// "medium" — partial coverage; trust the edges but expect gaps
-	// "low" — most call sites unresolved; combine with grep before trusting
-	// "speculative" — zero edges and >0 unresolved; trace is silent on real calls
-	resolvedCount := len(edges)
-	band := traceConfidenceBand(resolvedCount, unresolvedTotal)
-
 	// Structured metadata block per METADATA_SCHEMA.md.
 	// Generalizes confidence_band/unresolved_call_count under _metadata.
 	// Top-level fields preserved for backwards compatibility.
-	metaRationale := ""
-	totalCalls := resolvedCount + unresolvedTotal
-	if totalCalls > 0 {
-		pct := (resolvedCount * 100) / totalCalls
-		metaRationale = formatRatioRationale(resolvedCount, totalCalls, pct)
+	band := "unknown"
+	metaRationale := "Call-resolution confidence is not applicable because unresolved_call_count only measures CALLS edges and does not match the selected edge family."
+	if traceEdgeTypesMatchUnresolvedCallFamily(edgeTypes) {
+		if minConfidence > 0 {
+			metaRationale = "Call-resolution confidence is unknown because min_confidence produces a filtered resolved-edge numerator while unresolved_call_count remains unfiltered."
+		} else {
+			// confidence_band classifies an unfiltered CALLS-only trace by
+			// resolved/(resolved+unresolved).
+			// "high" — extractor bound the call sites well; trust the edges
+			// "medium" — partial coverage; trust the edges but expect gaps
+			// "low" — most call sites unresolved; combine with grep before trusting
+			// "speculative" — zero edges and >0 unresolved; trace is silent on real calls
+			resolvedCount := len(edges)
+			band = traceConfidenceBand(resolvedCount, unresolvedTotal)
+			metaRationale = ""
+			totalCalls := resolvedCount + unresolvedTotal
+			if totalCalls > 0 {
+				pct := (resolvedCount * 100) / totalCalls
+				metaRationale = formatRatioRationale(resolvedCount, totalCalls, pct)
+			}
+		}
 	}
 	metadata := NewMetadataBuilder().
 		WithFreshness(freshnessStateFromIndexedAt(indexedAt), indexedAt).
@@ -241,8 +297,13 @@ func buildTraceResponse(st *store.Store, rootNode *store.Node, project string, h
 		"total_results":         len(visited),
 		"unresolved_call_count": unresolvedTotal,
 		"confidence_band":       band,
+		"min_confidence":        minConfidence,
 		"_metadata":             metadata,
 	}
+}
+
+func traceEdgeTypesMatchUnresolvedCallFamily(edgeTypes []string) bool {
+	return len(edgeTypes) == 1 && edgeTypes[0] == "CALLS"
 }
 
 // formatRatioRationale produces a short string like "432 of 480 calls resolved (90%)".
@@ -313,6 +374,7 @@ func nodeUnresolvedCount(n *store.Node) int {
 //   - Middle bands (0.10-0.95) are sparse and overrepresent partial-extraction
 //     cases (e.g., Python with some method calls resolved, others on
 //     dynamically-typed Path objects unresolved).
+//
 // Heuristic 0.8/0.5 thresholds put 72% of nodes in "high" — too generous
 // to be informative. Empirical 0.95/0.10 thresholds match the natural
 // breakpoints in the data and produce calibrated output.
@@ -579,7 +641,7 @@ func buildEdgeList(edges []store.EdgeInfo) []map[string]any {
 			"to":   e.ToName,
 			"type": e.Type,
 		}
-		if e.Confidence > 0 {
+		if e.HasConfidence || e.Confidence > 0 {
 			entry["confidence"] = e.Confidence
 		}
 		result = append(result, entry)

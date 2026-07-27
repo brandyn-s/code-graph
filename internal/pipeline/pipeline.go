@@ -1688,6 +1688,7 @@ func (p *Pipeline) passDefinitions(files []discover.FileInfo) {
 	var parsed atomic.Int64
 	totalFiles := len(parseableFiles)
 	lastReportedPct := 10 // structure pass already reported 10%
+	var progressMu sync.Mutex
 	stopTicker := progressTicker(p.ProjectName, "definitions:parse", &parsed, totalFiles, 10)
 
 	var wg sync.WaitGroup
@@ -1705,10 +1706,12 @@ func (p *Pipeline) passDefinitions(files []discover.FileInfo) {
 			done := int(parsed.Add(1))
 			// Report progress every ~5% of files (10% -> 20% range)
 			pct := 10 + (done*10)/totalFiles // maps [0, totalFiles] to [10, 20]
+			progressMu.Lock()
 			if pct > lastReportedPct && pct <= 20 {
 				lastReportedPct = pct
 				p.reportProgress("definitions:parse", pct, fmt.Sprintf("%d/%d files parsed", done, totalFiles))
 			}
+			progressMu.Unlock()
 		}()
 	}
 	wg.Wait()
@@ -1895,6 +1898,7 @@ func (p *Pipeline) passCalls() {
 	var resolved atomic.Int64
 	totalCallFiles := len(files)
 	lastCallPct := 45
+	var progressMu sync.Mutex
 	stopCallTicker := progressTicker(p.ProjectName, "calls:resolve", &resolved, totalCallFiles, 45)
 
 	g, gctx := errgroup.WithContext(p.ctx)
@@ -1916,10 +1920,12 @@ func (p *Pipeline) passCalls() {
 			done := int(resolved.Add(1))
 			// Report progress every ~5% of files (45% -> 55% range)
 			pct := 45 + (done*10)/totalCallFiles
+			progressMu.Lock()
 			if pct > lastCallPct && pct <= 55 {
 				lastCallPct = pct
 				p.reportProgress("calls:resolve", pct, fmt.Sprintf("%d/%d files resolved", done, totalCallFiles))
 			}
+			progressMu.Unlock()
 			return nil
 		})
 	}

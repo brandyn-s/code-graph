@@ -21,6 +21,10 @@ import (
 // newCommand wraps exec.Command for testability.
 var newCommand = exec.Command
 
+var verifyReleaseArchive = selfupdate.VerifyReleaseAsset
+
+const releaseVerificationSuccessMessage = "Release verification passed."
+
 func runUpdate(args []string) int {
 	dryRun := false
 	for _, a := range args {
@@ -35,7 +39,7 @@ func runUpdate(args []string) int {
 	if runtime.GOOS == "windows" {
 		fmt.Println("Self-update is not supported on Windows.")
 		fmt.Println("Download the latest release manually from:")
-		fmt.Println("  https://github.com/DeusData/codebase-memory-mcp/releases/latest")
+		fmt.Println("  https://github.com/redacted-org/code-graph/releases/latest")
 		return 1
 	}
 
@@ -91,8 +95,9 @@ func runUpdate(args []string) int {
 	return 0
 }
 
-// downloadAndVerify downloads the release asset and verifies its checksum.
-// Fails closed: if checksums cannot be downloaded or verified, the update is aborted.
+// downloadAndVerify downloads the release asset, verifies its checksum,
+// immutable release membership, and SLSA provenance before extraction.
+// Every verification step fails closed.
 func downloadAndVerify(ctx context.Context, release *selfupdate.Release, assetName string, asset *selfupdate.Asset) ([]byte, error) {
 	fmt.Println("Downloading checksums...")
 	checksums, err := selfupdate.DownloadChecksums(ctx, release)
@@ -116,6 +121,17 @@ func downloadAndVerify(ctx context.Context, release *selfupdate.Release, assetNa
 		return nil, fmt.Errorf("checksum mismatch\n  expected: %s\n  actual:   %s", expected, actual)
 	}
 	fmt.Println("Checksum verified.")
+
+	fmt.Println("Verifying release membership and available provenance...")
+	if err := verifyReleaseArchive(
+		ctx,
+		release.TagName,
+		assetName,
+		tarballData,
+	); err != nil {
+		return nil, fmt.Errorf("release verification failed: %w", err)
+	}
+	fmt.Println(releaseVerificationSuccessMessage)
 
 	binaryData, err := extractBinaryFromTarGz(tarballData)
 	if err != nil {

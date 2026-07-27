@@ -41,45 +41,19 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Test fail-closed release state machine
+        run: |
+          python3 -m unittest \
+            scripts.test_release_version \
+            scripts.test_release_workflow \
+            scripts.test_release_workflow_acceptance
+
       - name: Verify immutable release inputs
         env:
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ inputs.version }}
-        run: |
-          set -euo pipefail
-          expected_ref="refs/heads/$DEFAULT_BRANCH"
-          if [ "$GITHUB_REF" != "$expected_ref" ]; then
-            echo "::error::Release must be dispatched from $expected_ref, got $GITHUB_REF"
-            exit 1
-          fi
-          actual_sha=$(git rev-parse HEAD)
-          if [ "$actual_sha" != "$GITHUB_SHA" ]; then
-            echo "::error::Checkout HEAD $actual_sha does not match event SHA $GITHUB_SHA"
-            exit 1
-          fi
-
-          latest_version=$(gh release view \
-            --repo "$GITHUB_REPOSITORY" \
-            --json tagName \
-            --jq .tagName)
-          python3 scripts/release_version.py "$VERSION" "$latest_version"
-
-          tag_count=$(gh api \
-            "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/$VERSION" \
-            --jq "[.[] | select(.ref == \"refs/tags/$VERSION\")] | length")
-          if [ "$tag_count" -ne 0 ]; then
-            echo "::error::Tag $VERSION already exists"
-            exit 1
-          fi
-
-          release_ids=$(gh api --paginate \
-            "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
-            --jq ".[] | select(.tag_name == \"$VERSION\") | .id")
-          if [ -n "$release_ids" ]; then
-            echo "::error::Release $VERSION already exists"
-            exit 1
-          fi
+        run: bash scripts/release_workflow.sh validate
 
   lint:
     if: github.repository_owner != 'redacted-brandyn'
@@ -273,74 +247,23 @@ jobs:
         run: sha256sum -- *.tar.gz *.zip > checksums.txt
 
       - name: Recheck immutable release inputs
+        id: release-state
         env:
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ inputs.version }}
-        run: |
-          set -euo pipefail
-          expected_ref="refs/heads/$DEFAULT_BRANCH"
-          if [ "$GITHUB_REF" != "$expected_ref" ]; then
-            echo "::error::Release must be dispatched from $expected_ref, got $GITHUB_REF"
-            exit 1
-          fi
-          actual_sha=$(git rev-parse HEAD)
-          if [ "$actual_sha" != "$GITHUB_SHA" ]; then
-            echo "::error::Checkout HEAD $actual_sha does not match event SHA $GITHUB_SHA"
-            exit 1
-          fi
+        run: bash scripts/release_workflow.sh validate
 
-          latest_version=$(gh release view \
-            --repo "$GITHUB_REPOSITORY" \
-            --json tagName \
-            --jq .tagName)
-          python3 scripts/release_version.py "$VERSION" "$latest_version"
-
-          tag_count=$(gh api \
-            "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/$VERSION" \
-            --jq "[.[] | select(.ref == \"refs/tags/$VERSION\")] | length")
-          if [ "$tag_count" -ne 0 ]; then
-            echo "::error::Tag $VERSION already exists"
-            exit 1
-          fi
-
-          release_ids=$(gh api --paginate \
-            "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
-            --jq ".[] | select(.tag_name == \"$VERSION\") | .id")
-          if [ -n "$release_ids" ]; then
-            echo "::error::Release $VERSION already exists"
-            exit 1
-          fi
-
-      - name: Create immutable tag
+      - name: Create immutable tag if absent
         env:
+          TAG_EXISTS: ${{ steps.release-state.outputs.tag_exists }}
           VERSION: ${{ inputs.version }}
-        run: |
-          git tag "$VERSION" "$GITHUB_SHA"
-          git push origin "refs/tags/$VERSION:refs/tags/$VERSION"
+        run: bash scripts/release_workflow.sh tag
 
-      - name: Create immutable release
+      - name: Create or resume immutable release
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_NOTES: ${{ inputs.release_notes }}
+          RELEASE_STATE: ${{ steps.release-state.outputs.release_state }}
           VERSION: ${{ inputs.version }}
-        run: |
-          if [ -n "$RELEASE_NOTES" ]; then
-            gh release create "$VERSION" \
-              --repo "$GITHUB_REPOSITORY" \
-              --verify-tag \
-              --draft \
-              --notes "$RELEASE_NOTES"
-          else
-            gh release create "$VERSION" \
-              --repo "$GITHUB_REPOSITORY" \
-              --verify-tag \
-              --draft \
-              --generate-notes
-          fi
-          gh release upload "$VERSION" \
-            --repo "$GITHUB_REPOSITORY" \
-            ./*.tar.gz ./*.zip ./checksums.txt
-          gh release edit "$VERSION" \
-            --repo "$GITHUB_REPOSITORY" \
-            --draft=false
+        run: bash scripts/release_workflow.sh publish

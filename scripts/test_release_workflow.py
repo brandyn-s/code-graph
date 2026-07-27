@@ -1,8 +1,8 @@
-from pathlib import Path
 import unittest
-
+from pathlib import Path
 
 WORKFLOW = Path(".github/workflows/release.yml")
+RELEASE_HELPER = Path("scripts/release_workflow.sh")
 SECURITY_POLICY = Path(".github/repo-security-policy.yml")
 README = Path("README.md")
 BASELINE = "832bede03d6118827919fc8727f3c17854047d06"
@@ -13,6 +13,7 @@ class ReleaseWorkflowContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.workflow = WORKFLOW.read_text(encoding="utf-8")
+        cls.release_helper = RELEASE_HELPER.read_text(encoding="utf-8")
         cls.security_policy = SECURITY_POLICY.read_text(encoding="utf-8")
         cls.readme = README.read_text(encoding="utf-8")
 
@@ -20,12 +21,16 @@ class ReleaseWorkflowContractTests(unittest.TestCase):
         self.assertIn("group: code-graph-release", self.workflow)
         self.assertIn("cancel-in-progress: false", self.workflow)
         self.assertGreaterEqual(
-            self.workflow.count('if [ "$GITHUB_REF" != "$expected_ref" ]'),
+            self.workflow.count("run: bash scripts/release_workflow.sh validate"),
             2,
         )
         self.assertGreaterEqual(
-            self.workflow.count('if [ "$actual_sha" != "$GITHUB_SHA" ]'),
-            2,
+            self.release_helper.count('if [ "$GITHUB_REF" != "$expected_ref" ]'),
+            1,
+        )
+        self.assertGreaterEqual(
+            self.release_helper.count('if [ "$actual_sha" != "$GITHUB_SHA" ]'),
+            1,
         )
 
     def test_uses_reachable_no_new_lint_gate(self) -> None:
@@ -41,28 +46,59 @@ class ReleaseWorkflowContractTests(unittest.TestCase):
         )
         self.assertIn("continue-on-error: true", self.workflow)
 
-    def test_validates_monotonic_nonexistent_release_twice(self) -> None:
-        validation = (
-            'python3 scripts/release_version.py "$VERSION" "$latest_version"'
+    def test_release_retry_state_machine_is_fail_closed_and_resumable(
+        self,
+    ) -> None:
+        self.assertIn(
+            "scripts.test_release_workflow_acceptance",
+            self.workflow,
         )
-        self.assertGreaterEqual(self.workflow.count(validation), 2)
-        self.assertGreaterEqual(
-            self.workflow.count("git/matching-refs/tags/$VERSION"),
-            2,
+        self.assertIn(
+            'python3 "$SCRIPT_DIR/release_version.py" "$VERSION" "$latest_version"',
+            self.release_helper,
         )
-        self.assertGreaterEqual(
-            self.workflow.count('select(.tag_name == \\"$VERSION\\")'),
-            2,
+        self.assertIn(
+            'if [ -n "$tag_sha" ] && [ "$tag_sha" != "$GITHUB_SHA" ]',
+            self.release_helper,
+        )
+        self.assertIn('release_state="absent"', self.release_helper)
+        self.assertIn('release_state="draft"', self.release_helper)
+        self.assertIn(
+            "Release $VERSION is already published",
+            self.release_helper,
+        )
+        self.assertIn(
+            "run: bash scripts/release_workflow.sh tag",
+            self.workflow,
+        )
+        self.assertIn(
+            "run: bash scripts/release_workflow.sh publish",
+            self.workflow,
+        )
+        self.assertIn("--clobber", self.release_helper)
+        self.assertIn(
+            "reject_unexpected_draft_assets",
+            self.release_helper,
+        )
+        self.assertIn(
+            "require_exact_release_inventory",
+            self.release_helper,
         )
 
     def test_publishes_an_immutable_tag_and_assets(self) -> None:
-        self.assertIn('git tag "$VERSION" "$GITHUB_SHA"', self.workflow)
+        self.assertIn(
+            'git tag "$VERSION" "$GITHUB_SHA"',
+            self.release_helper,
+        )
         self.assertIn(
             'git push origin "refs/tags/$VERSION:refs/tags/$VERSION"',
-            self.workflow,
+            self.release_helper,
         )
         self.assertIn("sha256sum -- *.tar.gz *.zip", self.workflow)
-        self.assertIn('gh release create "$VERSION"', self.workflow)
+        self.assertIn(
+            'gh release create "$VERSION"',
+            self.release_helper,
+        )
         for forbidden in (
             "replace:",
             "release delete",
@@ -72,6 +108,7 @@ class ReleaseWorkflowContractTests(unittest.TestCase):
         ):
             with self.subTest(forbidden=forbidden):
                 self.assertNotIn(forbidden, self.workflow)
+                self.assertNotIn(forbidden, self.release_helper)
 
     def test_attests_release_archives_before_publication_with_least_privilege(
         self,
@@ -98,16 +135,34 @@ class ReleaseWorkflowContractTests(unittest.TestCase):
     def test_stages_release_assets_on_a_draft_before_publication(self) -> None:
         release_start = self.workflow.index("\n  release:\n")
         release_job = self.workflow[release_start:]
-        self.assertGreaterEqual(release_job.count("--draft"), 2)
-        self.assertIn('gh release upload "$VERSION"', release_job)
-        self.assertIn('gh release edit "$VERSION"', release_job)
-        self.assertIn("--draft=false", release_job)
+        self.assertIn(
+            "run: bash scripts/release_workflow.sh publish",
+            release_job,
+        )
+        self.assertGreaterEqual(self.release_helper.count("--draft"), 2)
+        self.assertIn(
+            'gh release upload "$VERSION"',
+            self.release_helper,
+        )
+        self.assertIn(
+            'gh release edit "$VERSION"',
+            self.release_helper,
+        )
+        self.assertIn("--draft=false", self.release_helper)
 
-        last_create = release_job.rindex('gh release create "$VERSION"')
-        upload = release_job.index('gh release upload "$VERSION"')
-        publish = release_job.index('gh release edit "$VERSION"')
+        last_create = self.release_helper.rindex('gh release create "$VERSION"')
+        upload = self.release_helper.index('gh release upload "$VERSION"')
+        inventory = self.release_helper.index(
+            "require_exact_release_inventory",
+            upload,
+        )
+        publish = self.release_helper.index(
+            'gh release edit "$VERSION"',
+            inventory,
+        )
         self.assertLess(last_create, upload)
-        self.assertLess(upload, publish)
+        self.assertLess(upload, inventory)
+        self.assertLess(inventory, publish)
 
     def test_documents_release_attestation_verification(self) -> None:
         self.assertIn(

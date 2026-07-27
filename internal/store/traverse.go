@@ -1,6 +1,7 @@
 package store
 
 import (
+	"database/sql"
 	"fmt"
 	"strings"
 )
@@ -27,10 +28,11 @@ type NodeHop struct {
 
 // EdgeInfo is a simplified edge for output.
 type EdgeInfo struct {
-	FromName   string
-	ToName     string
-	Type       string
-	Confidence float64
+	FromName      string
+	ToName        string
+	Type          string
+	Confidence    float64
+	HasConfidence bool
 }
 
 // BFS performs breadth-first traversal following edges of given types using a
@@ -45,11 +47,24 @@ type EdgeInfo struct {
 // caller that wants untyped traversal — Cypher variable-length patterns with
 // no relationship type — was silently narrowed.)
 func (s *Store) BFS(startNodeID int64, direction string, edgeTypes []string, maxDepth, maxResults int) (*TraverseResult, error) {
-	result, err := s.bfsVisited(startNodeID, direction, edgeTypes, maxDepth, maxResults)
+	return s.bfs(startNodeID, direction, edgeTypes, maxDepth, maxResults, 0)
+}
+
+// BFSWithMinConfidence performs BFS while treating edges below minConfidence
+// as absent. Edges with a missing or null confidence value remain traversable;
+// an explicit numeric zero is filtered when minConfidence is positive.
+// Applying the threshold to the recursive frontier guarantees every visited
+// node has a retained path from the root.
+func (s *Store) BFSWithMinConfidence(startNodeID int64, direction string, edgeTypes []string, maxDepth, maxResults int, minConfidence float64) (*TraverseResult, error) {
+	return s.bfs(startNodeID, direction, edgeTypes, maxDepth, maxResults, minConfidence)
+}
+
+func (s *Store) bfs(startNodeID int64, direction string, edgeTypes []string, maxDepth, maxResults int, minConfidence float64) (*TraverseResult, error) {
+	result, err := s.bfsVisited(startNodeID, direction, edgeTypes, maxDepth, maxResults, minConfidence)
 	if err != nil {
 		return nil, err
 	}
-	if err := s.bfsCollectEdges(result, startNodeID, direction, edgeTypes, maxDepth); err != nil {
+	if err := s.bfsCollectEdges(result, startNodeID, direction, edgeTypes, maxDepth, minConfidence); err != nil {
 		return nil, err
 	}
 	return result, nil
@@ -60,10 +75,10 @@ func (s *Store) BFS(startNodeID int64, direction string, edgeTypes []string, max
 // CTE is as expensive as the node CTE — skipping it halves the per-source
 // traversal cost for `-[*..]->` patterns.
 func (s *Store) BFSNodes(startNodeID int64, direction string, edgeTypes []string, maxDepth, maxResults int) (*TraverseResult, error) {
-	return s.bfsVisited(startNodeID, direction, edgeTypes, maxDepth, maxResults)
+	return s.bfsVisited(startNodeID, direction, edgeTypes, maxDepth, maxResults, 0)
 }
 
-func (s *Store) bfsVisited(startNodeID int64, direction string, edgeTypes []string, maxDepth, maxResults int) (*TraverseResult, error) {
+func (s *Store) bfsVisited(startNodeID int64, direction string, edgeTypes []string, maxDepth, maxResults int, minConfidence float64) (*TraverseResult, error) {
 	if maxDepth <= 0 {
 		maxDepth = 3
 	}
@@ -76,13 +91,20 @@ func (s *Store) bfsVisited(startNodeID int64, direction string, edgeTypes []stri
 	var typeArgs []any
 	if len(edgeTypes) > 0 {
 		typePlaceholders := make([]string, len(edgeTypes))
-		typeArgs = make([]any, len(edgeTypes))
+		typeArgs = make([]any, 0, len(edgeTypes)+1)
 		for i, et := range edgeTypes {
 			typePlaceholders[i] = "?"
-			typeArgs[i] = et
+			typeArgs = append(typeArgs, et)
 		}
 		typeClause = " AND e.type IN (" + strings.Join(typePlaceholders, ",") + ")"
 	}
+	confidenceClause := ""
+	if minConfidence > 0 {
+		confidenceClause = " AND (json_extract(e.properties, '$.confidence') IS NULL" +
+			" OR json_extract(e.properties, '$.confidence') >= ?)"
+		typeArgs = append(typeArgs, minConfidence)
+	}
+	edgeFilterClause := typeClause + confidenceClause
 
 	// Determine join columns based on direction
 	var joinCol, nextCol string
@@ -115,7 +137,7 @@ func (s *Store) bfsVisited(startNodeID int64, direction string, edgeTypes []stri
 		WHERE bfs.hop > 0
 		ORDER BY bfs.hop, n.name
 		LIMIT ?`,
-		nextCol, joinCol, typeClause)
+		nextCol, joinCol, edgeFilterClause)
 
 	// Build args: startNodeID, ...typeArgs, maxDepth, maxResults+1.
 	// Fetch one row past the cap so truncation is detectable.
@@ -154,7 +176,7 @@ func (s *Store) bfsVisited(startNodeID int64, direction string, edgeTypes []stri
 }
 
 // bfsCollectEdges runs the edge-collection CTE and fills result.Edges.
-func (s *Store) bfsCollectEdges(result *TraverseResult, startNodeID int64, direction string, edgeTypes []string, maxDepth int) error {
+func (s *Store) bfsCollectEdges(result *TraverseResult, startNodeID int64, direction string, edgeTypes []string, maxDepth int, minConfidence float64) error {
 	if maxDepth <= 0 {
 		maxDepth = 3
 	}
@@ -162,13 +184,20 @@ func (s *Store) bfsCollectEdges(result *TraverseResult, startNodeID int64, direc
 	var typeArgs []any
 	if len(edgeTypes) > 0 {
 		typePlaceholders := make([]string, len(edgeTypes))
-		typeArgs = make([]any, len(edgeTypes))
+		typeArgs = make([]any, 0, len(edgeTypes)+1)
 		for i, et := range edgeTypes {
 			typePlaceholders[i] = "?"
-			typeArgs[i] = et
+			typeArgs = append(typeArgs, et)
 		}
 		typeClause = " AND e.type IN (" + strings.Join(typePlaceholders, ",") + ")"
 	}
+	confidenceClause := ""
+	if minConfidence > 0 {
+		confidenceClause = " AND (json_extract(e.properties, '$.confidence') IS NULL" +
+			" OR json_extract(e.properties, '$.confidence') >= ?)"
+		typeArgs = append(typeArgs, minConfidence)
+	}
+	edgeFilterClause := typeClause + confidenceClause
 	var joinCol, nextCol string
 	if direction == "inbound" {
 		joinCol, nextCol = "target_id", "source_id"
@@ -186,14 +215,14 @@ func (s *Store) bfsCollectEdges(result *TraverseResult, startNodeID int64, direc
 			WHERE b.hop < ?
 		)
 		SELECT DISTINCT src.name, tgt.name, e.type,
-			COALESCE(json_extract(e.properties, '$.confidence'), 0) as confidence
+			json_extract(e.properties, '$.confidence') as confidence
 		FROM bfs b
 		JOIN edges e ON e.%s = b.node_id%s
 		JOIN nodes src ON src.id = e.source_id
 		JOIN nodes tgt ON tgt.id = e.target_id
 		WHERE b.hop < ?`,
-		nextCol, joinCol, typeClause,
-		joinCol, typeClause)
+		nextCol, joinCol, edgeFilterClause,
+		joinCol, edgeFilterClause)
 
 	// Build edge args: startNodeID, ...typeArgs, maxDepth, ...typeArgs, maxDepth
 	edgeArgs := make([]any, 0, 4+2*len(typeArgs))
@@ -211,8 +240,13 @@ func (s *Store) bfsCollectEdges(result *TraverseResult, startNodeID int64, direc
 
 	for edgeRows.Next() {
 		var ei EdgeInfo
-		if err := edgeRows.Scan(&ei.FromName, &ei.ToName, &ei.Type, &ei.Confidence); err != nil {
+		var confidence sql.NullFloat64
+		if err := edgeRows.Scan(&ei.FromName, &ei.ToName, &ei.Type, &confidence); err != nil {
 			return err
+		}
+		if confidence.Valid {
+			ei.Confidence = confidence.Float64
+			ei.HasConfidence = true
 		}
 		result.Edges = append(result.Edges, ei)
 	}

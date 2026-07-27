@@ -5,14 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
-	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -21,6 +18,7 @@ import (
 	"github.com/DeusData/codebase-memory-mcp/internal/discover"
 	"github.com/DeusData/codebase-memory-mcp/internal/indexidentity"
 	"github.com/DeusData/codebase-memory-mcp/internal/pipeline"
+	"github.com/DeusData/codebase-memory-mcp/internal/selfupdate"
 	"github.com/DeusData/codebase-memory-mcp/internal/store"
 	"github.com/DeusData/codebase-memory-mcp/internal/watcher"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -41,6 +39,8 @@ func SetVersion(v string) { Version = v }
 // would prompt `codebase-memory-mcp update`, which replaces the binary with
 // an upstream build and silently drops every fork addition.
 var releaseURL = "https://api.github.com/repos/redacted-org/code-graph/releases/latest"
+
+var fetchRelease = selfupdate.FetchRelease
 
 // Server wraps the MCP server with tool handlers.
 type Server struct {
@@ -227,7 +227,7 @@ func (s *Server) onRootsChanged(ctx context.Context, req *mcp.RootsListChangedRe
 // detectSessionRoot tries multiple fallback strategies to find the project root.
 func (s *Server) detectSessionRoot(ctx context.Context, session *mcp.ServerSession) string {
 	// 1. Try MCP roots protocol
-	if session != nil {
+	if sessionSupportsRoots(session) {
 		result, err := session.ListRoots(ctx, nil)
 		if err == nil && len(result.Roots) > 0 {
 			uri := result.Roots[0].URI
@@ -261,6 +261,16 @@ func (s *Server) detectSessionRoot(ctx context.Context, session *mcp.ServerSessi
 
 	slog.Info("session.root.none", "reason", "no_roots_no_cwd_no_single_project")
 	return ""
+}
+
+func sessionSupportsRoots(session *mcp.ServerSession) bool {
+	if session == nil {
+		return false
+	}
+	params := session.InitializeParams()
+	return params != nil &&
+		params.Capabilities != nil &&
+		params.Capabilities.RootsV2 != nil
 }
 
 // parseFileURI extracts a filesystem path from a file:// URI.
@@ -574,52 +584,16 @@ func (s *Server) checkForUpdate() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, "GET", releaseURL, http.NoBody)
+	release, err := fetchRelease(ctx, releaseURL)
 	if err != nil {
-		slog.Warn("update check: request create failed", "err", err)
-		return
-	}
-	req.Header.Set("Accept", "application/vnd.github+json")
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		slog.Warn("update check: http failed", "err", err)
-		return
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		// 403/429 are GitHub's unauthenticated per-IP rate limit and 404 is
-		// no-releases-yet — expected background conditions, not actionable.
-		// Logging them at Warn produced hundreds of noise lines (one per
-		// server start, 491 in the 2026-07-04 server.log census).
-		if resp.StatusCode == 403 || resp.StatusCode == 404 || resp.StatusCode == 429 {
-			slog.Debug("update check: skipped", "status", resp.StatusCode)
-		} else {
-			slog.Warn("update check: bad status", "status", resp.StatusCode)
-		}
+		// Missing gh or unavailable private-repository credentials should not
+		// spam one warning per MCP startup. The explicit `update` command
+		// returns the same authenticated-fetch error to the operator.
+		slog.Debug("update check: authenticated release fetch failed", "err", err)
 		return
 	}
 
-	// 1MB cap, matching selfupdate.FetchLatestRelease. The previous 64KB cap
-	// truncated release JSON with long release notes mid-escape, producing
-	// the "unexpected end of JSON input" / "invalid character in string
-	// escape code" parse failures seen at every server start.
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if err != nil {
-		slog.Warn("update check: body read failed", "err", err)
-		return
-	}
-
-	var release struct {
-		TagName string `json:"tag_name"`
-	}
-	if err := json.Unmarshal(body, &release); err != nil {
-		slog.Warn("update check: json parse failed", "err", err)
-		return
-	}
-
-	latest := strings.TrimPrefix(release.TagName, "v")
+	latest := release.LatestVersion()
 	if latest == "" || latest == Version {
 		slog.Debug("update check: current", "version", Version, "latest", latest)
 		return
@@ -636,16 +610,7 @@ func (s *Server) checkForUpdate() {
 // compareVersions compares two semver strings (e.g. "0.2.1" vs "0.2.0").
 // Returns >0 if a > b, <0 if a < b, 0 if equal.
 func compareVersions(a, b string) int {
-	aParts := strings.Split(a, ".")
-	bParts := strings.Split(b, ".")
-	for i := 0; i < len(aParts) && i < len(bParts); i++ {
-		ai, _ := strconv.Atoi(aParts[i])
-		bi, _ := strconv.Atoi(bParts[i])
-		if ai != bi {
-			return ai - bi
-		}
-	}
-	return len(aParts) - len(bParts)
+	return selfupdate.CompareVersions(a, b)
 }
 
 // --- Tool registration ---
@@ -653,6 +618,32 @@ func compareVersions(a, b string) int {
 func (s *Server) addTool(tool *mcp.Tool, handler mcp.ToolHandler) {
 	s.mcp.AddTool(tool, handler)
 	s.handlers[tool.Name] = handler
+}
+
+func withTraceEdgeTypes(schemaJSON json.RawMessage) map[string]any {
+	var schema map[string]any
+	if err := json.Unmarshal(schemaJSON, &schema); err != nil {
+		panic(fmt.Sprintf("invalid trace_call_path input schema: %v", err))
+	}
+	properties, ok := schema["properties"].(map[string]any)
+	if !ok {
+		panic("trace_call_path input schema has no properties object")
+	}
+	defaultEdgeTypes := append([]string(nil), traceDefaultEdgeTypes[:]...)
+	supportedEdgeTypes := append([]string(nil), traceSupportedEdgeTypes[:]...)
+	properties["edge_types"] = map[string]any{
+		"type":        "array",
+		"items":       map[string]any{"type": "string", "enum": supportedEdgeTypes},
+		"minItems":    1,
+		"maxItems":    len(supportedEdgeTypes),
+		"uniqueItems": true,
+		"default":     defaultEdgeTypes,
+		"description": fmt.Sprintf(
+			"Relationship types to traverse. Defaults to call-like relationships: %s. Non-call relationships are opt-in: USAGE, OVERRIDE.",
+			strings.Join(defaultEdgeTypes, ", "),
+		),
+	}
+	return schema
 }
 
 // CallTool invokes a tool handler directly by name, bypassing MCP transport.
@@ -1098,8 +1089,11 @@ func (s *Server) registerIndexAndTraceTool() {
 			DestructiveHint: boolPtr(false),
 		},
 
-		Description: "Trace the call path of a function (who calls it, what it calls). Requires exact function name. Returns hop-by-hop callees/callers with edge types (CALLS, HTTP_CALLS, ASYNC_CALLS, USAGE, OVERRIDE). If not found, returns similar name suggestions - use the qualified_name from suggestions to retry. Use depth=1 first, increase only if needed. Use direction='both' for full cross-service context - HTTP_CALLS from other services appear as inbound edges, so direction='outbound' alone misses them.",
-		InputSchema: json.RawMessage(`{
+		Description: fmt.Sprintf(
+			"Trace the call path of a function (who calls it, what it calls). Requires exact function name. Returns hop-by-hop callees/callers over the default call-like edge types (%s). USAGE and OVERRIDE are supported as opt-in non-call relationships through edge_types. Call-resolution confidence is calibrated only for unfiltered CALLS-only traces (edge_types=[CALLS], min_confidence=0); positive thresholds and every other edge selection report confidence as unknown/not applicable. If not found, returns similar name suggestions - use the qualified_name from suggestions to retry. Use depth=1 first, increase only if needed. Use direction='both' for full cross-service context - HTTP_CALLS from other services appear as inbound edges, so direction='outbound' alone misses them.",
+			strings.Join(traceDefaultEdgeTypes[:], ", "),
+		),
+		InputSchema: withTraceEdgeTypes(json.RawMessage(`{
 			"type": "object",
 			"properties": {
 				"function_name": {
@@ -1121,7 +1115,9 @@ func (s *Server) registerIndexAndTraceTool() {
 				},
 				"min_confidence": {
 					"type": "number",
-					"description": "Minimum confidence threshold (0.0-1.0) for CALLS edges. Filters out low-confidence fuzzy matches. Bands: high (>=0.7), medium (>=0.45), speculative (<0.45). Default 0.45 — filters speculative cross-crate name-only matches that frequently resolve to wrong-crate same-named methods. Pass 0 explicitly to disable filtering and see the full unfiltered trace."
+					"minimum": 0,
+					"maximum": 1,
+					"description": "Minimum confidence threshold (0.0-1.0) for all selected edge types. Filters out low-confidence fuzzy matches. Edges with missing or null confidence remain traversable; an explicit numeric zero is filtered when the threshold is positive. Bands: high (>=0.7), medium (>=0.45), speculative (<0.45). Default 0.45 — filters speculative cross-crate name-only matches that frequently resolve to wrong-crate same-named methods. Pass 0 explicitly to disable filtering and see the full unfiltered trace. confidence_band is unknown whenever min_confidence is positive because the resolved-edge numerator is filtered while unresolved_call_count is not."
 				},
 				"project": {
 					"type": "string",
@@ -1133,7 +1129,7 @@ func (s *Server) registerIndexAndTraceTool() {
 				}
 			},
 			"required": ["function_name"]
-		}`),
+		}`)),
 	}, s.handleTraceCallPath)
 }
 
@@ -1359,10 +1355,14 @@ func (s *Server) registerSearchTools() {
 				},
 				"max_results": {
 					"type": "integer",
-					"description": "Max matches per page (default: 10). Response includes has_more flag for pagination."
+					"minimum": 1,
+					"maximum": 1000,
+					"description": "Max matches per page (default: 10, max: 1000). Response includes has_more flag for pagination."
 				},
 				"offset": {
 					"type": "integer",
+					"minimum": 0,
+					"maximum": 1000000,
 					"description": "Skip N matches for pagination (default: 0). Check has_more in response."
 				},
 				"case_sensitive": {

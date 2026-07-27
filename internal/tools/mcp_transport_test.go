@@ -3,9 +3,12 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/DeusData/codebase-memory-mcp/internal/store"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -126,6 +129,85 @@ func TestMCPTransport_NoBannerWhenNoNotice(t *testing.T) {
 	if strings.HasPrefix(first.Text, "⚡ Update available") {
 		t.Errorf("Content[0] starts with banner even though no notice was set: %q",
 			first.Text[:tmin(80, len(first.Text))])
+	}
+}
+
+func TestMCPTransport_SearchCodeRejectsNegativeOffsetWithoutTerminatingSession(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "sample.go"), []byte("package sample\n"), 0o600); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+
+	router, err := store.NewRouterWithDir(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewRouterWithDir: %v", err)
+	}
+	t.Cleanup(router.CloseAll)
+	st, err := router.ForProject("test")
+	if err != nil {
+		t.Fatalf("ForProject: %v", err)
+	}
+	if err := st.UpsertProject("test", root); err != nil {
+		t.Fatalf("UpsertProject: %v", err)
+	}
+	if _, err := st.UpsertNode(&store.Node{
+		Project:  "test",
+		Label:    "File",
+		Name:     "sample.go",
+		FilePath: "sample.go",
+	}); err != nil {
+		t.Fatalf("UpsertNode: %v", err)
+	}
+
+	srv := NewServer(router)
+	// Keep initialization deterministic: this test exercises tool transport,
+	// not session-root auto-detection or update checks.
+	srv.sessionOnce.Do(func() {})
+	srv.updateOnce.Do(func() {})
+
+	clientTransport, serverTransport := mcp.NewInMemoryTransports()
+	serverSession, err := srv.MCPServer().Connect(context.Background(), serverTransport, nil)
+	if err != nil {
+		t.Fatalf("connect server: %v", err)
+	}
+	t.Cleanup(func() { _ = serverSession.Close() })
+
+	client := mcp.NewClient(
+		&mcp.Implementation{Name: "contract-test", Version: "dev"},
+		&mcp.ClientOptions{Capabilities: &mcp.ClientCapabilities{}},
+	)
+	clientSession, err := client.Connect(context.Background(), clientTransport, nil)
+	if err != nil {
+		t.Fatalf("connect client: %v", err)
+	}
+	t.Cleanup(func() { _ = clientSession.Close() })
+
+	result, err := clientSession.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "search_code",
+		Arguments: map[string]any{
+			"pattern":     "package",
+			"project":     "test",
+			"max_results": 10,
+			"offset":      -1,
+		},
+	})
+	if err != nil {
+		t.Fatalf("negative offset returned protocol error: %v", err)
+	}
+	if result == nil || !result.IsError {
+		t.Fatalf("negative offset must return a structured tool error, got %+v", result)
+	}
+
+	// A rejected request must not poison the MCP connection.
+	after, err := clientSession.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "list_projects",
+		Arguments: map[string]any{},
+	})
+	if err != nil {
+		t.Fatalf("session terminated after invalid pagination: %v", err)
+	}
+	if after == nil || after.IsError {
+		t.Fatalf("session did not remain usable after invalid pagination: %+v", after)
 	}
 }
 

@@ -6,6 +6,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -20,6 +25,31 @@ import (
 // tools, resolver gates, SCIP ingest). See tools.releaseURL for the
 // matching update-notice endpoint.
 var ReleaseURL = "https://api.github.com/repos/redacted-org/code-graph/releases/latest"
+
+const (
+	privateRepository         = "redacted-org/code-graph"
+	historicalNoProvenanceTag = "v0.7.0-redacted.2"
+	slsaProvenancePredicate   = "https://slsa.dev/provenance/v1"
+)
+
+var safeReleaseComponent = regexp.MustCompile(
+	`^[A-Za-z0-9][A-Za-z0-9._+-]{0,255}$`,
+)
+
+var runGitHubCLI = func(ctx context.Context, args ...string) ([]byte, error) {
+	cmd := exec.CommandContext(ctx, "gh", args...)
+	output, err := cmd.Output()
+	if err == nil {
+		return output, nil
+	}
+	if exitError, ok := err.(*exec.ExitError); ok {
+		detail := strings.TrimSpace(string(exitError.Stderr))
+		if detail != "" {
+			return nil, fmt.Errorf("%w: %s", err, detail)
+		}
+	}
+	return nil, err
+}
 
 // Release holds parsed GitHub release metadata.
 type Release struct {
@@ -36,10 +66,52 @@ type Asset struct {
 
 // FetchLatestRelease fetches release metadata from GitHub.
 func FetchLatestRelease(ctx context.Context) (*Release, error) {
+	return FetchRelease(ctx, ReleaseURL)
+}
+
+// FetchRelease fetches release metadata, authenticating private redacted access
+// through GitHub CLI while retaining HTTP injection for generic/public URLs.
+func FetchRelease(ctx context.Context, rawURL string) (*Release, error) {
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, "GET", ReleaseURL, http.NoBody)
+	var body []byte
+	if isPrivateReleaseURL(rawURL) {
+		var err error
+		body, err = runGitHubCLI(
+			ctx,
+			"api",
+			"repos/"+privateRepository+"/releases/latest",
+			"--header",
+			"Accept: application/vnd.github+json",
+		)
+		if err != nil {
+			return nil, fmt.Errorf(
+				"authenticated GitHub CLI release metadata failed "+
+					"(run `gh auth login --hostname github.com`): %w",
+				err,
+			)
+		}
+		if len(body) > 1<<20 {
+			return nil, fmt.Errorf("release metadata exceeds 1 MiB")
+		}
+	} else {
+		var err error
+		body, err = fetchReleaseHTTP(ctx, rawURL)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	var release Release
+	if err := json.Unmarshal(body, &release); err != nil {
+		return nil, fmt.Errorf("parse json: %w", err)
+	}
+	return &release, nil
+}
+
+func fetchReleaseHTTP(ctx context.Context, rawURL string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", rawURL, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
@@ -59,12 +131,7 @@ func FetchLatestRelease(ctx context.Context) (*Release, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read body: %w", err)
 	}
-
-	var release Release
-	if err := json.Unmarshal(body, &release); err != nil {
-		return nil, fmt.Errorf("parse json: %w", err)
-	}
-	return &release, nil
+	return body, nil
 }
 
 // LatestVersion returns the version string from the latest release (without "v" prefix).
@@ -161,6 +228,36 @@ func DownloadAsset(ctx context.Context, rawURL string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
 
+	if isPrivateRepositoryURL(rawURL) {
+		tag, assetName, err := privateReleaseAsset(rawURL)
+		if err != nil {
+			return nil, err
+		}
+		data, err := runGitHubCLI(
+			ctx,
+			"release",
+			"download",
+			tag,
+			"--repo",
+			privateRepository,
+			"--pattern",
+			assetName,
+			"--output",
+			"-",
+		)
+		if err != nil {
+			return nil, fmt.Errorf(
+				"authenticated GitHub CLI asset download failed "+
+					"(run `gh auth login --hostname github.com`): %w",
+				err,
+			)
+		}
+		if len(data) > 500<<20 {
+			return nil, fmt.Errorf("download exceeds 500 MiB")
+		}
+		return data, nil
+	}
+
 	req, err := http.NewRequestWithContext(ctx, "GET", rawURL, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
@@ -177,6 +274,139 @@ func DownloadAsset(ctx context.Context, rawURL string) ([]byte, error) {
 	}
 
 	return io.ReadAll(io.LimitReader(resp.Body, 500<<20)) // 500 MB safety limit
+}
+
+// VerifyReleaseAsset proves that archive is the named immutable release asset
+// and, for releases that publish provenance, that it has a valid SLSA
+// attestation. Verification is performed against a private temporary copy so
+// the exact downloaded bytes are checked before extraction or replacement.
+func VerifyReleaseAsset(
+	ctx context.Context,
+	releaseTag string,
+	assetName string,
+	archive []byte,
+) error {
+	if !safeReleaseComponent.MatchString(releaseTag) {
+		return fmt.Errorf("invalid release tag %q", releaseTag)
+	}
+	if !safeReleaseComponent.MatchString(assetName) ||
+		filepath.Base(assetName) != assetName ||
+		strings.ContainsAny(assetName, `/\`) {
+		return fmt.Errorf("invalid release asset basename %q", assetName)
+	}
+
+	tempDir, err := os.MkdirTemp("", "codebase-memory-mcp-update-*")
+	if err != nil {
+		return fmt.Errorf("create private verification directory: %w", err)
+	}
+	defer os.RemoveAll(tempDir)
+	if err := os.Chmod(tempDir, 0o700); err != nil {
+		return fmt.Errorf("secure verification directory: %w", err)
+	}
+
+	archivePath := filepath.Join(tempDir, assetName)
+	if err := os.WriteFile(archivePath, archive, 0o600); err != nil {
+		return fmt.Errorf("write verification archive: %w", err)
+	}
+	if err := os.Chmod(archivePath, 0o600); err != nil {
+		return fmt.Errorf("secure verification archive: %w", err)
+	}
+
+	verifyCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
+	if _, err := runGitHubCLI(
+		verifyCtx,
+		"release",
+		"verify-asset",
+		releaseTag,
+		archivePath,
+		"--repo",
+		privateRepository,
+	); err != nil {
+		return fmt.Errorf(
+			"authenticated release asset membership verification failed: %w",
+			err,
+		)
+	}
+
+	// This immutable historical release predates build provenance. Membership
+	// verification above remains mandatory; only its unavailable SLSA check is
+	// exempted.
+	if releaseTag == historicalNoProvenanceTag {
+		return nil
+	}
+
+	if _, err := runGitHubCLI(
+		verifyCtx,
+		"attestation",
+		"verify",
+		archivePath,
+		"--repo",
+		privateRepository,
+		"--predicate-type",
+		slsaProvenancePredicate,
+	); err != nil {
+		return fmt.Errorf(
+			"authenticated release asset provenance verification failed: %w",
+			err,
+		)
+	}
+	return nil
+}
+
+func isPrivateReleaseURL(rawURL string) bool {
+	parsed, err := url.Parse(rawURL)
+	if err != nil || !strings.EqualFold(parsed.Hostname(), "api.github.com") {
+		return false
+	}
+	return strings.Trim(parsed.Path, "/") ==
+		"repos/"+privateRepository+"/releases/latest"
+}
+
+func isPrivateRepositoryURL(rawURL string) bool {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return false
+	}
+	path := strings.Trim(parsed.Path, "/")
+	switch {
+	case strings.EqualFold(parsed.Hostname(), "github.com"):
+		return path == privateRepository ||
+			strings.HasPrefix(path, privateRepository+"/")
+	case strings.EqualFold(parsed.Hostname(), "api.github.com"):
+		return path == "repos/"+privateRepository ||
+			strings.HasPrefix(path, "repos/"+privateRepository+"/")
+	default:
+		return false
+	}
+}
+
+func privateReleaseAsset(rawURL string) (tag, assetName string, err error) {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return "", "", fmt.Errorf("parse private release asset URL: %w", err)
+	}
+	escapedParts := strings.Split(strings.Trim(parsed.EscapedPath(), "/"), "/")
+	if !strings.EqualFold(parsed.Hostname(), "github.com") ||
+		len(escapedParts) != 6 ||
+		escapedParts[0] != "redacted-org" ||
+		escapedParts[1] != "code-graph" ||
+		escapedParts[2] != "releases" ||
+		escapedParts[3] != "download" {
+		return "", "", fmt.Errorf(
+			"refusing unsupported private release asset URL: %s",
+			rawURL,
+		)
+	}
+	tag, err = url.PathUnescape(escapedParts[4])
+	if err != nil || tag == "" {
+		return "", "", fmt.Errorf("invalid private release tag in URL")
+	}
+	assetName, err = url.PathUnescape(escapedParts[5])
+	if err != nil || assetName == "" {
+		return "", "", fmt.Errorf("invalid private release asset name in URL")
+	}
+	return tag, assetName, nil
 }
 
 // DownloadChecksums downloads and parses the checksums.txt file from a release.

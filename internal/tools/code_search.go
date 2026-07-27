@@ -3,14 +3,22 @@ package tools
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
+	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/store"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+)
+
+const (
+	defaultSearchCodeMaxResults = 10
+	maxSearchCodeResults        = 1000
+	maxSearchCodeOffset         = 1_000_000
 )
 
 type codeMatch struct {
@@ -38,11 +46,26 @@ func parseSearchCodeParams(req *mcp.CallToolRequest) (*searchCodeParams, *mcp.Ca
 		return nil, errResult(err.Error())
 	}
 
+	maxResults, err := boundedIntegerArg(
+		args,
+		"max_results",
+		defaultSearchCodeMaxResults,
+		1,
+		maxSearchCodeResults,
+	)
+	if err != nil {
+		return nil, errResult(err.Error())
+	}
+	offset, err := boundedIntegerArg(args, "offset", 0, 0, maxSearchCodeOffset)
+	if err != nil {
+		return nil, errResult(err.Error())
+	}
+
 	p := &searchCodeParams{
 		pattern:       getStringArg(args, "pattern"),
 		fileGlob:      getStringArg(args, "file_pattern"),
-		maxResults:    getIntArg(args, "max_results", 10),
-		offset:        getIntArg(args, "offset", 0),
+		maxResults:    maxResults,
+		offset:        offset,
 		isRegex:       getBoolArg(args, "regex"),
 		caseSensitive: getBoolArg(args, "case_sensitive"),
 		project:       getStringArg(args, "project"),
@@ -69,6 +92,21 @@ func parseSearchCodeParams(req *mcp.CallToolRequest) (*searchCodeParams, *mcp.Ca
 	return p, nil
 }
 
+func boundedIntegerArg(args map[string]any, key string, defaultValue, minValue, maxValue int) (int, error) {
+	raw, ok := args[key]
+	if !ok {
+		return defaultValue, nil
+	}
+	value, ok := raw.(float64)
+	if !ok || math.Trunc(value) != value {
+		return 0, fmt.Errorf("%s must be an integer between %d and %d", key, minValue, maxValue)
+	}
+	if value < float64(minValue) || value > float64(maxValue) {
+		return 0, fmt.Errorf("%s must be between %d and %d", key, minValue, maxValue)
+	}
+	return int(value), nil
+}
+
 func (s *Server) handleSearchCode(_ context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	params, errRes := parseSearchCodeParams(req)
 	if errRes != nil {
@@ -81,37 +119,32 @@ func (s *Server) handleSearchCode(_ context.Context, req *mcp.CallToolRequest) (
 		return errResult(fmt.Sprintf("resolve root: %v", err)), nil
 	}
 
-	filePaths := s.collectSearchFilePaths(params.fileGlob, params.project)
+	filePaths, err := s.collectSearchFilePaths(params.fileGlob, params.project)
+	if err != nil {
+		return errResult(fmt.Sprintf("collect files: %v", err)), nil
+	}
 
-	// Collect all matches up to offset+maxResults for accurate total count
-	fetchLimit := params.offset + params.maxResults
-	var allMatches []codeMatch
+	// Scan every match so total and has_more are exact, while retaining only
+	// the requested page in memory.
+	pageMatches := make([]codeMatch, 0, params.maxResults)
+	total := 0
 	for _, relPath := range filePaths {
-		if len(allMatches) >= fetchLimit {
-			break
-		}
-
 		absPath, pathErr := safePath(root, relPath)
 		if pathErr != nil {
-			continue // skip files with paths that escape the project root
+			return errResult(fmt.Sprintf("resolve indexed file %q: %v", relPath, pathErr)), nil
 		}
-		fileMatches := searchFile(absPath, relPath, params.pattern, params.re, params.isRegex, params.caseSensitive, fetchLimit-len(allMatches))
-		allMatches = append(allMatches, fileMatches...)
+		searchErr := searchFile(absPath, relPath, params.pattern, params.re, params.isRegex, params.caseSensitive, func(match codeMatch) {
+			if total >= params.offset && len(pageMatches) < params.maxResults {
+				pageMatches = append(pageMatches, match)
+			}
+			total++
+		})
+		if searchErr != nil {
+			return errResult(fmt.Sprintf("search indexed file %q: %v", relPath, searchErr)), nil
+		}
 	}
 
-	total := len(allMatches)
-	hasMore := total >= fetchLimit
-
-	// Apply offset and limit
-	start := params.offset
-	if start > total {
-		start = total
-	}
-	end := start + params.maxResults
-	if end > total {
-		end = total
-	}
-	pageMatches := allMatches[start:end]
+	hasMore := params.offset+len(pageMatches) < total
 
 	responseData := map[string]any{
 		"pattern":     params.pattern,
@@ -131,87 +164,102 @@ func (s *Server) handleSearchCode(_ context.Context, req *mcp.CallToolRequest) (
 }
 
 // collectSearchFilePaths gathers indexed file paths, optionally filtered by a glob pattern.
-func (s *Server) collectSearchFilePaths(fileGlob, project string) []string {
-	var filePaths []string
-
-	collectFromStore := func(st *store.Store, projName string) {
-		files, _ := st.FindNodesByLabel(projName, "File")
-		for _, f := range files {
-			if f.FilePath == "" {
-				continue
-			}
-			if fileGlob != "" {
-				matched, _ := filepath.Match(fileGlob, filepath.Base(f.FilePath))
-				if !matched {
-					matched = globMatch(fileGlob, f.FilePath)
-				}
-				if !matched {
-					continue
-				}
-			}
-			filePaths = append(filePaths, f.FilePath)
-		}
-	}
-
+func (s *Server) collectSearchFilePaths(fileGlob, project string) ([]string, error) {
 	st, err := s.resolveStore(project)
 	if err != nil {
-		return filePaths
+		return nil, fmt.Errorf("resolve store: %w", err)
 	}
 
 	projName := s.resolveProjectName(project)
-	projects, _ := st.ListProjects()
+	projects, err := st.ListProjects()
+	if err != nil {
+		return nil, fmt.Errorf("list projects: %w", err)
+	}
 	if len(projects) > 0 {
 		projName = projects[0].Name
 	}
-	collectFromStore(st, projName)
 
-	return filePaths
+	files, err := st.FindNodesByLabel(projName, "File")
+	if err != nil {
+		return nil, fmt.Errorf("list indexed files: %w", err)
+	}
+
+	filePaths := make([]string, 0, len(files))
+	for _, f := range files {
+		if f.FilePath == "" {
+			continue
+		}
+		if fileGlob != "" {
+			matched, matchErr := filepath.Match(fileGlob, filepath.Base(f.FilePath))
+			if matchErr != nil {
+				return nil, fmt.Errorf("invalid file_pattern %q: %w", fileGlob, matchErr)
+			}
+			if !matched {
+				matched = globMatch(fileGlob, f.FilePath)
+			}
+			if !matched {
+				continue
+			}
+		}
+		filePaths = append(filePaths, f.FilePath)
+	}
+
+	return filePaths, nil
 }
 
-func searchFile(absPath, relPath, pattern string, re *regexp.Regexp, isRegex, caseSensitive bool, limit int) []codeMatch {
+func searchFile(
+	absPath, relPath, pattern string,
+	re *regexp.Regexp,
+	isRegex, caseSensitive bool,
+	onMatch func(codeMatch),
+) error {
 	f, err := os.Open(absPath)
 	if err != nil {
-		return nil
+		return fmt.Errorf("open: %w", err)
 	}
 	defer f.Close()
 
-	var matches []codeMatch
-	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	reader := bufio.NewReader(f)
 	lineNum := 0
 
-	for scanner.Scan() {
-		lineNum++
-		line := scanner.Text()
+	for {
+		line, readErr := reader.ReadString('\n')
+		if line != "" {
+			lineNum++
+			line = strings.TrimSuffix(line, "\n")
+			line = strings.TrimSuffix(line, "\r")
 
-		var found bool
-		switch {
-		case isRegex:
-			found = re.MatchString(line)
-		case caseSensitive:
-			found = strings.Contains(line, pattern)
-		default:
-			// pattern already lowercased in parseSearchCodeParams
-			found = strings.Contains(strings.ToLower(line), pattern)
+			var found bool
+			switch {
+			case isRegex:
+				found = re.MatchString(line)
+			case caseSensitive:
+				found = strings.Contains(line, pattern)
+			default:
+				// pattern already lowercased in parseSearchCodeParams
+				found = strings.Contains(strings.ToLower(line), pattern)
+			}
+
+			if found {
+				content := strings.TrimSpace(line)
+				if len(content) > 200 {
+					content = content[:200] + "..."
+				}
+				onMatch(codeMatch{
+					File:    relPath,
+					Line:    lineNum,
+					Content: content,
+				})
+			}
 		}
 
-		if found {
-			content := strings.TrimSpace(line)
-			if len(content) > 200 {
-				content = content[:200] + "..."
+		if readErr != nil {
+			if errors.Is(readErr, io.EOF) {
+				return nil
 			}
-			matches = append(matches, codeMatch{
-				File:    relPath,
-				Line:    lineNum,
-				Content: content,
-			})
-			if len(matches) >= limit {
-				break
-			}
+			return fmt.Errorf("read: %w", readErr)
 		}
 	}
-
-	return matches
 }
 
 // globMatch does a simple glob match supporting ** patterns.

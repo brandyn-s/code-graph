@@ -5,6 +5,10 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -154,6 +158,97 @@ func TestDownloadAndVerify_FailsWithoutChecksums(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "checksum") {
 		t.Fatalf("expected checksum-related error, got: %v", err)
+	}
+}
+
+func TestDownloadAndVerify_ProvenanceFailureAbortsBeforeExtraction(t *testing.T) {
+	archive := []byte("not a valid tar.gz")
+	hash := sha256.Sum256(archive)
+	checksum := hex.EncodeToString(hash[:])
+	const assetName = "codebase-memory-mcp-linux-amd64.tar.gz"
+
+	assetServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/checksums.txt":
+			_, _ = fmt.Fprintf(w, "%s  %s\n", checksum, assetName)
+		case "/archive":
+			_, _ = w.Write(archive)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer assetServer.Close()
+
+	origPrefixes := selfupdate.AllowedDownloadPrefixes
+	selfupdate.AllowedDownloadPrefixes = append(
+		selfupdate.AllowedDownloadPrefixes,
+		assetServer.URL,
+	)
+	t.Cleanup(func() { selfupdate.AllowedDownloadPrefixes = origPrefixes })
+
+	originalVerifier := verifyReleaseArchive
+	verificationCalled := false
+	verifyReleaseArchive = func(
+		_ context.Context,
+		tag string,
+		gotAssetName string,
+		gotArchive []byte,
+	) error {
+		verificationCalled = true
+		if tag != "v9.9.9" {
+			t.Fatalf("verification tag = %q, want v9.9.9", tag)
+		}
+		if gotAssetName != assetName {
+			t.Fatalf("verification asset = %q, want %q", gotAssetName, assetName)
+		}
+		if !bytes.Equal(gotArchive, archive) {
+			t.Fatalf("verification archive = %q, want %q", gotArchive, archive)
+		}
+		return errors.New("simulated provenance failure")
+	}
+	t.Cleanup(func() { verifyReleaseArchive = originalVerifier })
+
+	release := &selfupdate.Release{
+		TagName: "v9.9.9",
+		Assets: []selfupdate.Asset{
+			{
+				Name:               "checksums.txt",
+				BrowserDownloadURL: assetServer.URL + "/checksums.txt",
+			},
+			{
+				Name:               assetName,
+				BrowserDownloadURL: assetServer.URL + "/archive",
+			},
+		},
+	}
+
+	_, err := downloadAndVerify(
+		context.Background(),
+		release,
+		assetName,
+		&release.Assets[1],
+	)
+	if !verificationCalled {
+		t.Fatal("release verifier was not called")
+	}
+	if err == nil || !strings.Contains(err.Error(), "release verification failed") {
+		t.Fatalf("downloadAndVerify() error = %v, want release verification failure", err)
+	}
+	if !strings.Contains(err.Error(), "simulated provenance failure") {
+		t.Fatalf("downloadAndVerify() error = %v, want verifier cause", err)
+	}
+	if strings.Contains(err.Error(), "gzip") || strings.Contains(err.Error(), "extract") {
+		t.Fatalf("archive was extracted after provenance failure: %v", err)
+	}
+}
+
+func TestHistoricalReleaseSuccessMessageDoesNotClaimProvenance(t *testing.T) {
+	message := strings.ToLower(releaseVerificationSuccessMessage)
+	if strings.Contains(message, "provenance") {
+		t.Fatalf(
+			"historical release uses success message %q, which overclaims provenance",
+			releaseVerificationSuccessMessage,
+		)
 	}
 }
 

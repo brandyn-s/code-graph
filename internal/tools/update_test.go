@@ -1,12 +1,14 @@
 package tools
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/DeusData/codebase-memory-mcp/internal/selfupdate"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -21,6 +23,8 @@ func TestCompareVersions(t *testing.T) {
 		{"0.10.0", "0.2.0", 1}, // numeric, not string comparison
 		{"1.0.0", "0.99.99", 1},
 		{"0.0.1", "0.0.2", -1},
+		{"0.7.1-redacted.1", "0.7.0-redacted.9", 1},
+		{"0.7.0-redacted.10", "0.7.0-redacted.2", 1},
 	}
 	for _, tt := range tests {
 		t.Run(fmt.Sprintf("%s_vs_%s", tt.a, tt.b), func(t *testing.T) {
@@ -42,6 +46,28 @@ func withTestVersion(t *testing.T, v string) {
 	old := Version
 	Version = v
 	t.Cleanup(func() { Version = old })
+}
+
+func TestCheckForUpdateUsesSharedAuthenticatedReleaseFetcher(t *testing.T) {
+	withTestVersion(t, "1.0.0")
+	originalFetcher := fetchRelease
+	var fetchedURL string
+	fetchRelease = func(_ context.Context, rawURL string) (*selfupdate.Release, error) {
+		fetchedURL = rawURL
+		return &selfupdate.Release{TagName: "v99.0.0"}, nil
+	}
+	t.Cleanup(func() { fetchRelease = originalFetcher })
+
+	srv := &Server{}
+	srv.checkForUpdate()
+
+	if fetchedURL != releaseURL {
+		t.Fatalf("release fetch URL = %q, want %q", fetchedURL, releaseURL)
+	}
+	notice, _ := srv.updateNotice.Load().(string)
+	if !strings.Contains(notice, "v99.0.0") {
+		t.Fatalf("authenticated release did not produce notice: %q", notice)
+	}
 }
 
 func TestCheckForUpdate_NewerAvailable(t *testing.T) {

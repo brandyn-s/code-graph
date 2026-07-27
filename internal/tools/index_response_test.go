@@ -40,14 +40,30 @@ import (
 func writeFixtureRepo(t *testing.T) string {
 	t.Helper()
 	// NOT t.TempDir(): on macOS that resolves to /var/folders/..., and
-	// isForbiddenIndexPath rejects everything under /var. A temp dir under
-	// the package directory (repo checkout) passes the forbidden-path check
-	// on every platform.
-	repo, err := os.MkdirTemp(".", "indexfixture-")
+	// isForbiddenIndexPath rejects everything under /var. Use the repo-root
+	// gitignored _fixtures directory so the approved-path fixture never
+	// dirties git status while a test is running.
+	fixtureRoot, err := filepath.Abs(filepath.Join("..", "..", "_fixtures"))
+	if err != nil {
+		t.Fatalf("resolve fixture root: %v", err)
+	}
+	rootExisted := true
+	if _, statErr := os.Stat(fixtureRoot); os.IsNotExist(statErr) {
+		rootExisted = false
+	}
+	if err := os.MkdirAll(fixtureRoot, 0o750); err != nil {
+		t.Fatalf("mkdir fixture root: %v", err)
+	}
+	repo, err := os.MkdirTemp(fixtureRoot, "indexfixture-")
 	if err != nil {
 		t.Fatalf("mkdir fixture: %v", err)
 	}
-	t.Cleanup(func() { _ = os.RemoveAll(repo) })
+	t.Cleanup(func() {
+		_ = os.RemoveAll(repo)
+		if !rootExisted {
+			_ = os.Remove(fixtureRoot)
+		}
+	})
 	src := `def helper():
     return 1
 

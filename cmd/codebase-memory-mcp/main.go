@@ -288,7 +288,12 @@ func printHelpTools() {
     direction: outbound (what it calls), inbound (what calls it), both
     depth: 1-5 (default 3)
     risk_labels: true to add CRITICAL/HIGH/MEDIUM/LOW classification
-    min_confidence: 0.0-1.0 threshold for CALLS edges
+    edge_types: defaults to CALLS, HTTP_CALLS, ASYNC_CALLS
+      USAGE and OVERRIDE are opt-in non-call relationships
+    min_confidence: 0.0-1.0 threshold for selected edges
+      missing/null confidence is retained; explicit numeric zero is filtered when threshold > 0
+    call confidence: calibrated only for unfiltered CALLS-only traces
+      positive thresholds and other edge selections report confidence as unknown
 
   detect_changes — Git diff → affected symbols + blast radius
     {"scope": "unstaged", "depth": 3}
@@ -382,7 +387,7 @@ Configuration:
 Data storage:
   ~/.cache/codebase-memory-mcp/   SQLite databases (WAL mode, persists across restarts)
 
-For more information: https://github.com/DeusData/codebase-memory-mcp
+For more information: https://github.com/redacted-org/code-graph
 `)
 }
 

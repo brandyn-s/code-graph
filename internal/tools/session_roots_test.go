@@ -2,7 +2,10 @@ package tools
 
 import (
 	"context"
+	"net/url"
 	"os"
+	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -33,6 +36,41 @@ type methodCountingConnection struct {
 	mcp.Connection
 	method string
 	count  *atomic.Int32
+}
+
+func TestFileURIForAbsolutePath(t *testing.T) {
+	tests := []struct {
+		name string
+		path string
+		want string
+	}{
+		{
+			name: "Unix",
+			path: "/tmp/project root",
+			want: "file:///tmp/project%20root",
+		},
+		{
+			name: "Windows",
+			path: `C:\Temp\project root`,
+			want: "file:///C:/Temp/project%20root",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := fileURIForAbsolutePath(test.path); got != test.want {
+				t.Errorf("fileURIForAbsolutePath(%q) = %q, want %q", test.path, got, test.want)
+			}
+		})
+	}
+}
+
+func fileURIForAbsolutePath(path string) string {
+	slashPath := filepath.ToSlash(path)
+	if len(path) >= 3 && path[1] == ':' && (path[2] == '\\' || path[2] == '/') {
+		slashPath = "/" + strings.ReplaceAll(path, `\`, "/")
+	}
+	return (&url.URL{Scheme: "file", Path: slashPath}).String()
 }
 
 func (c *methodCountingConnection) Write(ctx context.Context, message jsonrpc.Message) error {
@@ -75,7 +113,7 @@ func TestDetectSessionRootOnlyListsRootsWhenClientDeclaresCapability(t *testing.
 			capabilities: &mcp.ClientCapabilities{
 				RootsV2: &mcp.RootCapabilities{},
 			},
-			root:          &mcp.Root{URI: "file://" + declaredRoot},
+			root:          &mcp.Root{URI: fileURIForAbsolutePath(declaredRoot)},
 			wantListCalls: 1,
 			wantRoot:      declaredRoot,
 		},

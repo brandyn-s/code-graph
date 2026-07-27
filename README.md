@@ -467,7 +467,26 @@ Pre-built binary at `~/bin/codebase-memory-mcp.exe`. MCP server name: `code-grap
 
 No API keys, no Docker, no external databases. Single binary, zero infrastructure.
 
-Releases are built via `workflow_dispatch` on `release.yml`. Download from [redacted releases](https://github.com/redacted-org/code-graph/releases).
+Releases are built via `workflow_dispatch` on `release.yml`. Download them from
+[redacted releases](https://github.com/redacted-org/code-graph/releases).
+The workflow tests every supported platform, generates GitHub build-provenance
+attestations for each archive, stages all assets on a draft, and only then
+publishes the immutable release.
+
+With an authenticated GitHub CLI, verify a downloaded archive's build
+provenance and its membership in an immutable release:
+
+```bash
+gh attestation verify PATH -R redacted-org/code-graph
+gh release verify-asset TAG PATH -R redacted-org/code-graph
+```
+
+Release immutability normally applies only to releases published after the
+repository setting was enabled. `v0.7.0-redacted.2` has an immutable-release attestation
+after a byte-preserving in-place republish, so `gh release verify` and
+`gh release verify-asset` validate its tag, commit, and assets. It predates
+workflow build-provenance support and does not have retroactive build provenance;
+do not describe its release attestation as proof of how it was built.
 
 ## Graph Data Model
 

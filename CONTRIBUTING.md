@@ -79,7 +79,19 @@ Most language issues are in `internal/lang/<name>.go` (node type configuration) 
 
 ## Release Process
 
-Releases are triggered via `workflow_dispatch` on `release.yml` with a `version` input (e.g. `v0.5.0-redacted.4`). The workflow builds cross-platform binaries and publishes a GitHub release.
+Releases are triggered via `workflow_dispatch` on `release.yml` with a
+monotonically increasing `version` input (for example,
+`v0.7.0-redacted.3`). The workflow accepts only the exact default-branch HEAD,
+tests and packages all supported platforms, generates build-provenance
+attestations, creates an immutable tag, uploads every asset to a draft, and
+publishes only after those gates pass.
+
+Repository-level release immutability must remain enabled. It applies only to
+future releases by default. An existing release may be republished in place
+only when its original tag and every asset digest have been independently
+verified; the resulting release attestation still must not be described as
+retroactive build provenance. Never reuse a version or move a release tag; the
+workflow rejects both.
 
 ## License
 

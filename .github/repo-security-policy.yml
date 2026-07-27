@@ -6,4 +6,4 @@ security:
   tier: 3
   auto-merge:
     enabled: true
-    require-attestation: false
+    require-attestation: true

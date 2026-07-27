@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sort"
 	"strings"
 
 	"github.com/DeusData/codebase-memory-mcp/internal/store"
@@ -14,12 +15,82 @@ import (
 // Functions longer than this are omitted to keep response size reasonable.
 const maxSourceLines = 50
 
-func (s *Server) handleSearchGraph(_ context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	args, err := parseArgs(req)
-	if err != nil {
-		return errResult(err.Error()), nil
-	}
+// searchGraphKnownArgs is every argument handleSearchGraph actually reads.
+// Anything else a caller sends is silently dropped, which is how a plausible
+// but WRONG call reads as a working one: `query="authentication token"` (a
+// parameter search_graph has never declared) is accepted, ignored, and the
+// response comes back ranked purely by node degree — Cargo.toml variables and
+// markdown files, with nothing indicating the filter never applied. Callers
+// reasonably assume a graph search takes a `query`; `search_graph` takes
+// `name_pattern`, and `search_code_semantic` is the meaning-based tool.
+//
+// Reported as unrecognized_arguments rather than an error: rejecting outright
+// would break any caller passing a harmless extra key, and the goal is to make
+// a silently-ignored argument VISIBLE, not to fail the request.
+var searchGraphKnownArgs = map[string]bool{
+	"project": true, "label": true, "name_pattern": true, "qn_pattern": true,
+	"file_pattern": true, "relationship": true, "direction": true,
+	"min_degree": true, "max_degree": true, "min_complexity": true,
+	"max_complexity": true, "limit": true, "offset": true,
+	"exclude_entry_points": true, "include_connected": true,
+	"case_sensitive": true, "exclude_labels": true, "sort_by": true,
+	"include_source": true,
+}
 
+// unrecognizedArgs returns the sorted set of argument keys the handler does not
+// read, so the response can surface them instead of dropping them silently.
+func unrecognizedArgs(args map[string]any, known map[string]bool) []string {
+	var unknown []string
+	for k := range args {
+		if !known[k] {
+			unknown = append(unknown, k)
+		}
+	}
+	sort.Strings(unknown)
+	return unknown
+}
+
+// withUnrecognizedArgs returns responseData unchanged when every argument is
+// recognized, and otherwise a COPY carrying the ignored-argument warning.
+//
+// Copying is the point, not a style choice: queryCache stores response maps by
+// reference, and unrecognized args are deliberately excluded from the cache key
+// (they don't change results). Annotating a cached/soon-to-be-cached map in
+// place would replay one caller's warning to every later caller with the same
+// filters. Pinned by TestSearchGraph_UnrecognizedArgs_DoesNotLeakToCleanCall.
+func withUnrecognizedArgs(responseData, args map[string]any) map[string]any {
+	if len(unrecognizedArgs(args, searchGraphKnownArgs)) == 0 {
+		return responseData
+	}
+	annotated := make(map[string]any, len(responseData)+2)
+	for k, v := range responseData {
+		annotated[k] = v
+	}
+	annotateUnrecognizedArgs(annotated, args)
+	return annotated
+}
+
+// annotateUnrecognizedArgs adds the ignored-argument warning to a search_graph
+// response in place. Callers must pass a map that is not shared with the cache
+// (see withUnrecognizedArgs).
+func annotateUnrecognizedArgs(responseData, args map[string]any) {
+	unknown := unrecognizedArgs(args, searchGraphKnownArgs)
+	if len(unknown) == 0 {
+		return
+	}
+	responseData["unrecognized_arguments"] = unknown
+	responseData["unrecognized_arguments_note"] = "These arguments were IGNORED — results are NOT filtered by them. " +
+		"search_graph filters on name_pattern (regex over the short name) and qn_pattern (regex over the qualified name); " +
+		"for meaning-based search use search_code_semantic. With no name/qn pattern, results are ranked by node degree, " +
+		"not by relevance to any query text."
+	slog.Warn("search_graph.unrecognized_arguments", "args", unknown)
+}
+
+// searchParamsFromArgs builds SearchParams from a search_graph argument map.
+// Extracted from handleSearchGraph so the handler stays under the funlen limit
+// (it was already at the ceiling before the unrecognized-args warning landed);
+// pure argument→params mapping with no behavior change.
+func searchParamsFromArgs(args map[string]any) *store.SearchParams {
 	params := &store.SearchParams{
 		Label:              getStringArg(args, "label"),
 		NamePattern:        getStringArg(args, "name_pattern"),
@@ -52,6 +123,16 @@ func (s *Server) handleSearchGraph(_ context.Context, req *mcp.CallToolRequest) 
 	}
 
 	params.SortBy = getStringArg(args, "sort_by")
+	return params
+}
+
+func (s *Server) handleSearchGraph(_ context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	args, err := parseArgs(req)
+	if err != nil {
+		return errResult(err.Error()), nil
+	}
+
+	params := searchParamsFromArgs(args)
 	includeSource := getBoolArg(args, "include_source")
 
 	// Build cache key from all filter params that affect results
@@ -66,7 +147,11 @@ func (s *Server) handleSearchGraph(_ context.Context, req *mcp.CallToolRequest) 
 		params.CaseSensitive, includeSource)
 
 	if cached, ok := s.queryCache.Get(cacheKey); ok {
-		result := jsonResult(cached)
+		payload := cached
+		if cachedMap, isMap := cached.(map[string]any); isMap {
+			payload = withUnrecognizedArgs(cachedMap, args)
+		}
+		result := jsonResult(payload)
 		s.addUpdateNotice(result)
 		return result, nil
 	}
@@ -163,7 +248,10 @@ func (s *Server) handleSearchGraph(_ context.Context, req *mcp.CallToolRequest) 
 	}
 	s.addIndexStatus(responseData)
 
+	// Cache the UNANNOTATED map; withUnrecognizedArgs returns a copy for this
+	// response so the cached entry stays warning-free.
 	s.queryCache.Set(cacheKey, responseData)
+	responseData = withUnrecognizedArgs(responseData, args)
 
 	result := jsonResult(responseData)
 	s.addUpdateNotice(result)

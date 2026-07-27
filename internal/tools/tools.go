@@ -1581,8 +1581,17 @@ func getBoolArg(args map[string]any, key string) bool {
 // boolPtr returns a pointer to a bool value. Used for optional ToolAnnotations fields.
 func boolPtr(b bool) *bool { return &b }
 
-// findNodeAcrossProjects searches for a node by simple name in the specified project.
-// Falls back to the session project if no filter is given.
+// findNodeAcrossProjects searches for a node in the specified project, accepting
+// EITHER a simple name or a fully-qualified name. Falls back to the session
+// project if no filter is given.
+//
+// The QN branch is load-bearing, not a convenience: the ambiguity guard in
+// handleTraceCallPath returns candidate `qualified_name` values and instructs the
+// caller to "re-call with a fully-qualified name to disambiguate". Before this
+// lookup existed, that retry always failed — FindNodesByName matches the `name`
+// column, which never contains a dotted QN — so every ambiguous symbol
+// (`validate`, `run`, `main`, `make_token`) was permanently untraceable. The
+// tool advertised an escape hatch wired to the wrong column.
 func (s *Server) findNodeAcrossProjects(name string, projectFilter ...string) (*store.Node, string, error) {
 	filter := s.sessionProject
 	if len(projectFilter) > 0 && projectFilter[0] != "" {
@@ -1607,6 +1616,21 @@ func (s *Server) findNodeAcrossProjects(name string, projectFilter ...string) (*
 		return nil, "", err
 	}
 	projects, _ := st.ListProjects()
+
+	// Exact-QN pass first. A dotted string is QN-shaped, and a QN is unique per
+	// project, so this resolves the disambiguation retry deterministically —
+	// no nodes[0] guess. Runs as its own pass over all projects so an exact QN
+	// match always beats a short-name match in a different project.
+	if strings.Contains(name, ".") {
+		for _, p := range projects {
+			node, findErr := st.FindNodeByQN(p.Name, name)
+			if findErr != nil || node == nil {
+				continue
+			}
+			return node, p.Name, nil
+		}
+	}
+
 	for _, p := range projects {
 		nodes, findErr := st.FindNodesByName(p.Name, name)
 		if findErr != nil {

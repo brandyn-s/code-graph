@@ -39,8 +39,64 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// scipIndexPathEnv names the SCIP index file to ingest. Unset = pass off.
-const scipIndexPathEnv = "CBM_SCIP_INDEX_PATH"
+// scipIndexPathEnv names the SCIP index file to ingest. It is a SINGLE global
+// path, so it selects an index for whatever repo is currently being indexed —
+// which makes it unusable as a persistent setting across more than one repo
+// (pointing it at repo A's index while indexing repo B is a no-op at best: the
+// drift guard excludes every document because no definition site matches).
+//
+// scipIndexDefaultName is the per-repo convention that makes the precision tier
+// persistent: with discovery enabled, an index at <repo>/index.scip is used
+// automatically, so the gain survives a re-index instead of depending on an env
+// var being set in the invoking shell. That name matches what the validation
+// runbook and CLAUDE.md have used since the tier shipped
+// (`rust-analyzer scip . --output index.scip`).
+//
+// scipAutoDiscoverEnv gates that discovery, and it is deliberately NOT
+// on-by-default. Treating "a file named index.scip exists" as consent would mean
+// a stale index left in a repo silently starts rewriting CALLS edges on the next
+// re-index with no operator action — the same shape of silent behavior change
+// this tier's drift guard exists to prevent. TestSCIPIngestInertWithoutEnv
+// encodes the existing contract (env var is the only switch) and still passes:
+// discovery is opt-in convenience, not an implicit trigger.
+//
+// Precedence: explicit env path > discovered in-repo index (when discovery is
+// enabled) > off.
+const (
+	scipIndexPathEnv     = "CBM_SCIP_INDEX_PATH"
+	scipAutoDiscoverEnv  = "CBM_SCIP_AUTO_DISCOVER"
+	scipIndexDefaultName = "index.scip"
+)
+
+// scipAutoDiscoverEnabled reports whether in-repo index discovery is on.
+// Any non-empty value other than an explicit falsey word enables it, matching
+// how the other CBM_* gates in this package read their env vars.
+func scipAutoDiscoverEnabled() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(scipAutoDiscoverEnv))) {
+	case "", "0", "false", "no", "off":
+		return false
+	default:
+		return true
+	}
+}
+
+// scipIndexPath resolves which SCIP index to ingest for repoRoot, and reports
+// how it was found. The provenance string is logged so an auto-discovered index
+// is distinguishable from an explicitly-configured one after the fact.
+func scipIndexPath(repoRoot string) (path, source string) {
+	if env := os.Getenv(scipIndexPathEnv); env != "" {
+		return env, "env:" + scipIndexPathEnv
+	}
+	if repoRoot == "" || !scipAutoDiscoverEnabled() {
+		return "", ""
+	}
+	candidate := filepath.Join(repoRoot, scipIndexDefaultName)
+	info, err := os.Stat(candidate)
+	if err != nil || info.IsDir() {
+		return "", ""
+	}
+	return candidate, "repo-default:" + scipIndexDefaultName
+}
 
 // scipFuncSpan is a Function/Method node's location, the shared vocabulary
 // between the SCIP occurrences and the existing graph.
@@ -80,14 +136,17 @@ func (fs scipFileSpans) atLine(file string, line int) *scipFuncSpan {
 }
 
 func (p *Pipeline) passSCIPIngest() {
-	path := os.Getenv(scipIndexPathEnv)
+	path, source := scipIndexPath(p.RepoPath)
 	if path == "" {
 		return
 	}
+	// Log the source so an auto-discovered index is distinguishable from an
+	// explicitly-configured one when reading pass.scip_ingest.done later.
+	slog.Info("pass.scip_ingest.selected", "path", path, "source", source)
 	if err := p.runSCIPIngest(path); err != nil {
 		// Ingest failure must not fail indexing — the heuristic edges are
 		// still in place and correct-by-default.
-		slog.Warn("pass.scip_ingest.err", "path", path, "err", err)
+		slog.Warn("pass.scip_ingest.err", "path", path, "source", source, "err", err)
 	}
 }
 

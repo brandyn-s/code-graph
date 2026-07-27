@@ -284,6 +284,36 @@ func (s *Store) EmbeddingCount(project string) (int, error) {
 	return count, err
 }
 
+// EmbeddingModelCounts returns the observed stored embedding inventory for a
+// project, grouped by the model recorded alongside each vector.
+func (s *Store) EmbeddingModelCounts(project string) (map[string]int, error) {
+	rows, err := s.q.QueryContext(context.Background(),
+		`SELECT ne.model, COUNT(*)
+		 FROM node_embeddings ne
+		 JOIN nodes n ON ne.node_id = n.id
+		 WHERE n.project = ?
+		 GROUP BY ne.model
+		 ORDER BY ne.model`, project)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	counts := make(map[string]int)
+	for rows.Next() {
+		var model string
+		var count int
+		if err := rows.Scan(&model, &count); err != nil {
+			return nil, err
+		}
+		counts[model] = count
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return counts, nil
+}
+
 // loadEmbeddingCache loads all embeddings for a project into memory.
 // Uses s.q so callers inside Store.WithTransaction don't deadlock on the
 // single-connection pool.

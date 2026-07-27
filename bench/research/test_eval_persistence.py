@@ -145,6 +145,20 @@ def _read_case_count(path: Path) -> int:
         return 0
 
 
+def _wait_for_case_count(
+    path: Path,
+    minimum: int,
+    timeout_s: float = 30.0,
+) -> bool:
+    """Wait through the mandatory empty preflight checkpoint for case data."""
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        if _read_case_count(path) >= minimum:
+            return True
+        time.sleep(0.2)
+    return False
+
+
 def test_per_case_dict_partial_summary_is_well_formed():
     """Unit-level test: _build_per_case_dict on a partial BatchSummary
     (1 instance) produces a valid schema-shaped dict with exactly that
@@ -266,8 +280,8 @@ def test_partial_state_preserved_on_interrupt(tmp_path: Path):
     proc = _spawn_eval(tmp_path, parquet_path, json_out, n=8)
     try:
         # Wait for the first checkpoint, then kill.
-        assert _wait_for_json_file(json_out, timeout_s=60.0), (
-            "subprocess never wrote a checkpoint before timeout"
+        assert _wait_for_case_count(json_out, 1, timeout_s=60.0), (
+            "subprocess never wrote a non-empty checkpoint before timeout"
         )
         first_count = _read_case_count(json_out)
         assert first_count >= 1, (

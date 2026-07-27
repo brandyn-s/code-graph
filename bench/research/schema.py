@@ -26,6 +26,7 @@ until they're updated. That's the discipline this module enforces.
 """
 from __future__ import annotations
 
+import math
 import time
 from dataclasses import dataclass, field, asdict
 from typing import Any
@@ -47,6 +48,18 @@ def _optional(d: dict, key: str, default: Any) -> Any:
     optional in the schema (e.g., agent_envelope is empty when the
     case wasn't agent-run). Most fields should be _required."""
     return d.get(key, default)
+
+
+def _finite_nonnegative_cost(d: dict, key: str) -> float:
+    value = _optional(d, key, 0.0)
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not math.isfinite(float(value))
+        or float(value) < 0.0
+    ):
+        raise ValueError(f"{key} cost must be finite and nonnegative")
+    return float(value)
 
 
 # ---------- AgentEnvelope (the inner agent-loop result) ----------
@@ -98,9 +111,53 @@ class CodeLocalizeAgentResult:
     note: str = ""
 
     @classmethod
-    def from_dict(cls, d: dict) -> "CodeLocalizeAgentResult":
+    def from_dict(
+        cls,
+        d: dict,
+        *,
+        strict: bool = False,
+    ) -> "CodeLocalizeAgentResult":
         ents_raw = _optional(d, "entities", []) or []
         iters_raw = _optional(d, "iterations", []) or []
+        if strict:
+            if not isinstance(d.get("entities"), list):
+                raise TypeError(
+                    "agent_envelope.code_localize_agent.entities must be a list"
+                )
+            for rank, entity in enumerate(d["entities"], start=1):
+                if not isinstance(entity, dict):
+                    raise TypeError(
+                        "agent_envelope.code_localize_agent.entities "
+                        f"rank {rank} must be a dict"
+                    )
+                for field_name in ("file_path", "qualified_name"):
+                    value = entity.get(field_name)
+                    if not isinstance(value, str) or not value:
+                        raise ValueError(
+                            "agent_envelope.code_localize_agent.entities "
+                            f"rank {rank} has invalid {field_name}"
+                        )
+                if "label" in entity and not isinstance(entity["label"], str):
+                    raise TypeError(
+                        "agent_envelope.code_localize_agent.entities "
+                        f"rank {rank} has invalid label"
+                    )
+            for field_name in ("turns", "input_tokens", "output_tokens"):
+                value = d.get(field_name)
+                if (
+                    isinstance(value, bool)
+                    or not isinstance(value, int)
+                    or value < 0
+                ):
+                    raise ValueError(
+                        "agent_envelope.code_localize_agent."
+                        f"{field_name} must be a nonnegative integer"
+                    )
+            stop_reason = d.get("stop_reason")
+            if not isinstance(stop_reason, str) or not stop_reason:
+                raise ValueError(
+                    "agent_envelope.code_localize_agent.stop_reason is absent"
+                )
         return cls(
             entities=[LocalizedEntity.from_dict(e) for e in ents_raw if isinstance(e, dict)],
             iterations=[
@@ -151,7 +208,12 @@ class AgentEnvelope:
             raise TypeError(
                 f"agent_envelope.code_localize_agent must be a dict, got {type(cla_raw).__name__}"
             )
-        return cls(code_localize_agent=CodeLocalizeAgentResult.from_dict(cla_raw))
+        return cls(
+            code_localize_agent=CodeLocalizeAgentResult.from_dict(
+                cla_raw,
+                strict=agent_ran,
+            )
+        )
 
 
 # ---------- PerCaseRecord (one Loc-Bench instance × one mode) ----------
@@ -185,6 +247,12 @@ class PerCaseRecord:
     duration_s: float
     note: str
     agent_envelope: AgentEnvelope
+    failure_class: str = ""
+    failure_code: str = ""
+    latency_s: dict = field(default_factory=dict)
+    index_identity: dict = field(default_factory=dict)
+    embedding_identity: dict = field(default_factory=dict)
+    attempts: list[dict] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         """Serialize to the on-disk JSON shape eval writes."""
@@ -213,8 +281,14 @@ class PerCaseRecord:
             "output_tokens": self.output_tokens,
             "cost_estimate_usd": self.cost_estimate_usd,
             "duration_s": self.duration_s,
+            "failure_class": self.failure_class,
+            "failure_code": self.failure_code,
+            "latency_s": dict(self.latency_s),
             "note": self.note,
             "agent_envelope": env_dict,
+            "index_identity": dict(self.index_identity),
+            "embedding_identity": dict(self.embedding_identity),
+            "attempts": list(self.attempts),
         }
 
     @classmethod
@@ -236,12 +310,21 @@ class PerCaseRecord:
             turns=int(_optional(d, "turns", 0)),
             input_tokens=int(_optional(d, "input_tokens", 0)),
             output_tokens=int(_optional(d, "output_tokens", 0)),
-            cost_estimate_usd=float(_optional(d, "cost_estimate_usd", 0.0)),
+            cost_estimate_usd=_finite_nonnegative_cost(
+                d,
+                "cost_estimate_usd",
+            ),
             duration_s=float(_optional(d, "duration_s", 0.0)),
+            failure_class=str(_optional(d, "failure_class", "")),
+            failure_code=str(_optional(d, "failure_code", "")),
+            latency_s=dict(_optional(d, "latency_s", {})),
             note=str(_optional(d, "note", "")),
             agent_envelope=AgentEnvelope.from_dict(
                 _optional(d, "agent_envelope", None), agent_ran=agent_ran
             ),
+            index_identity=dict(_optional(d, "index_identity", {})),
+            embedding_identity=dict(_optional(d, "embedding_identity", {})),
+            attempts=list(_optional(d, "attempts", [])),
         )
 
     # ----- Convenience accessors that previous readers had to do via
@@ -315,6 +398,7 @@ class BatchSummaryRecord:
     n_func_hit: int
     aborted_reason: str
     cases: list[PerCaseRecord]
+    checkpoint_contract: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return {
@@ -328,6 +412,7 @@ class BatchSummaryRecord:
             "n_func_hit": self.n_func_hit,
             "aborted_reason": self.aborted_reason,
             "cases": [c.to_dict() for c in self.cases],
+            "checkpoint_contract": dict(self.checkpoint_contract),
         }
 
     @classmethod
@@ -348,6 +433,7 @@ class BatchSummaryRecord:
             n_func_hit=int(_required(d, "n_func_hit")),
             aborted_reason=str(_optional(d, "aborted_reason", "")),
             cases=[PerCaseRecord.from_dict(c) for c in cases_raw if isinstance(c, dict)],
+            checkpoint_contract=dict(_optional(d, "checkpoint_contract", {})),
         )
 
 

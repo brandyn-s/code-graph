@@ -330,6 +330,23 @@ func (s *Server) handleIndexRepository(ctx context.Context, req *mcp.CallToolReq
 		"indexed_at":    indexedAt,
 		"_metadata":     s.stdWriteToolMetadata(outcome),
 	}
+	embeddingCount, embeddingCountErr := st.EmbeddingCount(projectName)
+	embeddingModels, embeddingModelsErr := st.EmbeddingModelCounts(projectName)
+	if embeddingCountErr != nil || embeddingModelsErr != nil {
+		result["embedding_status"] = "error"
+		result["embedding_count"] = 0
+		result["embedding_models"] = map[string]int{}
+		result["embedding_reason"] = fmt.Sprintf(
+			"embedding inventory unavailable: count=%v models=%v",
+			embeddingCountErr,
+			embeddingModelsErr,
+		)
+	} else {
+		result["embedding_status"] = "captured"
+		result["embedding_count"] = embeddingCount
+		result["embedding_models"] = embeddingModels
+		result["embedding_reason"] = ""
+	}
 	if coherent := addIndexIdentity(result, st, projectName); !coherent {
 		result["status"] = "degraded"
 		if identityErr != nil && result["identity_reason"] == "" {

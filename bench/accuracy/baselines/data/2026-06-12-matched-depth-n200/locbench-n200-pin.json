@@ -1,0 +1,1433 @@
+{
+  "schema_version": 1,
+  "purpose": "retrieval-only-vs-graph matched-depth LocBench n=200",
+  "n": 200,
+  "score_depth": 10,
+  "query_rule": "problem_statement first paragraph, stripped",
+  "recorded_source": {
+    "path": "bench/accuracy/baselines/2026-06-12-loc-bench-n200-rebaseline.md",
+    "sha256": "aa30f7a284cfb4f130a2f2c29baa35be07a6c90edb63dbdb79f4e17622279333",
+    "table_marker": "## Per-instance details (200 rows)"
+  },
+  "dataset": {
+    "metadata_bundle_path": "bench/research/locbench_v1_instances.json",
+    "metadata_bundle_sha256": "a1e5de9ebaed957035928c86e103493137448c824f2ad5c5cb99cd5e868ac60e",
+    "metadata_bundle_n": 560,
+    "repository": "czlll/Loc-Bench_V1",
+    "revision": "c44cf3b74e07ca642cec841b471a9939907c12a7",
+    "parquet_path": "data/test-00000-of-00001.parquet",
+    "parquet_sha256": "8df0833c2c1276c5837aab923d489ab97d7654529abe759d0f59242c4978a662",
+    "parquet_size_bytes": 3084430
+  },
+  "component_pins": {
+    "code_search": {
+      "tag": "v0.2.1",
+      "artifact_sha256": "567d4caabdd3b5446bcaa789afc7104fb8cce142ff69d7fc8f1294398532e7e9"
+    }
+  },
+  "recorded_order_sha256": "de161cf07a6310209d78e9f2e2f05ca28a21cfcdeef1b871279d39ea24d54577",
+  "pinned_instance_ids": [
+    "UXARRAY__uxarray-1117",
+    "Chainlit__chainlit-1575",
+    "Open-MSS__MSS-1967",
+    "sopel-irc__sopel-2285",
+    "mesonbuild__meson-11366",
+    "pypa__pip-13085",
+    "vllm-project__vllm-9390",
+    "scikit-learn__scikit-learn-25186",
+    "okta__okta-jwt-verifier-python-59",
+    "ray-project__ray-26818",
+    "gitpython-developers__GitPython-1636",
+    "huggingface__optimum-benchmark-266",
+    "JoinMarket-Org__joinmarket-clientserver-1180",
+    "TagStudioDev__TagStudio-735",
+    "micropython__micropython-lib-947",
+    "fortra__impacket-1636",
+    "AzureAD__microsoft-authentication-library-for-python-454",
+    "Chainlit__chainlit-1441",
+    "django__django-18616",
+    "Bears-R-Us__arkouda-1969",
+    "django__django-18435",
+    "sqlfluff__sqlfluff-6399",
+    "mathesar-foundation__mathesar-3117",
+    "huggingface__transformers-22498",
+    "JackPlowman__repo_standards_validator-137",
+    "huggingface__transformers-35453",
+    "pandas-dev__pandas-29944",
+    "scikit-learn__scikit-learn-16948",
+    "numba__numba-9757",
+    "jobatabs__textec-53",
+    "django__django-19009",
+    "internetarchive__openlibrary-3196",
+    "django__django-13134",
+    "webcompat__webcompat.com-2731",
+    "scikit-learn__scikit-learn-14012",
+    "airbnb__knowledge-repo-558",
+    "pulp__pulp_rpm-3224",
+    "sancus-tee__sancus-compiler-36",
+    "scikit-learn__scikit-learn-6116",
+    "duncanscanga__VDRS-Solutions-73",
+    "scipy__scipy-5647",
+    "plone__plone.restapi-859",
+    "openwisp__openwisp-users-286",
+    "rucio__rucio-4930",
+    "home-assistant__core-15182",
+    "jazzband__django-two-factor-auth-390",
+    "Innopoints__backend-124",
+    "zulip__zulip-14091",
+    "matchms__matchms-backup-187",
+    "latchset__jwcrypto-195",
+    "django__django-5605",
+    "jax-ml__jax-25114",
+    "PlasmaPy__PlasmaPy-2542",
+    "kedro-org__kedro-4367",
+    "Deltares__imod-python-1159",
+    "ivadomed__ivadomed-1081",
+    "zulip__zulip-31168",
+    "ckan__ckan-8226",
+    "UXARRAY__uxarray-1144",
+    "UXARRAY__uxarray-1151",
+    "twisted__klein-773",
+    "hyeneung__tech-blog-hub-site-49",
+    "home-assistant__core-136739",
+    "celery__django-celery-beat-835",
+    "Standard-Labs__real-intent-27",
+    "vllm-project__vllm-7874",
+    "NCSU-High-Powered-Rocketry-Club__AirbrakesV2-151",
+    "scikit-learn__scikit-learn-8478",
+    "scikit-learn__scikit-learn-17443",
+    "Qiskit__qiskit-13141",
+    "sgkit-dev__sgkit-447",
+    "numpy__numpy-17394",
+    "Ouranosinc__xclim-477",
+    "scikit-learn__scikit-learn-10280",
+    "pandas-dev__pandas-22762",
+    "numpy__numpy-8206",
+    "pandas-dev__pandas-19074",
+    "rapidsai__dask-cuda-98",
+    "freedomofpress__securedrop-client-944",
+    "modin-project__modin-4391",
+    "scikit-learn__scikit-learn-13290",
+    "alexa-pi__AlexaPi-188",
+    "matrix-org__synapse-8744",
+    "streamlit__streamlit-9754",
+    "streamlit__streamlit-9472",
+    "scikit-learn__scikit-learn-30128",
+    "PrefectHQ__prefect-16117",
+    "PrefectHQ__prefect-14693",
+    "PrefectHQ__prefect-13259",
+    "Lightning-AI__pytorch-lightning-20403",
+    "dask__dask-11609",
+    "dask__dask-11541",
+    "dask__dask-11479",
+    "dask__dask-11434",
+    "dask__dask-10750",
+    "DS4SD__docling-330",
+    "getmoto__moto-8342",
+    "getmoto__moto-8316",
+    "ray-project__ray-49236",
+    "ray-project__ray-49221",
+    "ray-project__ray-48957",
+    "spotify__luigi-3308",
+    "bridgecrewio__checkov-6909",
+    "bridgecrewio__checkov-6895",
+    "keras-team__keras-20626",
+    "keras-team__keras-20550",
+    "keras-team__keras-20443",
+    "vllm-project__vllm-7783",
+    "pydantic__pydantic-10789",
+    "pydantic__pydantic-8706",
+    "yt-dlp__yt-dlp-11750",
+    "Qiskit__qiskit-12214",
+    "python__mypy-18164",
+    "python__mypy-18163",
+    "python__mypy-18160",
+    "pandas-dev__pandas-59900",
+    "django__django-18906",
+    "django__django-18820",
+    "django__django-18795",
+    "django__django-18785",
+    "django__django-18752",
+    "django__django-18508",
+    "django__django-18105",
+    "django__django-17984",
+    "django__django-17904",
+    "django__django-17874",
+    "roboflow__supervision-1739",
+    "roboflow__supervision-1698",
+    "py-pdf__pypdf-2656",
+    "huggingface__trl-2450",
+    "rq__rq-2138",
+    "tobymao__sqlglot-4524",
+    "tobymao__sqlglot-4434",
+    "tobymao__sqlglot-4415",
+    "modin-project__modin-6980",
+    "modin-project__modin-6951",
+    "sympy__sympy-27325",
+    "sympy__sympy-27288",
+    "jax-ml__jax-25787",
+    "jax-ml__jax-25511",
+    "jax-ml__jax-22049",
+    "jax-ml__jax-19909",
+    "jax-ml__jax-19710",
+    "mlflow__mlflow-10923",
+    "prowler-cloud__prowler-5856",
+    "prowler-cloud__prowler-5653",
+    "vllm-project__vllm-11138",
+    "vllm-project__vllm-11073",
+    "vllm-project__vllm-10903",
+    "vllm-project__vllm-10536",
+    "vllm-project__vllm-10347",
+    "UKPLab__sentence-transformers-3073",
+    "Zulko__moviepy-2253",
+    "yt-dlp__yt-dlp-11644",
+    "locustio__locust-2976",
+    "ranaroussi__yfinance-2122",
+    "scipy__scipy-22106",
+    "DS4SD__docling-528",
+    "DS4SD__docling-442",
+    "certbot__certbot-10043",
+    "pandas-dev__pandas-60543",
+    "pandas-dev__pandas-60461",
+    "pandas-dev__pandas-60310",
+    "pandas-dev__pandas-60277",
+    "pandas-dev__pandas-60247",
+    "huggingface__trl-2433",
+    "SYSTRAN__faster-whisper-1198",
+    "SYSTRAN__faster-whisper-1141",
+    "phidatahq__phidata-1563",
+    "nltk__nltk-3335",
+    "dask__dask-11491",
+    "bridgecrewio__checkov-6826",
+    "spotify__luigi-3324",
+    "ray-project__ray-49071",
+    "ray-project__ray-48891",
+    "ray-project__ray-48756",
+    "BerriAI__litellm-6915",
+    "matplotlib__matplotlib-29265",
+    "flet-dev__flet-4425",
+    "flet-dev__flet-4388",
+    "flet-dev__flet-4384",
+    "kornia__kornia-3084",
+    "wandb__wandb-9011",
+    "ultralytics__ultralytics-17728",
+    "huggingface__diffusers-10262",
+    "huggingface__diffusers-10185",
+    "huggingface__diffusers-10067",
+    "huggingface__diffusers-9885",
+    "modin-project__modin-7400",
+    "Qiskit__qiskit-13552",
+    "aio-libs__aiohttp-9766",
+    "aio-libs__aiohttp-9762",
+    "langchain-ai__langgraph-2724",
+    "langchain-ai__langgraph-2571",
+    "vllm-project__vllm-9617",
+    "mlflow__mlflow-13390",
+    "huggingface__transformers-34507",
+    "huggingface__transformers-34279",
+    "django__django-18654",
+    "huggingface__diffusers-9815"
+  ],
+  "cases": [
+    {
+      "instance_id": "UXARRAY__uxarray-1117",
+      "repo": "UXARRAY/uxarray",
+      "base_commit": "fe4cae1311db7fb21187b505e06018334a015c48",
+      "category": "Performance Issue"
+    },
+    {
+      "instance_id": "Chainlit__chainlit-1575",
+      "repo": "Chainlit/chainlit",
+      "base_commit": "8b2d4bacfd4fa2c8af72e2d140d527d20125b07b",
+      "category": "Security Vulnerability"
+    },
+    {
+      "instance_id": "Open-MSS__MSS-1967",
+      "repo": "Open-MSS/MSS",
+      "base_commit": "56e9528b552a9d8f2e267661473b8f0e724fd093",
+      "category": "Performance Issue"
+    },
+    {
+      "instance_id": "sopel-irc__sopel-2285",
+      "repo": "sopel-irc/sopel",
+      "base_commit": "51300a1ab854d6ec82d90df1bc876188c03335ff",
+      "category": "Security Vulnerability"
+    },
+    {
+      "instance_id": "mesonbuild__meson-11366",
+      "repo": "mesonbuild/meson",
+      "base_commit": "088727164de8496c4bada040c2f4690e42f66b69",
+      "category": "Security Vulnerability"
+    },
+    {
+      "instance_id": "pypa__pip-13085",
+      "repo": "pypa/pip",
+      "base_commit": "fe0925b3c00bf8956a0d33408df692ac364217d4",
+      "category": "Security Vulnerability"
+    },
+    {
+      "instance_id": "vllm-project__vllm-9390",
+      "repo": "vllm-project/vllm",
+      "base_commit": "83450458339b07765b0e72a822e5fe93eeaf5258",
+      "category": "Feature Request"
+    },
+    {
+      "instance_id": "scikit-learn__scikit-learn-25186",
+      "repo": "scikit-learn/scikit-learn",
+      "base_commit": "b2fe9746a862272a60ffc7d2c6563d28dd13a6c6",
+      "category": "Performance Issue"
+    },
+    {
+      "instance_id": "okta__okta-jwt-verifier-python-59",
+      "repo": "okta/okta-jwt-verifier-python",
+      "base_commit": "cb4e6780c55c234690299fa4ccef5ad33746c2c2",
+      "category": "Security Vulnerability"
+    },
+    {
+      "instance_id": "ray-project__ray-26818",
+      "repo": "ray-project/ray",
+      "base_commit": "1b06e7a83acd1c7b721327cef73bd5d3cb66faa2",
+      "category": "Performance Issue"
+    },
+    {
+      "instance_id": "gitpython-developers__GitPython-1636",
+      "repo": "gitpython-developers/GitPython",
+      "base_commit": "e19abe75bbd7d766d7f06171c6524431e4653545",
+      "category": "Security Vulnerability"
+    },
+    {
+      "instance_id": "huggingface__optimum-benchmark-266",
+      "repo": "huggingface/optimum-benchmark",
+      "base_commit": "1992de306378f7d5848d36ddc73f15ba711c8d70",
+      "category": "Performance Issue"
+    },
+    {
+      "instance_id": "JoinMarket-Org__joinmarket-clientserver-1180",
+      "repo": "JoinMarket-Org/joinmarket-clientserver",
+      "base_commit": "aabfd3f7c2ec33391b89369bd1fe354659f10f0f",
+      "category": "Performance Issue"
+    },
+    {
+      "instance_id": "TagStudioDev__TagStudio-735",
+      "repo": "TagStudioDev/TagStudio",
+      "base_commit": "921a8875de22f7c136316edfb5d3038236414b57",
+      "category": "Performance Issue"
+    },
+    {
+      "instance_id": "micropython__micropython-lib-947",
+      "repo": "micropython/micropython-lib",
+      "base_commit": "e4cf09527bce7569f5db742cf6ae9db68d50c6a9",
+      "category": "Security Vulnerability"
+    },
+    {
+      "instance_id": "fortra__impacket-1636",
+      "repo": "fortra/impacket",
+      "base_commit": "33058eb2fde6976ea62e04bc7d6b629d64d44712",
+      "category": "Security Vulnerability"
+    },
+    {
+      "instance_id": "AzureAD__microsoft-authentication-library-for-python-454",
+      "repo": "AzureAD/microsoft-authentication-library-for-python",
+      "base_commit": "66a1c5a935e59c66281ccf73a3931681eeedee23",
+      "category": "Performance Issue"
+    },
+    {
+      "instance_id": "Chainlit__chainlit-1441",
+      "repo": "Chainlit/chainlit",
+      "base_commit": "beb44ca74f18b352fa078baf7038c2dc6b729e0c",
+      "category": "Security Vulnerability"
+    },
+    {
+      "instance_id": "django__django-18616",
+      "repo": "django/django",
+      "base_commit": "b9aa3239ab1328c915684d89b87a49459cabd30b",
+      "category": "Feature Request"
+    },
+    {
+      "instance_id": "Bears-R-Us__arkouda-1969",
+      "repo": "Bears-R-Us/arkouda",
+      "base_commit": "6e3da833ae55173cfc7488faa1e1951c8506a255",
+      "category": "Performance Issue"
+    },
+    {
+      "instance_id": "django__django-18435",
+      "repo": "django/django",
+      "base_commit": "95827452571eb976c4f0d5e9ac46843948dd5fe6",
+      "category": "Feature Request"
+    },
+    {
+      "instance_id": "sqlfluff__sqlfluff-6399",
+      "repo": "sqlfluff/sqlfluff",
+      "base_commit": "80f4fc2d3bbc7839e41a9018ae4918118c309656",
+      "category": "Feature Request"
+    },
+    {
+      "instance_id": "mathesar-foundation__mathesar-3117",
+      "repo": "mathesar-foundation/mathesar",
+      "base_commit": "e7b175bc2f7db0ae6e69c723c6a054c6dc2152d8",
+      "category": "Security Vulnerability"
+    },
+    {
+      "instance_id": "huggingface__transformers-22498",
+      "repo": "huggingface/transformers",
+      "base_commit": "6fc44656b43f1de939a1e62dd59c45d1fec9f1aa",
+      "category": "Feature Request"
+    },
+    {
+      "instance_id": "JackPlowman__repo_standards_validator-137",
+      "repo": "JackPlowman/repo_standards_validator",
+      "base_commit": "35962a9fbb5711ab436edca91026428aed1e2d1c",
+      "category": "Security Vulnerability"
+    },
+    {
+      "instance_id": "huggingface__transformers-35453",
+      "repo": "huggingface/transformers",
+      "base_commit": "6b550462139655d488d4c663086a63e98713c6b9",
+      "category": "Feature Request"
+    },
+    {
+      "instance_id": "pandas-dev__pandas-29944",
+      "repo": "pandas-dev/pandas",
+      "base_commit": "aae9234e816469391512910e8265552f215d6263",
+      "category": "Feature Request"
+    },
+    {
+      "instance_id": "scikit-learn__scikit-learn-16948",
+      "repo": "scikit-learn/scikit-learn",
+      "base_commit": "7d93ca87ea14ef8f16be43d75cff72d05f48f7ed",
+      "category": "Feature Request"
+    },
+    {
+      "instance_id": "numba__numba-9757",
+      "repo": "numba/numba",
+      "base_commit": "b49469f06176769ecfa47a7865ef2030f4ed77f4",
+      "category": "Performance Issue"
+    },
+    {
+      "instance_id": "jobatabs__textec-53",
+      "repo": "jobatabs/textec",
+      "base_commit": "951409c20a2cf9243690b9bda7f7a22bb7c999a7",
+      "category": "Security Vulnerability"
+    },
+    {
+      "instance_id": "django__django-19009",
+      "repo": "django/django",
+      "base_commit": "5f30fd2358fd60a514bdba31594bfc8122f30167",
+      "category": "Performance Issue"
+    },
+    {
+      "instance_id": "internetarchive__openlibrary-3196",
+      "repo": "internetarchive/openlibrary",
+      "base_commit": "061f07ec54cec6ffd169580641eb87144fe7ea14",
+      "category": "Security Vulnerability"
+    },
+    {
+      "instance_id": "django__django-13134",
+      "repo": "django/django",
+      "base_commit": "3071660acfbdf4b5c59457c8e9dc345d5e8894c5",
+      "category": "Security Vulnerability"
+    },
+    {
+      "instance_id": "webcompat__webcompat.com-2731",
+      "repo": "webcompat/webcompat.com",
+      "base_commit": "384c4feeef14a13655b8264dde9f10bfa5614134",
+      "category": "Performance Issue"
+    },
+    {
+      "instance_id": "scikit-learn__scikit-learn-14012",
+      "repo": "scikit-learn/scikit-learn",
+      "base_commit": "15b54340ee7dc7cb870a418d1b5f6f553672f5dd",
+      "category": "Feature Request"
+    },
+    {
+      "instance_id": "airbnb__knowledge-repo-558",
+      "repo": "airbnb/knowledge-repo",
+      "base_commit": "d1874d3e71994cd9bb769d60133c046b6d2b8bb5",
+      "category": "Security Vulnerability"
+    },
+    {
+      "instance_id": "pulp__pulp_rpm-3224",
+      "repo": "pulp/pulp_rpm",
+      "base_commit": "6b999b4d8a16d936927e3fc9dec74fe506c25226",
+      "category": "Performance Issue"
+    },
+    {
+      "instance_id": "sancus-tee__sancus-compiler-36",
+      "repo": "sancus-tee/sancus-compiler",
+      "base_commit": "dc3910192f99374c91ac5f12187dbc460454fa1f",
+      "category": "Security Vulnerability"
+    },
+    {
+      "instance_id": "scikit-learn__scikit-learn-6116",
+      "repo": "scikit-learn/scikit-learn",
+      "base_commit": "5e4f524f8408e5a0efb96f8128504f8ca747a95e",
+      "category": "Feature Request"
+    },
+    {
+      "instance_id": "duncanscanga__VDRS-Solutions-73",
+      "repo": "duncanscanga/VDRS-Solutions",
+      "base_commit": "c97e24d072fe1bffe3dc9e3b363d40b725a70be9",
+      "category": "Security Vulnerability"
+    },
+    {
+      "instance_id": "scipy__scipy-5647",
+      "repo": "scipy/scipy",
+      "base_commit": "ccb338fa0521070107200a9ebcab67905b286a7a",
+      "category": "Performance Issue"
+    },
+    {
+      "instance_id": "plone__plone.restapi-859",
+      "repo": "plone/plone.restapi",
+      "base_commit": "32a80ab4850252f1d5b9d1b3c847e9e32d3aa45e",
+      "category": "Security Vulnerability"
+    },
+    {
+      "instance_id": "openwisp__openwisp-users-286",
+      "repo": "openwisp/openwisp-users",
+      "base_commit": "6c083027ed7bb467351f8f05ac201fa60d9bdc24",
+      "category": "Security Vulnerability"
+    },
+    {
+      "instance_id": "rucio__rucio-4930",
+      "repo": "rucio/rucio",
+      "base_commit": "92474868cec7d64b83b46b451ecdc4a294ef2711",
+      "category": "Security Vulnerability"
+    },
+    {
+      "instance_id": "home-assistant__core-15182",
+      "repo": "home-assistant/core",
+      "base_commit": "4fbe3bb07062b81ac4562d4080550d92cbd47828",
+      "category": "Security Vulnerability"
+    },
+    {
+      "instance_id": "jazzband__django-two-factor-auth-390",
+      "repo": "jazzband/django-two-factor-auth",
+      "base_commit": "430ef08a2c6cec4e0ce6cfa4a08686d4e62f73b7",
+      "category": "Security Vulnerability"
+    },
+    {
+      "instance_id": "Innopoints__backend-124",
+      "repo": "Innopoints/backend",
+      "base_commit": "c1779409130762a141710875bd1d758c8671b1d8",
+      "category": "Security Vulnerability"
+    },
+    {
+      "instance_id": "zulip__zulip-14091",
+      "repo": "zulip/zulip",
+      "base_commit": "cb85763c7870bd6c83e84e4e7bca0900810457e9",
+      "category": "Performance Issue"
+    },
+    {
+      "instance_id": "matchms__matchms-backup-187",
+      "repo": "matchms/matchms-backup",
+      "base_commit": "da8debd649798367ed29102b2965a1ab0e6f4938",
+      "category": "Security Vulnerability"
+    },
+    {
+      "instance_id": "latchset__jwcrypto-195",
+      "repo": "latchset/jwcrypto",
+      "base_commit": "e0249b1161cb8ef7a3a9910948103b816bc0a299",
+      "category": "Security Vulnerability"
+    },
+    {
+      "instance_id": "django__django-5605",
+      "repo": "django/django",
+      "base_commit": "6d9c5d46e644a8ef93b0227fc710e09394a03992",
+      "category": "Security Vulnerability"
+    },
+    {
+      "instance_id": "jax-ml__jax-25114",
+      "repo": "jax-ml/jax",
+      "base_commit": "df6758f021167b1c0b85f5d6e4986f6f0d2a1169",
+      "category": "Feature Request"
+    },
+    {
+      "instance_id": "PlasmaPy__PlasmaPy-2542",
+      "repo": "PlasmaPy/PlasmaPy",
+      "base_commit": "db62754e6150dc841074afe2e155f21a806e7f1b",
+      "category": "Performance Issue"
+    },
+    {
+      "instance_id": "kedro-org__kedro-4367",
+      "repo": "kedro-org/kedro",
+      "base_commit": "70734ce00ee46b58c85b4cf04afbe89d32c06758",
+      "category": "Performance Issue"
+    },
+    {
+      "instance_id": "Deltares__imod-python-1159",
+      "repo": "Deltares/imod-python",
+      "base_commit": "4f3b71675708c5a832fb78e05f679bb89158f95d",
+      "category": "Performance Issue"
+    },
+    {
+      "instance_id": "ivadomed__ivadomed-1081",
+      "repo": "ivadomed/ivadomed",
+      "base_commit": "dee79e6bd90b30095267a798da99c4033cc5991b",
+      "category": "Performance Issue"
+    },
+    {
+      "instance_id": "zulip__zulip-31168",
+      "repo": "zulip/zulip",
+      "base_commit": "3d58a7ec0455ba609955c13470d31854687eff7a",
+      "category": "Performance Issue"
+    },
+    {
+      "instance_id": "ckan__ckan-8226",
+      "repo": "ckan/ckan",
+      "base_commit": "15f32e57e229db6436d10adddf73bcff84bdd453",
+      "category": "Performance Issue"
+    },
+    {
+      "instance_id": "UXARRAY__uxarray-1144",
+      "repo": "UXARRAY/uxarray",
+      "base_commit": "81ac5bd50ed2a2faca24008dc261029be30c37c4",
+      "category": "Performance Issue"
+    },
+    {
+      "instance_id": "UXARRAY__uxarray-1151",
+      "repo": "UXARRAY/uxarray",
+      "base_commit": "9926057173e143e8170e3337dd1b7d39a4d1a961",
+      "category": "Performance Issue"
+    },
+    {
+      "instance_id": "twisted__klein-773",
+      "repo": "twisted/klein",
+      "base_commit": "04db6d26fd6f8dc749868268518957c8238c09d6",
+      "category": "Performance Issue"
+    },
+    {
+      "instance_id": "hyeneung__tech-blog-hub-site-49",
+      "repo": "hyeneung/tech-blog-hub-site",
+      "base_commit": "940338fead4a77132a4d78b42232265301a20b83",
+      "category": "Performance Issue"
+    },
+    {
+      "instance_id": "home-assistant__core-136739",
+      "repo": "home-assistant/core",
+      "base_commit": "a8c382566cae06c43a33c4d3d44c9bc92ef7b4d8",
+      "category": "Performance Issue"
+    },
+    {
+      "instance_id": "celery__django-celery-beat-835",
+      "repo": "celery/django-celery-beat",
+      "base_commit": "17d87f4951d42498c9ca9aaa23ecbd95f2a7dbc3",
+      "category": "Performance Issue"
+    },
+    {
+      "instance_id": "Standard-Labs__real-intent-27",
+      "repo": "Standard-Labs/real-intent",
+      "base_commit": "ed2a2cf98cbce1f571212aadd0cebf07f0bb5bd9",
+      "category": "Performance Issue"
+    },
+    {
+      "instance_id": "vllm-project__vllm-7874",
+      "repo": "vllm-project/vllm",
+      "base_commit": "1248e8506a4d98b4f15cbfe729cf2af42fb4223a",
+      "category": "Performance Issue"
+    },
+    {
+      "instance_id": "NCSU-High-Powered-Rocketry-Club__AirbrakesV2-151",
+      "repo": "NCSU-High-Powered-Rocketry-Club/AirbrakesV2",
+      "base_commit": "2d85a6c6bf946636c5e6b4aa74388b9d376289f3",
+      "category": "Performance Issue"
+    },
+    {
+      "instance_id": "scikit-learn__scikit-learn-8478",
+      "repo": "scikit-learn/scikit-learn",
+      "base_commit": "312f64053d7249a326a19a07fa635ef5b5c6ed99",
+      "category": "Feature Request"
+    },
+    {
+      "instance_id": "scikit-learn__scikit-learn-17443",
+      "repo": "scikit-learn/scikit-learn",
+      "base_commit": "c3db2cdbf5244229af2c5eb54f9216a69f77a146",
+      "category": "Feature Request"
+    },
+    {
+      "instance_id": "Qiskit__qiskit-13141",
+      "repo": "Qiskit/qiskit",
+      "base_commit": "90e92a46643c72a21c5852299243213907453c21",
+      "category": "Feature Request"
+    },
+    {
+      "instance_id": "sgkit-dev__sgkit-447",
+      "repo": "sgkit-dev/sgkit",
+      "base_commit": "9150392b3b38f575d12b5f555877fc059ee44591",
+      "category": "Performance Issue"
+    },
+    {
+      "instance_id": "numpy__numpy-17394",
+      "repo": "numpy/numpy",
+      "base_commit": "43683b3256a86659f230dcadbcde1f8020398bfa",
+      "category": "Feature Request"
+    },
+    {
+      "instance_id": "Ouranosinc__xclim-477",
+      "repo": "Ouranosinc/xclim",
+      "base_commit": "cc17fde69b757443602872d1156caf00b34ba161",
+      "category": "Performance Issue"
+    },
+    {
+      "instance_id": "scikit-learn__scikit-learn-10280",
+      "repo": "scikit-learn/scikit-learn",
+      "base_commit": "1557cb8a1910bce6dc33cd5cd3a08c380bdec566",
+      "category": "Feature Request"
+    },
+    {
+      "instance_id": "pandas-dev__pandas-22762",
+      "repo": "pandas-dev/pandas",
+      "base_commit": "c8ce3d01e9ffafc24c6f9dd568cd9eb7e42c610c",
+      "category": "Feature Request"
+    },
+    {
+      "instance_id": "numpy__numpy-8206",
+      "repo": "numpy/numpy",
+      "base_commit": "6feb18ce79bacdac09945cf2ca0ddf85f8294298",
+      "category": "Feature Request"
+    },
+    {
+      "instance_id": "pandas-dev__pandas-19074",
+      "repo": "pandas-dev/pandas",
+      "base_commit": "24d95098789c8685e7c0ce6a57982d0372ffc3e0",
+      "category": "Feature Request"
+    },
+    {
+      "instance_id": "rapidsai__dask-cuda-98",
+      "repo": "rapidsai/dask-cuda",
+      "base_commit": "f4ffc5782330ac1d83d196cba78142ffd761fe1c",
+      "category": "Performance Issue"
+    },
+    {
+      "instance_id": "freedomofpress__securedrop-client-944",
+      "repo": "freedomofpress/securedrop-client",
+      "base_commit": "bd94b7c2d0e6a4da01504b532e91cbb07716b333",
+      "category": "Performance Issue"
+    },
+    {
+      "instance_id": "modin-project__modin-4391",
+      "repo": "modin-project/modin",
+      "base_commit": "4ec7f6347903f9133c65ebc5b6e0e15553b98577",
+      "category": "Performance Issue"
+    },
+    {
+      "instance_id": "scikit-learn__scikit-learn-13290",
+      "repo": "scikit-learn/scikit-learn",
+      "base_commit": "3f25ea034cca6fa719dec024e0cbba608bce07e6",
+      "category": "Performance Issue"
+    },
+    {
+      "instance_id": "alexa-pi__AlexaPi-188",
+      "repo": "alexa-pi/AlexaPi",
+      "base_commit": "81d04a41212a5b6040a402c6f84907a16f5b186b",
+      "category": "Performance Issue"
+    },
+    {
+      "instance_id": "matrix-org__synapse-8744",
+      "repo": "matrix-org/synapse",
+      "base_commit": "03e392f787df3fb8d23aca0964695a5caa075940",
+      "category": "Performance Issue"
+    },
+    {
+      "instance_id": "streamlit__streamlit-9754",
+      "repo": "streamlit/streamlit",
+      "base_commit": "8cfd31614446fda361aab1d007c97acb5ffcc12a",
+      "category": "Security Vulnerability"
+    },
+    {
+      "instance_id": "streamlit__streamlit-9472",
+      "repo": "streamlit/streamlit",
+      "base_commit": "4c45934065ea2c0acea32fdb3b4d51fc4fb00620",
+      "category": "Performance Issue"
+    },
+    {
+      "instance_id": "scikit-learn__scikit-learn-30128",
+      "repo": "scikit-learn/scikit-learn",
+      "base_commit": "6bf2061f76ba0977c1f7ffb9ddc48db794e5c7ec",
+      "category": "Feature Request"
+    },
+    {
+      "instance_id": "PrefectHQ__prefect-16117",
+      "repo": "PrefectHQ/prefect",
+      "base_commit": "fb919c67427d230ecea03a5273dfdd6de59bd697",
+      "category": "Bug Report"
+    },
+    {
+      "instance_id": "PrefectHQ__prefect-14693",
+      "repo": "PrefectHQ/prefect",
+      "base_commit": "80181d73383659c27f4e16122328f6c383e852fe",
+      "category": "Feature Request"
+    },
+    {
+      "instance_id": "PrefectHQ__prefect-13259",
+      "repo": "PrefectHQ/prefect",
+      "base_commit": "dbf132b346df079c4565abbe2cb31f61117b1b13",
+      "category": "Feature Request"
+    },
+    {
+      "instance_id": "Lightning-AI__pytorch-lightning-20403",
+      "repo": "Lightning-AI/pytorch-lightning",
+      "base_commit": "20d19d2f5728f7049272f2db77a9748ff4cf5ccd",
+      "category": "Feature Request"
+    },
+    {
+      "instance_id": "dask__dask-11609",
+      "repo": "dask/dask",
+      "base_commit": "076b1f4d59283709127e5f7fe3b0c045127b7a92",
+      "category": "Performance Issue"
+    },
+    {
+      "instance_id": "dask__dask-11541",
+      "repo": "dask/dask",
+      "base_commit": "5b115c4360fec6a4aa6e0edf8ad1d89a87c986dd",
+      "category": "Bug Report"
+    },
+    {
+      "instance_id": "dask__dask-11479",
+      "repo": "dask/dask",
+      "base_commit": "b5ed6c5529c347a210cda856f6cf9f1609203e2a",
+      "category": "Performance Issue"
+    },
+    {
+      "instance_id": "dask__dask-11434",
+      "repo": "dask/dask",
+      "base_commit": "091f4e9bd226836faeaf30bdc3b5182ba14d22a6",
+      "category": "Feature Request"
+    },
+    {
+      "instance_id": "dask__dask-10750",
+      "repo": "dask/dask",
+      "base_commit": "6d5b994cb58f295c27bd888de0f67c83ed568d3d",
+      "category": "Feature Request"
+    },
+    {
+      "instance_id": "DS4SD__docling-330",
+      "repo": "DS4SD/docling",
+      "base_commit": "bf2a85f1d45bcff38ff5f9b6269dd1edf7cff0ae",
+      "category": "Bug Report"
+    },
+    {
+      "instance_id": "getmoto__moto-8342",
+      "repo": "getmoto/moto",
+      "base_commit": "60328d54ee14c390f00d83167da94bf273a58a6b",
+      "category": "Bug Report"
+    },
+    {
+      "instance_id": "getmoto__moto-8316",
+      "repo": "getmoto/moto",
+      "base_commit": "c9536b117e39fef41b9ccb5e07463eecda15ba2a",
+      "category": "Bug Report"
+    },
+    {
+      "instance_id": "ray-project__ray-49236",
+      "repo": "ray-project/ray",
+      "base_commit": "b78a78037bb8730eaa480e09df2805da5712b0bf",
+      "category": "Bug Report"
+    },
+    {
+      "instance_id": "ray-project__ray-49221",
+      "repo": "ray-project/ray",
+      "base_commit": "bc41605ee1c91e6666fa0f30a07bc90520c030f9",
+      "category": "Bug Report"
+    },
+    {
+      "instance_id": "ray-project__ray-48957",
+      "repo": "ray-project/ray",
+      "base_commit": "062df9887a2353a88d6a343008e9f028685f40db",
+      "category": "Feature Request"
+    },
+    {
+      "instance_id": "spotify__luigi-3308",
+      "repo": "spotify/luigi",
+      "base_commit": "7eeb7238d0e2e6707ab1f0498177420a7b2bb01e",
+      "category": "Security Vulnerability"
+    },
+    {
+      "instance_id": "bridgecrewio__checkov-6909",
+      "repo": "bridgecrewio/checkov",
+      "base_commit": "a657e60794302e971ff39b9566520067d67f1bf9",
+      "category": "Bug Report"
+    },
+    {
+      "instance_id": "bridgecrewio__checkov-6895",
+      "repo": "bridgecrewio/checkov",
+      "base_commit": "a94c1682b275bbf755342c0164d2ac0c379c0c16",
+      "category": "Bug Report"
+    },
+    {
+      "instance_id": "keras-team__keras-20626",
+      "repo": "keras-team/keras",
+      "base_commit": "a0f586beb7842d86fce623cab5d3a7fdb2419e9b",
+      "category": "Bug Report"
+    },
+    {
+      "instance_id": "keras-team__keras-20550",
+      "repo": "keras-team/keras",
+      "base_commit": "553521ee92f72c993ddb3c40d0ced406a3a4b7db",
+      "category": "Bug Report"
+    },
+    {
+      "instance_id": "keras-team__keras-20443",
+      "repo": "keras-team/keras",
+      "base_commit": "f9ea1a013c29e24001dc6cb7b10d9f740545fe58",
+      "category": "Bug Report"
+    },
+    {
+      "instance_id": "vllm-project__vllm-7783",
+      "repo": "vllm-project/vllm",
+      "base_commit": "80162c44b1d1e59a2c10f65b6adb9b0407439b1f",
+      "category": "Feature Request"
+    },
+    {
+      "instance_id": "pydantic__pydantic-10789",
+      "repo": "pydantic/pydantic",
+      "base_commit": "0157e343bac2313064492744ef07493b5c42bd5b",
+      "category": "Feature Request"
+    },
+    {
+      "instance_id": "pydantic__pydantic-8706",
+      "repo": "pydantic/pydantic",
+      "base_commit": "8898b8fee91c5a9dd99f4eb0c05f6950c2f684e0",
+      "category": "Feature Request"
+    },
+    {
+      "instance_id": "yt-dlp__yt-dlp-11750",
+      "repo": "yt-dlp/yt-dlp",
+      "base_commit": "fca3eb5f8be08d5fab2e18b45b7281a12e566725",
+      "category": "Bug Report"
+    },
+    {
+      "instance_id": "Qiskit__qiskit-12214",
+      "repo": "Qiskit/qiskit",
+      "base_commit": "d10f9a0fe1f73cde5b66e49af880a6f7816f131f",
+      "category": "Feature Request"
+    },
+    {
+      "instance_id": "python__mypy-18164",
+      "repo": "python/mypy",
+      "base_commit": "8ef21976cfd190d0b1974f438a7d30e8eaea5272",
+      "category": "Bug Report"
+    },
+    {
+      "instance_id": "python__mypy-18163",
+      "repo": "python/mypy",
+      "base_commit": "8ef21976cfd190d0b1974f438a7d30e8eaea5272",
+      "category": "Feature Request"
+    },
+    {
+      "instance_id": "python__mypy-18160",
+      "repo": "python/mypy",
+      "base_commit": "8ef21976cfd190d0b1974f438a7d30e8eaea5272",
+      "category": "Bug Report"
+    },
+    {
+      "instance_id": "pandas-dev__pandas-59900",
+      "repo": "pandas-dev/pandas",
+      "base_commit": "8d2ca0bf84bcf44a800ac19bdb4ed7ec88c555e2",
+      "category": "Feature Request"
+    },
+    {
+      "instance_id": "django__django-18906",
+      "repo": "django/django",
+      "base_commit": "1860a1afc9ac20750f932e8e0a94b32d096f2848",
+      "category": "Bug Report"
+    },
+    {
+      "instance_id": "django__django-18820",
+      "repo": "django/django",
+      "base_commit": "4c452cc377f6f43acd90c6e54826ebd2e6219b0d",
+      "category": "Feature Request"
+    },
+    {
+      "instance_id": "django__django-18795",
+      "repo": "django/django",
+      "base_commit": "2bc43ccbdb28b9d87da172ef119ff3b48e6ff71a",
+      "category": "Bug Report"
+    },
+    {
+      "instance_id": "django__django-18785",
+      "repo": "django/django",
+      "base_commit": "c12bc980e5b2bb25e447cd8dee550cad767f1ad2",
+      "category": "Bug Report"
+    },
+    {
+      "instance_id": "django__django-18752",
+      "repo": "django/django",
+      "base_commit": "2debd018dbc7aba0b98b4c082bbb1fa1d195a47e",
+      "category": "Feature Request"
+    },
+    {
+      "instance_id": "django__django-18508",
+      "repo": "django/django",
+      "base_commit": "519087819ed6e8bfbe6be208df71a7df19f23a58",
+      "category": "Performance Issue"
+    },
+    {
+      "instance_id": "django__django-18105",
+      "repo": "django/django",
+      "base_commit": "dd46cab6e076ec766ef0727a16f4219e3e6cb552",
+      "category": "Performance Issue"
+    },
+    {
+      "instance_id": "django__django-17984",
+      "repo": "django/django",
+      "base_commit": "921670c6943e9c532137b7d164885f2d3ab436b8",
+      "category": "Performance Issue"
+    },
+    {
+      "instance_id": "django__django-17904",
+      "repo": "django/django",
+      "base_commit": "fad334e1a9b54ea1acb8cce02a25934c5acfe99f",
+      "category": "Performance Issue"
+    },
+    {
+      "instance_id": "django__django-17874",
+      "repo": "django/django",
+      "base_commit": "28a3fbe0048883fdd5cefd6ffecb88e351121891",
+      "category": "Performance Issue"
+    },
+    {
+      "instance_id": "roboflow__supervision-1739",
+      "repo": "roboflow/supervision",
+      "base_commit": "6f55d9de9e0f5469f11f768fb993de133f7d5af3",
+      "category": "Feature Request"
+    },
+    {
+      "instance_id": "roboflow__supervision-1698",
+      "repo": "roboflow/supervision",
+      "base_commit": "6889e33da587ed6e161334d815274d520f2844c4",
+      "category": "Bug Report"
+    },
+    {
+      "instance_id": "py-pdf__pypdf-2656",
+      "repo": "py-pdf/pypdf",
+      "base_commit": "c227b0c725af6d0afc88bcf89348ece9b65adcb5",
+      "category": "Performance Issue"
+    },
+    {
+      "instance_id": "huggingface__trl-2450",
+      "repo": "huggingface/trl",
+      "base_commit": "9c5388b69e0842f76edc46a2ff9d0b51e1db4337",
+      "category": "Bug Report"
+    },
+    {
+      "instance_id": "rq__rq-2138",
+      "repo": "rq/rq",
+      "base_commit": "bb7f34053730da924486f97baa0d34fee9b1918b",
+      "category": "Bug Report"
+    },
+    {
+      "instance_id": "tobymao__sqlglot-4524",
+      "repo": "tobymao/sqlglot",
+      "base_commit": "992f6e9fc867aa5ad60a255be593b8982a0fbcba",
+      "category": "Bug Report"
+    },
+    {
+      "instance_id": "tobymao__sqlglot-4434",
+      "repo": "tobymao/sqlglot",
+      "base_commit": "38e2e19ac3e20224dc07128994a47340aa56e635",
+      "category": "Feature Request"
+    },
+    {
+      "instance_id": "tobymao__sqlglot-4415",
+      "repo": "tobymao/sqlglot",
+      "base_commit": "122ef5f41c4e29347026a81e6f6460ccf8e910ed",
+      "category": "Bug Report"
+    },
+    {
+      "instance_id": "modin-project__modin-6980",
+      "repo": "modin-project/modin",
+      "base_commit": "f601f8a9d602c70333548df3ef5e3c953df04f37",
+      "category": "Performance Issue"
+    },
+    {
+      "instance_id": "modin-project__modin-6951",
+      "repo": "modin-project/modin",
+      "base_commit": "4704751c4440574ce59b9948e88e6991e1d3183b",
+      "category": "Performance Issue"
+    },
+    {
+      "instance_id": "sympy__sympy-27325",
+      "repo": "sympy/sympy",
+      "base_commit": "fbe647fb34f90de01946fcaa1314207f11e5b26e",
+      "category": "Feature Request"
+    },
+    {
+      "instance_id": "sympy__sympy-27288",
+      "repo": "sympy/sympy",
+      "base_commit": "efa1521b638e4f7f2b9a18e0280a0667a4bb16c8",
+      "category": "Bug Report"
+    },
+    {
+      "instance_id": "jax-ml__jax-25787",
+      "repo": "jax-ml/jax",
+      "base_commit": "39ce7916f1fcabb11edd33ad006e5c8dc0929656",
+      "category": "Feature Request"
+    },
+    {
+      "instance_id": "jax-ml__jax-25511",
+      "repo": "jax-ml/jax",
+      "base_commit": "cd7109e6b55730c3ace264ed5eccf7b2ce84407e",
+      "category": "Bug Report"
+    },
+    {
+      "instance_id": "jax-ml__jax-22049",
+      "repo": "jax-ml/jax",
+      "base_commit": "e0efcaee840e8db7940723e65750ddf8c138b264",
+      "category": "Feature Request"
+    },
+    {
+      "instance_id": "jax-ml__jax-19909",
+      "repo": "jax-ml/jax",
+      "base_commit": "5f19f7712b485493ac141c44eea3b3eb1ffdfb59",
+      "category": "Feature Request"
+    },
+    {
+      "instance_id": "jax-ml__jax-19710",
+      "repo": "jax-ml/jax",
+      "base_commit": "b9824d7de3cb30f1df738cc42e486db3e9d915ff",
+      "category": "Feature Request"
+    },
+    {
+      "instance_id": "mlflow__mlflow-10923",
+      "repo": "mlflow/mlflow",
+      "base_commit": "4179ca2fffbaab94f6f1f8d2fc55acd2534b557d",
+      "category": "Security Vulnerability"
+    },
+    {
+      "instance_id": "prowler-cloud__prowler-5856",
+      "repo": "prowler-cloud/prowler",
+      "base_commit": "a83725fbedb15d6465bee076b8c8d740e677f8d1",
+      "category": "Bug Report"
+    },
+    {
+      "instance_id": "prowler-cloud__prowler-5653",
+      "repo": "prowler-cloud/prowler",
+      "base_commit": "816b49fac5f9c9e011fcbb1039938ad01a4d92c8",
+      "category": "Bug Report"
+    },
+    {
+      "instance_id": "vllm-project__vllm-11138",
+      "repo": "vllm-project/vllm",
+      "base_commit": "85362f028c0324d8d00b0438f29c3d9f64737b9a",
+      "category": "Feature Request"
+    },
+    {
+      "instance_id": "vllm-project__vllm-11073",
+      "repo": "vllm-project/vllm",
+      "base_commit": "75f89dc44c6e44cc28bae59d5b40a588735b507b",
+      "category": "Bug Report"
+    },
+    {
+      "instance_id": "vllm-project__vllm-10903",
+      "repo": "vllm-project/vllm",
+      "base_commit": "82eb5ea8f3bd3aabbe5c2fd43e37d263768603c5",
+      "category": "Bug Report"
+    },
+    {
+      "instance_id": "vllm-project__vllm-10536",
+      "repo": "vllm-project/vllm",
+      "base_commit": "8a93a598d9ac265882e55432e7aef55c8bff23f4",
+      "category": "Bug Report"
+    },
+    {
+      "instance_id": "vllm-project__vllm-10347",
+      "repo": "vllm-project/vllm",
+      "base_commit": "2ec88272881a49d40d91ae0cd858b19d22996c70",
+      "category": "Bug Report"
+    },
+    {
+      "instance_id": "UKPLab__sentence-transformers-3073",
+      "repo": "UKPLab/sentence-transformers",
+      "base_commit": "043445051d60dc2dcf62d7d5afbc4da27a5a8dbd",
+      "category": "Bug Report"
+    },
+    {
+      "instance_id": "Zulko__moviepy-2253",
+      "repo": "Zulko/moviepy",
+      "base_commit": "c88852f6f3753469d4aeed677dd0b772764ccf42",
+      "category": "Bug Report"
+    },
+    {
+      "instance_id": "yt-dlp__yt-dlp-11644",
+      "repo": "yt-dlp/yt-dlp",
+      "base_commit": "4b5eec0aaa7c02627f27a386591b735b90e681a8",
+      "category": "Bug Report"
+    },
+    {
+      "instance_id": "locustio__locust-2976",
+      "repo": "locustio/locust",
+      "base_commit": "a8510a466dd358a5d2956079cf10f25dc9beb380",
+      "category": "Bug Report"
+    },
+    {
+      "instance_id": "ranaroussi__yfinance-2122",
+      "repo": "ranaroussi/yfinance",
+      "base_commit": "f05f99c2b8101576911b35cbd3129afb04fb140d",
+      "category": "Bug Report"
+    },
+    {
+      "instance_id": "scipy__scipy-22106",
+      "repo": "scipy/scipy",
+      "base_commit": "15d6284e5a0f3333394ca4498eb56bce14a6245b",
+      "category": "Bug Report"
+    },
+    {
+      "instance_id": "DS4SD__docling-528",
+      "repo": "DS4SD/docling",
+      "base_commit": "c830b92b2e043ea63d216f65b3f9d88d2a8c33f7",
+      "category": "Bug Report"
+    },
+    {
+      "instance_id": "DS4SD__docling-442",
+      "repo": "DS4SD/docling",
+      "base_commit": "6666d9ec070650df35a8b156643a78c32dcfefb5",
+      "category": "Bug Report"
+    },
+    {
+      "instance_id": "certbot__certbot-10043",
+      "repo": "certbot/certbot",
+      "base_commit": "0e225dcba293441e7b8d420c9a210480f8c707d8",
+      "category": "Bug Report"
+    },
+    {
+      "instance_id": "pandas-dev__pandas-60543",
+      "repo": "pandas-dev/pandas",
+      "base_commit": "659eecf22a2e4c4a8f023c655a75a7135614a409",
+      "category": "Bug Report"
+    },
+    {
+      "instance_id": "pandas-dev__pandas-60461",
+      "repo": "pandas-dev/pandas",
+      "base_commit": "a4fc97e92ed938260728e3f6c2b92df5ffb57b7f",
+      "category": "Performance Issue"
+    },
+    {
+      "instance_id": "pandas-dev__pandas-60310",
+      "repo": "pandas-dev/pandas",
+      "base_commit": "61f800d7b69efa632c5f93b4be4b1e4154c698d7",
+      "category": "Bug Report"
+    },
+    {
+      "instance_id": "pandas-dev__pandas-60277",
+      "repo": "pandas-dev/pandas",
+      "base_commit": "4fcee0e431135bf6fa97440d4d7e17a96630fe6e",
+      "category": "Feature Request"
+    },
+    {
+      "instance_id": "pandas-dev__pandas-60247",
+      "repo": "pandas-dev/pandas",
+      "base_commit": "5f23aced2f97f2ed481deda4eaeeb049d6c7debe",
+      "category": "Feature Request"
+    },
+    {
+      "instance_id": "huggingface__trl-2433",
+      "repo": "huggingface/trl",
+      "base_commit": "9ff79a65e3d1c28b7ee8bc0912b2fbdceb3dbeec",
+      "category": "Bug Report"
+    },
+    {
+      "instance_id": "SYSTRAN__faster-whisper-1198",
+      "repo": "SYSTRAN/faster-whisper",
+      "base_commit": "b568faec40eef1fee88f8aeb27ac3f9d6e006ba4",
+      "category": "Performance Issue"
+    },
+    {
+      "instance_id": "SYSTRAN__faster-whisper-1141",
+      "repo": "SYSTRAN/faster-whisper",
+      "base_commit": "85e61ea11173dce3f10ce05e4b4bc1a2939d9e4e",
+      "category": "Bug Report"
+    },
+    {
+      "instance_id": "phidatahq__phidata-1563",
+      "repo": "phidatahq/phidata",
+      "base_commit": "8f55f8b1d3fc13d46ad840666225ff2f9885cb68",
+      "category": "Bug Report"
+    },
+    {
+      "instance_id": "nltk__nltk-3335",
+      "repo": "nltk/nltk",
+      "base_commit": "9a5622f8a5b228df9499cd03181d9f8491e39f17",
+      "category": "Bug Report"
+    },
+    {
+      "instance_id": "dask__dask-11491",
+      "repo": "dask/dask",
+      "base_commit": "fa8fecf10a94971f2f31df57d504d25bef4dd57e",
+      "category": "Bug Report"
+    },
+    {
+      "instance_id": "bridgecrewio__checkov-6826",
+      "repo": "bridgecrewio/checkov",
+      "base_commit": "24535627d7315014328ec034daa3362a72948d09",
+      "category": "Feature Request"
+    },
+    {
+      "instance_id": "spotify__luigi-3324",
+      "repo": "spotify/luigi",
+      "base_commit": "80549f6b6f8c143effb81f3cf4a411b6068d9e2c",
+      "category": "Bug Report"
+    },
+    {
+      "instance_id": "ray-project__ray-49071",
+      "repo": "ray-project/ray",
+      "base_commit": "f498afc76dfafcf447106471e8df33578a6293be",
+      "category": "Bug Report"
+    },
+    {
+      "instance_id": "ray-project__ray-48891",
+      "repo": "ray-project/ray",
+      "base_commit": "37aa0c66110fc235762c29612b90f1c73869e6cf",
+      "category": "Bug Report"
+    },
+    {
+      "instance_id": "ray-project__ray-48756",
+      "repo": "ray-project/ray",
+      "base_commit": "e70b37a435122609f88e02ce3377b8dd7f780e6b",
+      "category": "Bug Report"
+    },
+    {
+      "instance_id": "BerriAI__litellm-6915",
+      "repo": "BerriAI/litellm",
+      "base_commit": "fd2d4254bcd01e924ca4dded36ee4714c33734af",
+      "category": "Bug Report"
+    },
+    {
+      "instance_id": "matplotlib__matplotlib-29265",
+      "repo": "matplotlib/matplotlib",
+      "base_commit": "0406a56b051a371ccf81d2946126580651a645f2",
+      "category": "Feature Request"
+    },
+    {
+      "instance_id": "flet-dev__flet-4425",
+      "repo": "flet-dev/flet",
+      "base_commit": "97f42c4602c7ee63b571c29af555d4eca6203659",
+      "category": "Bug Report"
+    },
+    {
+      "instance_id": "flet-dev__flet-4388",
+      "repo": "flet-dev/flet",
+      "base_commit": "5fb877b3a3f886f3475cd8ebca1cee52472d0ef7",
+      "category": "Feature Request"
+    },
+    {
+      "instance_id": "flet-dev__flet-4384",
+      "repo": "flet-dev/flet",
+      "base_commit": "5fb877b3a3f886f3475cd8ebca1cee52472d0ef7",
+      "category": "Bug Report"
+    },
+    {
+      "instance_id": "kornia__kornia-3084",
+      "repo": "kornia/kornia",
+      "base_commit": "b230615f08bb0fff1b3044fc8ccb38f21bd9e817",
+      "category": "Bug Report"
+    },
+    {
+      "instance_id": "wandb__wandb-9011",
+      "repo": "wandb/wandb",
+      "base_commit": "87070417bcde22e45fc3a662b2dfd73d79981ad9",
+      "category": "Bug Report"
+    },
+    {
+      "instance_id": "ultralytics__ultralytics-17728",
+      "repo": "ultralytics/ultralytics",
+      "base_commit": "426879d80d49d0180b525c4fc2484772f9f6f8cc",
+      "category": "Performance Issue"
+    },
+    {
+      "instance_id": "huggingface__diffusers-10262",
+      "repo": "huggingface/diffusers",
+      "base_commit": "f9d5a9324d77169d486a60f3b4b267c74149b982",
+      "category": "Feature Request"
+    },
+    {
+      "instance_id": "huggingface__diffusers-10185",
+      "repo": "huggingface/diffusers",
+      "base_commit": "43534a8d1fd405fd0d1e74f991ab97f743bd3e59",
+      "category": "Bug Report"
+    },
+    {
+      "instance_id": "huggingface__diffusers-10067",
+      "repo": "huggingface/diffusers",
+      "base_commit": "827b6c25f9b78a297345f356a7d152fd6faf27d8",
+      "category": "Bug Report"
+    },
+    {
+      "instance_id": "huggingface__diffusers-9885",
+      "repo": "huggingface/diffusers",
+      "base_commit": "5588725e8e7be497839432e5328c596169385f16",
+      "category": "Bug Report"
+    },
+    {
+      "instance_id": "modin-project__modin-7400",
+      "repo": "modin-project/modin",
+      "base_commit": "78674005577efea7aa7c5e3e7c6fb53bd0365fe5",
+      "category": "Performance Issue"
+    },
+    {
+      "instance_id": "Qiskit__qiskit-13552",
+      "repo": "Qiskit/qiskit",
+      "base_commit": "17648ebb030c90fa7a595333b61823735275f68f",
+      "category": "Bug Report"
+    },
+    {
+      "instance_id": "aio-libs__aiohttp-9766",
+      "repo": "aio-libs/aiohttp",
+      "base_commit": "cc9a14aa3a29e54e2da3045083cca865654e3ff9",
+      "category": "Performance Issue"
+    },
+    {
+      "instance_id": "aio-libs__aiohttp-9762",
+      "repo": "aio-libs/aiohttp",
+      "base_commit": "50cccb3823e53e187723f5dd713e2f1299405d1e",
+      "category": "Performance Issue"
+    },
+    {
+      "instance_id": "langchain-ai__langgraph-2724",
+      "repo": "langchain-ai/langgraph",
+      "base_commit": "ff3bc2f9821d9dffe5d1a8fcf6eb1758f3715da8",
+      "category": "Bug Report"
+    },
+    {
+      "instance_id": "langchain-ai__langgraph-2571",
+      "repo": "langchain-ai/langgraph",
+      "base_commit": "c6fe26510e814e1cf165bc957b42bf4d5adf789b",
+      "category": "Bug Report"
+    },
+    {
+      "instance_id": "vllm-project__vllm-9617",
+      "repo": "vllm-project/vllm",
+      "base_commit": "e7116c017c86cb547f4d1888edaf13a9be2a4562",
+      "category": "Feature Request"
+    },
+    {
+      "instance_id": "mlflow__mlflow-13390",
+      "repo": "mlflow/mlflow",
+      "base_commit": "49e038235f64cee0d6985293b9e5a24d2718abab",
+      "category": "Performance Issue"
+    },
+    {
+      "instance_id": "huggingface__transformers-34507",
+      "repo": "huggingface/transformers",
+      "base_commit": "dadb286f061f156d01b80e12594321e890b53088",
+      "category": "Feature Request"
+    },
+    {
+      "instance_id": "huggingface__transformers-34279",
+      "repo": "huggingface/transformers",
+      "base_commit": "93352e81f5019abaa52f7bdc2e3284779e864367",
+      "category": "Feature Request"
+    },
+    {
+      "instance_id": "django__django-18654",
+      "repo": "django/django",
+      "base_commit": "c334c1a8ff4579cdb1dd77cce8da747070ac9fc4",
+      "category": "Feature Request"
+    },
+    {
+      "instance_id": "huggingface__diffusers-9815",
+      "repo": "huggingface/diffusers",
+      "base_commit": "13e8fdecda91e27e40b15fa8a8f456ade773e6eb",
+      "category": "Feature Request"
+    }
+  ]
+}

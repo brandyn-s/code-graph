@@ -41,6 +41,12 @@ def _make_record(file_hit: bool = True) -> S.PerCaseRecord:
         output_tokens=500,
         cost_estimate_usd=0.05,
         duration_s=120.5,
+        latency_s={
+            "clone": 1.0,
+            "index": 20.0,
+            "marginal_query": 99.0,
+            "total": 120.5,
+        },
         note="",
         agent_envelope=S.AgentEnvelope(
             code_localize_agent=S.CodeLocalizeAgentResult(

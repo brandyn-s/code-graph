@@ -213,6 +213,35 @@ func TestIndexRepositoryPersistsCleanIndexIdentityForStatus(t *testing.T) {
 	}
 }
 
+func TestIndexRepositoryReportsObservedEmbeddingInventory(t *testing.T) {
+	t.Setenv("VOYAGE_API_KEY", "")
+	router, err := store.NewRouterWithDir(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewRouterWithDir: %v", err)
+	}
+	t.Cleanup(router.CloseAll)
+	srv := NewServer(router)
+	repo := writeFixtureRepo(t)
+	initCommittedFixtureRepo(t, repo)
+
+	indexResp := metadataResponseFromHandler(t, srv.handleIndexRepository, "index_repository",
+		map[string]any{"repo_path": repo, "skip_report": true})
+
+	if got, ok := indexResp["embedding_count"].(float64); !ok || got != 0 {
+		t.Fatalf("embedding_count = %v (%T), want observed zero", indexResp["embedding_count"], indexResp["embedding_count"])
+	}
+	models, ok := indexResp["embedding_models"].(map[string]any)
+	if !ok {
+		t.Fatalf("embedding_models = %v (%T), want an observed model-count map", indexResp["embedding_models"], indexResp["embedding_models"])
+	}
+	if len(models) != 0 {
+		t.Fatalf("embedding_models = %v, want empty without a Voyage credential", models)
+	}
+	if got, _ := indexResp["embedding_status"].(string); got != "captured" {
+		t.Fatalf("embedding_status = %q, want captured", got)
+	}
+}
+
 func TestIndexRepositoryDegradesWhenSourceChangesDuringIndex(t *testing.T) {
 	router, err := store.NewRouterWithDir(t.TempDir())
 	if err != nil {

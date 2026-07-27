@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""One-shot code-search indexing helper for the SweRank pre-filter pilot (Arm C).
+"""One-shot code-search indexing helper for the retrieval-only graph comparison.
 
 Runs INSIDE code-search's venv. Mirrors the MCP server's component wiring
 (CodeIndexManager + CodeEmbedder + MultiLanguageChunker + SnapshotManager →
@@ -20,7 +20,15 @@ import sys
 from pathlib import Path
 
 
-def main() -> int:
+class IndexHelperContractError(RuntimeError):
+    failure_class = "invalid_experiment"
+
+    def __init__(self, message: str, failure_code: str):
+        super().__init__(message)
+        self.failure_code = failure_code
+
+
+def _run() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--code-search-root", required=True)
     ap.add_argument("--repo", required=True)
@@ -35,6 +43,9 @@ def main() -> int:
     from chunking.multi_language_chunker import MultiLanguageChunker  # noqa: E402
     from embeddings.embedder import CodeEmbedder  # noqa: E402
     from merkle.snapshot_manager import SnapshotManager  # noqa: E402
+    from mcp_server.code_search_server import get_pipeline_version  # noqa: E402
+    from search.epoch_manifest import read_with_fallback  # noqa: E402
+    from search.index_identity import capture_index_identity  # noqa: E402
     from search.incremental_indexer import IncrementalIndexer  # noqa: E402
     from search.indexer import CodeIndexManager  # noqa: E402
 
@@ -42,16 +53,113 @@ def main() -> int:
     storage = Path(args.storage_dir)
     storage.mkdir(parents=True, exist_ok=True)
 
+    start_identity = capture_index_identity(repo)
+    index_manager = CodeIndexManager(str(storage / "index"))
+    embedder = CodeEmbedder(cache_dir=str(storage / "models"))
+    configuration = embedder.configuration
+    pipeline_version = get_pipeline_version(configuration)
+    index_manager.bind_embedding_configuration(
+        configuration,
+        pipeline_version=pipeline_version,
+    )
     indexer = IncrementalIndexer(
-        indexer=CodeIndexManager(str(storage / "index")),
-        embedder=CodeEmbedder(cache_dir=str(storage / "models")),
+        indexer=index_manager,
+        embedder=embedder,
         chunker=MultiLanguageChunker(repo),
         snapshot_manager=SnapshotManager(storage_dir=storage / "merkle"),
     )
     result = indexer.incremental_index(repo, project_name=Path(repo).name, force_full=args.force_full)
+    if result.success is not True:
+        raise RuntimeError(f"index did not complete successfully: {result.error}")
+    end_identity = capture_index_identity(repo)
+    source_fields = (
+        "repository_id",
+        "checkout_id",
+        "source_revision",
+        "dirty_fingerprint",
+        "index_generation",
+    )
+    if any(
+        getattr(start_identity, field) != getattr(end_identity, field)
+        for field in source_fields
+    ):
+        raise IndexHelperContractError(
+            "source identity changed during indexing",
+            "index_identity_mismatch",
+        )
+
+    publication = read_with_fallback(index_manager.storage_dir)
+    manifest = publication.manifest
+    if publication.freshness != "fresh" or not isinstance(manifest, dict):
+        raise IndexHelperContractError(
+            "index manifest is not a fresh verified generation: "
+            f"{publication.freshness}: {publication.detail}",
+            "embedding_identity_invalid",
+        )
+    expected_manifest = {
+        "provider": configuration.provider,
+        "model": configuration.model_name,
+        "vector_dim": configuration.output_dimension,
+        "pipeline_version": pipeline_version,
+    }
+    mismatches = {
+        field: (manifest.get(field), expected)
+        for field, expected in expected_manifest.items()
+        if manifest.get(field) != expected
+    }
+    if mismatches:
+        raise IndexHelperContractError(
+            f"verified manifest disagrees with the effective embedder: {mismatches}",
+            "embedding_identity_mismatch",
+        )
+    epoch_id = manifest.get("epoch_id")
+    if not isinstance(epoch_id, str) or not epoch_id:
+        raise IndexHelperContractError(
+            "verified index manifest has no epoch_id",
+            "embedding_identity_invalid",
+        )
+
     payload = result.to_dict() if hasattr(result, "to_dict") else {"repr": repr(result)}
+    payload.update(
+        {
+            "index_identity_status": "ready",
+            "index_identity": end_identity.to_dict(),
+            "embedding_identity": {
+                "provider": configuration.provider,
+                "model": configuration.model_name,
+                "vector_dim": configuration.output_dimension,
+                "content_mode": configuration.content_mode,
+                "pipeline_version": pipeline_version,
+                "manifest_freshness": publication.freshness,
+                "index_epoch_id": epoch_id,
+            },
+        }
+    )
     json.dump(payload, sys.stdout)
     return 0
+
+
+def main() -> int:
+    try:
+        return _run()
+    except IndexHelperContractError as exc:
+        payload = {
+            "success": False,
+            "error": str(exc),
+            "failure_class": exc.failure_class,
+            "failure_code": exc.failure_code,
+        }
+        json.dump(payload, sys.stdout)
+        return 2
+    except Exception as exc:  # noqa: BLE001 - serialize child infrastructure failure
+        payload = {
+            "success": False,
+            "error": str(exc),
+            "failure_class": "infrastructure",
+            "failure_code": "index_helper_failed",
+        }
+        json.dump(payload, sys.stdout)
+        return 1
 
 
 if __name__ == "__main__":

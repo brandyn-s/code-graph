@@ -1,0 +1,514 @@
+name: matched-depth-retrieval-only-vs-graph
+
+on:
+  workflow_dispatch:
+    inputs:
+      max_total_usd:
+        description: 'Requested ceiling; requires provider-enforced operation bounds'
+        required: true
+        type: string
+      graph_max_usd:
+        description: 'Requested graph-arm share'
+        required: true
+        type: string
+      retrieval_max_usd:
+        description: 'Requested retrieval-only share'
+        required: true
+        type: string
+      resume_run_id:
+        description: 'Optional prior run ID from this repository'
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+env:
+  PIN: bench/accuracy/baselines/data/2026-06-12-matched-depth-n200/locbench-n200-pin.json
+  LOCBENCH_REVISION: c44cf3b74e07ca642cec841b471a9939907c12a7
+  LOCBENCH_SHA256: 8df0833c2c1276c5837aab923d489ab97d7654529abe759d0f59242c4978a662
+  CODE_SEARCH_WHEEL: redacted_code_search-0.2.1-py3-none-any.whl
+  CODE_SEARCH_SHA256: 567d4caabdd3b5446bcaa789afc7104fb8cce142ff69d7fc8f1294398532e7e9
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.13'
+
+      - name: Verify canonical pin
+        run: python bench/research/build_matched_depth_pin.py --check
+
+      - name: Fail closed without credentials or numeric cost authority
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          VOYAGE_API_KEY: ${{ secrets.VOYAGE_API_KEY }}
+          CODE_INTEL_COMPONENT_TOKEN: ${{ secrets.CODE_INTEL_COMPONENT_TOKEN }}
+          MAX_TOTAL_USD: ${{ inputs.max_total_usd }}
+          GRAPH_MAX_USD: ${{ inputs.graph_max_usd }}
+          RETRIEVAL_MAX_USD: ${{ inputs.retrieval_max_usd }}
+        run: |
+          set +e
+          python - <<'PY'
+          import json
+          import os
+          import sys
+          from decimal import Decimal, InvalidOperation
+          from pathlib import Path
+
+          model_credentials_missing = [
+              name
+              for name in ("ANTHROPIC_API_KEY", "VOYAGE_API_KEY")
+              if not os.environ.get(name)
+          ]
+          component_credential_missing = not os.environ.get(
+              "CODE_INTEL_COMPONENT_TOKEN"
+          )
+          missing = list(model_credentials_missing)
+          if component_credential_missing:
+              missing.append("CODE_INTEL_COMPONENT_TOKEN")
+          errors = []
+          budgets = {}
+          for name in ("MAX_TOTAL_USD", "GRAPH_MAX_USD", "RETRIEVAL_MAX_USD"):
+              try:
+                  value = Decimal(os.environ.get(name, ""))
+                  microdollar_value = value.quantize(Decimal("0.000001"))
+              except InvalidOperation:
+                  errors.append(
+                      f"{name} is not a finite number with at most six "
+                      "decimal places"
+                  )
+                  continue
+              if (
+                  not value.is_finite()
+                  or value <= 0
+                  or value != microdollar_value
+              ):
+                  errors.append(
+                      f"{name} must be finite, positive, and use at most "
+                      "six decimal places"
+                  )
+              budgets[name] = value
+          if not errors and (
+              budgets["GRAPH_MAX_USD"] + budgets["RETRIEVAL_MAX_USD"]
+              > budgets["MAX_TOTAL_USD"]
+          ):
+              errors.append("arm caps exceed max_total_usd")
+          unavailable_bounds = [
+              "graph_agent_request_usd",
+              "graph_embedding_batch_usd",
+              "retrieval_embedding_batch_usd",
+              "retrieval_reranker_request_usd",
+          ]
+          if not missing and not errors:
+              errors.append(
+                  "paid providers expose no enforceable per-operation USD "
+                  "ceiling; estimates cannot be labeled a hard cap"
+              )
+          if missing or errors:
+              diagnostic = {
+                  "schema_version": 1,
+                  "status": "not_evaluated",
+                  "reason_code": (
+                      "missing_component_credential"
+                      if component_credential_missing
+                      else (
+                          "missing_credentials"
+                          if model_credentials_missing
+                          else (
+                              "invalid_cost_authority"
+                              if len(errors) != 1
+                              or not errors[0].startswith("paid providers")
+                              else "hard_provider_cost_bound_unavailable"
+                          )
+                      )
+                  ),
+                  "missing_credentials": missing,
+                  "unavailable_provider_bounds": unavailable_bounds,
+                  "errors": errors,
+                  "total_cost_usd": 0.0,
+              }
+              Path("matched-depth-preflight.json").write_text(
+                  json.dumps(diagnostic, indent=2) + "\n",
+                  encoding="utf-8",
+              )
+              print("matched-depth not evaluated; see diagnostic artifact", file=sys.stderr)
+              sys.exit(1)
+          PY
+          preflight_rc=$?
+          set -e
+          if [ "$preflight_rc" -ne 0 ]; then
+            exit 1
+          fi
+
+      - name: Build repository matrix and bounded arm budgets
+        id: matrix
+        env:
+          GRAPH_MAX_USD: ${{ inputs.graph_max_usd }}
+          RETRIEVAL_MAX_USD: ${{ inputs.retrieval_max_usd }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from collections import Counter
+          from decimal import Decimal
+          from pathlib import Path
+
+          from bench.research.matched_depth_budget import (
+              allocate_decimal_budget,
+          )
+
+          pin = json.loads(Path(os.environ["PIN"]).read_text(encoding="utf-8"))
+          counts = Counter(case["repo"] for case in pin["cases"])
+          repositories = list(dict.fromkeys(case["repo"] for case in pin["cases"]))
+          graph_allocations = allocate_decimal_budget(
+              Decimal("${{ inputs.graph_max_usd }}"),
+              {repository: counts[repository] for repository in repositories},
+          )
+          retrieval_allocations = allocate_decimal_budget(
+              Decimal("${{ inputs.retrieval_max_usd }}"),
+              {repository: 1 for repository in repositories},
+          )
+          include = []
+          for repository in repositories:
+              include.append(
+                  {
+                      "repository": repository,
+                      "slug": repository.replace("/", "__"),
+                      "graph_budget_usd": str(graph_allocations[repository]),
+                      "retrieval_budget_usd": str(
+                          retrieval_allocations[repository]
+                      ),
+                  }
+              )
+          matrix = json.dumps({"include": include}, separators=(",", ":"))
+          with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as handle:
+              handle.write(f"matrix={matrix}\n")
+          PY
+
+      - name: Upload fail-closed preflight diagnostic
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: matched-depth-preflight
+          path: matched-depth-preflight.json
+          if-no-files-found: ignore
+
+  graph:
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.26'
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.13'
+
+      - name: Download prior graph shard checkpoint
+        if: ${{ inputs.resume_run_id != '' }}
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: matched-depth-graph-${{ matrix.slug }}
+          path: ${{ runner.temp }}/resume-graph
+          run-id: ${{ inputs.resume_run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Install graph harness dependencies
+        run: python -m pip install anthropic pandas pyarrow
+
+      - name: Download exact public LocBench parquet
+        run: |
+          curl --fail --location --retry 3 --retry-delay 1 --retry-max-time 60 \
+            "https://huggingface.co/datasets/czlll/Loc-Bench_V1/resolve/${LOCBENCH_REVISION}/data/test-00000-of-00001.parquet" \
+            --output "$RUNNER_TEMP/locbench.parquet"
+          echo "${LOCBENCH_SHA256}  $RUNNER_TEMP/locbench.parquet" | sha256sum --check -
+
+      - name: Build graph binaries
+        run: |
+          CGO_ENABLED=1 go build -o bin/codebase-memory-mcp ./cmd/codebase-memory-mcp/
+          CGO_ENABLED=1 go build -o bench/research/eval_rank_localize/eval ./bench/research/eval_rank_localize/
+
+      - name: Write exact repository pin
+        env:
+          GRAPH_BUDGET_USD: ${{ matrix.graph_budget_usd }}
+          REPOSITORY: ${{ matrix.repository }}
+        run: |
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          pin_path = Path(os.environ["PIN"])
+          pin = json.loads(pin_path.read_text(encoding="utf-8"))
+          ids = [
+              case["instance_id"]
+              for case in pin["cases"]
+              if case["repo"] == os.environ["REPOSITORY"]
+          ]
+          Path(os.environ["RUNNER_TEMP"], "graph-shard-pin.json").write_text(
+              json.dumps({"pinned_instance_ids": ids}, indent=2) + "\n",
+              encoding="utf-8",
+          )
+          contract = {
+              "schema_version": 1,
+              "arm": "graph",
+              "graph_sha": os.environ["GITHUB_SHA"],
+              "pin_sha256": hashlib.sha256(pin_path.read_bytes()).hexdigest(),
+              "dataset_sha256": os.environ["LOCBENCH_SHA256"],
+              "repository": os.environ["REPOSITORY"],
+              "expected_instance_ids": ids,
+              "model": "claude-haiku-4-5-20251001",
+              "embedding_model": "voyage-code-3",
+              "iterations": 2,
+              "score_depth": int(pin["score_depth"]),
+              "graph_budget_usd": os.environ["GRAPH_BUDGET_USD"],
+              "harness_sha256": hashlib.sha256(
+                  Path("bench/research/eval_locbench_batch.py").read_bytes()
+              ).hexdigest(),
+              "scorer_sha256": hashlib.sha256(
+                  Path("bench/research/pilot_compare.py").read_bytes()
+              ).hexdigest(),
+          }
+          Path(
+              os.environ["RUNNER_TEMP"],
+              "graph-checkpoint-contract.json",
+          ).write_text(
+              json.dumps(contract, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Run graph shard with per-case checkpoints
+        shell: bash
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          VOYAGE_API_KEY: ${{ secrets.VOYAGE_API_KEY }}
+          ANTHROPIC_MODEL: claude-haiku-4-5-20251001
+          VOYAGE_EMBED_MODEL: voyage-code-3
+          LOCAGENT_ITERATIONS: '2'
+          RESUME_RUN_ID: ${{ inputs.resume_run_id }}
+        run: |
+          resume_args=()
+          if [[ -n "$RESUME_RUN_ID" ]]; then
+            resume_args=(
+              --resume-per-case-json
+              "$RUNNER_TEMP/resume-graph/raw-graph-${{ matrix.slug }}.json"
+            )
+          fi
+          python bench/research/eval_locbench_batch.py \
+            --instances "$RUNNER_TEMP/graph-shard-pin.json" \
+            --canonical-pin "$PIN" \
+            --parquet "$RUNNER_TEMP/locbench.parquet" \
+            --repository "${{ matrix.repository }}" \
+            --graph-sha "$GITHUB_SHA" \
+            --score-depth 10 \
+            --budget-usd "${{ matrix.graph_budget_usd }}" \
+            --workdir "$RUNNER_TEMP/graph-work" \
+            --output "$RUNNER_TEMP/graph-${{ matrix.slug }}.md" \
+            --per-case-json "$RUNNER_TEMP/raw-graph-${{ matrix.slug }}.json" \
+            --checkpoint-contract "$RUNNER_TEMP/graph-checkpoint-contract.json" \
+            "${resume_args[@]}"
+
+      - name: Normalize graph ranks and provenance
+        run: |
+          python bench/research/pilot_compare.py normalize-graph \
+            --raw "$RUNNER_TEMP/raw-graph-${{ matrix.slug }}.json" \
+            --pin "$PIN" \
+            --parquet "$RUNNER_TEMP/locbench.parquet" \
+            --repository "${{ matrix.repository }}" \
+            --graph-sha "$GITHUB_SHA" \
+            --iterations 2 \
+            --graph-budget-usd "${{ matrix.graph_budget_usd }}" \
+            --out "$RUNNER_TEMP/graph-${{ matrix.slug }}.json"
+
+      - name: Upload graph shard and partial checkpoints
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: matched-depth-graph-${{ matrix.slug }}
+          path: |
+            ${{ runner.temp }}/graph-${{ matrix.slug }}.json
+            ${{ runner.temp }}/graph-${{ matrix.slug }}.json.sha256
+            ${{ runner.temp }}/raw-graph-${{ matrix.slug }}.json
+            ${{ runner.temp }}/graph-${{ matrix.slug }}.md
+          if-no-files-found: warn
+
+  retrieval:
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.13'
+
+      - name: Download prior retrieval shard checkpoint
+        if: ${{ inputs.resume_run_id != '' }}
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: matched-depth-retrieval-${{ matrix.slug }}
+          path: ${{ runner.temp }}/resume-retrieval
+          run-id: ${{ inputs.resume_run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Download exact private code-search wheel
+        env:
+          GH_TOKEN: ${{ secrets.CODE_INTEL_COMPONENT_TOKEN }}
+        run: |
+          gh release download v0.2.1 \
+            --repo redacted-org/code-search \
+            --pattern "$CODE_SEARCH_WHEEL" \
+            --dir "$RUNNER_TEMP" \
+            --clobber
+
+      - name: Verify and install exact code-search wheel
+        run: |
+          echo "${CODE_SEARCH_SHA256}  $RUNNER_TEMP/$CODE_SEARCH_WHEEL" | sha256sum --check -
+          python -m pip install pandas pyarrow "$RUNNER_TEMP/$CODE_SEARCH_WHEEL"
+          mkdir -p "$RUNNER_TEMP/code-search-root"
+
+      - name: Download exact public LocBench parquet
+        run: |
+          curl --fail --location --retry 3 --retry-delay 1 --retry-max-time 60 \
+            "https://huggingface.co/datasets/czlll/Loc-Bench_V1/resolve/${LOCBENCH_REVISION}/data/test-00000-of-00001.parquet" \
+            --output "$RUNNER_TEMP/locbench.parquet"
+          echo "${LOCBENCH_SHA256}  $RUNNER_TEMP/locbench.parquet" | sha256sum --check -
+
+      - name: Run retrieval-only shard with per-case checkpoints
+        shell: bash
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          VOYAGE_API_KEY: ${{ secrets.VOYAGE_API_KEY }}
+          RESUME_RUN_ID: ${{ inputs.resume_run_id }}
+        run: |
+          resume_args=()
+          if [[ -n "$RESUME_RUN_ID" ]]; then
+            resume_args=(
+              --resume-from
+              "$RUNNER_TEMP/resume-retrieval/retrieval-${{ matrix.slug }}.json"
+            )
+          fi
+          python bench/research/armC_retrieval.py \
+            --pin "$PIN" \
+            --parquet "$RUNNER_TEMP/locbench.parquet" \
+            --repository "${{ matrix.repository }}" \
+            --workdir "$RUNNER_TEMP/retrieval-work" \
+            --out "$RUNNER_TEMP/retrieval-${{ matrix.slug }}.json" \
+            --graph-sha "$GITHUB_SHA" \
+            --cs-root "$RUNNER_TEMP/code-search-root" \
+            --cs-python python \
+            --embedding-model voyage-4-large \
+            --reranker sonnet \
+            --score-depth 10 \
+            --voyage-ceiling-usd "${{ matrix.retrieval_budget_usd }}" \
+            --arm-ceiling-usd "${{ inputs.retrieval_max_usd }}" \
+            --total-ceiling-usd "${{ inputs.max_total_usd }}" \
+            --provider-operation-bound-policy provider-enforced-per-operation-usd-required-v1 \
+            "${resume_args[@]}"
+
+      - name: Upload retrieval-only shard and partial checkpoint
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: matched-depth-retrieval-${{ matrix.slug }}
+          path: ${{ runner.temp }}/retrieval-${{ matrix.slug }}.json
+          if-no-files-found: warn
+
+  reduce:
+    if: always() && needs.prepare.result == 'success'
+    needs: [prepare, graph, retrieval]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.13'
+
+      - name: Download graph shards
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: matched-depth-graph-*
+          path: artifacts/graph
+          merge-multiple: true
+
+      - name: Download retrieval-only shards
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: matched-depth-retrieval-*
+          path: artifacts/retrieval
+          merge-multiple: true
+
+      - name: Reduce only exact 200-case coverage
+        shell: bash
+        run: |
+          mapfile -t graph_files < <(find artifacts/graph -type f -name 'graph-*.json' | sort)
+          mapfile -t retrieval_files < <(find artifacts/retrieval -type f -name 'retrieval-*.json' | sort)
+          graph_args=()
+          retrieval_args=()
+          for file in "${graph_files[@]}"; do graph_args+=(--graph "$file"); done
+          for file in "${retrieval_files[@]}"; do retrieval_args+=(--retrieval "$file"); done
+          python bench/research/pilot_compare.py reduce \
+            --pin "$PIN" \
+            "${graph_args[@]}" \
+            "${retrieval_args[@]}" \
+            --out matched-depth-summary.json \
+            --n-boot 10000 \
+            --seed 42
+
+      - name: Upload reduced result or reducer diagnostics
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: matched-depth-retrieval-only-vs-graph
+          path: |
+            matched-depth-summary.json
+            matched-depth-summary.json.sha256
+          if-no-files-found: warn

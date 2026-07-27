@@ -12,7 +12,7 @@ Loop over N selected Loc-Bench instances and for each:
   5. Score: did the ground-truth file or class appear in the agent's
      finalized entities? Record per-instance hit/miss + token usage.
   6. After every instance, check accumulated estimated LLM cost and
-     abort if the configured budget cap is exceeded.
+     stop if the configured advisory threshold is exceeded.
   7. Write a summary table at the end.
 
 This script is the harness for the Phase B / V1 deliverable from the
@@ -21,7 +21,8 @@ a defensible N=20 benchmark claim.
 
 The script is INTENTIONALLY conservative about cost:
 
-  - Hard-aborts when accumulated cost exceeds --budget-usd (default $3).
+  - Stops when accumulated estimated cost exceeds --budget-usd (default $3).
+    This is not a provider-enforced billing cap and may overshoot by one case.
   - Skips instances whose repo > 200 MB (indexing wall time would dominate).
   - Skips instances whose ground-truth requires multi-file edits unless
     they all share a common parent dir.
@@ -38,7 +39,9 @@ Not run by CI. This is an offline benchmark — invoke manually:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import math
 import os
 import random
 import shutil
@@ -46,6 +49,7 @@ import subprocess
 import sys
 import time
 from dataclasses import dataclass, field
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
@@ -93,6 +97,140 @@ SMALL_REPO_PREFERENCE = (
     "pydantic/pydantic",
     "psf/requests",
 )
+RUNTIME_CHILD_ENV_KEYS = {
+    "HOME",
+    "HTTPS_PROXY",
+    "HTTP_PROXY",
+    "LANG",
+    "LC_ALL",
+    "NO_PROXY",
+    "PATH",
+    "SSL_CERT_DIR",
+    "SSL_CERT_FILE",
+    "SYSTEMROOT",
+    "SystemRoot",
+    "TEMP",
+    "TMP",
+    "TMPDIR",
+    "USERPROFILE",
+    "WINDIR",
+}
+GRAPH_INDEX_CHILD_ENV_KEYS = RUNTIME_CHILD_ENV_KEYS | {
+    "VOYAGE_API_KEY",
+    "VOYAGE_EMBED_MODEL",
+}
+GRAPH_AGENT_CHILD_ENV_KEYS = RUNTIME_CHILD_ENV_KEYS | {
+    "ANTHROPIC_API_KEY",
+    "ANTHROPIC_MODEL",
+    "LOCAGENT_ITERATIONS",
+    "VOYAGE_API_KEY",
+    "VOYAGE_EMBED_MODEL",
+}
+
+
+def _sha256_file(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def expected_graph_checkpoint_contract(
+    *,
+    graph_sha: str,
+    canonical_pin: Path,
+    parquet: Path,
+    repository: str,
+    expected_instance_ids: list[str],
+    model: str,
+    embedding_model: str,
+    iterations: int,
+    score_depth: int,
+    graph_budget_usd: str,
+) -> dict[str, Any]:
+    """Derive the complete graph contract independently from runtime inputs."""
+    if not (
+        len(graph_sha) == 40
+        and all(character in "0123456789abcdef" for character in graph_sha)
+    ):
+        raise ValueError("graph SHA must be a lowercase 40-character Git SHA")
+    if not repository or not model or not embedding_model:
+        raise ValueError("repository and model identities are required")
+    if iterations < 1 or score_depth < 1:
+        raise ValueError("iterations and score depth must be positive")
+    try:
+        budget = Decimal(graph_budget_usd)
+    except InvalidOperation as exc:
+        raise ValueError("graph budget must be an exact decimal") from exc
+    if not budget.is_finite() or budget < 0:
+        raise ValueError("graph budget must be a finite nonnegative decimal")
+    if len(expected_instance_ids) != len(set(expected_instance_ids)):
+        raise ValueError("graph checkpoint contract IDs must be unique")
+    return {
+        "schema_version": 1,
+        "arm": "graph",
+        "graph_sha": graph_sha,
+        "pin_sha256": _sha256_file(canonical_pin),
+        "dataset_sha256": _sha256_file(parquet),
+        "repository": repository,
+        "expected_instance_ids": list(expected_instance_ids),
+        "model": model,
+        "embedding_model": embedding_model,
+        "iterations": iterations,
+        "score_depth": score_depth,
+        "graph_budget_usd": graph_budget_usd,
+        "harness_sha256": _sha256_file(Path(__file__).resolve()),
+        "scorer_sha256": _sha256_file(
+            Path(__file__).resolve().parent / "pilot_compare.py"
+        ),
+    }
+
+
+def validate_graph_checkpoint_contract(
+    observed: object,
+    expected: dict[str, Any],
+) -> dict[str, Any]:
+    if observed != expected:
+        raise ValueError(
+            "graph checkpoint contract does not match the bound runtime inputs"
+        )
+    return dict(expected)
+
+
+def write_graph_checkpoint(path: Path, payload: dict[str, Any]) -> None:
+    """Atomically replace and durably fsync a graph checkpoint."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    try:
+        with temporary.open("w", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=2)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+        directory_fd = os.open(path.parent, os.O_RDONLY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def allowlisted_child_env(
+    allowed_keys: set[str] | frozenset[str],
+    *,
+    overrides: dict[str, str] | None = None,
+) -> dict[str, str]:
+    """Build a positive-allowlist environment for one child process."""
+    child_env = {
+        name: value
+        for name, value in os.environ.items()
+        if name in allowed_keys
+    }
+    if overrides:
+        unexpected = sorted(set(overrides) - set(allowed_keys))
+        if unexpected:
+            raise ValueError(f"child environment override is not allowlisted: {unexpected}")
+        child_env.update(overrides)
+    return child_env
 
 
 @dataclass
@@ -111,12 +249,32 @@ class InstanceResult:
     output_tokens: int = 0
     cost_estimate_usd: float = 0.0
     note: str = ""
+    failure_class: str = ""
+    failure_code: str = ""
     duration_s: float = 0.0
+    latency_s: dict[str, float] = field(default_factory=dict)
     # Plan 4 T1: full structured JSON envelope from eval_rank_localize -json,
     # including per-iteration entity lists when LOCAGENT_ITERATIONS>=2.
     # Populated only when --per-case-json is passed. Discarded otherwise
     # to keep the markdown report path unaffected.
     agent_json: dict[str, Any] = field(default_factory=dict)
+    index_identity: dict[str, Any] = field(default_factory=dict)
+    embedding_identity: dict[str, Any] = field(default_factory=dict)
+    attempts: list[dict[str, Any]] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class GraphIndexOutcome:
+    success: bool
+    error: str = ""
+    failure_class: str = ""
+    failure_code: str = ""
+    index_identity: dict[str, Any] = field(default_factory=dict)
+    embedding_count: int = 0
+    embedding_model: str = ""
+
+    def __bool__(self) -> bool:
+        return self.success
 
 
 @dataclass
@@ -132,6 +290,23 @@ class BatchSummary:
     total_cost_usd: float = 0.0
     aborted_reason: str = ""
     instances: list[InstanceResult] = field(default_factory=list)
+
+    def record(self, result: InstanceResult) -> bool:
+        self.instances.append(result)
+        self.n_indexed += int(result.indexed)
+        self.n_agent_ran += int(result.agent_ran)
+        self.n_file_hit += int(result.file_hit)
+        self.n_class_hit += int(result.class_hit)
+        self.n_func_hit += int(result.func_hit)
+        self.total_input_tokens += result.input_tokens
+        self.total_output_tokens += result.output_tokens
+        self.total_cost_usd += result.cost_estimate_usd
+        if result.failure_class == "invalid_experiment":
+            self.aborted_reason = (
+                f"invalid_experiment:{result.failure_code}:{result.instance_id}"
+            )
+            return False
+        return True
 
 
 def select_instances(df: pd.DataFrame, n: int, seed: int) -> pd.DataFrame:
@@ -193,8 +368,7 @@ def repo_size_mb(path: Path) -> float:
     return total / (1024 * 1024)
 
 
-def clone_repo(repo: str, base_commit: str, dest: Path) -> bool:
-    """Shallow-clone {repo} at {base_commit} into {dest}. Returns True on success."""
+def _remove_clone_destination(dest: Path) -> bool:
     if dest.exists():
         # Plan 5 Phase A: git pack files / docs assets / .png on Windows
         # often have read-only bits set after checkout. shutil.rmtree
@@ -209,38 +383,200 @@ def clone_repo(repo: str, base_commit: str, dest: Path) -> bool:
                 pass
         shutil.rmtree(dest, onerror=_force_writable)
         if dest.exists():
-            # Last-resort fallback if rmtree still failed: skip this instance.
             print(f"  clone target dir not removable: {dest}; skipping")
             return False
+    return True
+
+
+def _is_transient_clone_error(message: str) -> bool:
+    normalized = message.lower()
+    return any(
+        marker in normalized
+        for marker in (
+            "timed out",
+            "timeout",
+            "connection reset",
+            "connection aborted",
+            "connection refused",
+            "could not resolve host",
+            "temporary failure",
+            "temporarily unavailable",
+            "http 429",
+            "http 500",
+            "http 502",
+            "http 503",
+            "http 504",
+        )
+    )
+
+
+def clone_repo(
+    repo: str,
+    base_commit: str,
+    dest: Path,
+    *,
+    max_attempts: int = 3,
+    attempts_out: list[dict] | None = None,
+) -> bool:
+    """Clone and checkout with bounded retries for transient network failures."""
+    if max_attempts < 1:
+        raise ValueError("max_attempts must be positive")
+    attempts = attempts_out if attempts_out is not None else []
+    if not _remove_clone_destination(dest):
+        return False
     dest.parent.mkdir(parents=True, exist_ok=True)
     url = f"https://github.com/{repo}.git"
     # Full clone needed because shallow + base_commit isn't reliable across
     # all GitHub repos. Tradeoff: more wall time, but deterministic.
+    clone_command = ["git", "clone", "--quiet", url, str(dest)]
+    for attempt_number in range(1, max_attempts + 1):
+        try:
+            subprocess.run(
+                clone_command,
+                check=True,
+                timeout=600,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                env=allowlisted_child_env(RUNTIME_CHILD_ENV_KEYS),
+            )
+        except subprocess.CalledProcessError as exc:
+            message = exc.stderr.decode("utf-8", errors="replace")[:300]
+            transient = _is_transient_clone_error(message)
+            retry = transient and attempt_number < max_attempts
+            attempts.append(
+                {
+                    "operation": "clone",
+                    "attempt": attempt_number,
+                    "outcome": "error",
+                    "error": message,
+                    "transient": transient,
+                    "retry": retry,
+                }
+            )
+            if not retry:
+                print(f"  clone failed: {message[:200]}")
+                _remove_clone_destination(dest)
+                return False
+            if not _remove_clone_destination(dest):
+                return False
+            time.sleep(2 ** (attempt_number - 1))
+        except subprocess.TimeoutExpired:
+            message = "clone timed out"
+            retry = attempt_number < max_attempts
+            attempts.append(
+                {
+                    "operation": "clone",
+                    "attempt": attempt_number,
+                    "outcome": "error",
+                    "error": message,
+                    "transient": True,
+                    "retry": retry,
+                }
+            )
+            if not retry:
+                print("  clone timed out")
+                _remove_clone_destination(dest)
+                return False
+            if not _remove_clone_destination(dest):
+                return False
+            time.sleep(2 ** (attempt_number - 1))
+        else:
+            attempts.append(
+                {
+                    "operation": "clone",
+                    "attempt": attempt_number,
+                    "outcome": "success",
+                    "retry": False,
+                }
+            )
+            break
+
     try:
-        subprocess.run(
-            ["git", "clone", "--quiet", url, str(dest)],
-            check=True,
-            timeout=600,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
         subprocess.run(
             ["git", "-C", str(dest), "checkout", base_commit],
             check=True,
             timeout=60,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
+            env=allowlisted_child_env(RUNTIME_CHILD_ENV_KEYS),
         )
-        return True
-    except subprocess.CalledProcessError as e:
-        print(f"  clone/checkout failed: {e.stderr.decode('utf-8', errors='replace')[:200]}")
+    except subprocess.CalledProcessError as exc:
+        message = exc.stderr.decode("utf-8", errors="replace")[:300]
+        attempts.append(
+            {
+                "operation": "checkout",
+                "attempt": 1,
+                "outcome": "error",
+                "error": message,
+                "transient": False,
+                "retry": False,
+            }
+        )
+        print(f"  checkout failed: {message[:200]}")
         return False
     except subprocess.TimeoutExpired:
-        print("  clone/checkout timed out")
+        attempts.append(
+            {
+                "operation": "checkout",
+                "attempt": 1,
+                "outcome": "error",
+                "error": "checkout timed out",
+                "transient": False,
+                "retry": False,
+            }
+        )
+        print("  checkout timed out")
         return False
+    attempts.append(
+        {
+            "operation": "checkout",
+            "attempt": 1,
+            "outcome": "success",
+            "retry": False,
+        }
+    )
+    return True
 
 
-def index_repo(path: Path) -> bool:
+def _is_lower_hex(value: object, length: int) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == length
+        and all(character in "0123456789abcdef" for character in value)
+    )
+
+
+def _validate_index_identity(identity: object) -> str:
+    if not isinstance(identity, dict):
+        return "index identity is absent"
+    if identity.get("schema_version") != 1:
+        return "index identity schema_version is not 1"
+    for field_name in ("repository_id", "checkout_id", "index_generation"):
+        if not _is_lower_hex(identity.get(field_name), 64):
+            return f"index identity {field_name} is not a lowercase SHA-256"
+    revision = identity.get("source_revision")
+    if revision != "unborn" and not (
+        _is_lower_hex(revision, 40) or _is_lower_hex(revision, 64)
+    ):
+        return "index identity source_revision is not a Git object ID"
+    dirty = identity.get("dirty_fingerprint")
+    if dirty != "clean" and not _is_lower_hex(dirty, 64):
+        return "index identity dirty_fingerprint is invalid"
+    expected_generation = hashlib.sha256(
+        (
+            f"{identity['repository_id']}\0{revision}\0"
+            f"{identity['dirty_fingerprint']}"
+        ).encode()
+    ).hexdigest()
+    if identity["index_generation"] != expected_generation:
+        return "index identity index_generation does not match its source fields"
+    captured_at = identity.get("captured_at")
+    if not isinstance(captured_at, str) or not captured_at.endswith("Z"):
+        return "index identity captured_at is not a UTC timestamp"
+    return ""
+
+
+def index_repo(path: Path) -> GraphIndexOutcome:
     """Invoke codebase-memory-mcp index_repository against {path}.
 
     Form: codebase-memory-mcp cli index_repository '{"path":"<abs path>"}'
@@ -249,16 +585,23 @@ def index_repo(path: Path) -> bool:
     VOYAGE_API_KEY at index time."""
     if not INDEX_BIN.exists():
         print(f"  binary missing: {INDEX_BIN}")
-        return False
+        return GraphIndexOutcome(
+            False,
+            f"binary missing: {INDEX_BIN}",
+            failure_class="infrastructure",
+            failure_code="index_binary_missing",
+        )
     args_json = json.dumps({"path": to_windows_path(path)})
+    child_env = allowlisted_child_env(GRAPH_INDEX_CHILD_ENV_KEYS)
     try:
         # Capture as bytes (no text=True) and decode UTF-8 with replace.
         # text=True uses cp1252 on Windows and crashes the parent reader
         # thread when subprocess outputs non-cp1252 bytes (PR #97 fix).
         result = subprocess.run(
-            [str(INDEX_BIN), "cli", "index_repository", args_json],
+            [str(INDEX_BIN), "cli", "--raw", "index_repository", args_json],
             capture_output=True,
             timeout=1800,  # 30 min cap per index
+            env=child_env,
         )
         if result.returncode != 0:
             err = result.stderr.decode("utf-8", errors="replace")
@@ -266,11 +609,91 @@ def index_repo(path: Path) -> bool:
             # at the END of stderr; the head is startup noise. 200-char head
             # truncation hid the real jax failure during the 2026-06-11 pilot.
             print(f"  index failed (exit {result.returncode}): ...{err[-1500:]}")
-            return False
-        return True
+            return GraphIndexOutcome(
+                False,
+                f"index failed (exit {result.returncode})",
+                failure_class="infrastructure",
+                failure_code="index_process_failed",
+            )
+        try:
+            payload = json.loads(result.stdout.decode("utf-8", errors="replace"))
+        except json.JSONDecodeError as exc:
+            error = f"index response is not JSON: {exc}"
+            print(f"  {error}")
+            return GraphIndexOutcome(
+                False,
+                error,
+                failure_class="infrastructure",
+                failure_code="index_response_invalid",
+            )
+        identity_error = _validate_index_identity(payload.get("index_identity"))
+        if payload.get("identity_status") != "captured" or identity_error:
+            error = identity_error or (
+                f"index identity status is {payload.get('identity_status')!r}"
+            )
+            print(f"  {error}")
+            return GraphIndexOutcome(
+                False,
+                error,
+                failure_class="invalid_experiment",
+                failure_code="index_identity_invalid",
+            )
+        if payload.get("embedding_status") != "captured":
+            error = f"embedding inventory status is {payload.get('embedding_status')!r}"
+            print(f"  {error}")
+            return GraphIndexOutcome(
+                False,
+                error,
+                failure_class="invalid_experiment",
+                failure_code="embedding_identity_invalid",
+            )
+        embedding_count = payload.get("embedding_count")
+        embedding_models = payload.get("embedding_models")
+        if (
+            isinstance(embedding_count, bool)
+            or not isinstance(embedding_count, int)
+            or embedding_count < 0
+            or not isinstance(embedding_models, dict)
+        ):
+            error = "embedding inventory is malformed"
+            print(f"  {error}")
+            return GraphIndexOutcome(
+                False,
+                error,
+                failure_class="invalid_experiment",
+                failure_code="embedding_identity_invalid",
+            )
+        expected_model = child_env.get("VOYAGE_EMBED_MODEL") or "voyage-code-3"
+        if child_env.get("VOYAGE_API_KEY"):
+            if embedding_count < 1 or embedding_models != {
+                expected_model: embedding_count
+            }:
+                error = (
+                    "semantic embedding identity mismatch: "
+                    f"count={embedding_count} models={embedding_models!r} "
+                    f"expected_model={expected_model!r}"
+                )
+                print(f"  {error}")
+                return GraphIndexOutcome(
+                    False,
+                    error,
+                    failure_class="invalid_experiment",
+                    failure_code="embedding_identity_mismatch",
+                )
+        return GraphIndexOutcome(
+            True,
+            index_identity=dict(payload["index_identity"]),
+            embedding_count=embedding_count,
+            embedding_model=expected_model if embedding_count else "",
+        )
     except subprocess.TimeoutExpired:
         print("  index timed out (30min)")
-        return False
+        return GraphIndexOutcome(
+            False,
+            "index timed out (30min)",
+            failure_class="infrastructure",
+            failure_code="index_timeout",
+        )
 
 
 def to_windows_path(p: Path | str) -> str:
@@ -323,6 +746,60 @@ def db_path_for(repo_path: Path) -> Path:
     return CACHE_DIR / f"{name}.db"
 
 
+class GraphAgentEnvelopeError(ValueError):
+    """A zero-exit graph-agent response that cannot be scored faithfully."""
+
+
+def validate_graph_agent_envelope(
+    envelope: object,
+    *,
+    top_k: int,
+) -> dict[str, Any]:
+    if not isinstance(envelope, dict):
+        raise GraphAgentEnvelopeError("graph-agent envelope is not an object")
+    agent = envelope.get("code_localize_agent")
+    if not isinstance(agent, dict):
+        raise GraphAgentEnvelopeError(
+            "graph-agent envelope has no structured code_localize_agent result"
+        )
+    entities = agent.get("entities")
+    if not isinstance(entities, list):
+        raise GraphAgentEnvelopeError("graph-agent entities are not a list")
+    if len(entities) > top_k:
+        raise GraphAgentEnvelopeError(
+            "graph-agent entities exceed the requested rank depth"
+        )
+    for rank, entity in enumerate(entities, start=1):
+        if not isinstance(entity, dict):
+            raise GraphAgentEnvelopeError(
+                f"graph-agent entity at rank {rank} is not an object"
+            )
+        for field_name in ("qualified_name", "file_path"):
+            value = entity.get(field_name)
+            if not isinstance(value, str) or not value:
+                raise GraphAgentEnvelopeError(
+                    f"graph-agent entity at rank {rank} has invalid {field_name}"
+                )
+        if "label" in entity and not isinstance(entity["label"], str):
+            raise GraphAgentEnvelopeError(
+                f"graph-agent entity at rank {rank} has invalid label"
+            )
+    for field_name in ("turns", "input_tokens", "output_tokens"):
+        value = agent.get(field_name)
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, int)
+            or value < 0
+        ):
+            raise GraphAgentEnvelopeError(
+                f"graph-agent {field_name} is not a nonnegative integer"
+            )
+    stop_reason = agent.get("stop_reason")
+    if not isinstance(stop_reason, str) or not stop_reason:
+        raise GraphAgentEnvelopeError("graph-agent stop_reason is absent")
+    return agent
+
+
 def run_agent(db: Path, query: str, top_k: int = 10, json_mode: bool = False) -> dict[str, Any]:
     """Run eval_rank_localize binary with -agent. Returns parsed result dict.
 
@@ -345,7 +822,12 @@ def run_agent(db: Path, query: str, top_k: int = 10, json_mode: bool = False) ->
 
     # Capture as bytes + UTF-8 decode (text=True uses cp1252 on Windows
     # and crashes on non-cp1252 bytes — PR #97 fix).
-    result = subprocess.run(cmd, capture_output=True, timeout=300)
+    result = subprocess.run(
+        cmd,
+        capture_output=True,
+        timeout=300,
+        env=allowlisted_child_env(GRAPH_AGENT_CHILD_ENV_KEYS),
+    )
     out = result.stdout.decode("utf-8", errors="replace")
     err = result.stderr.decode("utf-8", errors="replace")
     if result.returncode != 0:
@@ -366,12 +848,19 @@ def run_agent(db: Path, query: str, top_k: int = 10, json_mode: bool = False) ->
             envelope = json.loads(out)
         except json.JSONDecodeError as e:
             parsed["error"] = f"json decode failed: {e}"
+            parsed["failure_class"] = "invalid_experiment"
+            parsed["failure_code"] = "agent_envelope_invalid"
             return parsed
-        agent = envelope.get("code_localize_agent") or {}
+        agent = (
+            envelope.get("code_localize_agent") or {}
+            if isinstance(envelope, dict)
+            else {}
+        )
         parsed["agent_json"] = envelope
-        parsed["turns"] = int(agent.get("turns", 0))
-        parsed["input_tokens"] = int(agent.get("input_tokens", 0))
-        parsed["output_tokens"] = int(agent.get("output_tokens", 0))
+        if isinstance(agent, dict):
+            parsed["turns"] = agent.get("turns", 0)
+            parsed["input_tokens"] = agent.get("input_tokens", 0)
+            parsed["output_tokens"] = agent.get("output_tokens", 0)
         return parsed
 
     # Text mode: parse the line "turns=N, stop_reason=foo, input_tokens=X, output_tokens=Y"
@@ -413,7 +902,12 @@ def score_against_ground_truth(agent_output: str, ground_truth: list[str]) -> tu
     return file_hit, class_hit, func_hit
 
 
-def evaluate_instance(row: dict[str, Any], workdir: Path, json_mode: bool = False) -> InstanceResult:
+def evaluate_instance(
+    row: dict[str, Any],
+    workdir: Path,
+    json_mode: bool = False,
+    score_depth: int = 10,
+) -> InstanceResult:
     iid = row["instance_id"]
     repo = row["repo"]
     res = InstanceResult(
@@ -422,25 +916,54 @@ def evaluate_instance(row: dict[str, Any], workdir: Path, json_mode: bool = Fals
         category=row.get("category", "Unknown"),
         ground_truth=list(row.get("edit_functions", [])),
     )
-    t0 = time.time()
+    t0 = time.monotonic()
+
+    def finalize_latency() -> None:
+        res.duration_s = time.monotonic() - t0
+        res.latency_s["total"] = res.duration_s
+
     print(f"\n=== {iid} ({repo}, {res.category}) ===")
     print(f"ground truth ({len(res.ground_truth)} fns): {res.ground_truth[:3]}")
 
     repo_dir = workdir / iid
-    if not clone_repo(repo, row["base_commit"], repo_dir):
+    clone_attempts: list[dict] = []
+    clone_started = time.monotonic()
+    clone_succeeded = clone_repo(
+        repo,
+        row["base_commit"],
+        repo_dir,
+        attempts_out=clone_attempts,
+    )
+    res.latency_s["clone"] = time.monotonic() - clone_started
+    if not clone_succeeded:
+        res.attempts = clone_attempts
+        res.failure_class = "infrastructure"
+        res.failure_code = "clone_failed"
         res.note = "clone failed"
-        res.duration_s = time.time() - t0
+        finalize_latency()
         return res
+    res.attempts = clone_attempts
 
     size_mb = repo_size_mb(repo_dir)
     if size_mb > MAX_REPO_MB:
+        res.failure_class = "measured_outcome"
+        res.failure_code = "repo_too_large"
         res.note = f"repo too large ({size_mb:.0f} MB > {MAX_REPO_MB})"
         shutil.rmtree(repo_dir, ignore_errors=True)
-        res.duration_s = time.time() - t0
+        finalize_latency()
         return res
 
-    if not index_repo(repo_dir):
-        res.note = "index failed"
+    index_started = time.monotonic()
+    index_outcome = index_repo(repo_dir)
+    res.latency_s["index"] = time.monotonic() - index_started
+    if not index_outcome:
+        res.failure_class = index_outcome.failure_class
+        res.failure_code = index_outcome.failure_code
+        res.note = (
+            index_outcome.error
+            if index_outcome.failure_class
+            else f"index failed: {index_outcome.error}"
+        )[:300]
         shutil.rmtree(repo_dir, ignore_errors=True)
         # Clean the (possibly half-written) DB on the FAILURE path too. A
         # killed BulkWrite leaves a .bulkwrite-crash-marker; the next index
@@ -454,25 +977,76 @@ def evaluate_instance(row: dict[str, Any], workdir: Path, json_mode: bool = Fals
                 Path(str(failed_db) + suffix).unlink(missing_ok=True)
             except OSError:
                 pass
-        res.duration_s = time.time() - t0
+        finalize_latency()
+        return res
+    if (
+        index_outcome.index_identity.get("source_revision") != row["base_commit"]
+        or index_outcome.index_identity.get("dirty_fingerprint") != "clean"
+    ):
+        res.failure_class = "invalid_experiment"
+        res.failure_code = "index_identity_mismatch"
+        res.note = "index identity does not match the clean pinned checkout"
+        shutil.rmtree(repo_dir, ignore_errors=True)
+        finalize_latency()
         return res
     res.indexed = True
+    res.index_identity = dict(index_outcome.index_identity)
+    res.embedding_identity = {
+        "status": "captured",
+        "count": index_outcome.embedding_count,
+        "model": index_outcome.embedding_model,
+    }
 
     # Use only the first paragraph as the agent's query — full multi-
     # paragraph issue dilutes seed matching (verified PR #82 testing).
     short_query = row["problem_statement"].split("\n\n")[0].strip()
     db = db_path_for(repo_dir)
     if not db.exists():
+        res.failure_class = "infrastructure"
+        res.failure_code = "index_database_missing"
         res.note = f"db not at expected path {db.name}"
         shutil.rmtree(repo_dir, ignore_errors=True)
-        res.duration_s = time.time() - t0
+        finalize_latency()
         return res
 
-    parsed = run_agent(db, short_query, top_k=10, json_mode=json_mode)
-    res.agent_ran = "error" not in parsed
-    res.input_tokens = parsed.get("input_tokens", 0)
-    res.output_tokens = parsed.get("output_tokens", 0)
-    res.turns = parsed.get("turns", 0)
+    query_started = time.monotonic()
+    parsed = run_agent(db, short_query, top_k=score_depth, json_mode=json_mode)
+    res.latency_s["marginal_query"] = time.monotonic() - query_started
+    if "error" in parsed:
+        parsed_failure_class = parsed.get("failure_class")
+        parsed_failure_code = parsed.get("failure_code")
+        if (
+            parsed_failure_class in {"invalid_experiment", "infrastructure"}
+            and isinstance(parsed_failure_code, str)
+            and parsed_failure_code
+        ):
+            res.failure_class = parsed_failure_class
+            res.failure_code = parsed_failure_code
+        else:
+            res.failure_class = "infrastructure"
+            res.failure_code = "agent_failed"
+        res.note = str(parsed.get("error", "agent failed"))[:300]
+    elif json_mode:
+        try:
+            agent = validate_graph_agent_envelope(
+                parsed.get("agent_json"),
+                top_k=score_depth,
+            )
+        except GraphAgentEnvelopeError as exc:
+            res.failure_class = "invalid_experiment"
+            res.failure_code = "agent_envelope_invalid"
+            res.note = str(exc)[:300]
+        else:
+            res.agent_ran = True
+            res.turns = agent["turns"]
+            res.input_tokens = agent["input_tokens"]
+            res.output_tokens = agent["output_tokens"]
+            res.agent_json = dict(parsed["agent_json"])
+    else:
+        res.agent_ran = True
+        res.input_tokens = parsed.get("input_tokens", 0)
+        res.output_tokens = parsed.get("output_tokens", 0)
+        res.turns = parsed.get("turns", 0)
     # Token-metered cost (Haiku 4.5: $1/M input, $5/M output — the agent's
     # default model). The flat $0.05 estimate underbooked heavy instances
     # ~20x (jax, 2026-06-11: 989K input tokens ≈ $1.02 actual), which made
@@ -484,16 +1058,13 @@ def evaluate_instance(row: dict[str, Any], workdir: Path, json_mode: bool = Fals
     else:
         res.cost_estimate_usd = COST_PER_QUERY_USD_ESTIMATE if res.agent_ran else 0.0
 
-    if json_mode and "agent_json" in parsed:
-        res.agent_json = parsed["agent_json"]
-
     if res.agent_ran:
         # In json_mode, the agent's text "stdout" is a JSON envelope.
         # Score against the structured entities directly when present
         # rather than against the JSON string (which would mis-attribute
         # substring hits to keys/property names instead of file paths).
-        if json_mode and "agent_json" in parsed:
-            agent_block = parsed["agent_json"].get("code_localize_agent") or {}
+        if json_mode and res.agent_json:
+            agent_block = res.agent_json["code_localize_agent"]
             entities = agent_block.get("entities") or []
             ent_blob = "\n".join(
                 f"{e.get('qualified_name','')} {e.get('file_path','')}"
@@ -517,7 +1088,7 @@ def evaluate_instance(row: dict[str, Any], workdir: Path, json_mode: bool = Fals
     except OSError:
         pass
 
-    res.duration_s = time.time() - t0
+    finalize_latency()
     print(
         f"  -> indexed={res.indexed} agent={res.agent_ran} "
         f"file_hit={res.file_hit} class_hit={res.class_hit} "
@@ -527,7 +1098,27 @@ def evaluate_instance(row: dict[str, Any], workdir: Path, json_mode: bool = Fals
     return res
 
 
-def _build_per_case_dict(summary: BatchSummary) -> dict:
+def build_exception_result(
+    row: dict[str, Any] | pd.Series,
+    error: Exception,
+) -> InstanceResult:
+    """Represent an unexpected per-case exception without scoring it as a miss."""
+    return InstanceResult(
+        instance_id=row["instance_id"],
+        repo=row["repo"],
+        category=row.get("category", "Unknown"),
+        ground_truth=list(row.get("edit_functions", [])),
+        failure_class="infrastructure",
+        failure_code="unhandled_case_exception",
+        note=f"exception: {error!r}",
+    )
+
+
+def _build_per_case_dict(
+    summary: BatchSummary,
+    *,
+    checkpoint_contract: dict | None = None,
+) -> dict:
     """Build the per-case JSON payload from the in-progress summary.
 
     Get-well plan Phase 1 (2026-05-06): now constructs via the shared
@@ -547,8 +1138,82 @@ def _build_per_case_dict(summary: BatchSummary) -> dict:
         n_func_hit=summary.n_func_hit,
         aborted_reason=summary.aborted_reason,
         cases=[_per_case_record_from_instance(r) for r in summary.instances],
+        checkpoint_contract=dict(checkpoint_contract or {}),
     )
     return record.to_dict()
+
+
+def _instance_result_from_record(record: "schema.PerCaseRecord") -> InstanceResult:
+    serialized = record.to_dict()
+    return InstanceResult(
+        instance_id=record.instance_id,
+        repo=record.repo,
+        category=record.category,
+        ground_truth=list(record.ground_truth),
+        indexed=record.indexed,
+        agent_ran=record.agent_ran,
+        file_hit=record.file_hit,
+        class_hit=record.class_hit,
+        func_hit=record.func_hit,
+        turns=record.turns,
+        input_tokens=record.input_tokens,
+        output_tokens=record.output_tokens,
+        cost_estimate_usd=record.cost_estimate_usd,
+        note=record.note,
+        failure_class=record.failure_class,
+        failure_code=record.failure_code,
+        duration_s=record.duration_s,
+        latency_s=dict(record.latency_s),
+        agent_json=dict(serialized["agent_envelope"]),
+        index_identity=dict(record.index_identity),
+        embedding_identity=dict(record.embedding_identity),
+        attempts=list(record.attempts),
+    )
+
+
+def load_graph_resume_instances(
+    path: Path,
+    checkpoint_contract: dict,
+    expected_instance_ids: list[str],
+) -> list[InstanceResult]:
+    """Load a prior raw graph shard only under an identical run contract."""
+    if not path.is_file():
+        raise ValueError(f"graph resume checkpoint is missing: {path}")
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    record = schema.BatchSummaryRecord.from_dict(payload)
+    if record.checkpoint_contract != checkpoint_contract:
+        raise ValueError("graph resume checkpoint contract does not match this run")
+    if (
+        record.aborted_reason.startswith("invalid_experiment:")
+        or any(
+            case.failure_class == "invalid_experiment"
+            for case in record.cases
+        )
+    ):
+        raise ValueError(
+            "graph resume checkpoint contains a persisted invalid_experiment abort"
+        )
+    for case in record.cases:
+        cost = case.cost_estimate_usd
+        if (
+            isinstance(cost, bool)
+            or not isinstance(cost, (int, float))
+            or not math.isfinite(float(cost))
+            or float(cost) < 0.0
+        ):
+            raise ValueError(
+                f"graph resume case {case.instance_id} has invalid persisted cost"
+            )
+    ids = [case.instance_id for case in record.cases]
+    duplicates = sorted(
+        {instance_id for instance_id in ids if ids.count(instance_id) > 1}
+    )
+    if duplicates:
+        raise ValueError(f"graph resume checkpoint has duplicate IDs: {duplicates}")
+    extras = sorted(set(ids) - set(expected_instance_ids))
+    if extras:
+        raise ValueError(f"graph resume checkpoint has unexpected IDs: {extras}")
+    return [_instance_result_from_record(case) for case in record.cases]
 
 
 def _per_case_record_from_instance(r: InstanceResult) -> "schema.PerCaseRecord":
@@ -588,8 +1253,14 @@ def _per_case_record_from_instance(r: InstanceResult) -> "schema.PerCaseRecord":
         output_tokens=r.output_tokens,
         cost_estimate_usd=r.cost_estimate_usd,
         duration_s=r.duration_s,
+        failure_class=r.failure_class,
+        failure_code=r.failure_code,
+        latency_s=dict(r.latency_s),
         note=r.note,
         agent_envelope=envelope,
+        index_identity=dict(r.index_identity),
+        embedding_identity=dict(r.embedding_identity),
+        attempts=list(r.attempts),
     )
 
 
@@ -664,7 +1335,34 @@ def main() -> int:
              "locbench.parquet). Used by the SweRank pre-filter pilot to feed "
              "an arm-B parquet whose problem_statement has a retrieval "
              "candidate block prepended, keeping every other knob identical.")
-    ap.add_argument("--budget-usd", type=float, default=3.0, help="Hard abort threshold")
+    ap.add_argument(
+        "--budget-usd",
+        type=Decimal,
+        default=Decimal("3.0"),
+        help="Advisory estimated-cost stop threshold (not a provider hard cap)",
+    )
+    ap.add_argument(
+        "--canonical-pin",
+        type=Path,
+        default=None,
+        help="Canonical matched-depth pin used to bind checkpoint provenance",
+    )
+    ap.add_argument(
+        "--repository",
+        default=None,
+        help="Exact repository identity for a contracted graph shard",
+    )
+    ap.add_argument(
+        "--graph-sha",
+        default=None,
+        help="Exact code-graph commit for a contracted graph shard",
+    )
+    ap.add_argument(
+        "--score-depth",
+        type=int,
+        default=10,
+        help="Requested graph-agent rank depth",
+    )
     ap.add_argument("--workdir", type=Path, default=Path(r"C:/tmp/locbench-batch"))
     ap.add_argument(
         "--output",
@@ -681,6 +1379,18 @@ def main() -> int:
             "Consumed by bench/research/locbench_failure_audit.py for the "
             "7-bucket classification pipeline."
         ),
+    )
+    ap.add_argument(
+        "--checkpoint-contract",
+        type=Path,
+        default=None,
+        help="Exact run-contract JSON persisted into raw per-case checkpoints",
+    )
+    ap.add_argument(
+        "--resume-per-case-json",
+        type=Path,
+        default=None,
+        help="Prior raw checkpoint to resume after exact contract validation",
     )
     args = ap.parse_args()
 
@@ -703,7 +1413,10 @@ def main() -> int:
         # in GC'd (clone-failing) instances.
         pin = json.loads(args.instances.read_text(encoding="utf-8"))
         ids = pin.get("pinned_instance_ids", pin) if isinstance(pin, dict) else pin
-        selected = df[df["instance_id"].isin(set(ids))]
+        selected_by_id = df.set_index("instance_id", drop=False)
+        selected = selected_by_id.loc[
+            [instance_id for instance_id in ids if instance_id in selected_by_id.index]
+        ]
         print(f"Pinned mode: {len(selected)}/{len(ids)} pinned instances present in parquet")
     else:
         selected = select_instances(df, args.n, args.seed)
@@ -713,6 +1426,105 @@ def main() -> int:
 
     args.workdir.mkdir(parents=True, exist_ok=True)
     summary = BatchSummary(n_total=len(selected))
+    selected_ids = [str(instance_id) for instance_id in selected["instance_id"]]
+    checkpoint_contract: dict = {}
+    if args.checkpoint_contract is not None:
+        try:
+            raw_contract = json.loads(
+                args.checkpoint_contract.read_text(encoding="utf-8")
+            )
+        except (OSError, json.JSONDecodeError) as exc:
+            print(f"ERROR: checkpoint contract is unreadable: {exc}", file=sys.stderr)
+            return 2
+        if not isinstance(raw_contract, dict):
+            print("ERROR: checkpoint contract must be a JSON object", file=sys.stderr)
+            return 2
+        contract_ids = raw_contract.get("expected_instance_ids")
+        if (
+            not isinstance(contract_ids, list)
+            or len(contract_ids) != len(selected_ids)
+            or set(map(str, contract_ids)) != set(selected_ids)
+        ):
+            print(
+                "ERROR: checkpoint contract IDs do not match the selected shard",
+                file=sys.stderr,
+            )
+            return 2
+        if (
+            args.canonical_pin is None
+            or args.repository is None
+            or args.graph_sha is None
+        ):
+            print(
+                "ERROR: contracted graph runs require --canonical-pin, "
+                "--repository, and --graph-sha",
+                file=sys.stderr,
+            )
+            return 2
+        if any(str(repo) != args.repository for repo in selected["repo"]):
+            print(
+                "ERROR: selected graph shard does not match --repository",
+                file=sys.stderr,
+            )
+            return 2
+        try:
+            iterations = int(os.environ.get("LOCAGENT_ITERATIONS", "1"))
+            expected_contract = expected_graph_checkpoint_contract(
+                graph_sha=args.graph_sha,
+                canonical_pin=args.canonical_pin,
+                parquet=parquet,
+                repository=args.repository,
+                expected_instance_ids=selected_ids,
+                model=os.environ.get(
+                    "ANTHROPIC_MODEL",
+                    "claude-haiku-4-5-20251001",
+                ),
+                embedding_model=os.environ.get(
+                    "VOYAGE_EMBED_MODEL",
+                    "voyage-code-3",
+                ),
+                iterations=iterations,
+                score_depth=args.score_depth,
+                graph_budget_usd=str(args.budget_usd),
+            )
+            checkpoint_contract = validate_graph_checkpoint_contract(
+                raw_contract,
+                expected_contract,
+            )
+        except (OSError, ValueError) as exc:
+            print(f"ERROR: graph checkpoint contract rejected: {exc}", file=sys.stderr)
+            return 2
+    if args.resume_per_case_json is not None and not checkpoint_contract:
+        print(
+            "ERROR: --resume-per-case-json requires --checkpoint-contract",
+            file=sys.stderr,
+        )
+        return 2
+    if checkpoint_contract and args.per_case_json is None:
+        print(
+            "ERROR: contracted graph runs require --per-case-json",
+            file=sys.stderr,
+        )
+        return 2
+    if args.resume_per_case_json is not None:
+        try:
+            summary.instances.extend(
+                load_graph_resume_instances(
+                    args.resume_per_case_json,
+                    checkpoint_contract,
+                    list(map(str, checkpoint_contract["expected_instance_ids"])),
+                )
+            )
+        except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError) as exc:
+            print(f"ERROR: graph resume checkpoint rejected: {exc}", file=sys.stderr)
+            return 2
+        print(f"Resumed {len(summary.instances)} graph cases from prior checkpoint")
+
+    resumed_instances = list(summary.instances)
+    summary.instances.clear()
+    for resumed in resumed_instances:
+        summary.record(resumed)
+    resumed_ids = {instance.instance_id for instance in summary.instances}
 
     # Roundtable T2 fix (2026-05-06): persist per-case JSON checkpoint
     # after EVERY instance, not only at end. Previously, killing the
@@ -723,47 +1535,70 @@ def main() -> int:
     def _checkpoint_per_case() -> None:
         if not args.per_case_json:
             return
-        try:
-            args.per_case_json.parent.mkdir(parents=True, exist_ok=True)
-            args.per_case_json.write_text(
-                json.dumps(_build_per_case_dict(summary), indent=2),
-                encoding="utf-8",
-            )
-        except Exception as exc:
-            print(f"  [checkpoint failed: {exc!r}]")
+        write_graph_checkpoint(
+            args.per_case_json,
+            _build_per_case_dict(
+                summary,
+                checkpoint_contract=checkpoint_contract,
+            ),
+        )
 
+    checkpoint_failed = False
+    try:
+        _checkpoint_per_case()
+    except Exception as exc:
+        print(
+            f"ERROR: initial graph checkpoint failed: {exc!r}",
+            file=sys.stderr,
+        )
+        return 2
     for _, row in selected.iterrows():
-        if summary.total_cost_usd >= args.budget_usd:
+        if summary.aborted_reason:
+            break
+        if row["instance_id"] in resumed_ids:
+            print(f"\n=== resume: {row['instance_id']} already checkpointed ===")
+            continue
+        if Decimal(str(summary.total_cost_usd)) >= args.budget_usd:
             summary.aborted_reason = (
-                f"budget cap ${args.budget_usd:.2f} hit at "
+                f"estimated-cost threshold ${args.budget_usd:.2f} hit at "
                 f"${summary.total_cost_usd:.2f} after {len(summary.instances)} runs"
             )
             print(f"\n!!! {summary.aborted_reason}")
             break
         try:
-            res = evaluate_instance(row.to_dict(), args.workdir, json_mode=bool(args.per_case_json))
+            res = evaluate_instance(
+                row.to_dict(),
+                args.workdir,
+                json_mode=bool(args.per_case_json),
+                score_depth=args.score_depth,
+            )
         except KeyboardInterrupt:
             summary.aborted_reason = "user interrupted (Ctrl+C)"
-            _checkpoint_per_case()
+            try:
+                _checkpoint_per_case()
+            except Exception as exc:
+                checkpoint_failed = True
+                print(
+                    f"ERROR: graph checkpoint failed: {exc!r}",
+                    file=sys.stderr,
+                )
             break
         except Exception as e:
-            res = InstanceResult(
-                instance_id=row["instance_id"],
-                repo=row["repo"],
-                category=row.get("category", "Unknown"),
-                ground_truth=list(row.get("edit_functions", [])),
-                note=f"exception: {e!r}",
+            res = build_exception_result(row, e)
+        should_continue = summary.record(res)
+        try:
+            _checkpoint_per_case()
+        except Exception as exc:
+            checkpoint_failed = True
+            summary.aborted_reason = f"checkpoint_write_failed:{type(exc).__name__}"
+            print(
+                f"ERROR: graph checkpoint failed; aborting before next case: {exc!r}",
+                file=sys.stderr,
             )
-        summary.instances.append(res)
-        summary.n_indexed += int(res.indexed)
-        summary.n_agent_ran += int(res.agent_ran)
-        summary.n_file_hit += int(res.file_hit)
-        summary.n_class_hit += int(res.class_hit)
-        summary.n_func_hit += int(res.func_hit)
-        summary.total_input_tokens += res.input_tokens
-        summary.total_output_tokens += res.output_tokens
-        summary.total_cost_usd += res.cost_estimate_usd
-        _checkpoint_per_case()
+            break
+        if not should_continue:
+            print(f"\n!!! {summary.aborted_reason}")
+            break
 
     write_report(summary, args.output)
 
@@ -773,14 +1608,22 @@ def main() -> int:
     # Roundtable T2 (2026-05-06): also written as a checkpoint after every
     # instance via _checkpoint_per_case() above — see _build_per_case_dict.
     if args.per_case_json:
-        args.per_case_json.parent.mkdir(parents=True, exist_ok=True)
-        args.per_case_json.write_text(
-            json.dumps(_build_per_case_dict(summary), indent=2),
-            encoding="utf-8",
-        )
+        try:
+            write_graph_checkpoint(
+                args.per_case_json,
+                _build_per_case_dict(
+                    summary,
+                    checkpoint_contract=checkpoint_contract,
+                ),
+            )
+        except Exception as exc:
+            print(f"ERROR: final graph checkpoint failed: {exc!r}", file=sys.stderr)
+            return 2
         print(f"\nPer-case JSON written: {args.per_case_json}")
 
-    return 0
+    if summary.aborted_reason.startswith("invalid_experiment:"):
+        return 2
+    return 2 if checkpoint_failed else 0
 
 
 if __name__ == "__main__":

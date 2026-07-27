@@ -11,7 +11,7 @@ func TestCaptureStderrDrainsBeyondWindowsPipeCapacity(t *testing.T) {
 	payload := strings.Repeat("x", 256<<10)
 
 	output := captureStderr(t, func() {
-		if _, err := io.WriteString(os.Stderr, payload); err != nil {
+		if _, err := os.Stderr.WriteString(payload); err != nil {
 			t.Fatalf("write oversized stderr payload: %v", err)
 		}
 	})

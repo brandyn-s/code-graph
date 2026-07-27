@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DeusData/codebase-memory-mcp/internal/indexidentity"
 	"github.com/DeusData/codebase-memory-mcp/internal/pipeline"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -19,14 +20,18 @@ func (s *Server) handleListProjects(_ context.Context, _ *mcp.CallToolRequest) (
 	}
 
 	type projectEntry struct {
-		Name             string `json:"name"`
-		RootPath         string `json:"root_path"`
-		IndexedAt        string `json:"indexed_at"`
-		Nodes            int    `json:"nodes"`
-		Edges            int    `json:"edges"`
-		DBPath           string `json:"db_path"`
-		ADRPresent       bool   `json:"adr_present"`
-		IsSessionProject bool   `json:"is_session_project,omitempty"`
+		Name             string                  `json:"name"`
+		RootPath         string                  `json:"root_path"`
+		IndexedAt        string                  `json:"indexed_at"`
+		Nodes            int                     `json:"nodes"`
+		Edges            int                     `json:"edges"`
+		DBPath           string                  `json:"db_path"`
+		ADRPresent       bool                    `json:"adr_present"`
+		IsSessionProject bool                    `json:"is_session_project,omitempty"`
+		Status           string                  `json:"status"`
+		IndexIdentity    *indexidentity.Envelope `json:"index_identity,omitempty"`
+		IdentityStatus   string                  `json:"identity_status"`
+		IdentityReason   string                  `json:"identity_reason"`
 	}
 
 	result := make([]projectEntry, 0, len(projectInfos))
@@ -35,7 +40,7 @@ func (s *Server) handleListProjects(_ context.Context, _ *mcp.CallToolRequest) (
 		if strings.HasPrefix(info.Name, "_") {
 			continue
 		}
-		st, err := s.router.ForProject(info.Name)
+		st, release, err := s.router.AcquireStore(info.Name)
 		if err != nil {
 			continue
 		}
@@ -61,11 +66,20 @@ func (s *Server) handleListProjects(_ context.Context, _ *mcp.CallToolRequest) (
 			Edges:      ec,
 			DBPath:     info.DBPath,
 			ADRPresent: adr != nil,
+			Status:     "ready",
 		}
+		identityFields := make(map[string]any)
+		if coherent := s.addLiveIndexIdentity(identityFields, st, info.Name, rootPath); !coherent {
+			entry.Status = "degraded"
+		}
+		entry.IndexIdentity, _ = identityFields["index_identity"].(*indexidentity.Envelope)
+		entry.IdentityStatus, _ = identityFields["identity_status"].(string)
+		entry.IdentityReason, _ = identityFields["identity_reason"].(string)
 		if info.Name == s.sessionProject {
 			entry.IsSessionProject = true
 		}
 		result = append(result, entry)
+		release()
 	}
 
 	return jsonResult(result), nil
@@ -130,10 +144,11 @@ func (s *Server) handleIndexStatus(_ context.Context, req *mcp.CallToolRequest) 
 	}
 
 	// Get store and project metadata
-	st, err := s.router.ForProject(projectName)
+	st, release, err := s.router.AcquireStore(projectName)
 	if err != nil {
 		return errResult(fmt.Sprintf("open store: %v", err)), nil
 	}
+	defer release()
 
 	proj, _ := st.GetProject(projectName)
 	if proj == nil {
@@ -162,6 +177,10 @@ func (s *Server) handleIndexStatus(_ context.Context, req *mcp.CallToolRequest) 
 		"edges":              edgeCount,
 		"is_session_project": isSessionProject,
 		"db_path":            filepath.Join(s.router.Dir(), projectName+".db"),
+	}
+	identityCoherent := s.addLiveIndexIdentity(result, st, projectName, proj.RootPath)
+	if !identityCoherent {
+		result["status"] = "degraded"
 	}
 
 	// Determine index type (initial vs incremental)
@@ -241,7 +260,16 @@ func (s *Server) handleIndexStatus(_ context.Context, req *mcp.CallToolRequest) 
 		}
 	}
 
-	result["_metadata"] = s.stdReadGraphMetadata(projectName)
+	metadata := s.stdReadGraphMetadata(projectName)
+	if !identityCoherent {
+		if freshness, ok := metadata["freshness"].(map[string]any); ok {
+			freshness["state"] = "unknown"
+			if result["identity_status"] == indexidentity.StatusStaleSource {
+				freshness["state"] = "stale"
+			}
+		}
+	}
+	result["_metadata"] = metadata
 
 	return jsonResult(result), nil
 }

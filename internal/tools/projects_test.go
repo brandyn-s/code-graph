@@ -1,11 +1,15 @@
 package tools
 
 import (
+	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/DeusData/codebase-memory-mcp/internal/indexidentity"
 	"github.com/DeusData/codebase-memory-mcp/internal/store"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // newServerWithRouter constructs a minimal Server suitable for testing the
@@ -135,5 +139,74 @@ func TestHandleListProjects_FiltersConfigDB(t *testing.T) {
 	}
 	if visible != 1 {
 		t.Errorf("after filter: got %d visible projects, want 1", visible)
+	}
+}
+
+func listProjectsResponse(t *testing.T, s *Server) []map[string]any {
+	t.Helper()
+	res, err := s.handleListProjects(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("list_projects handler: %v", err)
+	}
+	if res == nil || len(res.Content) == 0 {
+		t.Fatal("list_projects returned nil/empty result")
+	}
+	text, ok := res.Content[0].(*mcp.TextContent)
+	if !ok {
+		t.Fatalf("list_projects Content[0] = %T, want TextContent", res.Content[0])
+	}
+	var projects []map[string]any
+	if err := json.Unmarshal([]byte(text.Text), &projects); err != nil {
+		t.Fatalf("parse list_projects response: %v\n%s", err, text.Text)
+	}
+	return projects
+}
+
+func TestLegacyProjectIdentityIsExplicitlyDegradedInStatusAndList(t *testing.T) {
+	router, err := store.NewRouterWithDir(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewRouterWithDir: %v", err)
+	}
+	t.Cleanup(router.CloseAll)
+	s := NewServer(router)
+	const project = "legacy"
+	upsertTestProject(t, router, project, "/work/legacy")
+
+	status := metadataResponseFromHandler(t, s.handleIndexStatus, "index_status",
+		map[string]any{"project": project})
+	if got, _ := status["status"].(string); got != "degraded" {
+		t.Errorf("index_status.status = %q, want degraded", got)
+	}
+	if got, _ := status["identity_status"].(string); got != indexidentity.StatusMissing {
+		t.Errorf("index_status.identity_status = %q, want %q", got, indexidentity.StatusMissing)
+	}
+	if reason, _ := status["identity_reason"].(string); reason == "" {
+		t.Error("index_status.identity_reason is empty; want reindex remediation")
+	}
+	if identity := status["index_identity"]; identity != nil {
+		t.Errorf("legacy index_status exposed an identity: %v", identity)
+	}
+	metadata, _ := status["_metadata"].(map[string]any)
+	freshness, _ := metadata["freshness"].(map[string]any)
+	if got, _ := freshness["state"].(string); got != "unknown" {
+		t.Errorf("legacy metadata freshness = %q, want unknown", got)
+	}
+
+	projects := listProjectsResponse(t, s)
+	if len(projects) != 1 {
+		t.Fatalf("list_projects returned %d projects, want 1: %v", len(projects), projects)
+	}
+	entry := projects[0]
+	if got, _ := entry["status"].(string); got != "degraded" {
+		t.Errorf("list_projects status = %q, want degraded", got)
+	}
+	if got, _ := entry["identity_status"].(string); got != indexidentity.StatusMissing {
+		t.Errorf("list_projects identity_status = %q, want %q", got, indexidentity.StatusMissing)
+	}
+	if reason, _ := entry["identity_reason"].(string); reason == "" {
+		t.Error("list_projects identity_reason is empty; want reindex remediation")
+	}
+	if identity := entry["index_identity"]; identity != nil {
+		t.Errorf("legacy list_projects exposed an identity: %v", identity)
 	}
 }

@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/DeusData/codebase-memory-mcp/internal/discover"
+	"github.com/DeusData/codebase-memory-mcp/internal/indexidentity"
 	"github.com/DeusData/codebase-memory-mcp/internal/pipeline"
 	"github.com/DeusData/codebase-memory-mcp/internal/store"
 	"github.com/DeusData/codebase-memory-mcp/internal/watcher"
@@ -51,6 +52,9 @@ type Server struct {
 	ctx        context.Context // server lifetime context — cancelled on shutdown
 	indexMu    sync.Mutex
 	handlers   map[string]mcp.ToolHandler
+
+	// Test seam for deterministic start/end checkout coherence checks.
+	captureIndexIdentity func(string) (*indexidentity.Envelope, error)
 
 	// Session-aware fields (set once via sync.Once, then immutable)
 	sessionOnce    sync.Once
@@ -129,12 +133,43 @@ func (s *Server) syncProject(ctx context.Context, projectName, rootPath string) 
 		return fmt.Errorf("store for %s: %w", projectName, err)
 	}
 	defer release()
+	if err := st.SetIndexIdentityState(
+		projectName,
+		indexidentity.StatusPending,
+		"watcher reindex is in progress; checkout identity has not been recaptured",
+	); err != nil {
+		return fmt.Errorf("invalidate previous index identity: %w", err)
+	}
+	captureIdentity := s.indexIdentityCapture()
+	startIdentity, startIdentityErr := captureIdentity(rootPath)
 	p := pipeline.New(ctx, st, rootPath, discover.ModeFull)
 	if err := p.Run(); err != nil {
+		if stateErr := persistTerminalIndexIdentityError(
+			st,
+			projectName,
+			"watcher_indexing_failed",
+			err,
+		); stateErr != nil {
+			slog.Error(
+				"watcher.identity.terminal_state_err",
+				"project", projectName,
+				"index_err", err,
+				"state_err", stateErr,
+			)
+		}
 		return err
 	}
+	endIdentity, endIdentityErr := captureIdentity(rootPath)
+	identityErr := persistCoherentIndexIdentity(
+		st,
+		projectName,
+		startIdentity,
+		startIdentityErr,
+		endIdentity,
+		endIdentityErr,
+	)
 	s.queryCache.Invalidate()
-	return nil
+	return identityErr
 }
 
 // MCPServer returns the underlying MCP server.
@@ -365,37 +400,91 @@ func (s *Server) startAutoIndex() {
 			)
 			return
 		}
-		s.indexStatus.Store("indexing")
-	} else {
-		s.indexStatus.Store("ready")
+	}
+	go func() {
+		if err := s.runAutoIndex(hasDB); errors.Is(err, errSyncBusy) {
+			slog.Debug("autoindex.skip", "reason", "index_in_progress")
+		} else if err != nil {
+			slog.Warn("autoindex.err", "err", err)
+		} else {
+			slog.Info("autoindex.done", "project", s.sessionProject)
+		}
+	}()
+}
+
+func (s *Server) runAutoIndex(hasDB bool) error {
+	if !s.indexMu.TryLock() {
+		return errSyncBusy
+	}
+	defer s.indexMu.Unlock()
+
+	s.indexStartedAt.Store(time.Now())
+	s.indexStatus.Store("indexing")
+
+	st, release, err := s.router.AcquireStore(s.sessionProject)
+	if err != nil {
+		s.indexStatus.Store("degraded")
+		return fmt.Errorf("auto-index store: %w", err)
+	}
+	defer release()
+
+	if hasDB {
+		if err := st.SetIndexIdentityState(
+			s.sessionProject,
+			indexidentity.StatusPending,
+			"auto-index is in progress; checkout identity has not been recaptured",
+		); err != nil {
+			s.indexStatus.Store("degraded")
+			return fmt.Errorf("invalidate previous auto-index identity: %w", err)
+		}
 	}
 
-	go func() {
-		if !s.indexMu.TryLock() {
-			slog.Debug("autoindex.skip", "reason", "index_in_progress")
-			return
+	captureIdentity := s.indexIdentityCapture()
+	startIdentity, startIdentityErr := captureIdentity(s.sessionRoot)
+	pipelineContext := s.ctx
+	if pipelineContext == nil {
+		pipelineContext = context.Background()
+	}
+	p := pipeline.New(pipelineContext, st, s.sessionRoot, discover.ModeFull)
+	if err := p.Run(); err != nil {
+		s.indexStatus.Store("degraded")
+		reason := fmt.Sprintf("auto-index failed after invalidating checkout identity: %v", err)
+		if stateErr := st.SetIndexIdentityState(
+			s.sessionProject,
+			indexidentity.StatusError,
+			reason,
+		); stateErr != nil {
+			slog.Warn("autoindex.identity_failure_state.err", "err", stateErr)
 		}
-		defer s.indexMu.Unlock()
+		return fmt.Errorf("auto-index pipeline: %w", err)
+	}
+	if err := st.SetIndexIdentityState(
+		s.sessionProject,
+		indexidentity.StatusPending,
+		"auto-index completed but checkout identity has not been recaptured",
+	); err != nil {
+		s.indexStatus.Store("degraded")
+		return fmt.Errorf("mark auto-index identity pending: %w", err)
+	}
 
-		s.indexStartedAt.Store(time.Now())
-		if !hasDB {
-			s.indexStatus.Store("indexing")
-		}
+	s.queryCache.Invalidate()
+	s.watcher.Watch(s.sessionProject, s.sessionRoot)
 
-		st, err := s.router.ForProject(s.sessionProject)
-		if err != nil {
-			slog.Warn("autoindex.store.err", "err", err)
-			return
-		}
-		p := pipeline.New(s.ctx, st, s.sessionRoot, discover.ModeFull)
-		if err := p.Run(); err != nil {
-			slog.Warn("autoindex.err", "err", err)
-			return
-		}
-		s.indexStatus.Store("ready")
-		s.watcher.Watch(s.sessionProject, s.sessionRoot)
-		slog.Info("autoindex.done", "project", s.sessionProject)
-	}()
+	endIdentity, endIdentityErr := captureIdentity(s.sessionRoot)
+	if err := persistCoherentIndexIdentity(
+		st,
+		s.sessionProject,
+		startIdentity,
+		startIdentityErr,
+		endIdentity,
+		endIdentityErr,
+	); err != nil {
+		s.indexStatus.Store("degraded")
+		return fmt.Errorf("auto-index identity coherence: %w", err)
+	}
+
+	s.indexStatus.Store("ready")
+	return nil
 }
 
 // --- Store routing ---

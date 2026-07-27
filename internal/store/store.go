@@ -486,6 +486,19 @@ func (s *Store) initSchema() error {
 
 	CREATE INDEX IF NOT EXISTS idx_edges_target_type ON edges(project, target_id, type);
 	CREATE INDEX IF NOT EXISTS idx_edges_source_type ON edges(project, source_id, type);
+
+	CREATE TABLE IF NOT EXISTS index_identity (
+		project TEXT PRIMARY KEY REFERENCES projects(name) ON DELETE CASCADE,
+		schema_version INTEGER NOT NULL DEFAULT 0,
+		repository_id TEXT NOT NULL DEFAULT '',
+		checkout_id TEXT NOT NULL DEFAULT '',
+		source_revision TEXT NOT NULL DEFAULT '',
+		dirty_fingerprint TEXT NOT NULL DEFAULT '',
+		index_generation TEXT NOT NULL DEFAULT '',
+		captured_at TEXT NOT NULL DEFAULT '',
+		identity_status TEXT NOT NULL,
+		identity_reason TEXT NOT NULL DEFAULT ''
+	);
 	`
 	_, err := s.db.ExecContext(ctx, schema)
 	if err != nil {

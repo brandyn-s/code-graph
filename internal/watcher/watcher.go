@@ -519,17 +519,15 @@ func (w *Watcher) fullSnapshotAndIndex(proj *store.Project, state *projectState)
 	interval := pollInterval(len(snap))
 	state.pollsSinceFull = 0
 
-	if snapshotsEqual(state.snapshot, snap) {
-		// Content-neutral change (e.g. a commit of already-indexed content
-		// only touches .git). Advance the git sentinel so the same no-op
-		// isn't re-detected every poll — checkSentinel deliberately leaves
-		// lastGitHead un-advanced on changed=true.
-		w.advanceGitHead(proj, state)
+	if snapshotsEqual(state.snapshot, snap) && state.strategy != strategyGit {
 		state.interval = interval
 		state.nextPoll = time.Now().Add(interval)
 		return
 	}
 
+	// Git HEAD changes must invoke indexFn even when the source-file snapshot
+	// is identical. The callback refreshes the persisted checkout identity,
+	// whose source_revision changes on content-neutral commits.
 	slog.Info("watcher.changed", "project", proj.Name, "strategy", state.strategy.String(), "files", len(snap))
 	if err := w.indexFn(w.ctx, proj.Name, proj.RootPath); err != nil {
 		// Snapshot and git head stay un-advanced: the next poll re-detects
@@ -548,9 +546,8 @@ func (w *Watcher) fullSnapshotAndIndex(proj *store.Project, state *projectState)
 }
 
 // advanceGitHead refreshes lastGitHead for git-strategy projects. Call only
-// after a detected change has been fully handled — indexed successfully, or
-// proven content-neutral — never before (a pre-advance turns a failed
-// reindex into a permanently missed change).
+// after a detected change has been indexed successfully — never before (a
+// pre-advance turns a failed reindex into a permanently missed change).
 func (w *Watcher) advanceGitHead(proj *store.Project, state *projectState) {
 	if state.strategy != strategyGit {
 		return

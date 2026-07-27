@@ -90,9 +90,10 @@ func TestGitHeadAdvanceDeferredToIndexOutcome(t *testing.T) {
 	}
 }
 
-// TestGitHeadAdvancesOnContentNeutralChange pins the no-op branch: a HEAD
-// move that leaves the file snapshot identical (e.g. an empty commit) must
-// advance the sentinel — otherwise the same no-op is re-detected forever.
+// TestGitHeadAdvancesOnContentNeutralChange pins the identity-refresh branch:
+// a HEAD move that leaves the file snapshot identical (e.g. an empty commit)
+// must still invoke the index callback so persisted source_revision advances,
+// then advance the sentinel so the same commit is not re-detected forever.
 func TestGitHeadAdvancesOnContentNeutralChange(t *testing.T) {
 	if !gitAvailable() {
 		t.Skip("git not available")
@@ -108,10 +109,11 @@ func TestGitHeadAdvancesOnContentNeutralChange(t *testing.T) {
 	}
 	defer r.CloseAll()
 
+	indexErr := errors.New("identity refresh failed")
 	indexCalls := 0
 	w := New(r, func(_ context.Context, _, _ string) error {
 		indexCalls++
-		return nil
+		return indexErr
 	})
 	w.ctx = context.Background()
 
@@ -128,8 +130,20 @@ func TestGitHeadAdvancesOnContentNeutralChange(t *testing.T) {
 		t.Fatalf("HEAD move should register as changed")
 	}
 	w.fullSnapshotAndIndex(proj, state)
-	if indexCalls != 0 {
-		t.Fatalf("content-neutral change must not trigger an index, got %d calls", indexCalls)
+	if indexCalls != 1 {
+		t.Fatalf("content-neutral HEAD change must refresh identity, got %d index calls", indexCalls)
+	}
+	if state.lastGitHead != baseHead {
+		t.Fatalf("failed identity refresh must not advance lastGitHead")
+	}
+	if changed, _ := w.checkSentinel(proj, state); !changed {
+		t.Fatalf("content-neutral HEAD change must retry after identity refresh failure")
+	}
+
+	indexErr = nil
+	w.fullSnapshotAndIndex(proj, state)
+	if indexCalls != 2 {
+		t.Fatalf("content-neutral HEAD change retry calls = %d, want 2", indexCalls)
 	}
 	if state.lastGitHead == baseHead {
 		t.Fatalf("content-neutral change must still advance lastGitHead")

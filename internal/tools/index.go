@@ -9,6 +9,7 @@ import (
 	"strconv"
 
 	"github.com/DeusData/codebase-memory-mcp/internal/discover"
+	"github.com/DeusData/codebase-memory-mcp/internal/indexidentity"
 	"github.com/DeusData/codebase-memory-mcp/internal/pipeline"
 	"github.com/DeusData/codebase-memory-mcp/internal/store"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -94,12 +95,61 @@ func (s *Server) handleIndexRepository(ctx context.Context, req *mcp.CallToolReq
 	// first-time index report action_outcome="updated".
 	preProj, _ := st.GetProject(projectName)
 	existedBefore := preProj != nil
+	terminalIdentityGuardArmed := false
+	terminalIdentityCode := "indexing_aborted"
+	var terminalIdentityCause error
+	if existedBefore {
+		if err := st.SetIndexIdentityState(
+			projectName,
+			indexidentity.StatusPending,
+			"indexing is in progress; checkout identity has not been recaptured",
+		); err != nil {
+			if projectName == s.sessionProject {
+				s.indexStatus.Store("degraded")
+			}
+			return errResult(fmt.Sprintf("invalidate previous index identity: %v", err)), nil
+		}
+		terminalIdentityGuardArmed = true
+	}
+	defer func() {
+		if !terminalIdentityGuardArmed {
+			return
+		}
+		if terminalIdentityCause == nil {
+			terminalIdentityCause = fmt.Errorf(
+				"index_repository exited before persisting a terminal checkout identity state",
+			)
+		}
+		if stateErr := persistTerminalIndexIdentityError(
+			st,
+			projectName,
+			terminalIdentityCode,
+			terminalIdentityCause,
+		); stateErr != nil {
+			slog.Error(
+				"index.identity.terminal_state_err",
+				"project", projectName,
+				"cause", terminalIdentityCause,
+				"state_err", stateErr,
+			)
+		}
+		if projectName == s.sessionProject {
+			s.indexStatus.Store("degraded")
+		}
+	}()
+	captureIdentity := s.indexIdentityCapture()
+	startIdentity, startIdentityErr := captureIdentity(absPath)
+	if startIdentityErr != nil {
+		slog.Error("index.identity.start_capture_err", "project", projectName, "err", startIdentityErr)
+	}
 
 	// If force=true, delete cached file hashes so classifyFiles treats all files as changed.
 	// This ensures post-flush enrichment passes (security tags, communities) run on all files.
 	forceReindex := getBoolArg(args, "force")
 	if forceReindex {
 		if err := st.DeleteFileHashes(projectName); err != nil {
+			terminalIdentityCode = "clearing_file_hashes_failed"
+			terminalIdentityCause = err
 			return errResult(fmt.Sprintf("clearing file hashes: %v", err)), nil
 		}
 	}
@@ -110,7 +160,38 @@ func (s *Server) handleIndexRepository(ctx context.Context, req *mcp.CallToolReq
 		slog.Info("index.progress", "project", projectName, "phase", phase, "pct", pct, "detail", detail)
 	}
 	if err := p.Run(); err != nil {
+		terminalIdentityGuardArmed = true
+		terminalIdentityCode = "indexing_failed"
+		terminalIdentityCause = err
+		if stateErr := persistTerminalIndexIdentityError(
+			st,
+			projectName,
+			"indexing_failed",
+			err,
+		); stateErr != nil {
+			slog.Error(
+				"index.identity.terminal_state_err",
+				"project", projectName,
+				"index_err", err,
+				"state_err", stateErr,
+			)
+		} else {
+			terminalIdentityGuardArmed = false
+		}
+		if projectName == s.sessionProject {
+			s.indexStatus.Store("degraded")
+		}
 		return errResult(fmt.Sprintf("indexing failed: %v", err)), nil
+	}
+	terminalIdentityGuardArmed = true
+	if err := st.SetIndexIdentityState(
+		projectName,
+		indexidentity.StatusPending,
+		"graph indexing completed but checkout identity has not been captured",
+	); err != nil {
+		terminalIdentityCode = "mark_identity_pending_failed"
+		terminalIdentityCause = err
+		return errResult(fmt.Sprintf("mark index identity pending: %v", err)), nil
 	}
 
 	// Invalidate query cache — indexed data has changed.
@@ -166,9 +247,47 @@ func (s *Server) handleIndexRepository(ctx context.Context, req *mcp.CallToolReq
 			"bytes", reportResult.Bytes)
 	}
 
-	// Update session state if this is the session project
+	// Capture only after all index-related repository writes, including the
+	// orientation report. Persist an envelope only when start and end
+	// generations match, so the graph is never labeled with a checkout state
+	// it did not coherently scan.
+	endIdentity, endIdentityErr := captureIdentity(absPath)
+	identityErr := persistCoherentIndexIdentity(
+		st,
+		projectName,
+		startIdentity,
+		startIdentityErr,
+		endIdentity,
+		endIdentityErr,
+	)
+	if identityErr != nil {
+		slog.Error("index.identity.incoherent", "project", projectName, "err", identityErr)
+	}
+
+	identityRecord, identityRecordErr := st.GetIndexIdentity(projectName)
+	switch {
+	case identityRecordErr != nil:
+		terminalIdentityCode = "identity_finalization_failed"
+		terminalIdentityCause = identityRecordErr
+	case identityRecord == nil:
+		terminalIdentityCode = "identity_finalization_failed"
+		terminalIdentityCause = fmt.Errorf("identity finalization returned a nil record")
+	case identityRecord.Status == indexidentity.StatusPending:
+		terminalIdentityCode = "identity_finalization_failed"
+		terminalIdentityCause = fmt.Errorf("identity remained pending after finalization")
+	default:
+		terminalIdentityGuardArmed = false
+	}
+
+	// Update session state if this is the session project.
 	if projectName == s.sessionProject {
-		s.indexStatus.Store("ready")
+		if identityRecordErr != nil ||
+			identityRecord == nil ||
+			identityRecord.Status != indexidentity.StatusCaptured {
+			s.indexStatus.Store("degraded")
+		} else {
+			s.indexStatus.Store("ready")
+		}
 	}
 
 	// Gather stats from the pipeline's LastNodeCount/LastEdgeCount fields,
@@ -210,6 +329,12 @@ func (s *Server) handleIndexRepository(ctx context.Context, req *mcp.CallToolReq
 		"edges":         edgeCount,
 		"indexed_at":    indexedAt,
 		"_metadata":     s.stdWriteToolMetadata(outcome),
+	}
+	if coherent := addIndexIdentity(result, st, projectName); !coherent {
+		result["status"] = "degraded"
+		if identityErr != nil && result["identity_reason"] == "" {
+			result["identity_reason"] = fmt.Sprintf("checkout identity unavailable: %v; re-run index_repository", identityErr)
+		}
 	}
 
 	// Check for ADR presence and suggest creation if missing

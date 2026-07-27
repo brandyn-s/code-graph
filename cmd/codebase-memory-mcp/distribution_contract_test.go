@@ -178,44 +178,82 @@ func TestInstallersVerifyArchiveBeforeExtraction(t *testing.T) {
 	}
 }
 
-func TestUnixInstallerMigratesLegacySourceRemote(t *testing.T) {
-	content := string(readRepositoryFile(t, "scripts/setup.sh"))
-	const functionStart = "ensure_private_source_remote() {\n"
-	start := strings.Index(content, functionStart)
-	if start == -1 {
-		t.Fatal("setup.sh must define ensure_private_source_remote")
+func TestInstallerLineEndingVariantsNormalizeExistingCRLF(t *testing.T) {
+	variants := installerLineEndingVariants("first\r\nsecond\r\n")
+	want := map[string]string{
+		"LF":   "first\nsecond\n",
+		"CRLF": "first\r\nsecond\r\n",
 	}
-	end := strings.Index(content[start:], "\n}\n")
-	if end == -1 {
-		t.Fatal("setup.sh ensure_private_source_remote function must have a closing brace")
-	}
-	function := content[start : start+end+len("\n}\n")]
 
-	repo := t.TempDir()
-	for _, args := range [][]string{
-		{"init", repo},
-		{"-C", repo, "remote", "add", "origin", "https://github.com/DeusData/codebase-memory-mcp.git"},
-	} {
-		output, err := exec.CommandContext(t.Context(), "git", args...).CombinedOutput()
-		if err != nil {
-			t.Fatalf("git %v: %v\n%s", args, err, output)
+	if len(variants) != len(want) {
+		t.Fatalf("line-ending variant count = %d, want %d", len(variants), len(want))
+	}
+	for _, variant := range variants {
+		if got, ok := want[variant.name]; !ok {
+			t.Errorf("unexpected line-ending variant %q", variant.name)
+		} else if variant.content != got {
+			t.Errorf("%s content = %q, want %q", variant.name, variant.content, got)
 		}
 	}
+}
 
-	command := function + `
+type installerLineEndingVariant struct {
+	name    string
+	content string
+}
+
+func installerLineEndingVariants(raw string) []installerLineEndingVariant {
+	lf := strings.ReplaceAll(raw, "\r\n", "\n")
+	return []installerLineEndingVariant{
+		{name: "LF", content: lf},
+		{name: "CRLF", content: strings.ReplaceAll(lf, "\n", "\r\n")},
+	}
+}
+
+func TestUnixInstallerMigratesLegacySourceRemote(t *testing.T) {
+	tests := installerLineEndingVariants(string(readRepositoryFile(t, "scripts/setup.sh")))
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			content := strings.ReplaceAll(tt.content, "\r\n", "\n")
+			const functionStart = "ensure_private_source_remote() {\n"
+			start := strings.Index(content, functionStart)
+			if start == -1 {
+				t.Fatal("setup.sh must define ensure_private_source_remote")
+			}
+			end := strings.Index(content[start:], "\n}\n")
+			if end == -1 {
+				t.Fatal("setup.sh ensure_private_source_remote function must have a closing brace")
+			}
+			function := content[start : start+end+len("\n}\n")]
+
+			repo := t.TempDir()
+			for _, args := range [][]string{
+				{"init", repo},
+				{"-C", repo, "remote", "add", "origin", "https://github.com/DeusData/codebase-memory-mcp.git"},
+			} {
+				output, err := exec.CommandContext(t.Context(), "git", args...).CombinedOutput()
+				if err != nil {
+					t.Fatalf("git %v: %v\n%s", args, err, output)
+				}
+			}
+
+			command := function + `
 REPO="redacted-org/code-graph"
 SOURCE_DIR="$1"
 ensure_private_source_remote
 `
-	output, err := exec.CommandContext(t.Context(), "bash", "-c", command, "test", repo).CombinedOutput()
-	if err != nil {
-		t.Fatalf("migrate legacy source remote: %v\n%s", err, output)
-	}
-	remote, err := exec.CommandContext(t.Context(), "git", "-C", repo, "remote", "get-url", "origin").CombinedOutput()
-	if err != nil {
-		t.Fatalf("read migrated origin: %v\n%s", err, remote)
-	}
-	if got, want := strings.TrimSpace(string(remote)), "https://github.com/redacted-org/code-graph.git"; got != want {
-		t.Errorf("migrated origin = %q, want %q", got, want)
+			output, err := exec.CommandContext(t.Context(), "bash", "-c", command, "test", repo).CombinedOutput()
+			if err != nil {
+				t.Fatalf("migrate legacy source remote: %v\n%s", err, output)
+			}
+			remote, err := exec.CommandContext(t.Context(), "git", "-C", repo, "remote", "get-url", "origin").CombinedOutput()
+			if err != nil {
+				t.Fatalf("read migrated origin: %v\n%s", err, remote)
+			}
+			if got, want := strings.TrimSpace(string(remote)), "https://github.com/redacted-org/code-graph.git"; got != want {
+				t.Errorf("migrated origin = %q, want %q", got, want)
+			}
+		})
 	}
 }

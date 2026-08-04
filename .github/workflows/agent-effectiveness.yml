@@ -46,7 +46,7 @@ permissions:
 
 jobs:
   agent-effectiveness:
-    if: github.repository_owner != 'redacted-brandyn'
+    if: github.repository_owner_id != '186206138'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:

@@ -146,14 +146,19 @@ func (s *Server) handleSearchGraph(_ context.Context, req *mcp.CallToolRequest) 
 		strings.Join(params.ExcludeLabels, ","), params.SortBy,
 		params.CaseSensitive, includeSource)
 
-	if cached, ok := s.queryCache.Get(cacheKey); ok {
-		payload := cached
-		if cachedMap, isMap := cached.(map[string]any); isMap {
-			payload = withUnrecognizedArgs(cachedMap, args)
+	// Ordinary searches preserve the existing fast cache path. Evidence-backed
+	// searches must first resolve and live-check the project identity, so their
+	// cache path is handled below after the store and root are known.
+	if !includeSource {
+		if cached, ok := s.queryCache.Get(cacheKey); ok {
+			payload := cached
+			if cachedMap, isMap := cached.(map[string]any); isMap {
+				payload = withUnrecognizedArgs(cachedMap, args)
+			}
+			result := jsonResult(payload)
+			s.addUpdateNotice(result)
+			return result, nil
 		}
-		result := jsonResult(payload)
-		s.addUpdateNotice(result)
-		return result, nil
 	}
 
 	st, err := s.resolveStore(getStringArg(args, "project"))
@@ -167,12 +172,27 @@ func (s *Server) handleSearchGraph(_ context.Context, req *mcp.CallToolRequest) 
 		projName = projects[0].Name
 	}
 
-	// Resolve project root for source reading
+	// Resolve the root for source reads and live checkout identity validation.
 	var rootPath string
+	if proj, _ := st.GetProject(projName); proj != nil {
+		rootPath = proj.RootPath
+	}
+
 	if includeSource {
-		proj, _ := st.GetProject(projName)
-		if proj != nil {
-			rootPath = proj.RootPath
+		if cached, ok := s.queryCache.Get(cacheKey); ok {
+			payload := cached
+			if cachedMap, isMap := cached.(map[string]any); isMap {
+				evidencePayload := s.withGraphEvidenceRefs(
+					cachedMap,
+					st,
+					projName,
+					rootPath,
+				)
+				payload = withUnrecognizedArgs(evidencePayload, args)
+			}
+			result := jsonResult(payload)
+			s.addUpdateNotice(result)
+			return result, nil
 		}
 	}
 
@@ -248,9 +268,17 @@ func (s *Server) handleSearchGraph(_ context.Context, req *mcp.CallToolRequest) 
 	}
 	s.addIndexStatus(responseData)
 
-	// Cache the UNANNOTATED map; withUnrecognizedArgs returns a copy for this
-	// response so the cached entry stays warning-free.
+	// Cache the raw result. Evidence refs are added to a response copy only
+	// after a live identity check so no stale generation can leak from cache.
 	s.queryCache.Set(cacheKey, responseData)
+	if includeSource {
+		responseData = s.withGraphEvidenceRefs(
+			responseData,
+			st,
+			projName,
+			rootPath,
+		)
+	}
 	responseData = withUnrecognizedArgs(responseData, args)
 
 	result := jsonResult(responseData)

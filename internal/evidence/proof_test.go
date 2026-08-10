@@ -36,6 +36,46 @@ func proofObservation(path, qualifiedName, sourceEngine, derivation, stance, gen
 	)
 }
 
+func proofRelationshipObservation(confidenceBand string, runtimeObserved bool, observationCount int, generation string) ObservationRef {
+	repositoryID := strings.Repeat("r", 64)
+	sourceRevision := strings.Repeat("s", 40)
+	source := NewSymbolRef(
+		repositoryID,
+		sourceRevision,
+		"src/api/admin.py",
+		"function",
+		"admin_handler",
+		1,
+		10,
+	)
+	target := NewSymbolRef(
+		repositoryID,
+		sourceRevision,
+		"src/auth/middleware.py",
+		"method",
+		"AuthMiddleware.verify",
+		1,
+		10,
+	)
+	relationship := NewRelationshipRef(
+		repositoryID,
+		sourceRevision,
+		generation,
+		"CALLS",
+		source,
+		target,
+		"go_lsp_cross_file",
+		confidenceBand,
+		runtimeObserved,
+		observationCount,
+	)
+	evidence := NewRelationshipEvidenceRef(relationship, "static_relationship")
+	if runtimeObserved {
+		evidence = NewRelationshipEvidenceRef(relationship, "runtime_validated_relationship")
+	}
+	return NewObservationRef(evidence, "support", "code-graph", "go_lsp_cross_file", confidenceBand)
+}
+
 func proofFixture() ProofBundle {
 	generation := strings.Repeat("g", 64)
 	return ProofBundle{
@@ -46,8 +86,8 @@ func proofFixture() ProofBundle {
 			"All administrative routes pass through authorization.",
 		),
 		IndexState: IndexState{
-			Coherent: true,
-			Freshness: "current",
+			Coherent:        true,
+			Freshness:       "current",
 			IndexGeneration: generation,
 		},
 		Observations: []ObservationRef{
@@ -69,20 +109,20 @@ func proofFixture() ProofBundle {
 			),
 		},
 		ContradictionSearch: ContradictionSearch{
-			Performed: true,
-			Strategy: "enumerate_routes_and_search_bypasses",
+			Performed:      true,
+			Strategy:       "enumerate_routes_and_search_bypasses",
 			CandidateCount: 13,
 		},
 		Coverage: Coverage{
-			State: "complete",
-			Examined: 13,
-			Expected: intPtr(13),
+			State:      "complete",
+			Examined:   13,
+			Expected:   intPtr(13),
 			Unresolved: 0,
 		},
 		Invariant: &InvariantResult{
-			ID: "SEC-AUTH-001",
-			Status: "pass",
-			Checked: 13,
+			ID:         "SEC-AUTH-001",
+			Status:     "pass",
+			Checked:    13,
 			Violations: 0,
 			Unresolved: 0,
 		},
@@ -106,6 +146,63 @@ func TestEvaluateProofVerifiedCrossEngineVector(t *testing.T) {
 	}
 }
 
+func TestEvaluateProofAcceptsCanonicalRelationshipEvidence(t *testing.T) {
+	bundle := proofFixture()
+	bundle.Observations = []ObservationRef{
+		proofRelationshipObservation("high", true, 17, bundle.IndexState.IndexGeneration),
+	}
+
+	result, err := EvaluateProof(bundle)
+	if err != nil {
+		t.Fatalf("EvaluateProof: %v", err)
+	}
+	if result.Verdict != VerdictVerified {
+		t.Fatalf("verdict = %q, want verified", result.Verdict)
+	}
+}
+
+func TestEvaluateProofTreatsSpeculativeOnlySupportAsUnresolved(t *testing.T) {
+	bundle := proofFixture()
+	bundle.Observations = []ObservationRef{
+		proofRelationshipObservation("speculative", false, 0, bundle.IndexState.IndexGeneration),
+	}
+
+	result, err := EvaluateProof(bundle)
+	if err != nil {
+		t.Fatalf("EvaluateProof: %v", err)
+	}
+	if result.Verdict != VerdictUnresolved {
+		t.Fatalf("verdict = %q, want unresolved", result.Verdict)
+	}
+	if len(result.Caveats) != 1 || result.Caveats[0] != "supporting_evidence_not_trustworthy" {
+		t.Fatalf("caveats = %#v", result.Caveats)
+	}
+}
+
+func TestProofValidationRejectsRelationshipProvenanceOverrides(t *testing.T) {
+	t.Run("confidence", func(t *testing.T) {
+		bundle := proofFixture()
+		observation := proofRelationshipObservation("speculative", false, 0, bundle.IndexState.IndexGeneration)
+		bundle.Observations = []ObservationRef{
+			NewObservationRef(observation.EvidenceRef, "support", "code-graph", observation.Derivation, "high"),
+		}
+		if _, err := EvaluateProof(bundle); err == nil || !strings.Contains(err.Error(), "confidence band disagrees") {
+			t.Fatalf("expected confidence mismatch error, got %v", err)
+		}
+	})
+
+	t.Run("derivation", func(t *testing.T) {
+		bundle := proofFixture()
+		observation := proofRelationshipObservation("high", true, 17, bundle.IndexState.IndexGeneration)
+		bundle.Observations = []ObservationRef{
+			NewObservationRef(observation.EvidenceRef, "support", "code-graph", "rewritten_after_capture", "high"),
+		}
+		if _, err := EvaluateProof(bundle); err == nil || !strings.Contains(err.Error(), "derivation disagrees") {
+			t.Fatalf("expected derivation mismatch error, got %v", err)
+		}
+	})
+}
+
 func TestEvaluateProofCounterexampleContradicts(t *testing.T) {
 	bundle := proofFixture()
 	bundle.Observations = append(
@@ -120,9 +217,9 @@ func TestEvaluateProofCounterexampleContradicts(t *testing.T) {
 		),
 	)
 	bundle.Invariant = &InvariantResult{
-		ID: "SEC-AUTH-001",
-		Status: "fail",
-		Checked: 13,
+		ID:         "SEC-AUTH-001",
+		Status:     "fail",
+		Checked:    13,
 		Violations: 1,
 		Unresolved: 0,
 	}
@@ -178,6 +275,24 @@ func TestProofValidationRejectsOtherGeneration(t *testing.T) {
 	if _, err := EvaluateProof(bundle); err == nil || !strings.Contains(err.Error(), "different index generation") {
 		t.Fatalf("expected generation error, got %v", err)
 	}
+}
+
+func TestProofValidationRejectsFalseCompleteCoverage(t *testing.T) {
+	t.Run("missing expected count", func(t *testing.T) {
+		bundle := proofFixture()
+		bundle.Coverage.Expected = nil
+		if _, err := EvaluateProof(bundle); err == nil || !strings.Contains(err.Error(), "known expected count") {
+			t.Fatalf("expected missing-denominator error, got %v", err)
+		}
+	})
+
+	t.Run("examined count is incomplete", func(t *testing.T) {
+		bundle := proofFixture()
+		bundle.Coverage.Examined--
+		if _, err := EvaluateProof(bundle); err == nil || !strings.Contains(err.Error(), "examined to equal expected") {
+			t.Fatalf("expected incomplete-coverage error, got %v", err)
+		}
+	})
 }
 
 func TestProofValidationRejectsForgedReferenceID(t *testing.T) {

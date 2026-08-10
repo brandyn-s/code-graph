@@ -68,6 +68,9 @@ var instrumentedTools = []string{
 	"index_repository",       // Write tool; outcome=created (first index) or updated (re-index)
 	"ingest_traces",          // Write tool; outcome=updated (edges enriched)
 	"manage_adr",             // Multi-mode: get->status, store/update/delete->write helper
+
+	// Wave 2 relationship provenance:
+	"get_relationship_evidence", // Resolver + runtime-confirmed edge evidence
 }
 
 // pendingTools lists MCP tools that should ultimately emit `_metadata`
@@ -114,6 +117,7 @@ var allMCPToolNames = []string{
 	"get_change_coupling",
 	"get_code_snippet",
 	"get_graph_schema",
+	"get_relationship_evidence",
 	"get_relevant_context",
 	"get_review_context",
 	"index_health",

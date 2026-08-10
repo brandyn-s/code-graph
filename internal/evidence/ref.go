@@ -21,17 +21,37 @@ type SymbolRef struct {
 	EndLine        int    `json:"end_line"`
 }
 
+// RelationshipRef is an immutable assertion about one graph edge in one index
+// generation. It carries the resolver provenance that ordinary source-location
+// evidence cannot express and can record runtime confirmation without replacing
+// the underlying static relationship.
+type RelationshipRef struct {
+	ID               string    `json:"id"`
+	SchemaVersion    int       `json:"schema_version"`
+	RepositoryID     string    `json:"repository_id"`
+	SourceRevision   string    `json:"source_revision"`
+	IndexGeneration  string    `json:"index_generation"`
+	RelationType     string    `json:"relation_type"`
+	SourceSymbolRef  SymbolRef `json:"source_symbol_ref"`
+	TargetSymbolRef  SymbolRef `json:"target_symbol_ref"`
+	ResolutionSource string    `json:"resolution_source"`
+	ConfidenceBand   string    `json:"confidence_band"`
+	RuntimeObserved  bool      `json:"runtime_observed"`
+	ObservationCount int       `json:"observation_count"`
+}
+
 type EvidenceRef struct {
-	ID              string     `json:"id"`
-	SchemaVersion   int        `json:"schema_version"`
-	RepositoryID    string     `json:"repository_id"`
-	SourceRevision  string     `json:"source_revision"`
-	IndexGeneration string     `json:"index_generation"`
-	RelativePath    string     `json:"relative_path"`
-	StartLine       int        `json:"start_line"`
-	EndLine         int        `json:"end_line"`
-	EvidenceType    string     `json:"evidence_type"`
-	SymbolRef       *SymbolRef `json:"symbol_ref,omitempty"`
+	ID              string           `json:"id"`
+	SchemaVersion   int              `json:"schema_version"`
+	RepositoryID    string           `json:"repository_id"`
+	SourceRevision  string           `json:"source_revision"`
+	IndexGeneration string           `json:"index_generation"`
+	RelativePath    string           `json:"relative_path"`
+	StartLine       int              `json:"start_line"`
+	EndLine         int              `json:"end_line"`
+	EvidenceType    string           `json:"evidence_type"`
+	SymbolRef       *SymbolRef       `json:"symbol_ref,omitempty"`
+	RelationshipRef *RelationshipRef `json:"relationship_ref,omitempty"`
 }
 
 type ObservationRef struct {
@@ -97,6 +117,26 @@ func symbolRefMap(ref *SymbolRef) map[string]any {
 	}
 }
 
+func relationshipRefMap(ref *RelationshipRef) map[string]any {
+	if ref == nil {
+		return nil
+	}
+	return map[string]any{
+		"id":                ref.ID,
+		"schema_version":    ref.SchemaVersion,
+		"repository_id":     ref.RepositoryID,
+		"source_revision":   ref.SourceRevision,
+		"index_generation":  ref.IndexGeneration,
+		"relation_type":     ref.RelationType,
+		"source_symbol_ref": symbolRefMap(&ref.SourceSymbolRef),
+		"target_symbol_ref": symbolRefMap(&ref.TargetSymbolRef),
+		"resolution_source": ref.ResolutionSource,
+		"confidence_band":   ref.ConfidenceBand,
+		"runtime_observed":  ref.RuntimeObserved,
+		"observation_count": ref.ObservationCount,
+	}
+}
+
 func evidenceRefMap(ref *EvidenceRef) map[string]any {
 	if ref == nil {
 		return nil
@@ -114,6 +154,9 @@ func evidenceRefMap(ref *EvidenceRef) map[string]any {
 	}
 	if ref.SymbolRef != nil {
 		payload["symbol_ref"] = symbolRefMap(ref.SymbolRef)
+	}
+	if ref.RelationshipRef != nil {
+		payload["relationship_ref"] = relationshipRefMap(ref.RelationshipRef)
 	}
 	return payload
 }
@@ -135,6 +178,35 @@ func NewSymbolRef(repositoryID, sourceRevision, relativePath, symbolKind, qualif
 	return ref
 }
 
+func NewRelationshipRef(
+	repositoryID, sourceRevision, indexGeneration, relationType string,
+	sourceSymbolRef, targetSymbolRef SymbolRef,
+	resolutionSource, confidenceBand string,
+	runtimeObserved bool,
+	observationCount int,
+) RelationshipRef {
+	if observationCount < 0 {
+		observationCount = 0
+	}
+	ref := RelationshipRef{
+		SchemaVersion:    SchemaVersion,
+		RepositoryID:     repositoryID,
+		SourceRevision:   sourceRevision,
+		IndexGeneration:  indexGeneration,
+		RelationType:     canonicalToken(relationType),
+		SourceSymbolRef:  sourceSymbolRef,
+		TargetSymbolRef:  targetSymbolRef,
+		ResolutionSource: canonicalToken(resolutionSource),
+		ConfidenceBand:   canonicalToken(confidenceBand),
+		RuntimeObserved:  runtimeObserved,
+		ObservationCount: observationCount,
+	}
+	payload := relationshipRefMap(&ref)
+	delete(payload, "id")
+	ref.ID = stableID("rel", payload)
+	return ref
+}
+
 func NewEvidenceRef(repositoryID, sourceRevision, indexGeneration, relativePath string, startLine, endLine int, evidenceType string, symbolRef *SymbolRef) EvidenceRef {
 	ref := EvidenceRef{
 		SchemaVersion:   SchemaVersion,
@@ -146,6 +218,26 @@ func NewEvidenceRef(repositoryID, sourceRevision, indexGeneration, relativePath 
 		EndLine:         endLine,
 		EvidenceType:    canonicalToken(evidenceType),
 		SymbolRef:       symbolRef,
+	}
+	payload := evidenceRefMap(&ref)
+	delete(payload, "id")
+	ref.ID = stableID("ev", payload)
+	return ref
+}
+
+func NewRelationshipEvidenceRef(relationshipRef RelationshipRef, evidenceType string) EvidenceRef {
+	source := relationshipRef.SourceSymbolRef
+	ref := EvidenceRef{
+		SchemaVersion:   SchemaVersion,
+		RepositoryID:    relationshipRef.RepositoryID,
+		SourceRevision:  relationshipRef.SourceRevision,
+		IndexGeneration: relationshipRef.IndexGeneration,
+		RelativePath:    source.RelativePath,
+		StartLine:       source.StartLine,
+		EndLine:         source.EndLine,
+		EvidenceType:    canonicalToken(evidenceType),
+		SymbolRef:       &source,
+		RelationshipRef: &relationshipRef,
 	}
 	payload := evidenceRefMap(&ref)
 	delete(payload, "id")

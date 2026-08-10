@@ -43,11 +43,11 @@ type InvariantResult struct {
 type ProofBundle struct {
 	SchemaVersion       int                 `json:"schema_version"`
 	Claim               ClaimRef            `json:"claim"`
-	IndexState          IndexState           `json:"index_state"`
-	Observations        []ObservationRef     `json:"observations"`
+	IndexState          IndexState          `json:"index_state"`
+	Observations        []ObservationRef    `json:"observations"`
 	ContradictionSearch ContradictionSearch `json:"contradiction_search"`
-	Coverage            Coverage             `json:"coverage"`
-	Invariant           *InvariantResult     `json:"invariant,omitempty"`
+	Coverage            Coverage            `json:"coverage"`
+	Invariant           *InvariantResult    `json:"invariant,omitempty"`
 }
 
 type Confidence struct {
@@ -66,9 +66,9 @@ type ProofResult struct {
 	Blockers                    []string            `json:"blockers"`
 	Caveats                     []string            `json:"caveats"`
 	Confidence                  Confidence          `json:"confidence"`
-	Coverage                    Coverage             `json:"coverage"`
+	Coverage                    Coverage            `json:"coverage"`
 	ContradictionSearch         ContradictionSearch `json:"contradiction_search"`
-	Invariant                   *InvariantResult     `json:"invariant,omitempty"`
+	Invariant                   *InvariantResult    `json:"invariant,omitempty"`
 }
 
 func validToken(value string, allowed ...string) bool {
@@ -99,20 +99,85 @@ func validateSymbolRef(ref *SymbolRef) error {
 	return nil
 }
 
+func validateRelationshipRef(ref *RelationshipRef) error {
+	if ref == nil {
+		return nil
+	}
+	if err := validateSymbolRef(&ref.SourceSymbolRef); err != nil {
+		return fmt.Errorf("source_symbol_ref: %w", err)
+	}
+	if err := validateSymbolRef(&ref.TargetSymbolRef); err != nil {
+		return fmt.Errorf("target_symbol_ref: %w", err)
+	}
+	for role, symbol := range map[string]SymbolRef{
+		"source": ref.SourceSymbolRef,
+		"target": ref.TargetSymbolRef,
+	} {
+		if symbol.RepositoryID != ref.RepositoryID {
+			return fmt.Errorf("%s_symbol_ref belongs to a different repository", role)
+		}
+		if symbol.SourceRevision != ref.SourceRevision {
+			return fmt.Errorf("%s_symbol_ref belongs to a different source revision", role)
+		}
+	}
+	if !validToken(ref.ConfidenceBand, "high", "medium", "low", "speculative", "unknown") {
+		return fmt.Errorf("relationship confidence band %q is invalid", ref.ConfidenceBand)
+	}
+	if ref.RuntimeObserved && ref.ObservationCount == 0 {
+		return fmt.Errorf("runtime_observed requires a positive observation_count")
+	}
+	if !ref.RuntimeObserved && ref.ObservationCount != 0 {
+		return fmt.Errorf("observation_count requires runtime_observed=true")
+	}
+	expected := NewRelationshipRef(
+		ref.RepositoryID,
+		ref.SourceRevision,
+		ref.IndexGeneration,
+		ref.RelationType,
+		ref.SourceSymbolRef,
+		ref.TargetSymbolRef,
+		ref.ResolutionSource,
+		ref.ConfidenceBand,
+		ref.RuntimeObserved,
+		ref.ObservationCount,
+	)
+	if ref.ID != expected.ID {
+		return fmt.Errorf("relationship_ref id does not match canonical contents")
+	}
+	return nil
+}
+
 func validateEvidenceRef(ref EvidenceRef) error {
 	if err := validateSymbolRef(ref.SymbolRef); err != nil {
 		return err
 	}
-	expected := NewEvidenceRef(
-		ref.RepositoryID,
-		ref.SourceRevision,
-		ref.IndexGeneration,
-		ref.RelativePath,
-		ref.StartLine,
-		ref.EndLine,
-		ref.EvidenceType,
-		ref.SymbolRef,
-	)
+	var expected EvidenceRef
+	if ref.RelationshipRef == nil {
+		expected = NewEvidenceRef(
+			ref.RepositoryID,
+			ref.SourceRevision,
+			ref.IndexGeneration,
+			ref.RelativePath,
+			ref.StartLine,
+			ref.EndLine,
+			ref.EvidenceType,
+			ref.SymbolRef,
+		)
+	} else {
+		if err := validateRelationshipRef(ref.RelationshipRef); err != nil {
+			return err
+		}
+		relationship := ref.RelationshipRef
+		if relationship.RepositoryID != ref.RepositoryID ||
+			relationship.SourceRevision != ref.SourceRevision ||
+			relationship.IndexGeneration != ref.IndexGeneration {
+			return fmt.Errorf("relationship_ref belongs to different evidence coordinates")
+		}
+		if ref.SymbolRef == nil || relationship.SourceSymbolRef.ID != ref.SymbolRef.ID {
+			return fmt.Errorf("relationship_ref source does not match symbol_ref")
+		}
+		expected = NewRelationshipEvidenceRef(*relationship, ref.EvidenceType)
+	}
 	if ref.ID != expected.ID {
 		return fmt.Errorf("evidence_ref id does not match canonical contents")
 	}
@@ -126,11 +191,19 @@ func validateObservationRef(ref ObservationRef) error {
 	if !validToken(ref.Stance, "support", "contradict") {
 		return fmt.Errorf("observation stance %q is invalid", ref.Stance)
 	}
-	if !validToken(ref.ConfidenceBand, "high", "medium", "low", "unknown") {
+	if !validToken(ref.ConfidenceBand, "high", "medium", "low", "speculative", "unknown") {
 		return fmt.Errorf("observation confidence band %q is invalid", ref.ConfidenceBand)
 	}
 	if strings.TrimSpace(ref.SourceEngine) == "" || strings.TrimSpace(ref.Derivation) == "" {
 		return fmt.Errorf("observation source_engine and derivation are required")
+	}
+	if relationship := ref.EvidenceRef.RelationshipRef; relationship != nil {
+		if relationship.ConfidenceBand != ref.ConfidenceBand {
+			return fmt.Errorf("observation confidence band disagrees with relationship_ref")
+		}
+		if relationship.ResolutionSource != ref.Derivation {
+			return fmt.Errorf("observation derivation disagrees with relationship_ref")
+		}
 	}
 	expected := NewObservationRef(
 		ref.EvidenceRef,
@@ -183,6 +256,12 @@ func (bundle ProofBundle) Validate() error {
 			return fmt.Errorf("coverage examined cannot exceed expected")
 		}
 	}
+	if bundle.Coverage.State == "complete" && bundle.Coverage.Expected == nil {
+		return fmt.Errorf("complete coverage requires a known expected count")
+	}
+	if bundle.Coverage.State == "complete" && bundle.Coverage.Examined != *bundle.Coverage.Expected {
+		return fmt.Errorf("complete coverage requires examined to equal expected")
+	}
 
 	seen := make(map[string]bool, len(bundle.Observations))
 	for i, observation := range bundle.Observations {
@@ -226,7 +305,7 @@ func proofConfidence(verdict string, supporting, contradicting []ObservationRef)
 	switch verdict {
 	case VerdictBlocked:
 		return Confidence{
-			Band: "unknown",
+			Band:      "unknown",
 			Rationale: []string{"proof evaluation was blocked before evidence could be trusted"},
 		}
 	case VerdictContradicted:
@@ -235,12 +314,12 @@ func proofConfidence(verdict string, supporting, contradicting []ObservationRef)
 			band = "high"
 		}
 		return Confidence{
-			Band: band,
+			Band:      band,
 			Rationale: []string{"a counterexample or invariant violation directly contradicts the claim"},
 		}
 	case VerdictUnresolved:
 		return Confidence{
-			Band: "low",
+			Band:      "low",
 			Rationale: []string{"one or more proof completeness requirements were not met"},
 		}
 	}
@@ -267,6 +346,14 @@ func proofConfidence(verdict string, supporting, contradicting []ObservationRef)
 			"support comes from one engine and derivation",
 		},
 	}
+}
+
+func isTrustedSupport(observation ObservationRef) bool {
+	if validToken(observation.ConfidenceBand, "high", "medium") {
+		return true
+	}
+	return observation.EvidenceRef.RelationshipRef != nil &&
+		observation.EvidenceRef.RelationshipRef.RuntimeObserved
 }
 
 func EvaluateProof(bundle ProofBundle) (ProofResult, error) {
@@ -319,6 +406,17 @@ func EvaluateProof(bundle ProofBundle) (ProofResult, error) {
 		}
 		if len(supporting) == 0 {
 			caveats = append(caveats, "no_supporting_evidence")
+		} else {
+			trusted := false
+			for _, observation := range supporting {
+				if isTrustedSupport(observation) {
+					trusted = true
+					break
+				}
+			}
+			if !trusted {
+				caveats = append(caveats, "supporting_evidence_not_trustworthy")
+			}
 		}
 		if len(caveats) > 0 {
 			verdict = VerdictUnresolved
@@ -339,28 +437,28 @@ func EvaluateProof(bundle ProofBundle) (ProofResult, error) {
 	sort.Strings(caveats)
 
 	proofPayload := map[string]any{
-		"schema_version": SchemaVersion,
-		"claim_id": bundle.Claim.ID,
-		"index_generation": bundle.IndexState.IndexGeneration,
-		"verdict": verdict,
-		"supporting_observation_ids": supportingIDs,
+		"schema_version":                SchemaVersion,
+		"claim_id":                      bundle.Claim.ID,
+		"index_generation":              bundle.IndexState.IndexGeneration,
+		"verdict":                       verdict,
+		"supporting_observation_ids":    supportingIDs,
 		"contradicting_observation_ids": contradictingIDs,
-		"blockers": blockers,
-		"caveats": caveats,
+		"blockers":                      blockers,
+		"caveats":                       caveats,
 	}
 	return ProofResult{
-		ProofID: stableID("proof", proofPayload),
-		SchemaVersion: SchemaVersion,
-		ClaimID: bundle.Claim.ID,
-		IndexGeneration: bundle.IndexState.IndexGeneration,
-		Verdict: verdict,
-		SupportingObservationIDs: supportingIDs,
+		ProofID:                     stableID("proof", proofPayload),
+		SchemaVersion:               SchemaVersion,
+		ClaimID:                     bundle.Claim.ID,
+		IndexGeneration:             bundle.IndexState.IndexGeneration,
+		Verdict:                     verdict,
+		SupportingObservationIDs:    supportingIDs,
 		ContradictingObservationIDs: contradictingIDs,
-		Blockers: blockers,
-		Caveats: caveats,
-		Confidence: proofConfidence(verdict, supporting, contradicting),
-		Coverage: bundle.Coverage,
-		ContradictionSearch: bundle.ContradictionSearch,
-		Invariant: bundle.Invariant,
+		Blockers:                    blockers,
+		Caveats:                     caveats,
+		Confidence:                  proofConfidence(verdict, supporting, contradicting),
+		Coverage:                    bundle.Coverage,
+		ContradictionSearch:         bundle.ContradictionSearch,
+		Invariant:                   bundle.Invariant,
 	}, nil
 }

@@ -115,6 +115,59 @@ func TestEvidenceAndObservationCrossEngineVectors(t *testing.T) {
 	}
 }
 
+func TestRelationshipEvidenceCrossEngineVectors(t *testing.T) {
+	source := NewSymbolRef(
+		"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		"src/admin.py",
+		"function",
+		"admin_handler",
+		1,
+		8,
+	)
+	target := NewSymbolRef(
+		"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		"src/auth.py",
+		"method",
+		"Auth.verify",
+		10,
+		20,
+	)
+	relationship := NewRelationshipRef(
+		"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+		"CALLS",
+		source,
+		target,
+		"go_lsp_cross_file",
+		"high",
+		true,
+		17,
+	)
+	const expectedRelationship = "rel:v1:cde3496a62834bd1d9a9c4c5f39d91af458133023b31dcb3c4bcb51f8a5dfb39"
+	if relationship.ID != expectedRelationship {
+		t.Fatalf("relationship id mismatch: got %s want %s", relationship.ID, expectedRelationship)
+	}
+	evidence := NewRelationshipEvidenceRef(relationship, "relationship")
+	const expectedEvidence = "ev:v1:bdc8d319a1c3ca96bbc4f3be166c500a0f12076a2e64dc4c2470cb17b7d91730"
+	if evidence.ID != expectedEvidence {
+		t.Fatalf("relationship evidence id mismatch: got %s want %s", evidence.ID, expectedEvidence)
+	}
+	observation := NewObservationRef(
+		evidence,
+		"support",
+		"code-graph",
+		"go_lsp_cross_file",
+		"high",
+	)
+	const expectedObservation = "obs:v1:3f199e7202bb70d076c1a363b3caf4fbe96209f0a537ecfe1f53502a448fac45"
+	if observation.ID != expectedObservation {
+		t.Fatalf("relationship observation id mismatch: got %s want %s", observation.ID, expectedObservation)
+	}
+}
+
 func TestEvidenceRefChangesWithGeneration(t *testing.T) {
 	symbol := NewSymbolRef("repo", "rev", "src/auth.py", "method", "Auth.verify", 10, 20)
 	first := NewEvidenceRef("repo", "rev", "generation-a", "src/auth.py", 10, 20, "semantic_match", &symbol)

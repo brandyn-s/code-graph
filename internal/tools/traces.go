@@ -35,6 +35,12 @@ func (s *Server) registerTraceTools() {
 			"required": ["project", "file_path"]
 		}`),
 	}, s.handleIngestTraces)
+
+	// Relationship evidence is registered with trace tooling because it is the
+	// read path that exposes both static resolver provenance and any runtime
+	// confirmation written by ingest_traces. It remains independently usable
+	// when no traces have been ingested.
+	s.registerRelationshipEvidenceTool()
 }
 
 func (s *Server) handleIngestTraces(_ context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {

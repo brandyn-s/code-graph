@@ -654,15 +654,31 @@ func (r *FunctionRegistry) resolveViaNameLookup(ctx CallContext) ResolutionResul
 	// drop internal candidates instead of falling through to bare-name
 	// suffix-match. If the import target IS internal, prefer the
 	// matching candidate.
+	importBindingMatched := false
 	if discriminated, applied, dropAll := r.applyImportBindingFilter(ctx, candidates); applied != "" {
 		if dropAll {
 			return ResolutionResult{}
 		}
 		candidates = discriminated
+		importBindingMatched = applied == "import-binding-match"
 	}
 
 	// Strategy 3: unique name — single candidate project-wide
 	if len(candidates) == 1 {
+		// An exact source import binding that narrows to one registered
+		// candidate is the same quality of evidence as the prefix-based
+		// import-map path above. Preserve that provenance and confidence
+		// instead of downgrading it to project-wide name uniqueness merely
+		// because registry QNs include a project/src prefix.
+		if importBindingMatched {
+			return ResolutionResult{
+				QualifiedName:         candidates[0],
+				Strategy:              "import_map",
+				Confidence:            0.95,
+				CandidateCount:        1,
+				DiscriminationApplied: "import-binding-match",
+			}
+		}
 		// Phase F (2026-05-09): when RESOLVER_REQUIRE_IMPORTS_FOR_LOOSE_CROSS_PACKAGE
 		// is set, drop unique_name candidates that are not import-reachable
 		// instead of emitting at halved confidence. The halved-confidence
@@ -694,17 +710,17 @@ func (r *FunctionRegistry) resolveViaNameLookup(ctx CallContext) ResolutionResul
 //
 // Returns (filtered, applied, dropAll):
 //   - applied=""  → discrimination did not fire (receiver type unknown,
-//                   or call shape is not method-call). Caller continues
-//                   with the unfiltered candidate set.
+//     or call shape is not method-call). Caller continues
+//     with the unfiltered candidate set.
 //   - applied="receiver-type-match" → at least one candidate's parent
-//                   class equals ctx.ReceiverType. Caller proceeds with
-//                   the filtered set.
+//     class equals ctx.ReceiverType. Caller proceeds with
+//     the filtered set.
 //   - applied="receiver-type-no-internal-match", dropAll=true →
-//                   ctx.ReceiverType is set but no internal candidate
-//                   matches. The call is almost certainly external
-//                   (the receiver type isn't a registered class, or
-//                   none of its methods share this bare name). Caller
-//                   should return empty to drop the binding entirely.
+//     ctx.ReceiverType is set but no internal candidate
+//     matches. The call is almost certainly external
+//     (the receiver type isn't a registered class, or
+//     none of its methods share this bare name). Caller
+//     should return empty to drop the binding entirely.
 //
 // Method candidates have parent class = the QN segment immediately
 // before the method name. Function/Class/etc. candidates have no

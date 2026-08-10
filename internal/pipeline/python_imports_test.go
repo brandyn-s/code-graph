@@ -293,6 +293,79 @@ def run():
 	}
 }
 
+// TestPythonImports_AbsoluteFromImport_CallUsesImportBindingConfidence pins
+// the exact src-layout call shape exercised by the deployed Wave 4 smoke.
+// An explicit `from auth.login import login` binding is stronger evidence
+// than project-wide name uniqueness and must survive the default 0.45 trace
+// threshold as a precise import-map resolution.
+func TestPythonImports_AbsoluteFromImport_CallUsesImportBindingConfidence(t *testing.T) {
+	dir, err := os.MkdirTemp("", "cgm-py-absfrom-call-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+
+	authDir := filepath.Join(dir, "src", "auth")
+	apiDir := filepath.Join(dir, "src", "api")
+	if err := os.MkdirAll(authDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(apiDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(authDir, "login.py"), `
+def login(user_id: str) -> str:
+    return f"session:{user_id}"
+`)
+	writeFile(t, filepath.Join(apiDir, "session.py"), `
+from auth.login import login
+
+def create_session(user_id: str) -> str:
+    return login(user_id)
+`)
+
+	s, err := store.OpenMemory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+
+	p := New(context.Background(), s, dir, discover.ModeFull)
+	if err := p.Run(); err != nil {
+		t.Fatalf("Pipeline.Run: %v", err)
+	}
+
+	callerQN := p.ProjectName + ".src.api.session.create_session"
+	targetQN := p.ProjectName + ".src.auth.login.login"
+	caller, _ := s.FindNodeByQN(p.ProjectName, callerQN)
+	target, _ := s.FindNodeByQN(p.ProjectName, targetQN)
+	if caller == nil || target == nil {
+		t.Fatalf("fixture nodes missing: caller=%v target=%v", caller, target)
+	}
+
+	edges, _ := s.FindEdgesBySourceAndType(caller.ID, "CALLS")
+	for _, edge := range edges {
+		if edge.TargetID != target.ID {
+			continue
+		}
+		if got := edge.Properties["resolution_strategy"]; got != "import_map" {
+			t.Errorf("resolution_strategy = %v, want import_map", got)
+		}
+		if got := edge.Properties["resolver_rule"]; got != ResolverRuleCrossPackageImportMap {
+			t.Errorf("resolver_rule = %v, want %s", got, ResolverRuleCrossPackageImportMap)
+		}
+		if got := edge.Properties["confidence"]; got != float64(0.95) {
+			t.Errorf("confidence = %v, want 0.95", got)
+		}
+		if got := edge.Properties["confidence_band"]; got != "high" {
+			t.Errorf("confidence_band = %v, want high", got)
+		}
+		return
+	}
+
+	t.Fatalf("expected CALLS edge %s -> %s", callerQN, targetQN)
+}
+
 // TestPythonImports_RelativeImport_BareNameCallResolves — Phase B
 // (2026-05-14, grade-lift roadmap). When a module does
 // `from .util import default_hooks` and then calls bare-name

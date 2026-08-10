@@ -6,7 +6,7 @@ RELEASE_HELPER = Path("scripts/release_workflow.sh")
 SECURITY_POLICY = Path(".github/repo-security-policy.yml")
 README = Path("README.md")
 BASELINE = "832bede03d6118827919fc8727f3c17854047d06"
-ATTEST_ACTION = "f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6"
+ATTEST_ACTION = "1e69f48acb82d1966a394da916b4c1698aa569d6"
 
 
 class ReleaseWorkflowContractTests(unittest.TestCase):

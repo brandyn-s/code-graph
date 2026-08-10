@@ -12,10 +12,10 @@ func testIndexIdentity(dirty string) *indexidentity.Envelope {
 	repositoryID := strings.Repeat("a", 64)
 	sourceRevision := strings.Repeat("c", 40)
 	return &indexidentity.Envelope{
-		SchemaVersion: indexidentity.SchemaVersion,
-		RepositoryID: repositoryID,
-		CheckoutID: strings.Repeat("b", 64),
-		SourceRevision: sourceRevision,
+		SchemaVersion:    indexidentity.SchemaVersion,
+		RepositoryID:     repositoryID,
+		CheckoutID:       strings.Repeat("b", 64),
+		SourceRevision:   sourceRevision,
 		DirtyFingerprint: dirty,
 		IndexGeneration: indexidentity.ComputeIndexGeneration(
 			repositoryID,
@@ -56,6 +56,24 @@ func firstSearchResult(t *testing.T, response map[string]any) map[string]any {
 	return result
 }
 
+func requireMapValue(t *testing.T, value any, label string) map[string]any {
+	t.Helper()
+	result, ok := value.(map[string]any)
+	if !ok {
+		t.Fatalf("%s is %T, want map", label, value)
+	}
+	return result
+}
+
+func requireStringValue(t *testing.T, value any, label string) string {
+	t.Helper()
+	result, ok := value.(string)
+	if !ok {
+		t.Fatalf("%s is %T, want string", label, value)
+	}
+	return result
+}
+
 func TestSearchGraphIncludeSourceEmitsGenerationBoundEvidence(t *testing.T) {
 	s := serverWithReadyEvidenceIdentity(t)
 	response := metadataResponseFromHandler(
@@ -63,9 +81,9 @@ func TestSearchGraphIncludeSourceEmitsGenerationBoundEvidence(t *testing.T) {
 		s.handleSearchGraph,
 		"search_graph",
 		map[string]any{
-			"project": "test",
-			"label": "Function",
-			"name_pattern": "handle_request",
+			"project":        "test",
+			"label":          "Function",
+			"name_pattern":   "handle_request",
 			"include_source": true,
 		},
 	)
@@ -75,16 +93,16 @@ func TestSearchGraphIncludeSourceEmitsGenerationBoundEvidence(t *testing.T) {
 			t.Fatalf("result missing %s: %#v", field, result[field])
 		}
 	}
-	evidenceRef := result["evidence_ref"].(map[string]any)
+	evidenceRef := requireMapValue(t, result["evidence_ref"], "evidence_ref")
 	if evidenceRef["index_generation"] != testIndexIdentity("clean").IndexGeneration {
 		t.Fatalf("index generation = %v", evidenceRef["index_generation"])
 	}
-	observationRef := result["observation_ref"].(map[string]any)
+	observationRef := requireMapValue(t, result["observation_ref"], "observation_ref")
 	if observationRef["source_engine"] != "code-graph" {
 		t.Fatalf("source_engine = %v", observationRef["source_engine"])
 	}
-	metadata := response["_metadata"].(map[string]any)
-	refs := metadata["evidence_refs"].(map[string]any)
+	metadata := requireMapValue(t, response["_metadata"], "_metadata")
+	refs := requireMapValue(t, metadata["evidence_refs"], "evidence_refs")
 	if refs["emitted"] != true || refs["count"] != float64(1) {
 		t.Fatalf("evidence refs metadata = %#v", refs)
 	}
@@ -101,9 +119,9 @@ func TestSearchGraphEvidenceFailsClosedWhenLiveCheckoutIsStale(t *testing.T) {
 		s.handleSearchGraph,
 		"search_graph",
 		map[string]any{
-			"project": "test",
-			"label": "Function",
-			"name_pattern": "handle_request",
+			"project":        "test",
+			"label":          "Function",
+			"name_pattern":   "handle_request",
 			"include_source": true,
 		},
 	)
@@ -111,8 +129,8 @@ func TestSearchGraphEvidenceFailsClosedWhenLiveCheckoutIsStale(t *testing.T) {
 	if _, ok := result["evidence_ref"]; ok {
 		t.Fatalf("stale result carried evidence_ref: %#v", result["evidence_ref"])
 	}
-	metadata := response["_metadata"].(map[string]any)
-	refs := metadata["evidence_refs"].(map[string]any)
+	metadata := requireMapValue(t, response["_metadata"], "_metadata")
+	refs := requireMapValue(t, metadata["evidence_refs"], "evidence_refs")
 	if refs["emitted"] != false {
 		t.Fatalf("stale evidence metadata = %#v", refs)
 	}
@@ -124,9 +142,9 @@ func TestSearchGraphEvidenceFailsClosedWhenLiveCheckoutIsStale(t *testing.T) {
 func TestSearchGraphCacheDoesNotReplayEvidenceAfterCheckoutChanges(t *testing.T) {
 	s := serverWithReadyEvidenceIdentity(t)
 	args := map[string]any{
-		"project": "test",
-		"label": "Function",
-		"name_pattern": "handle_request",
+		"project":        "test",
+		"label":          "Function",
+		"name_pattern":   "handle_request",
 		"include_source": true,
 	}
 	first := metadataResponseFromHandler(

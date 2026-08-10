@@ -266,28 +266,146 @@ func relationshipIdentityBlockedResult(identityData map[string]any) *mcp.CallToo
 	return jsonResult(identityData)
 }
 
+type relationshipQuery struct {
+	qualifiedName string
+	direction     string
+	allowedTypes  map[string]bool
+	relatedQN     string
+	limit         int
+}
+
+func parseRelationshipQuery(args map[string]any) (relationshipQuery, error) {
+	query := relationshipQuery{
+		qualifiedName: strings.TrimSpace(getStringArg(args, "qualified_name")),
+		direction:     strings.ToLower(strings.TrimSpace(getStringArg(args, "direction"))),
+		allowedTypes:  relationshipTypeSet(args),
+		relatedQN:     strings.TrimSpace(getStringArg(args, "related_qualified_name")),
+		limit:         getIntArg(args, "limit", 100),
+	}
+	if query.qualifiedName == "" {
+		return relationshipQuery{}, fmt.Errorf("qualified_name is required")
+	}
+	if query.direction == "" {
+		query.direction = "both"
+	}
+	if query.direction != "outbound" && query.direction != "inbound" && query.direction != "both" {
+		return relationshipQuery{}, fmt.Errorf("direction must be outbound, inbound, or both")
+	}
+	if query.limit < 1 {
+		query.limit = 1
+	}
+	if query.limit > 500 {
+		query.limit = 500
+	}
+	return query, nil
+}
+
+type relationshipCandidate struct {
+	edge   *store.Edge
+	source *store.Node
+	target *store.Node
+	other  *store.Node
+}
+
+func appendRelationshipCandidates(
+	st *store.Store,
+	candidates *[]relationshipCandidate,
+	seen map[int64]bool,
+	edges []*store.Edge,
+	inbound bool,
+) {
+	for _, edge := range edges {
+		if seen[edge.ID] {
+			continue
+		}
+		seen[edge.ID] = true
+		source, err := st.FindNodeByID(edge.SourceID)
+		if err != nil || source == nil {
+			continue
+		}
+		target, err := st.FindNodeByID(edge.TargetID)
+		if err != nil || target == nil {
+			continue
+		}
+		other := target
+		if inbound {
+			other = source
+		}
+		*candidates = append(*candidates, relationshipCandidate{
+			edge: edge, source: source, target: target, other: other,
+		})
+	}
+}
+
+func collectRelationshipCandidates(
+	st *store.Store,
+	focal *store.Node,
+	direction string,
+) ([]relationshipCandidate, error) {
+	seen := map[int64]bool{}
+	candidates := []relationshipCandidate{}
+	if direction == "outbound" || direction == "both" {
+		edges, err := st.FindEdgesBySource(focal.ID)
+		if err != nil {
+			return nil, fmt.Errorf("find outbound relationships: %w", err)
+		}
+		appendRelationshipCandidates(st, &candidates, seen, edges, false)
+	}
+	if direction == "inbound" || direction == "both" {
+		edges, err := st.FindEdgesByTarget(focal.ID)
+		if err != nil {
+			return nil, fmt.Errorf("find inbound relationships: %w", err)
+		}
+		appendRelationshipCandidates(st, &candidates, seen, edges, true)
+	}
+	sort.Slice(candidates, func(i, j int) bool {
+		if candidates[i].edge.Type != candidates[j].edge.Type {
+			return candidates[i].edge.Type < candidates[j].edge.Type
+		}
+		return candidates[i].other.QualifiedName < candidates[j].other.QualifiedName
+	})
+	return candidates, nil
+}
+
+func relationshipResults(
+	identity *indexidentity.Envelope,
+	query relationshipQuery,
+	candidates []relationshipCandidate,
+) (results []map[string]any, skippedUnaddressable int) {
+	results = make([]map[string]any, 0, len(candidates))
+	for _, candidate := range candidates {
+		if len(results) >= query.limit {
+			break
+		}
+		if len(query.allowedTypes) > 0 && !query.allowedTypes[strings.ToUpper(candidate.edge.Type)] {
+			continue
+		}
+		if query.relatedQN != "" && candidate.other.QualifiedName != query.relatedQN {
+			continue
+		}
+		if !store.IsSurfaceableCodeNode(candidate.source.Label, candidate.source.FilePath) ||
+			!store.IsSurfaceableCodeNode(candidate.target.Label, candidate.target.FilePath) {
+			skippedUnaddressable++
+			continue
+		}
+		results = append(results, relationshipEntry(
+			identity,
+			candidate.edge,
+			candidate.source,
+			candidate.target,
+		))
+	}
+	return results, skippedUnaddressable
+}
+
 func (s *Server) handleGetRelationshipEvidence(_ context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	args, err := parseArgs(req)
 	if err != nil {
 		return errResult(err.Error()), nil
 	}
-	qualifiedName := strings.TrimSpace(getStringArg(args, "qualified_name"))
-	if qualifiedName == "" {
-		return errResult("qualified_name is required"), nil
-	}
-	direction := strings.ToLower(strings.TrimSpace(getStringArg(args, "direction")))
-	if direction == "" {
-		direction = "both"
-	}
-	if direction != "outbound" && direction != "inbound" && direction != "both" {
-		return errResult("direction must be outbound, inbound, or both"), nil
-	}
-	limit := getIntArg(args, "limit", 100)
-	if limit < 1 {
-		limit = 1
-	}
-	if limit > 500 {
-		limit = 500
+	query, err := parseRelationshipQuery(args)
+	if err != nil {
+		return errResult(err.Error()), nil
 	}
 
 	projectArg := getStringArg(args, "project")
@@ -300,7 +418,10 @@ func (s *Server) handleGetRelationshipEvidence(_ context.Context, req *mcp.CallT
 		projectName = s.sessionProject
 	}
 	project, err := st.GetProject(projectName)
-	if err != nil || project == nil {
+	if err != nil {
+		return errResult(fmt.Sprintf("project metadata: %v", err)), nil
+	}
+	if project == nil {
 		return errResult("project metadata is unavailable"), nil
 	}
 
@@ -313,7 +434,7 @@ func (s *Server) handleGetRelationshipEvidence(_ context.Context, req *mcp.CallT
 		return errResult("ready index identity is unavailable"), nil
 	}
 
-	focal, err := st.FindNodeByQN(projectName, qualifiedName)
+	focal, err := st.FindNodeByQN(projectName, query.qualifiedName)
 	if err != nil {
 		return errResult(fmt.Sprintf("find symbol: %v", err)), nil
 	}
@@ -321,59 +442,10 @@ func (s *Server) handleGetRelationshipEvidence(_ context.Context, req *mcp.CallT
 		return errResult("qualified_name was not found in the indexed graph"), nil
 	}
 
-	type candidate struct {
-		edge   *store.Edge
-		source *store.Node
-		target *store.Node
-		other  *store.Node
+	candidates, err := collectRelationshipCandidates(st, focal, query.direction)
+	if err != nil {
+		return errResult(err.Error()), nil
 	}
-	seen := map[int64]bool{}
-	candidates := []candidate{}
-	addEdges := func(edges []*store.Edge, inbound bool) error {
-		for _, edge := range edges {
-			if seen[edge.ID] {
-				continue
-			}
-			seen[edge.ID] = true
-			source, findErr := st.FindNodeByID(edge.SourceID)
-			if findErr != nil || source == nil {
-				continue
-			}
-			target, findErr := st.FindNodeByID(edge.TargetID)
-			if findErr != nil || target == nil {
-				continue
-			}
-			other := target
-			if inbound {
-				other = source
-			}
-			candidates = append(candidates, candidate{edge: edge, source: source, target: target, other: other})
-		}
-		return nil
-	}
-	if direction == "outbound" || direction == "both" {
-		edges, findErr := st.FindEdgesBySource(focal.ID)
-		if findErr != nil {
-			return errResult(fmt.Sprintf("find outbound relationships: %v", findErr)), nil
-		}
-		_ = addEdges(edges, false)
-	}
-	if direction == "inbound" || direction == "both" {
-		edges, findErr := st.FindEdgesByTarget(focal.ID)
-		if findErr != nil {
-			return errResult(fmt.Sprintf("find inbound relationships: %v", findErr)), nil
-		}
-		_ = addEdges(edges, true)
-	}
-
-	allowedTypes := relationshipTypeSet(args)
-	relatedQN := strings.TrimSpace(getStringArg(args, "related_qualified_name"))
-	sort.Slice(candidates, func(i, j int) bool {
-		if candidates[i].edge.Type != candidates[j].edge.Type {
-			return candidates[i].edge.Type < candidates[j].edge.Type
-		}
-		return candidates[i].other.QualifiedName < candidates[j].other.QualifiedName
-	})
 
 	finalIdentityData := map[string]any{}
 	if !s.addLiveIndexIdentity(finalIdentityData, st, projectName, project.RootPath) {
@@ -395,30 +467,7 @@ func (s *Server) handleGetRelationshipEvidence(_ context.Context, req *mcp.CallT
 	}
 	identity = finalIdentity
 
-	results := make([]map[string]any, 0, len(candidates))
-	skippedUnaddressable := 0
-	for _, candidate := range candidates {
-		if len(results) >= limit {
-			break
-		}
-		if len(allowedTypes) > 0 && !allowedTypes[strings.ToUpper(candidate.edge.Type)] {
-			continue
-		}
-		if relatedQN != "" && candidate.other.QualifiedName != relatedQN {
-			continue
-		}
-		if !store.IsSurfaceableCodeNode(candidate.source.Label, candidate.source.FilePath) ||
-			!store.IsSurfaceableCodeNode(candidate.target.Label, candidate.target.FilePath) {
-			skippedUnaddressable++
-			continue
-		}
-		results = append(results, relationshipEntry(
-			identity,
-			candidate.edge,
-			candidate.source,
-			candidate.target,
-		))
-	}
+	results, skippedUnaddressable := relationshipResults(identity, query, candidates)
 
 	metadata := s.stdReadGraphMetadata(projectName)
 	metadata["evidence_refs"] = map[string]any{
@@ -430,7 +479,7 @@ func (s *Server) handleGetRelationshipEvidence(_ context.Context, req *mcp.CallT
 	response := map[string]any{
 		"project":               projectName,
 		"qualified_name":        focal.QualifiedName,
-		"direction":             direction,
+		"direction":             query.direction,
 		"relationships":         results,
 		"total":                 len(results),
 		"skipped_unaddressable": skippedUnaddressable,

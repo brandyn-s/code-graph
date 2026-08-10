@@ -178,6 +178,10 @@ func NewSymbolRef(repositoryID, sourceRevision, relativePath, symbolKind, qualif
 	return ref
 }
 
+// NewRelationshipRef copies both symbol refs so later caller mutation cannot
+// change the canonical relationship contents after its ID is derived.
+//
+//nolint:gocritic // Value copies preserve the immutable reference contract.
 func NewRelationshipRef(
 	repositoryID, sourceRevision, indexGeneration, relationType string,
 	sourceSymbolRef, targetSymbolRef SymbolRef,
@@ -225,6 +229,10 @@ func NewEvidenceRef(repositoryID, sourceRevision, indexGeneration, relativePath 
 	return ref
 }
 
+// NewRelationshipEvidenceRef copies the relationship into the evidence ref so
+// the generated evidence ID remains stable after construction.
+//
+//nolint:gocritic // Value copy preserves the immutable reference contract.
 func NewRelationshipEvidenceRef(relationshipRef RelationshipRef, evidenceType string) EvidenceRef {
 	source := relationshipRef.SourceSymbolRef
 	ref := EvidenceRef{
@@ -245,6 +253,10 @@ func NewRelationshipEvidenceRef(relationshipRef RelationshipRef, evidenceType st
 	return ref
 }
 
+// NewObservationRef copies its evidence so the observation remains bound to
+// the exact canonical evidence contents used to derive its ID.
+//
+//nolint:gocritic // Value copy preserves the immutable reference contract.
 func NewObservationRef(evidenceRef EvidenceRef, stance, sourceEngine, derivation, confidenceBand string) ObservationRef {
 	ref := ObservationRef{
 		SchemaVersion:  SchemaVersion,

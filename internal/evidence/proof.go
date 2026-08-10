@@ -147,7 +147,7 @@ func validateRelationshipRef(ref *RelationshipRef) error {
 	return nil
 }
 
-func validateEvidenceRef(ref EvidenceRef) error {
+func validateEvidenceRef(ref *EvidenceRef) error {
 	if err := validateSymbolRef(ref.SymbolRef); err != nil {
 		return err
 	}
@@ -184,8 +184,8 @@ func validateEvidenceRef(ref EvidenceRef) error {
 	return nil
 }
 
-func validateObservationRef(ref ObservationRef) error {
-	if err := validateEvidenceRef(ref.EvidenceRef); err != nil {
+func validateObservationRef(ref *ObservationRef) error {
+	if err := validateEvidenceRef(&ref.EvidenceRef); err != nil {
 		return err
 	}
 	if !validToken(ref.Stance, "support", "contradict") {
@@ -218,7 +218,7 @@ func validateObservationRef(ref ObservationRef) error {
 	return nil
 }
 
-func (bundle ProofBundle) Validate() error {
+func validateProofHeader(bundle *ProofBundle) error {
 	if bundle.SchemaVersion != SchemaVersion {
 		return fmt.Errorf("schema_version must equal %d", SchemaVersion)
 	}
@@ -242,29 +242,37 @@ func (bundle ProofBundle) Validate() error {
 	if bundle.ContradictionSearch.CandidateCount < 0 {
 		return fmt.Errorf("contradiction candidate_count cannot be negative")
 	}
-	if !validToken(bundle.Coverage.State, "complete", "partial", "unknown") {
-		return fmt.Errorf("coverage state %q is invalid", bundle.Coverage.State)
+	return nil
+}
+
+func validateCoverage(coverage Coverage) error {
+	if !validToken(coverage.State, "complete", "partial", "unknown") {
+		return fmt.Errorf("coverage state %q is invalid", coverage.State)
 	}
-	if bundle.Coverage.Examined < 0 || bundle.Coverage.Unresolved < 0 {
+	if coverage.Examined < 0 || coverage.Unresolved < 0 {
 		return fmt.Errorf("coverage counts cannot be negative")
 	}
-	if bundle.Coverage.Expected != nil {
-		if *bundle.Coverage.Expected < 0 {
+	if coverage.Expected != nil {
+		if *coverage.Expected < 0 {
 			return fmt.Errorf("coverage expected cannot be negative")
 		}
-		if bundle.Coverage.Examined > *bundle.Coverage.Expected {
+		if coverage.Examined > *coverage.Expected {
 			return fmt.Errorf("coverage examined cannot exceed expected")
 		}
 	}
-	if bundle.Coverage.State == "complete" && bundle.Coverage.Expected == nil {
+	if coverage.State == "complete" && coverage.Expected == nil {
 		return fmt.Errorf("complete coverage requires a known expected count")
 	}
-	if bundle.Coverage.State == "complete" && bundle.Coverage.Examined != *bundle.Coverage.Expected {
+	if coverage.State == "complete" && coverage.Examined != *coverage.Expected {
 		return fmt.Errorf("complete coverage requires examined to equal expected")
 	}
+	return nil
+}
 
+func validateObservations(bundle *ProofBundle) error {
 	seen := make(map[string]bool, len(bundle.Observations))
-	for i, observation := range bundle.Observations {
+	for i := range bundle.Observations {
+		observation := &bundle.Observations[i]
 		if err := validateObservationRef(observation); err != nil {
 			return fmt.Errorf("observations[%d]: %w", i, err)
 		}
@@ -279,29 +287,51 @@ func (bundle ProofBundle) Validate() error {
 		}
 		seen[observation.ID] = true
 	}
+	return nil
+}
 
-	if bundle.Invariant != nil {
-		invariant := bundle.Invariant
-		if strings.TrimSpace(invariant.ID) == "" {
-			return fmt.Errorf("invariant id is required")
-		}
-		if !validToken(invariant.Status, "pass", "fail", "unresolved") {
-			return fmt.Errorf("invariant status %q is invalid", invariant.Status)
-		}
-		if invariant.Checked < 0 || invariant.Violations < 0 || invariant.Unresolved < 0 {
-			return fmt.Errorf("invariant counts cannot be negative")
-		}
-		if invariant.Status == "pass" && (invariant.Violations > 0 || invariant.Unresolved > 0) {
-			return fmt.Errorf("a passing invariant cannot have violations or unresolved subjects")
-		}
-		if invariant.Status == "fail" && invariant.Violations == 0 {
-			return fmt.Errorf("a failing invariant must contain a violation")
-		}
+func validateInvariant(invariant *InvariantResult) error {
+	if invariant == nil {
+		return nil
+	}
+	if strings.TrimSpace(invariant.ID) == "" {
+		return fmt.Errorf("invariant id is required")
+	}
+	if !validToken(invariant.Status, "pass", "fail", "unresolved") {
+		return fmt.Errorf("invariant status %q is invalid", invariant.Status)
+	}
+	if invariant.Checked < 0 || invariant.Violations < 0 || invariant.Unresolved < 0 {
+		return fmt.Errorf("invariant counts cannot be negative")
+	}
+	if invariant.Status == "pass" && (invariant.Violations > 0 || invariant.Unresolved > 0) {
+		return fmt.Errorf("a passing invariant cannot have violations or unresolved subjects")
+	}
+	if invariant.Status == "fail" && invariant.Violations == 0 {
+		return fmt.Errorf("a failing invariant must contain a violation")
 	}
 	return nil
 }
 
-func proofConfidence(verdict string, supporting, contradicting []ObservationRef) Confidence {
+func (bundle *ProofBundle) Validate() error {
+	if bundle == nil {
+		return fmt.Errorf("proof bundle is required")
+	}
+	if err := validateProofHeader(bundle); err != nil {
+		return err
+	}
+	if err := validateCoverage(bundle.Coverage); err != nil {
+		return err
+	}
+	if err := validateObservations(bundle); err != nil {
+		return err
+	}
+	if err := validateInvariant(bundle.Invariant); err != nil {
+		return err
+	}
+	return nil
+}
+
+func proofConfidence(verdict string, supporting, contradicting []*ObservationRef) Confidence {
 	switch verdict {
 	case VerdictBlocked:
 		return Confidence{
@@ -348,7 +378,7 @@ func proofConfidence(verdict string, supporting, contradicting []ObservationRef)
 	}
 }
 
-func isTrustedSupport(observation ObservationRef) bool {
+func isTrustedSupport(observation *ObservationRef) bool {
 	if validToken(observation.ConfidenceBand, "high", "medium") {
 		return true
 	}
@@ -356,14 +386,18 @@ func isTrustedSupport(observation ObservationRef) bool {
 		observation.EvidenceRef.RelationshipRef.RuntimeObserved
 }
 
+// EvaluateProof works from a value copy so evaluation cannot mutate caller-owned evidence.
+//
+//nolint:gocritic // The defensive copy is part of the deterministic proof contract.
 func EvaluateProof(bundle ProofBundle) (ProofResult, error) {
 	if err := bundle.Validate(); err != nil {
 		return ProofResult{}, err
 	}
 
-	supporting := make([]ObservationRef, 0)
-	contradicting := make([]ObservationRef, 0)
-	for _, observation := range bundle.Observations {
+	supporting := make([]*ObservationRef, 0)
+	contradicting := make([]*ObservationRef, 0)
+	for i := range bundle.Observations {
+		observation := &bundle.Observations[i]
 		if observation.Stance == "contradict" {
 			contradicting = append(contradicting, observation)
 		} else {

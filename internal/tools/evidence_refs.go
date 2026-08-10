@@ -56,8 +56,8 @@ func (s *Server) withGraphEvidenceRefs(
 
 	refsMetadata := map[string]any{
 		"schema_version": evidence.SchemaVersion,
-		"emitted": false,
-		"count": 0,
+		"emitted":        false,
+		"count":          0,
 	}
 	metadata["evidence_refs"] = refsMetadata
 

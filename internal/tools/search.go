@@ -126,6 +126,18 @@ func searchParamsFromArgs(args map[string]any) *store.SearchParams {
 	return params
 }
 
+func searchGraphCacheKey(args map[string]any, params *store.SearchParams, includeSource bool) string {
+	return fmt.Sprintf("search:%s:%s:%s:%s:%s:%s:%s:%d:%d:%d:%d:%d:%d:%t:%t:%s:%s:%t:%t",
+		getStringArg(args, "project"), params.Label, params.NamePattern, params.QNPattern,
+		params.FilePattern, params.Relationship, params.Direction,
+		params.MinDegree, params.MaxDegree,
+		params.MinComplexity, params.MaxComplexity,
+		params.Limit, params.Offset,
+		params.ExcludeEntryPoints, params.IncludeConnected,
+		strings.Join(params.ExcludeLabels, ","), params.SortBy,
+		params.CaseSensitive, includeSource)
+}
+
 func (s *Server) handleSearchGraph(_ context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	args, err := parseArgs(req)
 	if err != nil {
@@ -136,15 +148,7 @@ func (s *Server) handleSearchGraph(_ context.Context, req *mcp.CallToolRequest) 
 	includeSource := getBoolArg(args, "include_source")
 
 	// Build cache key from all filter params that affect results
-	cacheKey := fmt.Sprintf("search:%s:%s:%s:%s:%s:%s:%s:%d:%d:%d:%d:%d:%d:%t:%t:%s:%s:%t:%t",
-		getStringArg(args, "project"), params.Label, params.NamePattern, params.QNPattern,
-		params.FilePattern, params.Relationship, params.Direction,
-		params.MinDegree, params.MaxDegree,
-		params.MinComplexity, params.MaxComplexity,
-		params.Limit, params.Offset,
-		params.ExcludeEntryPoints, params.IncludeConnected,
-		strings.Join(params.ExcludeLabels, ","), params.SortBy,
-		params.CaseSensitive, includeSource)
+	cacheKey := searchGraphCacheKey(args, params, includeSource)
 
 	// Ordinary searches preserve the existing fast cache path. Evidence-backed
 	// searches must first resolve and live-check the project identity, so their

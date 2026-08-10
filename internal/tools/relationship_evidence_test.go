@@ -98,23 +98,23 @@ func TestRelationshipEvidencePreservesResolverAndRuntimeProvenance(t *testing.T)
 			t.Fatalf("%s missing id", field)
 		}
 	}
-	relationshipRef := entry["relationship_ref"].(map[string]any)
-	if !strings.HasPrefix(relationshipRef["id"].(string), "rel:v1:") {
+	relationshipRef := requireMapValue(t, entry["relationship_ref"], "relationship_ref")
+	if !strings.HasPrefix(requireStringValue(t, relationshipRef["id"], "relationship_ref.id"), "rel:v1:") {
 		t.Fatalf("relationship id = %v", relationshipRef["id"])
 	}
 	if relationshipRef["runtime_observed"] != true ||
 		relationshipRef["observation_count"] != float64(17) {
 		t.Fatalf("runtime relationship ref = %#v", relationshipRef)
 	}
-	evidenceRef := entry["evidence_ref"].(map[string]any)
+	evidenceRef := requireMapValue(t, entry["evidence_ref"], "evidence_ref")
 	if evidenceRef["index_generation"] != testIndexIdentity("clean").IndexGeneration {
 		t.Fatalf("generation = %v", evidenceRef["index_generation"])
 	}
 	if _, ok := evidenceRef["relationship_ref"].(map[string]any); !ok {
 		t.Fatalf("nested relationship ref missing: %#v", evidenceRef)
 	}
-	metadata := response["_metadata"].(map[string]any)
-	refs := metadata["evidence_refs"].(map[string]any)
+	metadata := requireMapValue(t, response["_metadata"], "_metadata")
+	refs := requireMapValue(t, metadata["evidence_refs"], "evidence_refs")
 	if refs["emitted"] != true || refs["count"] != float64(1) {
 		t.Fatalf("evidence metadata = %#v", refs)
 	}
@@ -171,8 +171,8 @@ func TestRelationshipEvidenceFailsClosedForStaleCheckout(t *testing.T) {
 	if response["total"] != float64(0) {
 		t.Fatalf("total = %v", response["total"])
 	}
-	metadata := response["_metadata"].(map[string]any)
-	refs := metadata["evidence_refs"].(map[string]any)
+	metadata := requireMapValue(t, response["_metadata"], "_metadata")
+	refs := requireMapValue(t, metadata["evidence_refs"], "evidence_refs")
 	if refs["emitted"] != false {
 		t.Fatalf("stale evidence metadata = %#v", refs)
 	}
@@ -211,8 +211,8 @@ func TestRelationshipEvidenceFailsClosedWhenCheckoutChangesDuringRetrieval(t *te
 	if response["total"] != float64(0) {
 		t.Fatalf("total = %v", response["total"])
 	}
-	metadata := response["_metadata"].(map[string]any)
-	refs := metadata["evidence_refs"].(map[string]any)
+	metadata := requireMapValue(t, response["_metadata"], "_metadata")
+	refs := requireMapValue(t, metadata["evidence_refs"], "evidence_refs")
 	if refs["emitted"] != false || refs["count"] != float64(0) {
 		t.Fatalf("changed-checkout evidence metadata = %#v", refs)
 	}

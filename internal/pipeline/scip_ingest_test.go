@@ -221,7 +221,7 @@ func TestSCIPDerivesCallsToTypeScriptVariableFunctions(t *testing.T) {
 	if err := os.WriteFile(
 		filepath.Join(repo, "fixture.ts"),
 		[]byte("const caller = () => {\n  callee();\n};\n\nconst callee = () => 1;\n"),
-		0o644,
+		0o600,
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -255,7 +255,7 @@ func TestSCIPDerivesTypeScriptGenericCalls(t *testing.T) {
 	if err := os.WriteFile(
 		filepath.Join(repo, "fixture.ts"),
 		[]byte("function caller() {\n  callee<Result<string>>(value);\n}\nfunction callee<T>(value: T) {}\n"),
-		0o644,
+		0o600,
 	); err != nil {
 		t.Fatal(err)
 	}

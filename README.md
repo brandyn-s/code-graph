@@ -225,7 +225,8 @@ false negatives). A hand-enumerated synthetic gate was perfect. Dynamic RTA
 edges were excluded because the current SCIP ingestion contract emits
 statically resolved call sites.
 
-The candidate TypeScript compiler tier is independently measured in
+The TypeScript compiler-tier CALLS behavior released in
+`v0.8.0-redacted.7` is independently measured in
 [`bench/accuracy/baselines/2026-08-12-typescript-compiler-tier-calls-report.md`](bench/accuracy/baselines/2026-08-12-typescript-compiler-tier-calls-report.md).
 On public `sindresorhus/ky`, a TypeScript 5.9.3 compiler-API oracle measured
 138 true positives, zero false positives, and zero false negatives (precision,
@@ -259,7 +260,8 @@ demonstrate a distributed organizational fleet or class-leading resource
 efficiency; peak memory and warm-query latency remain explicit optimization
 targets.
 
-A focused candidate `code_localize` query improvement is measured in
+A focused `code_localize` query improvement released in
+`v0.8.0-redacted.7` is measured in
 [`bench/accuracy/baselines/2026-08-12-llvm-localize-efficiency.md`](bench/accuracy/baselines/2026-08-12-llvm-localize-efficiency.md).
 On the preserved 729,010-node / 2,308,049-edge LLVM graph, the exact same query
 improved from 12.95 seconds to 3.02 seconds repeat median (4.29×), while fresh
@@ -580,12 +582,15 @@ No API keys, no Docker, no external databases. Single binary, zero infrastructur
 
 Releases are built via `workflow_dispatch` on `release.yml`. Download them from
 [redacted releases](https://github.com/redacted-org/code-graph/releases).
-The current plugin-bound release is `v0.8.0-redacted.6`; it was built from
-commit `3eae292836f45932be7faa237a1c2adc6721c69b`, has per-platform checksums and
+The current plugin-bound release is `v0.8.0-redacted.7`; it was built from
+commit `d10625db5b63ea8df4bfac924a11693c949fa19f`, has per-platform checksums and
 GitHub-hosted build provenance, and retains the compiler-tier behavior measured
 above. Relative to `.5`, `.6` indexes qualified-name suffix lookups used during
 import resolution instead of scanning every graph node for each candidate; an
-exact-match regression test preserves the lookup contract.
+exact-match regression test preserves that lookup contract. Release `.7` adds
+the measured TypeScript compiler-tier CALLS corrections and a lower-memory,
+lower-latency `code_localize` path while preserving ranked output in the fixed
+LLVM replay.
 This is an internal package in a private repository. It is not published to the public MCP Registry,
 which does not support private package downloads. The setup scripts therefore
 require an authenticated GitHub CLI session with access to the repository.

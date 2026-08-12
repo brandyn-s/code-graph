@@ -10,9 +10,12 @@ This is a functional-coverage benchmark, not an edge-precision oracle. A PASS
 shows that the tool returned a usable answer to the question; it does not prove
 that every returned CALLS, IMPORTS, or other relationship is correct or
 complete. Use the dated reports under `bench/accuracy/baselines/` for
-edge-level precision/recall. The current pinned Go CALLS report is
-`2026-08-12-code-graph-go-report.md`; relationship types without a current
-oracle remain unmeasured.
+edge-level precision/recall. The current pinned reports include heuristic Go
+CALLS, compiler-tier Go CALLS, and compiler-tier TypeScript CALLS:
+`2026-08-12-code-graph-go-report.md`,
+`2026-08-12-compiler-tier-calls-report.md`, and
+`2026-08-12-typescript-compiler-tier-calls-report.md`. Relationship types and
+languages without a current independent oracle remain unmeasured.
 
 The benchmark is run on real repos (Django, ripgrep, NestJS, Laravel, Neovim, etc.), not synthetic test data. This means the scores reflect actual real-world performance, including edge cases from production codebases.
 
@@ -25,7 +28,7 @@ The benchmark is run on real repos (Django, ripgrep, NestJS, Laravel, Neovim, et
 
 ## Methodology
 
-- **63 languages** (27 programming + 8 config/markup), 12 questions each (4 for config languages)
+- **35 languages** (27 programming + 8 config/markup), 12 questions each (4 for config languages)
 - **Up to 5 attempts** per question with escalating retry strategies
 - **Real open-source repos** (medium to large: 78--49K nodes)
 - **Grading**: PASS (1.0) / PARTIAL (0.5) / FAIL (0.0), N/A excluded from denominator

@@ -10,7 +10,7 @@ median 0.884 recall / 20-30% precision for Java static analyzers; we adjust
 the precision target up because Python/Go code has less reflection
 complexity than Java.
 
-## Why this is LLM-only but not circular
+## Why the oracles are independent and not circular
 
 code-graph already consumes LSP internally (`internal/cbm/cbm.go`), so LSP
 can't serve as an independent oracle. Instead:
@@ -22,8 +22,9 @@ can't serve as an independent oracle. Instead:
 | HTTP_CALLS | all     | Opus + Sonnet ensemble with 2/3 majority tiebreaker | Medium |
 | CALLS     | Rust     | `syn` 2.x visitor (AST-level, matches code-graph's tree-sitter granularity) | High |
 | IMPORTS   | Rust     | (not measured — code-graph's Rust IMPORTS resolver emits few edges in practice) | N/A |
-| CALLS     | Go       | `go callgraph -algo=rta` (RTA matches code-graph's gopls-informed extraction) | High — but see caveats |
-| IMPORTS   | Go       | `go list -json` (authoritative from the Go toolchain) | High |
+| CALLS     | Go       | `go/ast` syntactic oracle for the heuristic tier; independent SSA/RTA for the compiler tier | High — but see caveats |
+| IMPORTS   | Go       | Currently ungraded; the `go/ast` harness drops IMPORTS until import paths can be mapped to internal file-qualified names | N/A |
+| CALLS     | TypeScript | TypeScript compiler API for the compiler tier | High — tested on the declared static-call scope |
 
 None require human verification. Ground truth is frozen to JSON and
 re-used for every future regression run.
@@ -40,7 +41,8 @@ bench/accuracy/
   oracle_ast_imports.py      IMPORTS ground truth via Python ast
   oracle_llm_ensemble.py     HTTP_CALLS ground truth via Opus+Sonnet
   oracle_rust_syn.py         CALLS ground truth via syn 2.x (Rust)
-  oracle_go_callgraph.py     CALLS + IMPORTS ground truth via go callgraph (Go)
+  oracle_go_ast.py           CALLS ground truth via go/ast (Go heuristic tier)
+  oracle_go_callgraph.py     legacy CALLS + IMPORTS experiment via go callgraph
   compare.py                 TP/FP/FN/P/R/F1 reporter
   run_baseline.py            orchestrator: verifies SHA, runs all oracles, runs code-graph, produces report
   tools/oracle-rust-syn/     Cargo crate for the Rust syn-based oracle binary
@@ -74,8 +76,8 @@ python bench/accuracy/oracle_rust_syn.py psm-rust
 # Index each subset first (use skip_report=true to respect read-only fixtures)
 python bench/accuracy/compare.py psm-rust
 
-# Go: requires `go install golang.org/x/tools/cmd/callgraph@latest`
-python bench/accuracy/oracle_go_callgraph.py code-graph-go
+# Go heuristic tier: deterministic standard-library AST oracle
+python bench/accuracy/oracle_go_ast.py code-graph-go
 
 # Independent compiler-tier CALLS oracle (Go SSA/RTA; no SCIP/graph truth)
 cd bench/accuracy/tools/oracle-go-rta
@@ -118,9 +120,9 @@ published baseline (see `rules/verify-effectiveness.md` for the full rule).
 ./bench/accuracy/tools/oracle-rust-syn/target/release/oracle-rust-syn.exe \
   bench/accuracy/synthetic/rust-minimal rust-minimal
 
-# Go callgraph oracle: 5 expected CALLS after init-chain filter
-cd bench/accuracy/synthetic/go-minimal && \
-  ~/go/bin/callgraph.exe -algo=rta -format=graphviz ./...
+# Go AST oracle
+cd bench/accuracy/tools/oracle-go-ast
+go test ./...
 ```
 
 Ground truth lives in each synthetic fixture's `ground_truth.json`.
@@ -228,5 +230,12 @@ the full repo while PyCG only walks 5 service entry points.
 - **LLM ensemble non-determinism**: runs are cached per `(file_sha, model)` so results are reproducible across re-runs, but cache invalidation on file change means the first run of a new fixture SHA is stochastic.
 - **Rust oracle is syntactic**: `syn` parses unexpanded source (same as code-graph's tree-sitter). Method-call receiver types are unresolved on both sides, so bare-method-call edges drop from both. This is apples-to-apples.
 - **Rust IMPORTS dropped from measurement**: code-graph's `use crate_name::Type` resolver is incomplete (empirically 0 edges on a canstatd re-index, 8 across the full 260-crate psm). The oracle drops IMPORTS rather than report a misleading F1.
-- **Go QN alignment**: `go callgraph` emits Go-native symbols (`github.com/org/repo/pkg.Func`) while code-graph stores sanitized-path QNs (`c-Users-...pkg.file.Func`). Fully aligning these requires per-file `go/ast` walking to know which `.go` file each function lives in. The current oracle is plumbed end-to-end but the QN normalization for multi-file packages is deferred.
+- **Go heuristic CALLS are syntactic**: the current operating point uses the
+  `go/ast` oracle so source files and callers can be aligned exactly. It does
+  not model dynamic dispatch. The older `go callgraph` RTA harness remains as
+  an experiment, but its Go-native symbols do not align cleanly with the
+  graph's file-qualified names.
+- **Go IMPORTS are currently ungraded**: the `go/ast` harness drops them until
+  module import paths can be mapped deterministically to internal file-qualified
+  graph nodes.
 - **Oracle scope ≠ code-graph scope**: oracles only walk source files with explicit `fn`/`def`; code-graph also indexes Cargo.toml (as config nodes), infrascan artifacts, and `diesel` query DSL macros. These show up as legitimate code-graph edges the oracle doesn't see. Scope-aligned metric filters this artifact.

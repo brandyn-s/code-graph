@@ -1,8 +1,10 @@
 package localize
 
 import (
+	"reflect"
 	"testing"
 
+	"github.com/DeusData/codebase-memory-mcp/internal/ranking"
 	"github.com/DeusData/codebase-memory-mcp/internal/store"
 )
 
@@ -55,7 +57,8 @@ func insertEdge(t *testing.T, st *store.Store, project, etype string, src, dst i
 // distance field reflects the actual shortest path.
 //
 // Graph: handler --CALLS--> validator --CALLS--> sanitizer
-//                     \--CALLS--> logger
+//
+//	\--CALLS--> logger
 //
 // Query "validator" should: seed validator, expand to handler (1 hop
 // via CALLS) + sanitizer + logger (1 hop via CALLS), total 4 entities.
@@ -180,5 +183,76 @@ func TestCodeLocalize_NoSeedMatch(t *testing.T) {
 	_, err := CodeLocalize(st, project, "totally-unrelated-xyz", 3, 10)
 	if err == nil {
 		t.Fatal("expected error for no seed match, got nil")
+	}
+}
+
+func TestSortByScoreDescBreaksTiesByStableSourceIdentity(t *testing.T) {
+	want := []string{"a.go", "a.go", "b.go"}
+	inputs := [][]LocalizedEntity{
+		{
+			{FilePath: "b.go", StartLine: 1, EndLine: 2, QualifiedName: "beta", Score: 1},
+			{FilePath: "a.go", StartLine: 8, EndLine: 9, QualifiedName: "zeta", Score: 1},
+			{FilePath: "a.go", StartLine: 3, EndLine: 4, QualifiedName: "alpha", Score: 1},
+		},
+		{
+			{FilePath: "a.go", StartLine: 3, EndLine: 4, QualifiedName: "alpha", Score: 1},
+			{FilePath: "b.go", StartLine: 1, EndLine: 2, QualifiedName: "beta", Score: 1},
+			{FilePath: "a.go", StartLine: 8, EndLine: 9, QualifiedName: "zeta", Score: 1},
+		},
+	}
+
+	for inputIndex, results := range inputs {
+		sortByScoreDesc(results)
+		for index, path := range want {
+			if results[index].FilePath != path {
+				t.Fatalf("input %d rank %d: got %q, want %q; results=%+v", inputIndex, index+1, results[index].FilePath, path, results)
+			}
+		}
+		if results[0].StartLine != 3 || results[1].StartLine != 8 {
+			t.Fatalf("input %d: same-file ties must use source coordinates; results=%+v", inputIndex, results)
+		}
+	}
+}
+
+func TestBFSExpansionIsIndependentOfEdgeLoadOrder(t *testing.T) {
+	seed := ranking.RankedNode{ID: 1, Score: 1.0}
+	edges := []struct {
+		source int64
+		target int64
+		kind   string
+	}{
+		{source: 1, target: 3, kind: "CALLS"},
+		{source: 1, target: 2, kind: "IMPORTS"},
+		{source: 2, target: 4, kind: "DEFINES"},
+		{source: 3, target: 4, kind: "CALLS"},
+	}
+
+	build := func(reverse bool) map[int64]*localizedAccumulator {
+		out := map[int64][]edgeRef{}
+		in := map[int64][]edgeRef{}
+		for offset := range edges {
+			index := offset
+			if reverse {
+				index = len(edges) - 1 - offset
+			}
+			edge := edges[index]
+			out[edge.source] = append(out[edge.source], edgeRef{other: edge.target, etype: edge.kind})
+			in[edge.target] = append(in[edge.target], edgeRef{other: edge.source, etype: edge.kind})
+		}
+		for id := range out {
+			sortEdgeRefs(out[id])
+		}
+		for id := range in {
+			sortEdgeRefs(in[id])
+		}
+		visited := map[int64]*localizedAccumulator{}
+		bfsExpand(seed, 2, out, in, visited)
+		return visited
+	}
+
+	forward := build(false)
+	reversed := build(true)
+	if !reflect.DeepEqual(forward, reversed) {
+		t.Fatalf("edge load order changed BFS result:\nforward=%+v\nreversed=%+v", forward, reversed)
 	}
 }

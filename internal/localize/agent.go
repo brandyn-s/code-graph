@@ -27,6 +27,7 @@ package localize
 import (
 	"context"
 	"fmt"
+	"sort"
 
 	"github.com/DeusData/codebase-memory-mcp/internal/ranking"
 	"github.com/DeusData/codebase-memory-mcp/internal/store"
@@ -152,6 +153,12 @@ func CodeLocalizeWithStrategy(ctx context.Context, st *store.Store, project, iss
 		outAdj[e.SourceID] = append(outAdj[e.SourceID], edgeRef{other: e.TargetID, etype: e.Type})
 		inAdj[e.TargetID] = append(inAdj[e.TargetID], edgeRef{other: e.SourceID, etype: e.Type})
 	}
+	for id := range outAdj {
+		sortEdgeRefs(outAdj[id])
+	}
+	for id := range inAdj {
+		sortEdgeRefs(inAdj[id])
+	}
 
 	// Step 3: BFS from each seed, accumulating min-distance and
 	// per-node aggregate score.
@@ -214,6 +221,15 @@ type localizedAccumulator struct {
 type edgeRef struct {
 	other int64
 	etype string
+}
+
+func sortEdgeRefs(edges []edgeRef) {
+	sort.Slice(edges, func(i, j int) bool {
+		if edges[i].other != edges[j].other {
+			return edges[i].other < edges[j].other
+		}
+		return edges[i].etype < edges[j].etype
+	})
 }
 
 // bfsExpand walks `depth` steps out from the seed in both directions
@@ -300,9 +316,32 @@ func sortStrings(s []string) {
 }
 
 func sortByScoreDesc(results []LocalizedEntity) {
-	for i := 1; i < len(results); i++ {
-		for j := i; j > 0 && results[j-1].Score < results[j].Score; j-- {
-			results[j-1], results[j] = results[j], results[j-1]
+	sort.Slice(results, func(i, j int) bool {
+		left, right := results[i], results[j]
+		if left.Score != right.Score {
+			return left.Score > right.Score
 		}
-	}
+		if left.Distance != right.Distance {
+			return left.Distance < right.Distance
+		}
+		if left.FilePath != right.FilePath {
+			return left.FilePath < right.FilePath
+		}
+		if left.StartLine != right.StartLine {
+			return left.StartLine < right.StartLine
+		}
+		if left.EndLine != right.EndLine {
+			return left.EndLine < right.EndLine
+		}
+		if left.QualifiedName != right.QualifiedName {
+			return left.QualifiedName < right.QualifiedName
+		}
+		if left.Label != right.Label {
+			return left.Label < right.Label
+		}
+		if left.Name != right.Name {
+			return left.Name < right.Name
+		}
+		return left.ID < right.ID
+	})
 }

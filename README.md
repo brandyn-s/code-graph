@@ -375,6 +375,8 @@ Structural search: finds functions by name pattern and immediately shows their c
 - **"How do these microservices connect?"** — HTTP route linking discovers REST API call patterns across services
 - **"What tests cover this?"** — `get_affected_tests` finds tests impacted by a change
 - **"What files need to change together?"** — `get_change_coupling` mines git history for co-change patterns
+- **Stable issue localization** — `code_localize` canonically orders seeds,
+  traversals, and tied results, so an unchanged index returns the same ranking
 - **Security surface analysis** — Find auth boundaries, crypto operations, input entry points, sensitive sinks
 - **STIG compliance mapping** — `query_stig_evidence` connects security controls to code-level evidence
 
@@ -396,7 +398,7 @@ These tools are complementary — **code-search finds by meaning, code-graph fin
 | "What calls `authenticate()`?" | **code-graph** — structural, call graph |
 | "Find rate limiting code" | **code-search** — conceptual search |
 | "Blast radius of changing `User.validate()`?" | **code-graph** — dependency + change coupling |
-| "How does error handling work?" | Both — code-search finds patterns, code-graph traces flows |
+| "How does error handling work?" | **code-search** first; add code-graph only when callers or flows are requested |
 
 The `get_relevant_context` tool bridges both: given files you plan to modify, it returns callers, callees, tests, and change-coupled files — everything an AI agent needs to make a safe change, in ~500 tokens instead of ~80K.
 

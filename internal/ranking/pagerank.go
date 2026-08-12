@@ -195,7 +195,63 @@ func MatchSeedNodes(st *store.Store, project, query string) ([]*store.Node, erro
 	for _, i := range seedIdx {
 		out = append(out, nodes[i])
 	}
+	sortSeedNodes(out, query)
 	return out, nil
+}
+
+type seedMatchQuality struct {
+	exactNames     int
+	qualifiedNames int
+}
+
+func sortSeedNodes(nodes []*store.Node, query string) {
+	tokens := tokenize(query)
+	tokenRes := compileTokenBoundaryRegexes(tokens)
+	quality := make(map[int64]seedMatchQuality, len(nodes))
+	for _, node := range nodes {
+		var current seedMatchQuality
+		nameLower := strings.ToLower(node.Name)
+		qnLower := strings.ToLower(node.QualifiedName)
+		for index, token := range tokens {
+			if nameLower == token {
+				current.exactNames++
+			}
+			if re := tokenRes[index]; re != nil && re.MatchString(qnLower) {
+				current.qualifiedNames++
+			}
+		}
+		quality[node.ID] = current
+	}
+
+	sort.Slice(nodes, func(i, j int) bool {
+		left, right := nodes[i], nodes[j]
+		leftQuality, rightQuality := quality[left.ID], quality[right.ID]
+		if leftQuality.exactNames != rightQuality.exactNames {
+			return leftQuality.exactNames > rightQuality.exactNames
+		}
+		if leftQuality.qualifiedNames != rightQuality.qualifiedNames {
+			return leftQuality.qualifiedNames > rightQuality.qualifiedNames
+		}
+		if left.FilePath != right.FilePath {
+			return left.FilePath < right.FilePath
+		}
+		if left.StartLine != right.StartLine {
+			return left.StartLine < right.StartLine
+		}
+		if left.EndLine != right.EndLine {
+			return left.EndLine < right.EndLine
+		}
+		if left.QualifiedName != right.QualifiedName {
+			return left.QualifiedName < right.QualifiedName
+		}
+		if left.Label != right.Label {
+			return left.Label < right.Label
+		}
+		if left.Name != right.Name {
+			return left.Name < right.Name
+		}
+		return left.ID < right.ID
+	})
 }
 
 // matchSeeds returns the compact indices of nodes whose Name exactly

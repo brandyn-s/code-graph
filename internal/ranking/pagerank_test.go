@@ -412,3 +412,33 @@ func TestMatchSeedNodesByStrategy_NilStoreErrorPath(t *testing.T) {
 		t.Errorf("expected error for nil store, got %d nodes", len(got))
 	}
 }
+
+func TestMatchSeedNodesReturnsCanonicalRelevanceOrder(t *testing.T) {
+	st := testStoreOrSkip(t)
+	project := "canonical-seeds"
+	ensureProject(t, st, project)
+
+	for _, node := range []*store.Node{
+		{Project: project, Label: "Function", Name: "zetaHandler", QualifiedName: "pkg.router.zetaHandler", FilePath: "z.go", StartLine: 9},
+		{Project: project, Label: "Function", Name: "alphaHandler", QualifiedName: "pkg.router.alphaHandler", FilePath: "a.go", StartLine: 3},
+		{Project: project, Label: "Function", Name: "router", QualifiedName: "pkg.router", FilePath: "router.go", StartLine: 7},
+	} {
+		if _, err := st.UpsertNode(node); err != nil {
+			t.Fatalf("upsert node %q: %v", node.Name, err)
+		}
+	}
+
+	got, err := MatchSeedNodes(st, project, "router")
+	if err != nil {
+		t.Fatalf("MatchSeedNodes: %v", err)
+	}
+	want := []string{"router", "alphaHandler", "zetaHandler"}
+	if len(got) != len(want) {
+		t.Fatalf("got %d seeds, want %d: %+v", len(got), len(want), got)
+	}
+	for index, name := range want {
+		if got[index].Name != name {
+			t.Fatalf("rank %d: got %q, want %q; seeds=%+v", index+1, got[index].Name, name, got)
+		}
+	}
+}

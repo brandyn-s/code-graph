@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "measurement_date": "2026-08-12",
+  "candidate": {
+    "repository": "redacted-org/code-graph",
+    "release": "v0.8.0-redacted.5",
+    "source_revision": "41b8400951aa7a4da478e9d79486e47f7e4ae075"
+  },
+  "generator": {
+    "repository": "scip-code/scip-go",
+    "release": "v0.2.7",
+    "source_revision": "2e9ff3c2603a85daabe125c9f20075ec52df0731"
+  },
+  "oracle": {
+    "name": "go-ssa-rta-all-source-roots-v1",
+    "implementation": "bench/accuracy/tools/oracle-go-rta",
+    "scope": "static_source_calls",
+    "uses_scip_as_truth": false,
+    "uses_code_graph_as_truth": false
+  },
+  "gates": {
+    "synthetic_fixture_fp": 0,
+    "synthetic_fixture_fn": 0,
+    "aggregate_precision_minimum": 0.9,
+    "aggregate_recall_minimum": 0.9,
+    "per_real_fixture_f1_minimum": 0.8
+  },
+  "fixtures": [
+    {
+      "id": "synthetic-go-minimal",
+      "source_revision": "6efd4fd9051b93b7d55d39ae354248b6ddd59504",
+      "true_positive": 5,
+      "false_positive": 0,
+      "false_negative": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "dynamic_oracle_edges_excluded": 0,
+      "resolution_artifact_sha256": "4af909925c48ca25a048aa40d104e3eb060e78c024a5486e939162752518e061"
+    },
+    {
+      "id": "code-graph",
+      "source_revision": "41b8400951aa7a4da478e9d79486e47f7e4ae075",
+      "true_positive": 2643,
+      "false_positive": 50,
+      "false_negative": 154,
+      "precision": 0.9814333457111029,
+      "recall": 0.9449410082230961,
+      "f1": 0.9628415300546449,
+      "dynamic_oracle_edges_excluded": 1152,
+      "resolution_artifact_sha256": "9e4c1bdf1b0a97bf933740d6792246ed806e2665d0a43e1452aade5b07c1a0f7"
+    },
+    {
+      "id": "spf13-cobra",
+      "source_revision": "f2878bab8c96afd6e36968af96343b35dbb82a82",
+      "true_positive": 504,
+      "false_positive": 52,
+      "false_negative": 77,
+      "precision": 0.9064748201438849,
+      "recall": 0.8674698795180723,
+      "f1": 0.8865435356200527,
+      "dynamic_oracle_edges_excluded": 193,
+      "resolution_artifact_sha256": "ea9d9f86ab312902e491ad7b1888e99dde910317d67d25b2ce253e1abe18cab0"
+    }
+  ],
+  "real_fixture_aggregate": {
+    "true_positive": 3147,
+    "false_positive": 102,
+    "false_negative": 231,
+    "precision": 0.9686057248384118,
+    "recall": 0.9316163410301954,
+    "f1": 0.9497510185604345
+  },
+  "gate_result": "pass"
+}
+

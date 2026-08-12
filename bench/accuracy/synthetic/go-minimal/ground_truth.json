@@ -7,6 +7,13 @@
     {"from_qn": "go-minimal.main.main",        "to_qn": "entry"},
     {"from_qn": "go-minimal.helpers.Greet",    "to_qn": "innerGreet"}
   ],
+  "expected_compiler_call_coordinates": [
+    {"caller": {"file": "helpers/helpers.go", "line": 3}, "callee": {"file": "helpers/helpers.go", "line": 7}, "dynamic": false},
+    {"caller": {"file": "main.go", "line": 9}, "callee": {"file": "helpers/helpers.go", "line": 3}, "dynamic": false},
+    {"caller": {"file": "main.go", "line": 9}, "callee": {"file": "main.go", "line": 14}, "dynamic": false},
+    {"caller": {"file": "main.go", "line": 14}, "callee": {"file": "main.go", "line": 18}, "dynamic": false},
+    {"caller": {"file": "main.go", "line": 20}, "callee": {"file": "main.go", "line": 9}, "dynamic": false}
+  ],
   "expected_internal_imports": [
     {"from_qn": "go-minimal.main", "to_qn": "github.com/example/go-minimal/helpers"}
   ],

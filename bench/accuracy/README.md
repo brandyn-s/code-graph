@@ -76,6 +76,18 @@ python bench/accuracy/compare.py psm-rust
 
 # Go: requires `go install golang.org/x/tools/cmd/callgraph@latest`
 python bench/accuracy/oracle_go_callgraph.py code-graph-go
+
+# Independent compiler-tier CALLS oracle (Go SSA/RTA; no SCIP/graph truth)
+cd bench/accuracy/tools/oracle-go-rta
+go test ./...
+go run . /path/to/go/module > oracle.json
+cd ../../../..
+python bench/accuracy/compare_compiler_calls.py \
+  --oracle oracle.json \
+  --database /path/to/project.db \
+  --project project-name \
+  --scip-index /path/to/index.scip \
+  --output compiler-report.json
 # Output:
 #   bench/accuracy/baselines/YYYY-MM-DD-mcp-servers-report.md   (human)
 #   bench/accuracy/baselines/YYYY-MM-DD-mcp-servers-report.json (machine)

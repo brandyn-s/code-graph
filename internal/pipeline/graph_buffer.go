@@ -19,9 +19,10 @@ type GraphBuffer struct {
 	project string
 	nextID  int64
 
-	nodeByQN     map[string]*store.Node
-	nodesByLabel map[string][]*store.Node
-	nodeByID     map[int64]*store.Node
+	nodeByQN      map[string]*store.Node
+	nodesByLabel  map[string][]*store.Node
+	nodeByID      map[int64]*store.Node
+	nodesByQNTail map[string][]*store.Node
 
 	edges             []*store.Edge
 	edgeByKey         map[edgeKey]*store.Edge
@@ -41,6 +42,7 @@ func newGraphBuffer(project string) *GraphBuffer {
 		nodeByQN:          make(map[string]*store.Node),
 		nodesByLabel:      make(map[string][]*store.Node),
 		nodeByID:          make(map[int64]*store.Node),
+		nodesByQNTail:     make(map[string][]*store.Node),
 		edgeByKey:         make(map[edgeKey]*store.Edge),
 		edgesBySourceType: make(map[int64]map[string][]*store.Edge),
 	}
@@ -77,7 +79,17 @@ func (b *GraphBuffer) UpsertNode(n *store.Node) int64 {
 	b.nodeByQN[n.QualifiedName] = n
 	b.nodeByID[id] = n
 	b.nodesByLabel[n.Label] = append(b.nodesByLabel[n.Label], n)
+	b.nodesByQNTail[qualifiedNameTail(n.QualifiedName)] = append(
+		b.nodesByQNTail[qualifiedNameTail(n.QualifiedName)], n,
+	)
 	return id
+}
+
+func qualifiedNameTail(qn string) string {
+	if index := strings.LastIndexByte(qn, '.'); index >= 0 {
+		return qn[index+1:]
+	}
+	return qn
 }
 
 // roundTripProps normalizes property types via JSON marshal/unmarshal.
@@ -163,7 +175,8 @@ func (b *GraphBuffer) FindNodeLabelsByQNs(qns []string) map[string]string {
 func (b *GraphBuffer) FindNodesByQNSuffix(suffix string) []*store.Node {
 	needle := "." + suffix
 	var out []*store.Node
-	for qn, n := range b.nodeByQN {
+	for _, n := range b.nodesByQNTail[qualifiedNameTail(suffix)] {
+		qn := n.QualifiedName
 		if strings.HasSuffix(qn, needle) || qn == suffix {
 			out = append(out, n)
 		}

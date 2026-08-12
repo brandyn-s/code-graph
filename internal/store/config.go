@@ -141,6 +141,15 @@ const (
 	// inherited by calls that omit the argument.
 	ConfigReportSkipPrefix = "report.skip."
 
+	// ConfigGraphPrecisionTierPrefix stores the explicit per-project graph
+	// precision choice ("heuristic" or "scip"). ConfigGraphSCIPPathPrefix
+	// stores the corresponding compiler index path, and
+	// ConfigGraphPrecisionStatusPrefix stores the last machine-readable ingest
+	// outcome surfaced by index_status.
+	ConfigGraphPrecisionTierPrefix   = "graph.precision.tier."
+	ConfigGraphSCIPPathPrefix        = "graph.precision.scip_path."
+	ConfigGraphPrecisionStatusPrefix = "graph.precision.status."
+
 	// ConfigAutoIndexLimit is the max file count for auto-indexing new projects.
 	// Default: 50000. Projects above this limit require explicit index_repository.
 	ConfigAutoIndexLimit = "auto_index_limit"

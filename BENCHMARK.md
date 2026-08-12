@@ -6,6 +6,14 @@ A code knowledge graph is only useful if it accurately represents the codebase i
 
 This benchmark tests code-graph against **35 real open-source repos** spanning 27 programming languages and 8 config/markup languages. Each language gets 12 standardized questions (4 for config languages) covering the full tool surface: indexing, discovery, pattern search, code snippets, text search, call tracing (inbound and outbound), Cypher queries, property extraction, inheritance, and directory listing.
 
+This is a functional-coverage benchmark, not an edge-precision oracle. A PASS
+shows that the tool returned a usable answer to the question; it does not prove
+that every returned CALLS, IMPORTS, or other relationship is correct or
+complete. Use the dated reports under `bench/accuracy/baselines/` for
+edge-level precision/recall. The current pinned Go CALLS report is
+`2026-08-12-code-graph-go-report.md`; relationship types without a current
+oracle remain unmeasured.
+
 The benchmark is run on real repos (Django, ripgrep, NestJS, Laravel, Neovim, etc.), not synthetic test data. This means the scores reflect actual real-world performance, including edge cases from production codebases.
 
 **How to read the scores:**

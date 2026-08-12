@@ -52,12 +52,12 @@ class GenerateSchemasContractTests(unittest.TestCase):
                 {"project"},
             )
 
-    def test_runtime_and_generated_name_sets_are_the_same_38_tools(self) -> None:
+    def test_runtime_and_generated_name_sets_are_the_same_40_tools(self) -> None:
         runtime = generate_schemas.extract_handlers()
         generated = load_generated_schemas()
 
-        self.assertEqual(len(runtime), 38)
-        self.assertEqual(len(generated), 38)
+        self.assertEqual(len(runtime), 40)
+        self.assertEqual(len(generated), 40)
         self.assertEqual(set(runtime), set(generated))
 
     def test_search_code_pagination_bounds_match_runtime(self) -> None:

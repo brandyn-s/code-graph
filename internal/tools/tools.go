@@ -145,6 +145,10 @@ func (s *Server) syncProject(ctx context.Context, projectName, rootPath string) 
 	captureIdentity := s.indexIdentityCapture()
 	startIdentity, startIdentityErr := captureIdentity(rootPath)
 	p := pipeline.New(ctx, st, rootPath, discover.ModeFull)
+	precisionSelection, err := s.configureStoredGraphPrecision(p, projectName, rootPath)
+	if err != nil {
+		return fmt.Errorf("configure graph precision: %w", err)
+	}
 	if err := p.Run(); err != nil {
 		if stateErr := persistTerminalIndexIdentityError(
 			st,
@@ -161,6 +165,7 @@ func (s *Server) syncProject(ctx context.Context, projectName, rootPath string) 
 		}
 		return err
 	}
+	s.persistGraphPrecision(projectName, precisionSelection, p.SCIPStatus)
 	endIdentity, endIdentityErr := captureIdentity(rootPath)
 	identityErr := persistCoherentIndexIdentity(
 		st,
@@ -458,6 +463,11 @@ func (s *Server) runAutoIndex(hasDB bool) error {
 		pipelineContext = context.Background()
 	}
 	p := pipeline.New(pipelineContext, st, s.sessionRoot, discover.ModeFull)
+	precisionSelection, err := s.configureStoredGraphPrecision(p, s.sessionProject, s.sessionRoot)
+	if err != nil {
+		s.indexStatus.Store("degraded")
+		return fmt.Errorf("configure graph precision: %w", err)
+	}
 	if err := p.Run(); err != nil {
 		s.indexStatus.Store("degraded")
 		reason := fmt.Sprintf("auto-index failed after invalidating checkout identity: %v", err)
@@ -470,6 +480,7 @@ func (s *Server) runAutoIndex(hasDB bool) error {
 		}
 		return fmt.Errorf("auto-index pipeline: %w", err)
 	}
+	s.persistGraphPrecision(s.sessionProject, precisionSelection, p.SCIPStatus)
 	if err := st.SetIndexIdentityState(
 		s.sessionProject,
 		indexidentity.StatusPending,
@@ -1128,6 +1139,15 @@ func (s *Server) registerIndexAndTraceTool() {
 				"skip_report": {
 					"type": "boolean",
 					"description": "Skip writing ARCHITECTURE_REPORT.md to the repo root after indexing. Required when indexing read-only repos (bench fixtures, vendored code, protected paths) where any write violates policy. Default: false (report is written)."
+				},
+				"precision_tier": {
+					"type": "string",
+					"enum": ["heuristic", "scip"],
+					"description": "Persistent per-project graph precision tier. 'heuristic' uses tree-sitter/static resolution. 'scip' replaces CALLS edges for compiler-index-covered functions using a SCIP index and reports exact coverage/drift telemetry. Omit to inherit the project's recorded choice; default heuristic."
+				},
+				"scip_index_path": {
+					"type": "string",
+					"description": "SCIP index path for precision_tier='scip'. Relative paths resolve under repo_path. Defaults to <repo>/index.scip."
 				}
 			}
 		}`),
@@ -1466,6 +1486,45 @@ func (s *Server) registerQueryTool() {
 
 // registerProjectTools registers tools for project management.
 func (s *Server) registerProjectTools() {
+	s.addTool(&mcp.Tool{
+		Name: "compare_project_indexes",
+		Annotations: &mcp.ToolAnnotations{
+			ReadOnlyHint: true, IdempotentHint: true,
+			OpenWorldHint: boolPtr(false), DestructiveHint: boolPtr(false),
+		},
+		Description: "Compare two immutable project indexes without switching global state. Reports deterministic file-content and declaration deltas with live index identities. This is an index snapshot comparison, not git history, ACL enforcement, or a continuously managed indexing fleet.",
+		InputSchema: json.RawMessage(`{
+			"type":"object",
+			"properties":{
+				"base_project":{"type":"string","description":"Canonical base project name from list_projects."},
+				"target_project":{"type":"string","description":"Canonical target project name from list_projects."},
+				"limit":{"type":"integer","description":"Maximum returned entries per delta category, 1-500; default 100."}
+			},
+			"required":["base_project","target_project"]
+		}`),
+	}, s.handleCompareProjectIndexes)
+
+	s.addTool(&mcp.Tool{
+		Name: "localize_across_projects",
+		Annotations: &mcp.ToolAnnotations{
+			ReadOnlyHint: true, IdempotentHint: true,
+			OpenWorldHint: boolPtr(false), DestructiveHint: boolPtr(false),
+		},
+		Description: "Run deterministic graph localization over multiple existing project indexes without merging their databases. Results are project-balanced and tagged with canonical project identity; raw graph scores are not treated as comparable across projects. Bounded to 25 indexes and intended for organization-wide discovery, not ACL enforcement. Verify any claim with project-bound source or relationship evidence.",
+		InputSchema: json.RawMessage(`{
+			"type":"object",
+			"properties":{
+				"query":{"type":"string","description":"Symbol or focused relationship concept to localize."},
+				"projects":{"type":"array","items":{"type":"string"},"description":"Optional canonical project names. Omit to search up to 25 indexed projects."},
+				"seed_strategy":{"type":"string","enum":["substring","embedding","hybrid"],"description":"Seed matching strategy; default hybrid."},
+				"depth":{"type":"integer","description":"Graph expansion depth 0-5; default 2."},
+				"per_project_top_k":{"type":"integer","description":"Candidates per project 1-20; default 5."},
+				"top_k":{"type":"integer","description":"Total project-balanced results 1-100; default 25."}
+			},
+			"required":["query"]
+		}`),
+	}, s.handleLocalizeAcrossProjects)
+
 	s.addTool(&mcp.Tool{
 		Name: "list_projects",
 		Annotations: &mcp.ToolAnnotations{

@@ -178,6 +178,12 @@ func (s *Server) handleIndexStatus(_ context.Context, req *mcp.CallToolRequest) 
 		"is_session_project": isSessionProject,
 		"db_path":            filepath.Join(s.router.Dir(), projectName+".db"),
 	}
+	precision := s.storedGraphPrecision(projectName)
+	result["graph_precision"] = precision
+	if graphPrecisionIsDegraded(precision) {
+		result["status"] = "degraded"
+		result["precision_reason"] = "SCIP precision was requested but not applied; graph results are heuristic"
+	}
 	identityCoherent := s.addLiveIndexIdentity(result, st, projectName, proj.RootPath)
 	if !identityCoherent {
 		result["status"] = "degraded"

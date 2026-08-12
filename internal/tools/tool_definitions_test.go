@@ -32,7 +32,7 @@ func TestRegisteredToolDefinitionsJSONIsDeterministicAndComplete(t *testing.T) {
 	if err := json.Unmarshal(first, &definitions); err != nil {
 		t.Fatalf("decode export: %v", err)
 	}
-	if got, want := len(definitions), 38; got != want {
+	if got, want := len(definitions), 40; got != want {
 		t.Fatalf("exported tool count = %d, want %d", got, want)
 	}
 

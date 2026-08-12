@@ -2,7 +2,7 @@
 
 Persistent code knowledge graph MCP server for Claude Code. Structural analysis via tree-sitter AST parsing with a Cypher-like query language.
 
-Originally forked from [DeusData/codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp). Substantially extended with security surface analysis, STIG evidence queries, sensitive data flow tracing, cross-service HTTP linking, dead code detection, change coupling from git history, Louvain community clustering, and more.
+Originally forked from [DeusData/codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp). Substantially extended with security surface analysis, STIG evidence queries, interprocedural graph reachability, cross-service HTTP linking, dead code detection, change coupling from git history, Louvain community clustering, and more.
 
 ## Why This Exists
 
@@ -138,7 +138,7 @@ See [BENCHMARK.md](BENCHMARK.md) for the full per-language breakdown with detail
 | Tool | Purpose |
 |------|---------|
 | `trace_call_path` | BFS call chain traversal with optional risk classification |
-| `trace_data_flow` | Track sensitive data paths through function call chains |
+| `trace_data_flow` | Trace CALLS/READS/WRITES/USAGE reachability. This is not variable-level taint analysis; requests that require taint assurance fail closed with a CodeQL handoff. |
 | `detect_changes` | Map git diff to affected symbols + blast radius with risk classification |
 | `get_relevant_context` | Graph-based file context for LLM agents — callers, callees, tests, change-coupled files in one call |
 
@@ -172,13 +172,58 @@ See [BENCHMARK.md](BENCHMARK.md) for the full per-language breakdown with detail
 | Tool | Purpose |
 |------|---------|
 | `index_repository` | Index a repo into the graph (incremental, content-hash based) |
-| `index_status` | Index stats and status for a project |
+| `index_status` | Index stats, source identity, and the requested/effective graph precision tier for a project |
 | `index_health` | Graph coverage report — parse failures, missing edges, stale files |
 | `list_projects` | Show all indexed projects with node/edge counts |
+| `localize_across_projects` | Project-balanced discovery across up to 25 isolated indexes; scores are not compared across indexes |
+| `compare_project_indexes` | Deterministic file-content and declaration delta between two immutable project indexes |
 | `delete_project` | Remove a project and all its graph data |
 | `manage_adr` | CRUD for Architecture Decision Records |
 | `ingest_traces` | Import OpenTelemetry traces for HTTP_CALLS validation |
 | `visualize` | HTML graph visualization of node neighborhoods |
+
+### Graph precision tiers
+
+The normal `heuristic` tier uses tree-sitter plus static resolution heuristics.
+It is broad and fast, but it is not compiler-grade. Request the optional
+`scip` tier per project when a current SCIP index is available:
+
+```json
+{
+  "repo_path": "/absolute/repository",
+  "precision_tier": "scip",
+  "scip_index_path": "index.scip"
+}
+```
+
+The choice persists for later watcher and incremental runs. `index_repository`
+and `index_status` report the requested and effective tier, index digest,
+document/function coverage, drifted documents, replaced heuristic edges, and
+inserted SCIP calls. If SCIP was requested but is missing or unusable, status
+is visibly degraded and the effective tier remains `heuristic`; the server
+does not silently call that compiler-grade.
+
+SCIP ingestion is a precision layer, not a blanket guarantee. Only covered,
+non-drifted documents receive SCIP-derived calls. Uncovered files retain the
+heuristic graph, and each result still requires source or relationship evidence
+before a consequential claim.
+
+### Relationship accuracy
+
+The current pinned Go CALLS measurement is
+[`bench/accuracy/baselines/2026-08-12-code-graph-go-report.md`](bench/accuracy/baselines/2026-08-12-code-graph-go-report.md).
+Against a deterministic `go/ast` oracle over five production subsets, the
+normal heuristic tier produced scope-aligned precision 0.953, recall 1.000,
+and F1 0.976 (2,869 true positives, 141 false positives, zero false
+negatives). Raw unscoped precision was 0.540 because 2,441 emitted edges came
+from callers outside the oracle's analyzed universe; it must not be presented
+as the same operating point.
+
+This is strong evidence for Go CALLS on one pinned fixture, not a universal
+graph-precision claim. The same current harness does not yet provide an oracle
+for Go IMPORTS, and current edge-level precision/recall is not established for
+every language and relationship type. Consequential results should therefore
+report the effective precision tier and carry source or relationship evidence.
 
 ## Examples
 
@@ -426,6 +471,14 @@ The `get_relevant_context` tool bridges both: given files you plan to modify, it
 | **grep / ripgrep** | Instant text search, regex, no indexing | No understanding of code structure — "main" matches everything | You know the exact string and need instant results. |
 
 **code-graph is best when**: You need to understand code *structure* — call chains, dependencies, blast radius, dead code, test coverage. It's designed for questions about *relationships* between code, not finding code by content.
+
+`trace_data_flow` specifically answers graph-connectivity questions. It follows
+CALLS, READS, WRITES, and USAGE edges and does not model variables, value
+propagation, sanitizers, path feasibility, or source-to-sink taint semantics.
+Pass `required_assurance="variable_level_taint"` when that assurance is
+required; the tool returns a structured `requires_external_analyzer` response
+with a CodeQL handoff instead of returning a reachability path under a taint
+label.
 
 ## Troubleshooting
 

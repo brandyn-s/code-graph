@@ -51,23 +51,25 @@ var instrumentedTools = []string{
 
 	// Plan 3 Phase C — status + write tools:
 	"index_status",
+	"localize_across_projects", // Read-only project-balanced discovery across isolated indexes
 	"delete_project",
 
 	// Plan 5 Phase B — D1 matrix mechanical rollout:
-	"search_code_semantic",   // Voyage embeddings; freshness + provenance + model
-	"rank_by_query",          // Read-graph; std helper
-	"code_localize",          // Read-graph; std helper
-	"code_localize_agent",    // LLM-using; freshness + model + stop_reason->confidence band
-	"diff_graph",             // Read-graph; struct field added (HARD per matrix, mechanical here)
-	"find_rationale",         // Read-graph; std helper
-	"find_similar_functions", // Read-graph; std helper
-	"generate_report",        // Write tool; std helper, action_outcome=created
-	"get_architecture",       // Read-graph; std helper on response map
-	"get_graph_schema",       // Status tool; std helper
-	"get_relevant_context",   // Read-graph; std helper
-	"index_repository",       // Write tool; outcome=created (first index) or updated (re-index)
-	"ingest_traces",          // Write tool; outcome=updated (edges enriched)
-	"manage_adr",             // Multi-mode: get->status, store/update/delete->write helper
+	"search_code_semantic",    // Voyage embeddings; freshness + provenance + model
+	"rank_by_query",           // Read-graph; std helper
+	"code_localize",           // Read-graph; std helper
+	"code_localize_agent",     // LLM-using; freshness + model + stop_reason->confidence band
+	"compare_project_indexes", // Immutable read-only file and declaration snapshot delta
+	"diff_graph",              // Read-graph; struct field added (HARD per matrix, mechanical here)
+	"find_rationale",          // Read-graph; std helper
+	"find_similar_functions",  // Read-graph; std helper
+	"generate_report",         // Write tool; std helper, action_outcome=created
+	"get_architecture",        // Read-graph; std helper on response map
+	"get_graph_schema",        // Status tool; std helper
+	"get_relevant_context",    // Read-graph; std helper
+	"index_repository",        // Write tool; outcome=created (first index) or updated (re-index)
+	"ingest_traces",           // Write tool; outcome=updated (edges enriched)
+	"manage_adr",              // Multi-mode: get->status, store/update/delete->write helper
 
 	// Wave 2 relationship provenance:
 	"get_relationship_evidence", // Resolver + runtime-confirmed edge evidence
@@ -102,6 +104,7 @@ var excludedTools = map[string]string{
 var allMCPToolNames = []string{
 	"code_localize",
 	"code_localize_agent",
+	"compare_project_indexes",
 	"delete_project",
 	"detect_changes",
 	"detect_cycles",
@@ -125,6 +128,7 @@ var allMCPToolNames = []string{
 	"index_status",
 	"ingest_traces",
 	"list_projects",
+	"localize_across_projects",
 	"manage_adr",
 	"query_graph",
 	"query_security_surfaces",

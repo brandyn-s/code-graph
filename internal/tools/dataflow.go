@@ -21,7 +21,7 @@ func (s *Server) registerDataFlowTool() {
 			DestructiveHint: boolPtr(false),
 		},
 
-		Description: "Trace data propagation from a source function through the code graph. Follows outbound CALLS, READS, WRITES, and USAGE edges via BFS to discover where data flows after leaving the source. Classifies each visited node by its security role (sensitive_sink, crypto_operation, auth_boundary, etc.) from enrichment properties. Use to answer: where does user input go? What sinks can a function reach? Does data from an entry point reach a sensitive sink? Not full taint analysis - traces graph connectivity, not variable-level data flow.",
+		Description: "Analyze interprocedural graph reachability from a source function. Follows outbound CALLS, READS, WRITES, and USAGE edges via BFS and classifies reachable nodes by security role. This is graph connectivity, not variable-level taint analysis: it does not model values, sanitizers, control flow, or source-to-sink flow semantics. Use required_assurance='variable_level_taint' to fail closed with a CodeQL handoff instead of returning reachability as vulnerability-grade evidence.",
 		InputSchema: json.RawMessage(`{
 			"type": "object",
 			"properties": {
@@ -36,6 +36,11 @@ func (s *Server) registerDataFlowTool() {
 				"project": {
 					"type": "string",
 					"description": "Project to trace in. Defaults to session project."
+				},
+				"required_assurance": {
+					"type": "string",
+					"enum": ["graph_reachability", "variable_level_taint"],
+					"description": "Required analysis assurance. graph_reachability (default) uses the code graph. variable_level_taint returns a structured CodeQL handoff and does not return graph connectivity as taint evidence."
 				}
 			},
 			"required": ["source"]
@@ -52,6 +57,31 @@ func (s *Server) handleDataFlow(_ context.Context, req *mcp.CallToolRequest) (*m
 	source := getStringArg(args, "source")
 	if source == "" {
 		return errResult("source is required"), nil
+	}
+	requiredAssurance := getStringArg(args, "required_assurance")
+	if requiredAssurance == "" {
+		requiredAssurance = "graph_reachability"
+	}
+	if requiredAssurance != "graph_reachability" && requiredAssurance != "variable_level_taint" {
+		return errResult("required_assurance must be 'graph_reachability' or 'variable_level_taint'"), nil
+	}
+	if requiredAssurance == "variable_level_taint" {
+		return jsonResult(map[string]any{
+			"status":               "requires_external_analyzer",
+			"requested_source":     source,
+			"recommended_analyzer": "CodeQL",
+			"reason":               "trace_data_flow models interprocedural graph connectivity, not variable-level source-to-sink flow",
+			"analysis_contract": map[string]any{
+				"analysis_kind":        "variable_level_taint",
+				"provided_by_tool":     false,
+				"variable_level_taint": true,
+			},
+			"handoff": map[string]any{
+				"required_artifacts": []string{"CodeQL database built from the target revision", "language-appropriate data-flow or taint-tracking query", "source, sink, and sanitizer models"},
+				"acceptance":         "Use CodeQL path results for vulnerability-grade flow claims; graph reachability may be retained only as discovery context.",
+			},
+			"_metadata": s.stdStatusToolMetadata(),
+		}), nil
 	}
 
 	depth := getIntArg(args, "depth", 3)
@@ -179,6 +209,14 @@ func (s *Server) handleDataFlow(_ context.Context, req *mcp.CallToolRequest) (*m
 		"flow_path":   flowPath,
 		"edges":       buildEdgeList(result.Edges),
 		"_metadata":   s.stdReadGraphMetadata(effectiveProject),
+		"analysis_contract": map[string]any{
+			"analysis_kind":        "interprocedural_graph_reachability",
+			"variable_level_taint": false,
+			"edge_semantics":       "CALLS_READS_WRITES_USAGE_connectivity",
+			"soundness":            "heuristic",
+			"allowed_claim":        "a graph path connects the source function to the returned node",
+			"forbidden_claim":      "a runtime value or attacker-controlled datum reaches the returned node",
+		},
 	}
 	s.addIndexStatus(responseData)
 

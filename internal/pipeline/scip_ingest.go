@@ -27,6 +27,7 @@ package pipeline
 // readable SCIP index file.
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"log/slog"
 	"os"
@@ -67,6 +68,23 @@ const (
 	scipAutoDiscoverEnv  = "CBM_SCIP_AUTO_DISCOVER"
 	scipIndexDefaultName = "index.scip"
 )
+
+// SCIPIngestStatus is the machine-readable outcome of the optional SCIP
+// precision pass. Coverage is function-level over the graph's existing
+// Function/Method nodes, not a claim that every language construct is covered.
+type SCIPIngestStatus struct {
+	State                  string  `json:"state"`
+	Source                 string  `json:"source,omitempty"`
+	Documents              int     `json:"documents"`
+	DriftedDocuments       int     `json:"drifted_documents"`
+	ProjectFunctions       int     `json:"project_functions"`
+	CoveredFunctions       int     `json:"covered_functions"`
+	CoveragePercent        float64 `json:"coverage_percent"`
+	HeuristicEdgesReplaced int     `json:"heuristic_edges_replaced"`
+	SCIPCallsInserted      int     `json:"scip_calls_inserted"`
+	IndexSHA256            string  `json:"index_sha256,omitempty"`
+	Error                  string  `json:"error,omitempty"`
+}
 
 // scipAutoDiscoverEnabled reports whether in-repo index discovery is on.
 // Any non-empty value other than an explicit falsey word enables it, matching
@@ -136,8 +154,12 @@ func (fs scipFileSpans) atLine(file string, line int) *scipFuncSpan {
 }
 
 func (p *Pipeline) passSCIPIngest() {
-	path, source := scipIndexPath(p.RepoPath)
+	path, source := p.scipPath, p.scipSource
+	if !p.scipConfigured {
+		path, source = scipIndexPath(p.RepoPath)
+	}
 	if path == "" {
+		p.SCIPStatus = SCIPIngestStatus{State: "disabled", Source: source}
 		return
 	}
 	// Log the source so an auto-discovered index is distinguishable from an
@@ -148,14 +170,23 @@ func (p *Pipeline) passSCIPIngest() {
 		// still in place and correct-by-default.
 		slog.Warn("pass.scip_ingest.err", "path", path, "source", source, "err", err)
 	}
+	p.SCIPStatus.Source = source
 }
 
 //nolint:gocognit // linear two-pass derivation over the index
-func (p *Pipeline) runSCIPIngest(path string) error {
+func (p *Pipeline) runSCIPIngest(path string) (retErr error) {
+	p.SCIPStatus = SCIPIngestStatus{State: "running"}
+	defer func() {
+		if retErr != nil {
+			p.SCIPStatus.State = "failed"
+			p.SCIPStatus.Error = retErr.Error()
+		}
+	}()
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return fmt.Errorf("read index: %w", err)
 	}
+	p.SCIPStatus.IndexSHA256 = fmt.Sprintf("%x", sha256.Sum256(raw))
 	var idx scip.Index
 	if err := proto.Unmarshal(raw, &idx); err != nil {
 		return fmt.Errorf("unmarshal index: %w", err)
@@ -164,6 +195,9 @@ func (p *Pipeline) runSCIPIngest(path string) error {
 	spans, err := p.loadFunctionSpans()
 	if err != nil {
 		return fmt.Errorf("load function spans: %w", err)
+	}
+	for _, fileSpans := range spans {
+		p.SCIPStatus.ProjectFunctions += len(fileSpans)
 	}
 
 	// SCIP symbols for functions/methods end with a `().` descriptor;
@@ -215,6 +249,20 @@ func (p *Pipeline) runSCIPIngest(path string) error {
 		slog.Warn("pass.scip_ingest.drifted_files",
 			"count", len(drifted),
 			"hint", "SCIP index predates current file contents; regenerate it at the indexed commit")
+	}
+	p.SCIPStatus.Documents = len(idx.Documents)
+	p.SCIPStatus.DriftedDocuments = len(drifted)
+	coveredFiles := make(map[string]struct{}, len(idx.Documents))
+	for _, doc := range idx.Documents {
+		if !drifted[doc.RelativePath] {
+			coveredFiles[doc.RelativePath] = struct{}{}
+		}
+	}
+	for file := range coveredFiles {
+		p.SCIPStatus.CoveredFunctions += len(spans[file])
+	}
+	if p.SCIPStatus.ProjectFunctions > 0 {
+		p.SCIPStatus.CoveragePercent = 100 * float64(p.SCIPStatus.CoveredFunctions) / float64(p.SCIPStatus.ProjectFunctions)
 	}
 
 	// Pass 2: derive call edges from call-shaped reference occurrences.
@@ -319,6 +367,9 @@ func (p *Pipeline) runSCIPIngest(path string) error {
 	if err := p.Store.InsertEdgeBatch(derived); err != nil {
 		return fmt.Errorf("insert derived edges: %w", err)
 	}
+	p.SCIPStatus.State = "applied"
+	p.SCIPStatus.HeuristicEdgesReplaced = int(deleted)
+	p.SCIPStatus.SCIPCallsInserted = len(derived)
 
 	slog.Info("pass.scip_ingest.done",
 		"index", path,

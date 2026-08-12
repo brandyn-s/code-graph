@@ -147,6 +147,26 @@ func TestSCIPIngestReplacesCoveredHeuristicEdges(t *testing.T) {
 		t.Fatalf("ingest: %v", err)
 	}
 
+	status := p.SCIPStatus
+	if status.State != "applied" {
+		t.Fatalf("SCIP status state = %q, want applied", status.State)
+	}
+	if status.Documents != 1 || status.DriftedDocuments != 0 {
+		t.Fatalf("SCIP document status = %+v, want 1 usable and 0 drifted", status)
+	}
+	if status.ProjectFunctions != 3 || status.CoveredFunctions != 2 {
+		t.Fatalf("SCIP function coverage = %+v, want 2/3", status)
+	}
+	if status.CoveragePercent < 66.6 || status.CoveragePercent > 66.7 {
+		t.Fatalf("SCIP coverage percent = %v, want about 66.7", status.CoveragePercent)
+	}
+	if status.HeuristicEdgesReplaced != 1 || status.SCIPCallsInserted != 1 {
+		t.Fatalf("SCIP edge replacement status = %+v, want 1 replaced and 1 inserted", status)
+	}
+	if len(status.IndexSHA256) != 64 {
+		t.Fatalf("SCIP index SHA-256 = %q, want 64 hex characters", status.IndexSHA256)
+	}
+
 	edges := callEdges(t, s, p.ProjectName)
 
 	// The wrong heuristic edge (both endpoints covered) is gone.

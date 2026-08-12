@@ -68,6 +68,10 @@ func (s *Server) handleIndexRepository(ctx context.Context, req *mcp.CallToolReq
 	slog.Info("index.resolved_path", "input", repoPath, "absolute", absPath)
 
 	projectName := pipeline.ProjectNameFromPath(absPath)
+	precisionSelection, err := s.resolveGraphPrecision(args, projectName, absPath)
+	if err != nil {
+		return errResult(err.Error()), nil
+	}
 
 	// Lock to prevent concurrent indexing with auto-sync watcher
 	s.indexMu.Lock()
@@ -156,6 +160,7 @@ func (s *Server) handleIndexRepository(ctx context.Context, req *mcp.CallToolReq
 
 	// Run the indexing pipeline with progress reporting
 	p := pipeline.New(ctx, st, absPath, mode)
+	configurePipelinePrecision(p, precisionSelection)
 	p.Progress = func(phase string, pct int, detail string) {
 		slog.Info("index.progress", "project", projectName, "phase", phase, "pct", pct, "detail", detail)
 	}
@@ -183,6 +188,7 @@ func (s *Server) handleIndexRepository(ctx context.Context, req *mcp.CallToolReq
 		}
 		return errResult(fmt.Sprintf("indexing failed: %v", err)), nil
 	}
+	s.persistGraphPrecision(projectName, precisionSelection, p.SCIPStatus)
 	terminalIdentityGuardArmed = true
 	if err := st.SetIndexIdentityState(
 		projectName,
@@ -329,6 +335,11 @@ func (s *Server) handleIndexRepository(ctx context.Context, req *mcp.CallToolReq
 		"edges":         edgeCount,
 		"indexed_at":    indexedAt,
 		"_metadata":     s.stdWriteToolMetadata(outcome),
+	}
+	result["graph_precision"] = graphPrecisionResult(precisionSelection, p.SCIPStatus)
+	if precisionSelection.Tier == graphPrecisionSCIP && p.SCIPStatus.State != "applied" {
+		result["status"] = "degraded"
+		result["precision_reason"] = "SCIP precision was requested but not applied; graph results are heuristic"
 	}
 	embeddingCount, embeddingCountErr := st.EmbeddingCount(projectName)
 	embeddingModels, embeddingModelsErr := st.EmbeddingModelCounts(projectName)

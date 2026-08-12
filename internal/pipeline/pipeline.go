@@ -67,6 +67,18 @@ type Pipeline struct {
 	// on a no-op incremental).
 	LastNodeCount int
 	LastEdgeCount int
+	// SCIPStatus reports whether the optional compiler-index precision tier was
+	// applied and how much of the project's function graph it covered. It is
+	// populated by passSCIPIngest and intentionally kept separate from the
+	// generic node/edge counts so callers cannot mistake a partially-covered
+	// SCIP index for compiler-grade coverage of the whole project.
+	SCIPStatus SCIPIngestStatus
+	// scipConfigured distinguishes an explicit per-project precision choice
+	// (including an explicit heuristic/off choice) from the legacy process-wide
+	// environment fallback.
+	scipConfigured bool
+	scipPath       string
+	scipSource     string
 	// buf holds all nodes/edges in memory during full-index passes 1-14.
 	// nil during incremental mode and post-flush passes 15-18.
 	buf *GraphBuffer
@@ -158,6 +170,15 @@ func New(ctx context.Context, s *store.Store, repoPath string, mode discover.Ind
 		importBindings:  make(map[string]map[string]string),
 		rustCrateMap:    make(map[string]string),
 	}
+}
+
+// ConfigureSCIP binds a per-project compiler index to this pipeline run. An
+// empty path explicitly selects the heuristic tier and suppresses the legacy
+// process-wide environment fallback.
+func (p *Pipeline) ConfigureSCIP(path, source string) {
+	p.scipConfigured = true
+	p.scipPath = path
+	p.scipSource = source
 }
 
 // buildRustCrateMap scans Cargo.toml files under RepoPath, parses

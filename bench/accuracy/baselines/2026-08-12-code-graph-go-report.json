@@ -1,0 +1,1100 @@
+{
+  "schema_version": 1,
+  "date": "2026-08-12",
+  "fixture": "code-graph-go",
+  "sha": "1dab656f84135f8f6a448eb3066598c3f31f3fb5",
+  "short_sha": "1dab656",
+  "project_name": "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812",
+  "results": {
+    "CALLS": {
+      "oracle": "go-ast",
+      "per_project": [
+        {
+          "project": "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store",
+          "oracle_count": 328,
+          "measured_count": 843,
+          "tp": 328,
+          "fp": 412,
+          "fn": 0,
+          "precision": 0.4432,
+          "recall": 1.0,
+          "f1": 0.6142
+        },
+        {
+          "project": "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-cypher",
+          "oracle_count": 289,
+          "measured_count": 290,
+          "tp": 289,
+          "fp": 0,
+          "fn": 0,
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0
+        },
+        {
+          "project": "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-pipeline",
+          "oracle_count": 1089,
+          "measured_count": 1322,
+          "tp": 1089,
+          "fp": 225,
+          "fn": 0,
+          "precision": 0.8288,
+          "recall": 1.0,
+          "f1": 0.9064
+        },
+        {
+          "project": "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-tools",
+          "oracle_count": 724,
+          "measured_count": 734,
+          "tp": 724,
+          "fp": 10,
+          "fn": 0,
+          "precision": 0.9864,
+          "recall": 1.0,
+          "f1": 0.9931
+        },
+        {
+          "project": "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-cbm",
+          "oracle_count": 439,
+          "measured_count": 2121,
+          "tp": 439,
+          "fp": 5,
+          "fn": 0,
+          "precision": 0.9887,
+          "recall": 1.0,
+          "f1": 0.9943
+        }
+      ],
+      "oracle_count": 2869,
+      "measured_count": 5310,
+      "oracle_caller_count": 1282,
+      "exact": {
+        "tp": 2869,
+        "fp": 2441,
+        "fn": 0,
+        "precision": 0.5403,
+        "recall": 1.0,
+        "f1": 0.7016
+      },
+      "suffix_3seg": {
+        "tp": 2869,
+        "fp": 2441,
+        "fn": 0,
+        "precision": 0.5403,
+        "recall": 1.0,
+        "f1": 0.7016
+      },
+      "scope_aligned": {
+        "tp": 2869,
+        "fp": 141,
+        "fn": 0,
+        "precision": 0.9532,
+        "recall": 1.0,
+        "f1": 0.976
+      },
+      "scope_aligned_high_confidence": {
+        "tp": 2869,
+        "fp": 141,
+        "fn": 0,
+        "precision": 0.9532,
+        "recall": 1.0,
+        "f1": 0.976
+      },
+      "scope_impl_normalized": {
+        "tp": 2869,
+        "fp": 141,
+        "fn": 0,
+        "precision": 0.9532,
+        "recall": 1.0,
+        "f1": 0.976
+      },
+      "scope_generic_normalized": {
+        "tp": 2869,
+        "fp": 141,
+        "fn": 0,
+        "precision": 0.9532,
+        "recall": 1.0,
+        "f1": 0.976
+      },
+      "scope_canonical": {
+        "tp": 2869,
+        "fp": 141,
+        "fn": 0,
+        "precision": 0.9532,
+        "recall": 1.0,
+        "f1": 0.976
+      },
+      "sample_fp_exact": [
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-cbm.arena",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-cbm.arena.arena_grow",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-cbm.arena",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-cbm.arena.cbm_arena_alloc",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-cbm.cbm",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-cbm.arena.cbm_arena_destroy",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-cbm.cbm",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-cbm.arena.cbm_arena_init",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-cbm.cbm",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-cbm.arena.cbm_arena_strdup",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-cbm.cbm",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-cbm.cbm.get_thread_parser",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-cbm.cbm",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-cbm.cbm.now_ns",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-cbm.cbm",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-cbm.extract_defs.cbm_extract_definitions",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-cbm.cbm",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-cbm.extract_imports.cbm_extract_imports",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-cbm.cbm",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-cbm.extract_unified.cbm_extract_unified",
+          "CALLS"
+        ]
+      ],
+      "sample_fn_exact": [],
+      "sample_fp_scoped": [
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-cbm.cbm.ExtractFile",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-cbm.cbm.cbm_extract_file",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-cbm.cbm.ExtractFile",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-cbm.cbm.cbm_free_result",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-cbm.lsp_bridge.RunGoLSPCrossFile",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-cbm.arena.cbm_arena_destroy",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-cbm.lsp_bridge.RunGoLSPCrossFile",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-cbm.arena.cbm_arena_init",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-cbm.lsp_bridge.RunGoLSPCrossFile",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-cbm.lsp.go_lsp.cbm_run_go_lsp_cross",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-pipeline.adaptive.adaptivePool.onTick",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-pipeline.adaptive_csw_unix.getContentionSignal",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-pipeline.configlink_strategies.Pipeline.matchTerraformEnvVars",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-pipeline.resolver.FunctionRegistry.Size",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-pipeline.envscan.ScanProjectEnvURLs",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-pipeline.resolver.FunctionRegistry.Size",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-pipeline.go_dep_registry.goLSPDefIndex.integrateThirdPartyDeps",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-pipeline.go_dep_registry.goDepVersions.resolveModDir",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-pipeline.infrascan.Pipeline.passInfraFiles",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-pipeline.resolver.FunctionRegistry.Size",
+          "CALLS"
+        ]
+      ],
+      "sample_fn_scoped": [],
+      "fp_scoped_full": [
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-cbm.cbm.ExtractFile",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-cbm.cbm.cbm_extract_file",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-cbm.cbm.ExtractFile",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-cbm.cbm.cbm_free_result",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-cbm.lsp_bridge.RunGoLSPCrossFile",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-cbm.arena.cbm_arena_destroy",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-cbm.lsp_bridge.RunGoLSPCrossFile",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-cbm.arena.cbm_arena_init",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-cbm.lsp_bridge.RunGoLSPCrossFile",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-cbm.lsp.go_lsp.cbm_run_go_lsp_cross",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-pipeline.adaptive.adaptivePool.onTick",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-pipeline.adaptive_csw_unix.getContentionSignal",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-pipeline.configlink_strategies.Pipeline.matchTerraformEnvVars",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-pipeline.resolver.FunctionRegistry.Size",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-pipeline.envscan.ScanProjectEnvURLs",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-pipeline.resolver.FunctionRegistry.Size",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-pipeline.go_dep_registry.goLSPDefIndex.integrateThirdPartyDeps",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-pipeline.go_dep_registry.goDepVersions.resolveModDir",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-pipeline.infrascan.Pipeline.passInfraFiles",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-pipeline.resolver.FunctionRegistry.Size",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-pipeline.pass_embeddings.Pipeline.passEmbeddings",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-pipeline.adaptive.contentionTier.String",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-pipeline.pass_embeddings.Pipeline.passEmbeddings",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-pipeline.voyage_client.VoyageClient.EmbedBatch",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-pipeline.pipeline.Pipeline.classifyFiles",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-pipeline.resolver.FunctionRegistry.Size",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-pipeline.pipeline.Pipeline.passDefinitions",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-pipeline.adaptive.adaptivePool.acquire",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-pipeline.pipeline.Pipeline.passDefinitions",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-pipeline.adaptive.adaptivePool.monitor",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-pipeline.pipeline.Pipeline.passDefinitions",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-pipeline.adaptive.adaptivePool.releaseBytes",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-pipeline.pipeline.Pipeline.passDefinitions",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-pipeline.adaptive.adaptivePool.stop",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-pipeline.pipeline.Pipeline.passDefinitions",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-pipeline.prefetch.prefetcher.advance",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-pipeline.pipeline.Pipeline.passDefinitions",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-pipeline.prefetch.prefetcher.run",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-pipeline.pipeline.Pipeline.passHTTPLinks",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-pipeline.pipeline.New",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-pipeline.pipeline.Pipeline.passHTTPLinks",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-pipeline.pipeline.Pipeline.Run",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-pipeline.pipeline.Pipeline.updateFileHashes",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-pipeline.resolver.FunctionRegistry.Size",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-pipeline.pipeline_cbm.cbmParseFile",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-pipeline.mmap_unix.mmapFile",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.architecture.Store.StoreADR",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.store.Querier.Exec",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.architecture.Store.archBoundaries",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.architecture.Store.archBoundaries",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.nodes.scanner.Scan",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.architecture.Store.archBoundaries",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.store.Querier.Query",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.architecture.Store.archClusters",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.architecture.Store.archClusters",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.nodes.scanner.Scan",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.architecture.Store.archClusters",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.store.Querier.Query",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.architecture.Store.archFileTree",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.architecture.Store.archFileTree",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.nodes.scanner.Scan",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.architecture.Store.archFileTree",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.store.Querier.Query",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.architecture.Store.archHotspots",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.architecture.Store.archHotspots",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.nodes.scanner.Scan",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.architecture.Store.archHotspots",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.store.Querier.Query",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.architecture.Store.archLanguages",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.architecture.Store.archLanguages",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.nodes.scanner.Scan",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.architecture.Store.archLanguages",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.store.Querier.Query",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.architecture.Store.archLayers",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.architecture.Store.archLayers",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.nodes.scanner.Scan",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.architecture.Store.archLayers",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.store.Querier.Query",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.architecture.Store.archPackages",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.architecture.Store.archPackages",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.nodes.scanner.Scan",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.architecture.Store.archPackages",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.store.Querier.Query",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.architecture.Store.archPackagesByQN",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.architecture.Store.archPackagesByQN",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.nodes.scanner.Scan",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.architecture.Store.archPackagesByQN",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.store.Querier.Query",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.architecture.Store.archRoutes",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.architecture.Store.archRoutes",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.nodes.scanner.Scan",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.architecture.Store.archRoutes",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.store.Querier.Query",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.architecture.Store.archServices",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.architecture.Store.archServices",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.nodes.scanner.Scan",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.architecture.Store.archServices",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.store.Querier.Query",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.architecture.Store.loadNodePackageMap",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.architecture.Store.loadNodePackageMap",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.nodes.scanner.Scan",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.architecture.Store.loadNodePackageMap",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.store.Querier.Query",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.auto_recovery.OpenPathWithAutoRecovery",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.auto_recovery.RecoveryEvent.String",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.bulk.Store.bulkInsertEdgeChunk",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.auto_recovery.RecoveryEvent.String",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.bulk.Store.bulkInsertEdgeChunk",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.store.Querier.Exec",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.bulk.Store.bulkInsertNodeChunk",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.auto_recovery.RecoveryEvent.String",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.bulk.Store.bulkInsertNodeChunk",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.store.Querier.Exec",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.cache.QueryCache.Set",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.store.Now",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.edges.Store.AllEdges",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.edges.Store.AllEdges",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.store.Querier.Query",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.edges.Store.FindEdgesBySource",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.edges.Store.FindEdgesBySource",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.store.Querier.Query",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.edges.Store.FindEdgesBySourceAndType",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.edges.Store.FindEdgesBySourceAndType",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.store.Querier.Query",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.edges.Store.FindEdgesBySourceIDs",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.edges.Store.FindEdgesBySourceIDs",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.store.Querier.Query",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.edges.Store.FindEdgesByTarget",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.edges.Store.FindEdgesByTarget",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.store.Querier.Query",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.edges.Store.FindEdgesByTargetAndType",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.edges.Store.FindEdgesByTargetAndType",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.store.Querier.Query",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.edges.Store.FindEdgesByTargetIDs",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.edges.Store.FindEdgesByTargetIDs",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.store.Querier.Query",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.edges.Store.FindEdgesByType",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.edges.Store.FindEdgesByType",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.store.Querier.Query",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.edges.Store.FindEdgesByURLPath",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.edges.Store.FindEdgesByURLPath",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.store.Querier.Query",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.edges.Store.InsertEdge",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.store.Querier.Exec",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.edges.Store.insertEdgeChunk",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.auto_recovery.RecoveryEvent.String",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.edges.Store.insertEdgeChunk",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.store.Querier.Exec",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.embeddings.Store.UpsertEmbedding",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.store.Querier.ExecContext",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.embeddings.Store.UpsertEmbeddingBatch",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.embeddings.Store.UpsertEmbeddingBatch",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.store.Querier.Exec",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.embeddings.Store.UpsertEmbeddingBatch",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.store.Querier.Prepare",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.embeddings.Store.loadEmbeddingCache",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.embeddings.Store.loadEmbeddingCache",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.nodes.scanner.Scan",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.embeddings.Store.loadEmbeddingCache",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.store.Querier.QueryContext",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.migrate.StoreRouter.migrate",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.migrate.StoreRouter.migrate",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.nodes.scanner.Scan",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.migrate.StoreRouter.migrate",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.store.Open",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.migrate.StoreRouter.migrate",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.store.Querier.QueryContext",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.migrate.StoreRouter.migrateProject",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.migrate.StoreRouter.migrateProject",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.nodes.scanner.Scan",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.migrate.StoreRouter.migrateProject",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.store.Querier.ExecContext",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.migrate.StoreRouter.migrateProject",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.store.Querier.QueryRowContext",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.nodes.Store.AllNodes",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.nodes.Store.AllNodes",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.store.Querier.Query",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.nodes.Store.FindNodeByID",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.store.Querier.QueryRow",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.nodes.Store.FindNodeByQN",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.store.Querier.QueryRow",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.nodes.Store.FindNodesByFile",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.nodes.Store.FindNodesByFile",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.store.Querier.Query",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.nodes.Store.FindNodesByFileOverlap",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.nodes.Store.FindNodesByFileOverlap",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.store.Querier.Query",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.nodes.Store.FindNodesByIDs",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.nodes.Store.FindNodesByIDs",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.store.Querier.Query",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.nodes.Store.FindNodesByLabel",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.nodes.Store.FindNodesByLabel",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.store.Querier.Query",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.nodes.Store.FindNodesByName",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.nodes.Store.FindNodesByName",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.store.Querier.Query",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.nodes.Store.FindNodesByProperty",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.nodes.Store.FindNodesByProperty",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.store.Querier.Query",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.nodes.Store.FindNodesByQNSuffix",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.nodes.Store.FindNodesByQNSuffix",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.store.Querier.Query",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.nodes.Store.UpsertNode",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.nodes.scanner.Scan",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.nodes.Store.UpsertNode",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.store.Querier.Exec",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.nodes.Store.UpsertNode",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.store.Querier.QueryRow",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.nodes.Store.upsertNodeChunk",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.auto_recovery.RecoveryEvent.String",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.nodes.Store.upsertNodeChunk",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.store.Querier.Exec",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.nodes.scanNode",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.nodes.scanner.Scan",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.projects.Store.UpsertProject",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.store.Querier.Exec",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.router.StoreRouter.AllStores",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.store.Now",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.router.StoreRouter.DeleteProject",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.router.StoreRouter.ListProjects",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.router.StoreRouter.ListProjects",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.router.StoreRouter.evictIdle",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.router.StoreRouter.evictIdle",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.store.Now",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.router.StoreRouter.getOrOpenLocked",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.store.Now",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.search.Store.executeSearchQuery",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.search.Store.executeSearchQuery",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.nodes.scanner.Scan",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.search.Store.executeSearchQuery",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.store.Querier.Query",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.store.Store.BeginBulkWrite",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.store.Querier.ExecContext",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.store.Store.EndBulkWrite",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.store.Querier.ExecContext",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.store.Store.WithLargeCache",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.store.Querier.ExecContext",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.store.Store.restoreDefaultCache",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.store.Querier.ExecContext",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.traverse.Store.BFS",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.config.ConfigStore.Close",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.traverse.Store.BFS",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.nodes.scanner.Scan",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.traverse.Store.BFS",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store.store.Querier.Query",
+          "CALLS"
+        ],
+        [
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-tools.tools.NewServer",
+          "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-tools.tools.NewServer",
+          "CALLS"
+        ]
+      ],
+      "fn_scoped_full": [],
+      "caller_kind_precision": {
+        "function-body": {
+          "tp": 286,
+          "fp": 10,
+          "precision": 0.9662,
+          "support": 296
+        },
+        "method-body": {
+          "tp": 1259,
+          "fp": 131,
+          "precision": 0.9058,
+          "support": 1390
+        },
+        "test-body": {
+          "tp": 1324,
+          "fp": 0,
+          "precision": 1.0,
+          "support": 1324
+        }
+      },
+      "pkg_block_caller_FP_rate": {
+        "value": 0.0,
+        "alarm": false,
+        "fp_count": 0,
+        "fp_total": 141
+      },
+      "caller_kind_complement_legitimacy": {
+        "value": 0.5601,
+        "legitimate_count": 1686,
+        "population_total": 3010
+      },
+      "modality_precision": {
+        "cross-package-unique-name": {
+          "tp": 1996,
+          "fp": 99,
+          "precision": 0.9527,
+          "support": 2095
+        },
+        "exact-qn-match": {
+          "tp": 593,
+          "fp": 0,
+          "precision": 1.0,
+          "support": 593
+        },
+        "same-package-shadow": {
+          "tp": 265,
+          "fp": 0,
+          "precision": 1.0,
+          "support": 265
+        }
+      },
+      "modality_mix_gini": {
+        "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store": 0.6064,
+        "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-cypher": 0.4957,
+        "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-pipeline": 0.6327,
+        "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-tools": 0.5859,
+        "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-cbm": 0.1599
+      },
+      "caller_context_tuple_precision": {
+        "function-body|cross-package-imported": {
+          "caller_kind": "function-body",
+          "callee_package_relation": "cross-package-imported",
+          "tp": 84,
+          "fp": 7,
+          "precision": 0.9231,
+          "support": 91
+        },
+        "function-body|same-package": {
+          "caller_kind": "function-body",
+          "callee_package_relation": "same-package",
+          "tp": 202,
+          "fp": 3,
+          "precision": 0.9854,
+          "support": 205
+        },
+        "method-body|cross-package-imported": {
+          "caller_kind": "method-body",
+          "callee_package_relation": "cross-package-imported",
+          "tp": 898,
+          "fp": 129,
+          "precision": 0.8744,
+          "support": 1027
+        },
+        "method-body|same-package": {
+          "caller_kind": "method-body",
+          "callee_package_relation": "same-package",
+          "tp": 361,
+          "fp": 2,
+          "precision": 0.9945,
+          "support": 363
+        },
+        "test-body|cross-package-imported": {
+          "caller_kind": "test-body",
+          "callee_package_relation": "cross-package-imported",
+          "tp": 933,
+          "fp": 0,
+          "precision": 1.0,
+          "support": 933
+        },
+        "test-body|same-package": {
+          "caller_kind": "test-body",
+          "callee_package_relation": "same-package",
+          "tp": 391,
+          "fp": 0,
+          "precision": 1.0,
+          "support": 391
+        }
+      },
+      "method_set_ambiguity_index": {
+        "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-store": {
+          "value": 0.1681,
+          "ambiguous_sites": 39,
+          "total_sites": 232
+        },
+        "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-cypher": {
+          "value": 0.0,
+          "ambiguous_sites": 0,
+          "total_sites": 134
+        },
+        "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-pipeline": {
+          "value": 0.0059,
+          "ambiguous_sites": 3,
+          "total_sites": 505
+        },
+        "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-tools": {
+          "value": 0.0,
+          "ambiguous_sites": 0,
+          "total_sites": 204
+        },
+        "Users-brandyn.schult-worktrees-code-graph-relationship-fixture-0812-internal-cbm": {
+          "value": 0.0,
+          "ambiguous_sites": 0,
+          "total_sites": 207
+        }
+      },
+      "janusian_site_precision_split": {
+        "ambiguous": {
+          "tp": 2,
+          "fp": 40,
+          "precision": 0.0476,
+          "support": 42
+        },
+        "unambiguous": {
+          "tp": 2867,
+          "fp": 101,
+          "precision": 0.966,
+          "support": 2968
+        }
+      },
+      "janusian_precision_gap": 0.9184
+    },
+    "IMPORTS": {
+      "oracle": "go-ast (dropped)",
+      "oracle_count": 0,
+      "measured_count": 80,
+      "status": "known_limitation",
+      "note": "Go oracle drops IMPORTS until import-path -> internal-file-QN resolution is added."
+    }
+  }
+}

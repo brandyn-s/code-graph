@@ -214,7 +214,8 @@ project-level tier status and legacy SCIP provenance are insufficient.
 
 ### Relationship accuracy
 
-The released `v0.8.0-redacted.5` compiler-tier CALLS measurement is
+The compiler-tier CALLS behavior first released in `v0.8.0-redacted.5` and
+retained in `v0.8.0-redacted.6` is measured in
 [`bench/accuracy/baselines/2026-08-12-compiler-tier-calls-report.md`](bench/accuracy/baselines/2026-08-12-compiler-tier-calls-report.md).
 An independent Go SSA/RTA oracle that reads neither SCIP nor graph output
 measured only `scip-ingest` edges bound to the exact input artifact. Across
@@ -232,6 +233,22 @@ and F1 0.976 (2,869 true positives, 141 false positives, zero false
 negatives). Raw unscoped precision was 0.540 because 2,441 emitted edges came
 from callers outside the oracle's analyzed universe; it must not be presented
 as the same operating point.
+
+### Very-large-repository measurement
+
+The released `v0.8.0-redacted.6` binary completed a clean LLVM checkout pinned
+to `2078da43e25a4623cab2d0d60decddf709aaea28`: 160,123 tracked files and
+39,222,246 UTF-8 source lines. It produced 729,625 nodes and 2,302,869 edges in
+2,198.0 seconds, used 9.43 GB peak RSS, and persisted a 2.89 GB index (73.7
+bytes per source line). Five identical warm queries measured 9.78 seconds p50
+and 10.50 seconds p95.
+
+The zero-LLM result file is bound by SHA-256
+`11681c997a2060aea9561a3f0c6c61f26fc5899d51af89330d609bc3c9653a2b`.
+This demonstrates very-large-repository operation on one host. It does not
+demonstrate a distributed organizational fleet or class-leading resource
+efficiency; peak memory and warm-query latency remain explicit optimization
+targets.
 
 These are strong but bounded Go CALLS results, not a universal graph-precision
 claim. Compiler-tier Cobra recall was 0.867 and remains visible. The compiler
@@ -540,11 +557,12 @@ No API keys, no Docker, no external databases. Single binary, zero infrastructur
 
 Releases are built via `workflow_dispatch` on `release.yml`. Download them from
 [redacted releases](https://github.com/redacted-org/code-graph/releases).
-The current plugin-bound release is `v0.8.0-redacted.5`; it was built from
-commit `41b8400951aa7a4da478e9d79486e47f7e4ae075`, has per-platform checksums and
-GitHub-hosted build provenance, and is exercised by the compiler-tier report
-above. Later documentation or benchmark commits do not change those release
-bytes.
+The current plugin-bound release is `v0.8.0-redacted.6`; it was built from
+commit `3eae292836f45932be7faa237a1c2adc6721c69b`, has per-platform checksums and
+GitHub-hosted build provenance, and retains the compiler-tier behavior measured
+above. Relative to `.5`, `.6` indexes qualified-name suffix lookups used during
+import resolution instead of scanning every graph node for each candidate; an
+exact-match regression test preserves the lookup contract.
 This is an internal package in a private repository. It is not published to the public MCP Registry,
 which does not support private package downloads. The setup scripts therefore
 require an authenticated GitHub CLI session with access to the repository.

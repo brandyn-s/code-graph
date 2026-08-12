@@ -206,7 +206,11 @@ does not silently call that compiler-grade.
 SCIP ingestion is a precision layer, not a blanket guarantee. Only covered,
 non-drifted documents receive SCIP-derived calls. Uncovered files retain the
 heuristic graph, and each result still requires source or relationship evidence
-before a consequential claim.
+before a consequential claim. `get_relationship_evidence` binds the exact
+ingested index SHA-256 into each SCIP-derived `relationship_ref`. A downstream
+assurance evaluator may treat that individual edge as compiler-resolved only
+when `resolution_source` is `scip-ingest` and the artifact digest is present;
+project-level tier status and legacy SCIP provenance are insufficient.
 
 ### Relationship accuracy
 

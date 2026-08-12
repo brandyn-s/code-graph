@@ -247,6 +247,7 @@ func (p *Pipeline) deriveSCIPCalls(
 	spans scipFileSpans,
 	definitions map[string]scipDefinitionLocation,
 	drifted map[string]bool,
+	indexSHA256 string,
 ) (derived []*store.Edge, referencesSeen, callShaped int) {
 	cache := scipSourceCache{repoRoot: p.RepoPath, lines: make(map[string][]string)}
 	seen := make(map[scipEdgePair]bool)
@@ -294,7 +295,10 @@ func (p *Pipeline) deriveSCIPCalls(
 			seen[pair] = true
 			derived = append(derived, &store.Edge{
 				Project: p.ProjectName, SourceID: caller.id, TargetID: callee.id, Type: "CALLS",
-				Properties: map[string]any{"resolver_rule": "scip-ingest"},
+				Properties: map[string]any{
+					"resolver_rule":              "scip-ingest",
+					"resolution_artifact_sha256": indexSHA256,
+				},
 			})
 		}
 	}
@@ -375,7 +379,13 @@ func (p *Pipeline) runSCIPIngest(path string) (retErr error) {
 	}
 
 	// Pass 2: derive call edges from call-shaped reference occurrences.
-	derived, refsSeen, callShaped := p.deriveSCIPCalls(&idx, spans, definitions, drifted)
+	derived, refsSeen, callShaped := p.deriveSCIPCalls(
+		&idx,
+		spans,
+		definitions,
+		drifted,
+		p.SCIPStatus.IndexSHA256,
+	)
 
 	// Replace heuristic CALLS edges only where the index can re-derive
 	// them: BOTH endpoints must live in covered, non-drifted files. Edges

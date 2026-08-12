@@ -1,6 +1,9 @@
 package evidence
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestSymbolRefCrossEngineVector(t *testing.T) {
 	ref := NewSymbolRef(
@@ -165,6 +168,44 @@ func TestRelationshipEvidenceCrossEngineVectors(t *testing.T) {
 	const expectedObservation = "obs:v1:3f199e7202bb70d076c1a363b3caf4fbe96209f0a537ecfe1f53502a448fac45"
 	if observation.ID != expectedObservation {
 		t.Fatalf("relationship observation id mismatch: got %s want %s", observation.ID, expectedObservation)
+	}
+}
+
+func TestCodeQLAnalysisEvidenceCrossEngineVectors(t *testing.T) {
+	analysis := NewCodeQLAnalysisRef(
+		strings.Repeat("r", 64),
+		strings.Repeat("s", 40),
+		strings.Repeat("g", 64),
+		"2.23.1",
+		"codeql/python-all@4.0.0",
+		"python",
+		strings.Repeat("a", 64),
+		strings.Repeat("d", 64),
+		DatabaseQuality{Status: "pass", SourceFiles: 18, BaselineLines: 640, ExtractorErrors: 0},
+		strings.Repeat("b", 64),
+		strings.Repeat("c", 64),
+		"py/sql-injection",
+		0,
+		0,
+		0,
+		[]AnalysisPathStep{
+			{Position: 0, Role: "source", RelativePath: "src/api/reports.py", StartLine: 4, StartColumn: 12, EndLine: 4, EndColumn: 24},
+			{Position: 1, Role: "sink", RelativePath: "src/db/execute.py", StartLine: 9, StartColumn: 5, EndLine: 9, EndColumn: 20},
+		},
+	)
+	const expectedAnalysis = "analysis:v1:29c85cc6883ce4d1adc1d5120ea668d46fbe6525c4d8591947907a76a1dc6a3d"
+	if analysis.ID != expectedAnalysis {
+		t.Fatalf("analysis id mismatch: got %s want %s", analysis.ID, expectedAnalysis)
+	}
+	evidence := NewAnalysisEvidenceRef(analysis)
+	const expectedEvidence = "ev:v1:7a8c367829a4f498212bfc21a90ee971a9a3526417fa0f059f88d949e25f81e8"
+	if evidence.ID != expectedEvidence {
+		t.Fatalf("analysis evidence id mismatch: got %s want %s", evidence.ID, expectedEvidence)
+	}
+	observation := NewObservationRef(evidence, "support", "codeql", "codeql_path", "high")
+	const expectedObservation = "obs:v1:0c02b0c3e8928e3b0a357e5edd009ddb910a24c8e87650155f38af163de18cbf"
+	if observation.ID != expectedObservation {
+		t.Fatalf("analysis observation id mismatch: got %s want %s", observation.ID, expectedObservation)
 	}
 }
 

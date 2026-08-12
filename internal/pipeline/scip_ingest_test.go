@@ -181,6 +181,13 @@ func TestSCIPIngestReplacesCoveredHeuristicEdges(t *testing.T) {
 	if props["resolver_rule"] != "scip-ingest" {
 		t.Errorf("derived edge resolver_rule = %v, want scip-ingest", props["resolver_rule"])
 	}
+	if props["resolution_artifact_sha256"] != status.IndexSHA256 {
+		t.Errorf(
+			"derived edge artifact = %v, want %s",
+			props["resolution_artifact_sha256"],
+			status.IndexSHA256,
+		)
+	}
 	// The heuristic edge whose caller is uncovered survives (fallback layer).
 	if _, ok := edges[[2]int64{ids["Other"], ids["Callee"]}]; !ok {
 		t.Error("heuristic edge from uncovered caller was deleted")

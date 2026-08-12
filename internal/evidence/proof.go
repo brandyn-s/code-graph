@@ -1,7 +1,10 @@
 package evidence
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -40,14 +43,28 @@ type InvariantResult struct {
 	Unresolved int    `json:"unresolved"`
 }
 
+type AssuranceRequirement struct {
+	RequiredCapabilities []string `json:"required_capabilities"`
+}
+
+type AssuranceLattice struct {
+	RequiredCapabilities             []string `json:"required_capabilities"`
+	SupportingCapabilities           []string `json:"supporting_capabilities"`
+	ContradictingCapabilities        []string `json:"contradicting_capabilities"`
+	MissingSupportingCapabilities    []string `json:"missing_supporting_capabilities"`
+	MissingContradictingCapabilities []string `json:"missing_contradicting_capabilities"`
+	SatisfiedBy                      *string  `json:"satisfied_by"`
+}
+
 type ProofBundle struct {
-	SchemaVersion       int                 `json:"schema_version"`
-	Claim               ClaimRef            `json:"claim"`
-	IndexState          IndexState          `json:"index_state"`
-	Observations        []ObservationRef    `json:"observations"`
-	ContradictionSearch ContradictionSearch `json:"contradiction_search"`
-	Coverage            Coverage            `json:"coverage"`
-	Invariant           *InvariantResult    `json:"invariant,omitempty"`
+	SchemaVersion        int                   `json:"schema_version"`
+	Claim                ClaimRef              `json:"claim"`
+	IndexState           IndexState            `json:"index_state"`
+	AssuranceRequirement *AssuranceRequirement `json:"assurance_requirement,omitempty"`
+	Observations         []ObservationRef      `json:"observations"`
+	ContradictionSearch  ContradictionSearch   `json:"contradiction_search"`
+	Coverage             Coverage              `json:"coverage"`
+	Invariant            *InvariantResult      `json:"invariant,omitempty"`
 }
 
 type Confidence struct {
@@ -69,6 +86,17 @@ type ProofResult struct {
 	Coverage                    Coverage            `json:"coverage"`
 	ContradictionSearch         ContradictionSearch `json:"contradiction_search"`
 	Invariant                   *InvariantResult    `json:"invariant,omitempty"`
+	AssuranceLattice            AssuranceLattice    `json:"assurance_lattice"`
+}
+
+var assuranceCapabilities = map[string]bool{
+	"source_coordinates":      true,
+	"semantic_retrieval":      true,
+	"lexical_retrieval":       true,
+	"structural_relationship": true,
+	"compiler_resolution":     true,
+	"runtime_observation":     true,
+	"variable_level_taint":    true,
 }
 
 func validToken(value string, allowed ...string) bool {
@@ -123,13 +151,22 @@ func validateRelationshipRef(ref *RelationshipRef) error {
 	if !validToken(ref.ConfidenceBand, "high", "medium", "low", "speculative", "unknown") {
 		return fmt.Errorf("relationship confidence band %q is invalid", ref.ConfidenceBand)
 	}
+	if ref.ResolutionArtifactSHA256 != "" {
+		decoded, err := hex.DecodeString(ref.ResolutionArtifactSHA256)
+		if err != nil || len(decoded) != sha256.Size || strings.ToLower(ref.ResolutionArtifactSHA256) != ref.ResolutionArtifactSHA256 {
+			return fmt.Errorf("resolution_artifact_sha256 must be 64 lowercase hex characters")
+		}
+		if !slices.Contains(strings.Split(ref.ResolutionSource, "+"), "scip-ingest") {
+			return fmt.Errorf("resolution_artifact_sha256 requires scip-ingest provenance")
+		}
+	}
 	if ref.RuntimeObserved && ref.ObservationCount == 0 {
 		return fmt.Errorf("runtime_observed requires a positive observation_count")
 	}
 	if !ref.RuntimeObserved && ref.ObservationCount != 0 {
 		return fmt.Errorf("observation_count requires runtime_observed=true")
 	}
-	expected := NewRelationshipRef(
+	expected := NewRelationshipRefWithArtifact(
 		ref.RepositoryID,
 		ref.SourceRevision,
 		ref.IndexGeneration,
@@ -137,6 +174,7 @@ func validateRelationshipRef(ref *RelationshipRef) error {
 		ref.SourceSymbolRef,
 		ref.TargetSymbolRef,
 		ref.ResolutionSource,
+		ref.ResolutionArtifactSHA256,
 		ref.ConfidenceBand,
 		ref.RuntimeObserved,
 		ref.ObservationCount,
@@ -151,8 +189,25 @@ func validateEvidenceRef(ref *EvidenceRef) error {
 	if err := validateSymbolRef(ref.SymbolRef); err != nil {
 		return err
 	}
+	if ref.RelationshipRef != nil && ref.AnalysisRef != nil {
+		return fmt.Errorf("evidence_ref cannot contain both relationship_ref and analysis_ref")
+	}
 	var expected EvidenceRef
-	if ref.RelationshipRef == nil {
+	if ref.AnalysisRef != nil {
+		if err := validateAnalysisRef(ref.AnalysisRef); err != nil {
+			return err
+		}
+		analysis := ref.AnalysisRef
+		if analysis.RepositoryID != ref.RepositoryID ||
+			analysis.SourceRevision != ref.SourceRevision ||
+			analysis.IndexGeneration != ref.IndexGeneration {
+			return fmt.Errorf("analysis_ref belongs to different evidence coordinates")
+		}
+		if ref.EvidenceType != "codeql_path" {
+			return fmt.Errorf("analysis_ref requires codeql_path evidence")
+		}
+		expected = NewAnalysisEvidenceRef(*analysis)
+	} else if ref.RelationshipRef == nil {
 		expected = NewEvidenceRef(
 			ref.RepositoryID,
 			ref.SourceRevision,
@@ -180,6 +235,58 @@ func validateEvidenceRef(ref *EvidenceRef) error {
 	}
 	if ref.ID != expected.ID {
 		return fmt.Errorf("evidence_ref id does not match canonical contents")
+	}
+	return nil
+}
+
+func validateAnalysisRef(ref *AnalysisRef) error {
+	if ref == nil {
+		return nil
+	}
+	if ref.AnalysisKind != "variable_level_taint" || ref.Analyzer != "codeql" {
+		return fmt.Errorf("analysis_ref must be CodeQL variable_level_taint")
+	}
+	if ref.DatabaseQuality.Status != "pass" || ref.DatabaseQuality.SourceFiles <= 0 || ref.DatabaseQuality.BaselineLines <= 0 || ref.DatabaseQuality.ExtractorErrors < 0 {
+		return fmt.Errorf("analysis_ref database quality is not passing")
+	}
+	if len(ref.PathSteps) < 2 {
+		return fmt.Errorf("analysis_ref path must contain at least two steps")
+	}
+	for i, step := range ref.PathSteps {
+		wantRole := "intermediate"
+		if i == 0 {
+			wantRole = "source"
+		} else if i == len(ref.PathSteps)-1 {
+			wantRole = "sink"
+		}
+		if step.Position != i || step.Role != wantRole {
+			return fmt.Errorf("analysis_ref path step %d has invalid position or role", i)
+		}
+		if step.StartLine <= 0 || step.StartColumn <= 0 || step.EndLine <= 0 || step.EndColumn <= 0 ||
+			step.EndLine < step.StartLine || (step.EndLine == step.StartLine && step.EndColumn < step.StartColumn) {
+			return fmt.Errorf("analysis_ref path step %d has invalid coordinates", i)
+		}
+	}
+	expected := NewCodeQLAnalysisRef(
+		ref.RepositoryID,
+		ref.SourceRevision,
+		ref.IndexGeneration,
+		ref.AnalyzerVersion,
+		ref.ExtractorVersion,
+		ref.Language,
+		ref.DatabaseManifestSHA256,
+		ref.DatabaseContentSHA256,
+		ref.DatabaseQuality,
+		ref.QueryPackManifestSHA256,
+		ref.SARIFSHA256,
+		ref.QueryID,
+		ref.ResultIndex,
+		ref.CodeFlowIndex,
+		ref.ThreadFlowIndex,
+		ref.PathSteps,
+	)
+	if ref.ID != expected.ID {
+		return fmt.Errorf("analysis_ref id does not match canonical contents")
 	}
 	return nil
 }
@@ -312,6 +419,27 @@ func validateInvariant(invariant *InvariantResult) error {
 	return nil
 }
 
+func validateAssuranceRequirement(requirement *AssuranceRequirement) error {
+	if requirement == nil {
+		return nil
+	}
+	if len(requirement.RequiredCapabilities) == 0 {
+		return fmt.Errorf("assurance_requirement.required_capabilities cannot be empty")
+	}
+	seen := make(map[string]bool, len(requirement.RequiredCapabilities))
+	for _, capability := range requirement.RequiredCapabilities {
+		capability = strings.ToLower(strings.TrimSpace(capability))
+		if !assuranceCapabilities[capability] {
+			return fmt.Errorf("unsupported assurance capability %q", capability)
+		}
+		if seen[capability] {
+			return fmt.Errorf("assurance capabilities must be unique")
+		}
+		seen[capability] = true
+	}
+	return nil
+}
+
 func (bundle *ProofBundle) Validate() error {
 	if bundle == nil {
 		return fmt.Errorf("proof bundle is required")
@@ -328,7 +456,109 @@ func (bundle *ProofBundle) Validate() error {
 	if err := validateInvariant(bundle.Invariant); err != nil {
 		return err
 	}
+	if err := validateAssuranceRequirement(bundle.AssuranceRequirement); err != nil {
+		return err
+	}
 	return nil
+}
+
+func observationCapabilities(observation *ObservationRef) map[string]bool {
+	capabilities := map[string]bool{"source_coordinates": true}
+	switch observation.EvidenceRef.EvidenceType {
+	case "semantic_match", "hybrid_match":
+		capabilities["semantic_retrieval"] = true
+	case "lexical_match":
+		capabilities["lexical_retrieval"] = true
+	case "codeql_path":
+		if analysis := observation.EvidenceRef.AnalysisRef; analysis != nil &&
+			analysis.Analyzer == "codeql" && analysis.AnalysisKind == "variable_level_taint" {
+			capabilities["variable_level_taint"] = true
+		}
+	}
+	if relationship := observation.EvidenceRef.RelationshipRef; relationship != nil {
+		capabilities["structural_relationship"] = true
+		for _, source := range strings.Split(relationship.ResolutionSource, "+") {
+			if source == "scip-ingest" && relationship.ResolutionArtifactSHA256 != "" {
+				capabilities["compiler_resolution"] = true
+			}
+		}
+		if relationship.RuntimeObserved {
+			capabilities["runtime_observation"] = true
+		}
+	}
+	return capabilities
+}
+
+func capabilityList(values map[string]bool) []string {
+	result := make([]string, 0, len(values))
+	for value := range values {
+		result = append(result, value)
+	}
+	sort.Strings(result)
+	return result
+}
+
+func buildAssuranceLattice(requirement *AssuranceRequirement, supporting, contradicting []*ObservationRef) AssuranceLattice {
+	required := map[string]bool{}
+	if requirement != nil {
+		for _, capability := range requirement.RequiredCapabilities {
+			required[strings.ToLower(strings.TrimSpace(capability))] = true
+		}
+	}
+	collect := func(observations []*ObservationRef) map[string]bool {
+		result := map[string]bool{}
+		for _, observation := range observations {
+			for capability := range observationCapabilities(observation) {
+				result[capability] = true
+			}
+		}
+		return result
+	}
+	supportingCapabilities := collect(supporting)
+	contradictingCapabilities := collect(contradicting)
+	missing := func(observed map[string]bool) []string {
+		result := []string{}
+		for capability := range required {
+			if !observed[capability] {
+				result = append(result, capability)
+			}
+		}
+		sort.Strings(result)
+		return result
+	}
+	missingSupporting := missing(supportingCapabilities)
+	missingContradicting := missing(contradictingCapabilities)
+	var satisfiedBy *string
+	if len(required) > 0 && len(contradicting) > 0 && len(missingContradicting) == 0 {
+		value := "contradiction"
+		satisfiedBy = &value
+	} else if len(required) > 0 && len(supporting) > 0 && len(missingSupporting) == 0 {
+		value := "support"
+		satisfiedBy = &value
+	}
+	return AssuranceLattice{
+		RequiredCapabilities:             capabilityList(required),
+		SupportingCapabilities:           capabilityList(supportingCapabilities),
+		ContradictingCapabilities:        capabilityList(contradictingCapabilities),
+		MissingSupportingCapabilities:    missingSupporting,
+		MissingContradictingCapabilities: missingContradicting,
+		SatisfiedBy:                      satisfiedBy,
+	}
+}
+
+func assuranceLatticeMap(lattice AssuranceLattice) map[string]any {
+	var satisfiedBy any
+	if lattice.SatisfiedBy != nil {
+		satisfiedBy = *lattice.SatisfiedBy
+	}
+	return map[string]any{
+		"required_capabilities":              lattice.RequiredCapabilities,
+		"supporting_capabilities":            lattice.SupportingCapabilities,
+		"contradicting_capabilities":         lattice.ContradictingCapabilities,
+		"missing_supporting_capabilities":    lattice.MissingSupportingCapabilities,
+		"missing_contradicting_capabilities": lattice.MissingContradictingCapabilities,
+		"satisfied_by":                       satisfiedBy,
+	}
 }
 
 func proofConfidence(verdict string, supporting, contradicting []*ObservationRef) Confidence {
@@ -418,13 +648,23 @@ func EvaluateProof(bundle ProofBundle) (ProofResult, error) {
 		(bundle.Invariant.Status == "fail" || bundle.Invariant.Violations > 0)
 	invariantUnresolved := bundle.Invariant != nil &&
 		(bundle.Invariant.Status == "unresolved" || bundle.Invariant.Unresolved > 0)
+	assuranceLattice := buildAssuranceLattice(bundle.AssuranceRequirement, supporting, contradicting)
+	assuranceRequired := len(assuranceLattice.RequiredCapabilities) > 0
+	assuranceSatisfiedBy := func(value string) bool {
+		return assuranceLattice.SatisfiedBy != nil && *assuranceLattice.SatisfiedBy == value
+	}
 
 	verdict := VerdictVerified
 	switch {
 	case len(blockers) > 0:
 		verdict = VerdictBlocked
 	case len(contradicting) > 0 || invariantFailed:
-		verdict = VerdictContradicted
+		if assuranceRequired && !assuranceSatisfiedBy("contradiction") {
+			caveats = append(caveats, "required_assurance_not_satisfied")
+			verdict = VerdictUnresolved
+		} else {
+			verdict = VerdictContradicted
+		}
 	default:
 		if !bundle.ContradictionSearch.Performed {
 			caveats = append(caveats, "contradiction_search_not_performed")
@@ -451,6 +691,9 @@ func EvaluateProof(bundle ProofBundle) (ProofResult, error) {
 			if !trusted {
 				caveats = append(caveats, "supporting_evidence_not_trustworthy")
 			}
+		}
+		if assuranceRequired && !assuranceSatisfiedBy("support") {
+			caveats = append(caveats, "required_assurance_not_satisfied")
 		}
 		if len(caveats) > 0 {
 			verdict = VerdictUnresolved
@@ -480,6 +723,9 @@ func EvaluateProof(bundle ProofBundle) (ProofResult, error) {
 		"blockers":                      blockers,
 		"caveats":                       caveats,
 	}
+	if assuranceRequired {
+		proofPayload["assurance_lattice"] = assuranceLatticeMap(assuranceLattice)
+	}
 	return ProofResult{
 		ProofID:                     stableID("proof", proofPayload),
 		SchemaVersion:               SchemaVersion,
@@ -494,5 +740,6 @@ func EvaluateProof(bundle ProofBundle) (ProofResult, error) {
 		Coverage:                    bundle.Coverage,
 		ContradictionSearch:         bundle.ContradictionSearch,
 		Invariant:                   bundle.Invariant,
+		AssuranceLattice:            assuranceLattice,
 	}, nil
 }

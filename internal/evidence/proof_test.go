@@ -1,6 +1,7 @@
 package evidence
 
 import (
+	"slices"
 	"strings"
 	"testing"
 )
@@ -36,7 +37,7 @@ func proofObservation(path, qualifiedName, sourceEngine, derivation, stance, gen
 	)
 }
 
-func proofRelationshipObservation(confidenceBand string, runtimeObserved bool, observationCount int, generation string) ObservationRef {
+func proofRelationshipObservationWithSource(resolutionSource, confidenceBand string, runtimeObserved bool, observationCount int, generation string) ObservationRef {
 	repositoryID := strings.Repeat("r", 64)
 	sourceRevision := strings.Repeat("s", 40)
 	source := NewSymbolRef(
@@ -44,7 +45,7 @@ func proofRelationshipObservation(confidenceBand string, runtimeObserved bool, o
 		sourceRevision,
 		"src/api/admin.py",
 		"function",
-		"admin_handler",
+		"repo.src.api.admin.admin_handler",
 		1,
 		10,
 	)
@@ -53,18 +54,23 @@ func proofRelationshipObservation(confidenceBand string, runtimeObserved bool, o
 		sourceRevision,
 		"src/auth/middleware.py",
 		"method",
-		"AuthMiddleware.verify",
+		"repo.src.auth.middleware.AuthMiddleware.verify",
 		1,
 		10,
 	)
-	relationship := NewRelationshipRef(
+	artifact := ""
+	if slices.Contains(strings.Split(resolutionSource, "+"), "scip-ingest") {
+		artifact = strings.Repeat("a", 64)
+	}
+	relationship := NewRelationshipRefWithArtifact(
 		repositoryID,
 		sourceRevision,
 		generation,
 		"CALLS",
 		source,
 		target,
-		"go_lsp_cross_file",
+		resolutionSource,
+		artifact,
 		confidenceBand,
 		runtimeObserved,
 		observationCount,
@@ -73,7 +79,17 @@ func proofRelationshipObservation(confidenceBand string, runtimeObserved bool, o
 	if runtimeObserved {
 		evidence = NewRelationshipEvidenceRef(relationship, "runtime_validated_relationship")
 	}
-	return NewObservationRef(evidence, "support", "code-graph", "go_lsp_cross_file", confidenceBand)
+	return NewObservationRef(evidence, "support", "code-graph", resolutionSource, confidenceBand)
+}
+
+func proofRelationshipObservation(confidenceBand string, runtimeObserved bool, observationCount int, generation string) ObservationRef {
+	return proofRelationshipObservationWithSource(
+		"go_lsp_cross_file",
+		confidenceBand,
+		runtimeObserved,
+		observationCount,
+		generation,
+	)
 }
 
 func proofFixture() ProofBundle {
@@ -176,6 +192,112 @@ func TestEvaluateProofTreatsSpeculativeOnlySupportAsUnresolved(t *testing.T) {
 	}
 	if len(result.Caveats) != 1 || result.Caveats[0] != "supporting_evidence_not_trustworthy" {
 		t.Fatalf("caveats = %#v", result.Caveats)
+	}
+}
+
+func TestEvaluateProofRequiresCompilerCapabilityWhenRequested(t *testing.T) {
+	bundle := proofFixture()
+	bundle.AssuranceRequirement = &AssuranceRequirement{
+		RequiredCapabilities: []string{"compiler_resolution"},
+	}
+	bundle.Observations = []ObservationRef{
+		proofRelationshipObservationWithSource(
+			"heuristic_static_resolution",
+			"high",
+			false,
+			0,
+			bundle.IndexState.IndexGeneration,
+		),
+	}
+
+	result, err := EvaluateProof(bundle)
+	if err != nil {
+		t.Fatalf("EvaluateProof: %v", err)
+	}
+	if result.Verdict != VerdictUnresolved {
+		t.Fatalf("verdict = %q, want unresolved", result.Verdict)
+	}
+	if !slices.Contains(result.Caveats, "required_assurance_not_satisfied") {
+		t.Fatalf("caveats = %v", result.Caveats)
+	}
+	if got := result.AssuranceLattice.MissingSupportingCapabilities; len(got) != 1 || got[0] != "compiler_resolution" {
+		t.Fatalf("missing capabilities = %v", got)
+	}
+}
+
+func TestEvaluateProofAcceptsSCIPCompilerCapabilityVector(t *testing.T) {
+	bundle := proofFixture()
+	bundle.AssuranceRequirement = &AssuranceRequirement{
+		RequiredCapabilities: []string{
+			"source_coordinates",
+			"structural_relationship",
+			"compiler_resolution",
+		},
+	}
+	bundle.Observations = []ObservationRef{
+		proofRelationshipObservationWithSource(
+			"scip-ingest",
+			"high",
+			false,
+			0,
+			bundle.IndexState.IndexGeneration,
+		),
+	}
+
+	result, err := EvaluateProof(bundle)
+	if err != nil {
+		t.Fatalf("EvaluateProof: %v", err)
+	}
+	if result.Verdict != VerdictVerified {
+		t.Fatalf("verdict = %q, want verified", result.Verdict)
+	}
+	const expected = "proof:v1:6a0310be2366d2696dc6645546cc137bd32dc5d490e504c983c3d71c01c04bd1"
+	if result.ProofID != expected {
+		t.Fatalf("lattice proof id mismatch: got %s want %s", result.ProofID, expected)
+	}
+	if result.AssuranceLattice.SatisfiedBy == nil || *result.AssuranceLattice.SatisfiedBy != "support" {
+		t.Fatalf("satisfied_by = %v", result.AssuranceLattice.SatisfiedBy)
+	}
+}
+
+func TestEvaluateProofRejectsUnboundLegacySCIPCompilerCapability(t *testing.T) {
+	bundle := proofFixture()
+	bundle.AssuranceRequirement = &AssuranceRequirement{
+		RequiredCapabilities: []string{"compiler_resolution"},
+	}
+	bound := proofRelationshipObservationWithSource(
+		"scip-ingest",
+		"high",
+		false,
+		0,
+		bundle.IndexState.IndexGeneration,
+	)
+	legacyRelationship := NewRelationshipRef(
+		bound.EvidenceRef.RelationshipRef.RepositoryID,
+		bound.EvidenceRef.RelationshipRef.SourceRevision,
+		bound.EvidenceRef.RelationshipRef.IndexGeneration,
+		bound.EvidenceRef.RelationshipRef.RelationType,
+		bound.EvidenceRef.RelationshipRef.SourceSymbolRef,
+		bound.EvidenceRef.RelationshipRef.TargetSymbolRef,
+		"scip-ingest",
+		"high",
+		false,
+		0,
+	)
+	legacyEvidence := NewRelationshipEvidenceRef(legacyRelationship, "static_relationship")
+	bundle.Observations = []ObservationRef{
+		NewObservationRef(legacyEvidence, "support", "code-graph", "scip-ingest", "high"),
+	}
+
+	result, err := EvaluateProof(bundle)
+	if err != nil {
+		t.Fatalf("EvaluateProof: %v", err)
+	}
+	if result.Verdict != VerdictUnresolved {
+		t.Fatalf("verdict = %q, want unresolved", result.Verdict)
+	}
+	if got := result.AssuranceLattice.MissingSupportingCapabilities; len(got) != 1 || got[0] != "compiler_resolution" {
+		t.Fatalf("missing capabilities = %v", got)
 	}
 }
 

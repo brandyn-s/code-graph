@@ -2,8 +2,10 @@ package tools
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -22,7 +24,7 @@ func (s *Server) registerRelationshipEvidenceTool() {
 			OpenWorldHint:   boolPtr(false),
 			DestructiveHint: boolPtr(false),
 		},
-		Description: "Return generation-bound evidence for graph relationships adjacent to one exact qualified symbol. Preserves the edge's resolver strategy/rule, confidence tier, and OpenTelemetry confirmation (`validated_by_trace`, call count) in canonical relationship/evidence/observation references. Use this after search_graph or get_code_snippet when a PROVE or change-impact workflow needs to distinguish compiler/LSP-resolved, AST-extracted, inferred, ambiguous, and runtime-observed relationships. Fails closed when the live checkout no longer matches the indexed generation.",
+		Description: "Return generation-bound evidence for graph relationships adjacent to one exact qualified symbol. Preserves the edge's resolver strategy/rule, immutable compiler-artifact digest when present, confidence tier, and OpenTelemetry confirmation (`validated_by_trace`, call count) in canonical relationship/evidence/observation references. Use this after search_graph or get_code_snippet when a PROVE or change-impact workflow needs to distinguish compiler/LSP-resolved, AST-extracted, inferred, ambiguous, and runtime-observed relationships. Fails closed when the live checkout no longer matches the indexed generation.",
 		InputSchema: json.RawMessage(`{
 			"type": "object",
 			"properties": {
@@ -157,6 +159,22 @@ func relationshipObservationCount(properties map[string]any) int {
 	return 0
 }
 
+func relationshipResolutionArtifact(edge *store.Edge, resolutionSource string) string {
+	if edge == nil {
+		return ""
+	}
+	value, _ := edge.Properties["resolution_artifact_sha256"].(string)
+	digest := strings.TrimSpace(value)
+	decoded, err := hex.DecodeString(digest)
+	if err != nil || len(decoded) != 32 || strings.ToLower(digest) != digest {
+		return ""
+	}
+	if !slices.Contains(strings.Split(resolutionSource, "+"), "scip-ingest") {
+		return ""
+	}
+	return digest
+}
+
 func nodeSymbolRef(identity *indexidentity.Envelope, node *store.Node) evidence.SymbolRef {
 	return evidence.NewSymbolRef(
 		identity.RepositoryID,
@@ -177,10 +195,14 @@ func relationshipEntry(
 	sourceRef := nodeSymbolRef(identity, source)
 	targetRef := nodeSymbolRef(identity, target)
 	resolutionSource := relationshipResolutionSource(edge)
+	resolutionArtifactSHA256 := relationshipResolutionArtifact(
+		edge,
+		resolutionSource,
+	)
 	confidenceBand := relationshipConfidenceBand(edge)
 	runtimeWasObserved := runtimeObserved(edge.Properties)
 	observationCount := relationshipObservationCount(edge.Properties)
-	relationshipRef := evidence.NewRelationshipRef(
+	relationshipRef := evidence.NewRelationshipRefWithArtifact(
 		identity.RepositoryID,
 		identity.SourceRevision,
 		identity.IndexGeneration,
@@ -188,6 +210,7 @@ func relationshipEntry(
 		sourceRef,
 		targetRef,
 		resolutionSource,
+		resolutionArtifactSHA256,
 		confidenceBand,
 		runtimeWasObserved,
 		observationCount,
@@ -231,6 +254,9 @@ func relationshipEntry(
 		"relationship_ref":  relationshipRef,
 		"evidence_ref":      evidenceRef,
 		"observation_ref":   observationRef,
+	}
+	if resolutionArtifactSHA256 != "" {
+		entry["resolution_artifact_sha256"] = resolutionArtifactSHA256
 	}
 	if value, ok := edge.Properties["p99_latency_ns"]; ok {
 		entry["p99_latency_ns"] = value

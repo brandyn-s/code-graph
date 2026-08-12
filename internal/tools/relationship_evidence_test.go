@@ -153,6 +153,72 @@ func TestRelationshipEvidenceMapsStaticInferenceConfidence(t *testing.T) {
 	}
 }
 
+func TestRelationshipEvidenceBindsSCIPArtifactDigest(t *testing.T) {
+	s := serverWithReadyEvidenceIdentity(t)
+	digest := strings.Repeat("a", 64)
+	seedRelationshipProperties(t, s, map[string]any{
+		"resolver_rule":              "scip-ingest",
+		"resolution_artifact_sha256": digest,
+		"confidence_tier":            store.ConfidenceExtracted,
+	})
+	response := metadataResponseFromHandler(
+		t,
+		s.handleGetRelationshipEvidence,
+		"get_relationship_evidence",
+		map[string]any{
+			"project":                "test",
+			"qualified_name":         "test.handler.handle_request",
+			"direction":              "outbound",
+			"related_qualified_name": "test.auth.authenticate",
+		},
+	)
+	entry := firstRelationship(t, response)
+	if entry["resolution_artifact_sha256"] != digest {
+		t.Fatalf("artifact digest = %v", entry["resolution_artifact_sha256"])
+	}
+	ref := requireMapValue(t, entry["relationship_ref"], "relationship_ref")
+	if ref["resolution_artifact_sha256"] != digest {
+		t.Fatalf("relationship artifact digest = %v", ref["resolution_artifact_sha256"])
+	}
+}
+
+func TestRelationshipEvidenceDoesNotPromoteMalformedOrHeuristicArtifacts(t *testing.T) {
+	for name, properties := range map[string]map[string]any{
+		"malformed": {
+			"resolver_rule":              "scip-ingest",
+			"resolution_artifact_sha256": "not-a-digest",
+		},
+		"heuristic": {
+			"resolver_rule":              "fuzzy-resolve",
+			"resolution_artifact_sha256": strings.Repeat("a", 64),
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			s := serverWithReadyEvidenceIdentity(t)
+			seedRelationshipProperties(t, s, properties)
+			response := metadataResponseFromHandler(
+				t,
+				s.handleGetRelationshipEvidence,
+				"get_relationship_evidence",
+				map[string]any{
+					"project":                "test",
+					"qualified_name":         "test.handler.handle_request",
+					"direction":              "outbound",
+					"related_qualified_name": "test.auth.authenticate",
+				},
+			)
+			entry := firstRelationship(t, response)
+			if _, present := entry["resolution_artifact_sha256"]; present {
+				t.Fatalf("untrusted artifact was promoted: %#v", entry)
+			}
+			ref := requireMapValue(t, entry["relationship_ref"], "relationship_ref")
+			if _, present := ref["resolution_artifact_sha256"]; present {
+				t.Fatalf("untrusted artifact entered relationship ref: %#v", ref)
+			}
+		})
+	}
+}
+
 func TestRelationshipEvidenceFailsClosedForStaleCheckout(t *testing.T) {
 	s := serverWithReadyEvidenceIdentity(t)
 	stale := testIndexIdentity(strings.Repeat("d", 64))

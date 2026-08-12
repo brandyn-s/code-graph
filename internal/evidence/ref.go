@@ -26,18 +26,59 @@ type SymbolRef struct {
 // evidence cannot express and can record runtime confirmation without replacing
 // the underlying static relationship.
 type RelationshipRef struct {
-	ID               string    `json:"id"`
-	SchemaVersion    int       `json:"schema_version"`
-	RepositoryID     string    `json:"repository_id"`
-	SourceRevision   string    `json:"source_revision"`
-	IndexGeneration  string    `json:"index_generation"`
-	RelationType     string    `json:"relation_type"`
-	SourceSymbolRef  SymbolRef `json:"source_symbol_ref"`
-	TargetSymbolRef  SymbolRef `json:"target_symbol_ref"`
-	ResolutionSource string    `json:"resolution_source"`
-	ConfidenceBand   string    `json:"confidence_band"`
-	RuntimeObserved  bool      `json:"runtime_observed"`
-	ObservationCount int       `json:"observation_count"`
+	ID                       string    `json:"id"`
+	SchemaVersion            int       `json:"schema_version"`
+	RepositoryID             string    `json:"repository_id"`
+	SourceRevision           string    `json:"source_revision"`
+	IndexGeneration          string    `json:"index_generation"`
+	RelationType             string    `json:"relation_type"`
+	SourceSymbolRef          SymbolRef `json:"source_symbol_ref"`
+	TargetSymbolRef          SymbolRef `json:"target_symbol_ref"`
+	ResolutionSource         string    `json:"resolution_source"`
+	ResolutionArtifactSHA256 string    `json:"resolution_artifact_sha256,omitempty"`
+	ConfidenceBand           string    `json:"confidence_band"`
+	RuntimeObserved          bool      `json:"runtime_observed"`
+	ObservationCount         int       `json:"observation_count"`
+}
+
+type DatabaseQuality struct {
+	Status          string `json:"status"`
+	SourceFiles     int    `json:"source_files"`
+	BaselineLines   int    `json:"baseline_lines"`
+	ExtractorErrors int    `json:"extractor_errors"`
+}
+
+type AnalysisPathStep struct {
+	Position     int    `json:"position"`
+	Role         string `json:"role"`
+	RelativePath string `json:"relative_path"`
+	StartLine    int    `json:"start_line"`
+	StartColumn  int    `json:"start_column"`
+	EndLine      int    `json:"end_line"`
+	EndColumn    int    `json:"end_column"`
+}
+
+type AnalysisRef struct {
+	ID                      string             `json:"id"`
+	SchemaVersion           int                `json:"schema_version"`
+	RepositoryID            string             `json:"repository_id"`
+	SourceRevision          string             `json:"source_revision"`
+	IndexGeneration         string             `json:"index_generation"`
+	AnalysisKind            string             `json:"analysis_kind"`
+	Analyzer                string             `json:"analyzer"`
+	AnalyzerVersion         string             `json:"analyzer_version"`
+	ExtractorVersion        string             `json:"extractor_version"`
+	Language                string             `json:"language"`
+	DatabaseManifestSHA256  string             `json:"database_manifest_sha256"`
+	DatabaseContentSHA256   string             `json:"database_content_sha256"`
+	DatabaseQuality         DatabaseQuality    `json:"database_quality"`
+	QueryPackManifestSHA256 string             `json:"query_pack_manifest_sha256"`
+	SARIFSHA256             string             `json:"sarif_sha256"`
+	QueryID                 string             `json:"query_id"`
+	ResultIndex             int                `json:"result_index"`
+	CodeFlowIndex           int                `json:"code_flow_index"`
+	ThreadFlowIndex         int                `json:"thread_flow_index"`
+	PathSteps               []AnalysisPathStep `json:"path_steps"`
 }
 
 type EvidenceRef struct {
@@ -52,6 +93,7 @@ type EvidenceRef struct {
 	EvidenceType    string           `json:"evidence_type"`
 	SymbolRef       *SymbolRef       `json:"symbol_ref,omitempty"`
 	RelationshipRef *RelationshipRef `json:"relationship_ref,omitempty"`
+	AnalysisRef     *AnalysisRef     `json:"analysis_ref,omitempty"`
 }
 
 type ObservationRef struct {
@@ -121,7 +163,7 @@ func relationshipRefMap(ref *RelationshipRef) map[string]any {
 	if ref == nil {
 		return nil
 	}
-	return map[string]any{
+	payload := map[string]any{
 		"id":                ref.ID,
 		"schema_version":    ref.SchemaVersion,
 		"repository_id":     ref.RepositoryID,
@@ -134,6 +176,63 @@ func relationshipRefMap(ref *RelationshipRef) map[string]any {
 		"confidence_band":   ref.ConfidenceBand,
 		"runtime_observed":  ref.RuntimeObserved,
 		"observation_count": ref.ObservationCount,
+	}
+	if ref.ResolutionArtifactSHA256 != "" {
+		payload["resolution_artifact_sha256"] = ref.ResolutionArtifactSHA256
+	}
+	return payload
+}
+
+func databaseQualityMap(quality DatabaseQuality) map[string]any {
+	return map[string]any{
+		"status":           quality.Status,
+		"source_files":     quality.SourceFiles,
+		"baseline_lines":   quality.BaselineLines,
+		"extractor_errors": quality.ExtractorErrors,
+	}
+}
+
+func analysisPathStepMap(step AnalysisPathStep) map[string]any {
+	return map[string]any{
+		"position":      step.Position,
+		"role":          step.Role,
+		"relative_path": step.RelativePath,
+		"start_line":    step.StartLine,
+		"start_column":  step.StartColumn,
+		"end_line":      step.EndLine,
+		"end_column":    step.EndColumn,
+	}
+}
+
+func analysisRefMap(ref *AnalysisRef) map[string]any {
+	if ref == nil {
+		return nil
+	}
+	steps := make([]map[string]any, 0, len(ref.PathSteps))
+	for _, step := range ref.PathSteps {
+		steps = append(steps, analysisPathStepMap(step))
+	}
+	return map[string]any{
+		"id":                         ref.ID,
+		"schema_version":             ref.SchemaVersion,
+		"repository_id":              ref.RepositoryID,
+		"source_revision":            ref.SourceRevision,
+		"index_generation":           ref.IndexGeneration,
+		"analysis_kind":              ref.AnalysisKind,
+		"analyzer":                   ref.Analyzer,
+		"analyzer_version":           ref.AnalyzerVersion,
+		"extractor_version":          ref.ExtractorVersion,
+		"language":                   ref.Language,
+		"database_manifest_sha256":   ref.DatabaseManifestSHA256,
+		"database_content_sha256":    ref.DatabaseContentSHA256,
+		"database_quality":           databaseQualityMap(ref.DatabaseQuality),
+		"query_pack_manifest_sha256": ref.QueryPackManifestSHA256,
+		"sarif_sha256":               ref.SARIFSHA256,
+		"query_id":                   ref.QueryID,
+		"result_index":               ref.ResultIndex,
+		"code_flow_index":            ref.CodeFlowIndex,
+		"thread_flow_index":          ref.ThreadFlowIndex,
+		"path_steps":                 steps,
 	}
 }
 
@@ -157,6 +256,9 @@ func evidenceRefMap(ref *EvidenceRef) map[string]any {
 	}
 	if ref.RelationshipRef != nil {
 		payload["relationship_ref"] = relationshipRefMap(ref.RelationshipRef)
+	}
+	if ref.AnalysisRef != nil {
+		payload["analysis_ref"] = analysisRefMap(ref.AnalysisRef)
 	}
 	return payload
 }
@@ -189,21 +291,49 @@ func NewRelationshipRef(
 	runtimeObserved bool,
 	observationCount int,
 ) RelationshipRef {
+	return NewRelationshipRefWithArtifact(
+		repositoryID,
+		sourceRevision,
+		indexGeneration,
+		relationType,
+		sourceSymbolRef,
+		targetSymbolRef,
+		resolutionSource,
+		"",
+		confidenceBand,
+		runtimeObserved,
+		observationCount,
+	)
+}
+
+// NewRelationshipRefWithArtifact additionally binds the immutable analyzer
+// artifact that produced a compiler-derived relationship. Empty artifact
+// digests remain omitted so pre-artifact relationship vectors keep their IDs.
+//
+//nolint:gocritic // Value copies preserve the immutable reference contract.
+func NewRelationshipRefWithArtifact(
+	repositoryID, sourceRevision, indexGeneration, relationType string,
+	sourceSymbolRef, targetSymbolRef SymbolRef,
+	resolutionSource, resolutionArtifactSHA256, confidenceBand string,
+	runtimeObserved bool,
+	observationCount int,
+) RelationshipRef {
 	if observationCount < 0 {
 		observationCount = 0
 	}
 	ref := RelationshipRef{
-		SchemaVersion:    SchemaVersion,
-		RepositoryID:     repositoryID,
-		SourceRevision:   sourceRevision,
-		IndexGeneration:  indexGeneration,
-		RelationType:     canonicalToken(relationType),
-		SourceSymbolRef:  sourceSymbolRef,
-		TargetSymbolRef:  targetSymbolRef,
-		ResolutionSource: canonicalToken(resolutionSource),
-		ConfidenceBand:   canonicalToken(confidenceBand),
-		RuntimeObserved:  runtimeObserved,
-		ObservationCount: observationCount,
+		SchemaVersion:            SchemaVersion,
+		RepositoryID:             repositoryID,
+		SourceRevision:           sourceRevision,
+		IndexGeneration:          indexGeneration,
+		RelationType:             canonicalToken(relationType),
+		SourceSymbolRef:          sourceSymbolRef,
+		TargetSymbolRef:          targetSymbolRef,
+		ResolutionSource:         canonicalToken(resolutionSource),
+		ResolutionArtifactSHA256: canonicalToken(resolutionArtifactSHA256),
+		ConfidenceBand:           canonicalToken(confidenceBand),
+		RuntimeObserved:          runtimeObserved,
+		ObservationCount:         observationCount,
 	}
 	payload := relationshipRefMap(&ref)
 	delete(payload, "id")
@@ -246,6 +376,81 @@ func NewRelationshipEvidenceRef(relationshipRef RelationshipRef, evidenceType st
 		EvidenceType:    canonicalToken(evidenceType),
 		SymbolRef:       &source,
 		RelationshipRef: &relationshipRef,
+	}
+	payload := evidenceRefMap(&ref)
+	delete(payload, "id")
+	ref.ID = stableID("ev", payload)
+	return ref
+}
+
+// NewCodeQLAnalysisRef binds one selected SARIF code-flow to its analyzer,
+// database, query pack, repository revision, and ordered path coordinates.
+func NewCodeQLAnalysisRef(
+	repositoryID, sourceRevision, indexGeneration,
+	analyzerVersion, extractorVersion, language,
+	databaseManifestSHA256, databaseContentSHA256 string,
+	databaseQuality DatabaseQuality,
+	queryPackManifestSHA256, sarifSHA256, queryID string,
+	resultIndex, codeFlowIndex, threadFlowIndex int,
+	pathSteps []AnalysisPathStep,
+) AnalysisRef {
+	canonicalSteps := make([]AnalysisPathStep, len(pathSteps))
+	copy(canonicalSteps, pathSteps)
+	for i := range canonicalSteps {
+		canonicalSteps[i].Role = canonicalToken(canonicalSteps[i].Role)
+		canonicalSteps[i].RelativePath = canonicalPath(canonicalSteps[i].RelativePath)
+	}
+	ref := AnalysisRef{
+		SchemaVersion:          SchemaVersion,
+		RepositoryID:           repositoryID,
+		SourceRevision:         sourceRevision,
+		IndexGeneration:        indexGeneration,
+		AnalysisKind:           "variable_level_taint",
+		Analyzer:               "codeql",
+		AnalyzerVersion:        strings.TrimSpace(analyzerVersion),
+		ExtractorVersion:       strings.TrimSpace(extractorVersion),
+		Language:               canonicalToken(language),
+		DatabaseManifestSHA256: databaseManifestSHA256,
+		DatabaseContentSHA256:  databaseContentSHA256,
+		DatabaseQuality: DatabaseQuality{
+			Status:          canonicalToken(databaseQuality.Status),
+			SourceFiles:     databaseQuality.SourceFiles,
+			BaselineLines:   databaseQuality.BaselineLines,
+			ExtractorErrors: databaseQuality.ExtractorErrors,
+		},
+		QueryPackManifestSHA256: queryPackManifestSHA256,
+		SARIFSHA256:             sarifSHA256,
+		QueryID:                 strings.TrimSpace(queryID),
+		ResultIndex:             resultIndex,
+		CodeFlowIndex:           codeFlowIndex,
+		ThreadFlowIndex:         threadFlowIndex,
+		PathSteps:               canonicalSteps,
+	}
+	payload := analysisRefMap(&ref)
+	delete(payload, "id")
+	ref.ID = stableID("analysis", payload)
+	return ref
+}
+
+// NewAnalysisEvidenceRef anchors the evidence location to the source step of
+// the externally analyzed path and copies the full immutable analysis record.
+//
+//nolint:gocritic // Value copy preserves the immutable reference contract.
+func NewAnalysisEvidenceRef(analysisRef AnalysisRef) EvidenceRef {
+	if len(analysisRef.PathSteps) == 0 {
+		return EvidenceRef{}
+	}
+	source := analysisRef.PathSteps[0]
+	ref := EvidenceRef{
+		SchemaVersion:   SchemaVersion,
+		RepositoryID:    analysisRef.RepositoryID,
+		SourceRevision:  analysisRef.SourceRevision,
+		IndexGeneration: analysisRef.IndexGeneration,
+		RelativePath:    source.RelativePath,
+		StartLine:       source.StartLine,
+		EndLine:         source.EndLine,
+		EvidenceType:    "codeql_path",
+		AnalysisRef:     &analysisRef,
 	}
 	payload := evidenceRefMap(&ref)
 	delete(payload, "id")

@@ -12,6 +12,10 @@ from pathlib import Path
 
 
 SHA256 = re.compile(r"[0-9a-f]{64}")
+SUPPORTED_ORACLES = {
+    "go-ssa-rta-all-source-roots-v1",
+    "typescript-compiler-api-call-target-v1",
+}
 
 
 def sha256_file(path: Path) -> str:
@@ -30,7 +34,7 @@ def load_oracle(
     document = json.loads(path.read_text(encoding="utf-8"))
     if (
         document.get("schema_version") != 1
-        or document.get("oracle") != "go-ssa-rta-all-source-roots-v1"
+        or document.get("oracle") not in SUPPORTED_ORACLES
         or not isinstance(document.get("edges"), list)
     ):
         raise ValueError("oracle has an unsupported contract")
@@ -135,7 +139,7 @@ def main() -> int:
     observed = load_compiler_edges(args.database, args.project, artifact_digest)
     result = {
         "schema_version": 1,
-        "oracle": "go-ssa-rta-all-source-roots-v1",
+        "oracle": json.loads(args.oracle.read_text(encoding="utf-8"))["oracle"],
         "oracle_scope": "static_source_calls",
         "dynamic_oracle_edges_excluded": len(all_oracle - oracle),
         "observed_tier": "scip-ingest",

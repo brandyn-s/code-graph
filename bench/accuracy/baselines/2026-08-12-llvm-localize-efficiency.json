@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "measurement_date": "2026-08-12",
+  "fixture": {
+    "repository": "llvm/llvm-project",
+    "files": 113959,
+    "lines": 35968701,
+    "graph_nodes": 729010,
+    "graph_edges": 2308049
+  },
+  "query": {
+    "tool": "code_localize",
+    "issue_description": "parse source file diagnostics",
+    "top_k": 20,
+    "depth": 3,
+    "seed_strategy": "substring"
+  },
+  "released": {
+    "repeat_seconds": [13.32, 12.95, 12.68],
+    "repeat_median_seconds": 12.95,
+    "fresh_seconds": 16.10,
+    "fresh_peak_rss_bytes": 1784184832
+  },
+  "candidate": {
+    "repeat_seconds": [3.02, 3.02, 3.00, 2.99, 3.02],
+    "repeat_median_seconds": 3.02,
+    "fresh_seconds": 3.12,
+    "fresh_peak_rss_bytes": 627032064
+  },
+  "improvement": {
+    "repeat_latency_speedup": 4.288079470198675,
+    "fresh_latency_speedup": 5.160256410256411,
+    "peak_rss_reduction_fraction": 0.648559914823411
+  },
+  "parity": {
+    "core_output_sha256_released": "f50060acf519a7096f8f8c91abc17657de39566eeb18ea3a7e4cd90321100d4b",
+    "core_output_sha256_candidate": "f50060acf519a7096f8f8c91abc17657de39566eeb18ea3a7e4cd90321100d4b",
+    "identical": true
+  }
+}

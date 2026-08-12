@@ -164,6 +164,48 @@ func (s *Store) AllEdges(project string) ([]*Edge, error) {
 	return scanEdges(rows)
 }
 
+// EdgeEndpoint is the lightweight edge shape needed by topology-only
+// consumers. It intentionally omits IDs, project names, and properties so a
+// graph walk does not allocate full Edge objects or decode unrelated JSON.
+type EdgeEndpoint struct {
+	SourceID int64
+	TargetID int64
+	Type     string
+}
+
+// FindEdgeEndpointsByTypes returns only endpoint columns for the requested
+// edge types. Callers that need topology but not edge metadata should prefer
+// this over AllEdges: filtering happens in SQLite and properties are never
+// materialized or decoded.
+func (s *Store) FindEdgeEndpointsByTypes(project string, edgeTypes []string) ([]EdgeEndpoint, error) {
+	if len(edgeTypes) == 0 {
+		return []EdgeEndpoint{}, nil
+	}
+	placeholders := make([]string, len(edgeTypes))
+	args := make([]any, 0, len(edgeTypes)+1)
+	args = append(args, project)
+	for i, edgeType := range edgeTypes {
+		placeholders[i] = "?"
+		args = append(args, edgeType)
+	}
+	rows, err := s.q.Query(`SELECT source_id, target_id, type FROM edges
+		WHERE project=? AND type IN (`+strings.Join(placeholders, ",")+`)`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("find edge endpoints by types: %w", err)
+	}
+	defer rows.Close()
+
+	result := make([]EdgeEndpoint, 0)
+	for rows.Next() {
+		var edge EdgeEndpoint
+		if err := rows.Scan(&edge.SourceID, &edge.TargetID, &edge.Type); err != nil {
+			return nil, err
+		}
+		result = append(result, edge)
+	}
+	return result, rows.Err()
+}
+
 // DeleteEdgesByProject deletes all edges for a project.
 func (s *Store) DeleteEdgesByProject(project string) error {
 	_, err := s.q.Exec("DELETE FROM edges WHERE project=?", project)

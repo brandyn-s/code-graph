@@ -137,6 +137,151 @@ func callEdges(t *testing.T, s *store.Store, project string) map[[2]int64]map[st
 	return out
 }
 
+func TestSCIPDefinitionMapsSymbolLineToContainingFunctionSpan(t *testing.T) {
+	spans := scipFileSpans{
+		"fixture.ts": {
+			{id: 1, qn: "fixture.arrow", start: 8, end: 12},
+		},
+	}
+	idx := &scip.Index{Documents: []*scip.Document{{
+		RelativePath: "fixture.ts",
+		Occurrences: []*scip.Occurrence{{
+			// scip-typescript defines a variable arrow at the variable name,
+			// while the graph node begins at the containing declaration line.
+			Range:       []int32{8, 8, 13},
+			Symbol:      "scip-npm fixture 1.0 arrow().",
+			SymbolRoles: int32(scip.SymbolRole_Definition),
+		}},
+	}}}
+
+	definitions, _, matches := collectSCIPDefinitions(idx, spans)
+	definition := definitions["scip-npm fixture 1.0 arrow()."]
+	if definition.line != 8 {
+		t.Fatalf("definition line = %d, want containing function line 8", definition.line)
+	}
+	if matches["fixture.ts"] != 1 {
+		t.Fatalf("definition matches = %v, want fixture.ts=1", matches)
+	}
+}
+
+func TestSCIPDefinitionsRecognizeTypeScriptVariableFunctions(t *testing.T) {
+	spans := scipFileSpans{
+		"fixture.ts": {
+			{id: 1, qn: "fixture.caller", start: 1, end: 3},
+			{id: 2, qn: "fixture.callee", start: 5, end: 5},
+		},
+	}
+	callerSymbol := "scip-typescript npm fixture 1.0 `fixture.ts`/caller."
+	calleeSymbol := "scip-typescript npm fixture 1.0 `fixture.ts`/callee."
+	idx := &scip.Index{Documents: []*scip.Document{{
+		RelativePath: "fixture.ts",
+		Occurrences: []*scip.Occurrence{
+			{Range: []int32{0, 6, 12}, EnclosingRange: []int32{0, 0, 2, 2}, Symbol: callerSymbol, SymbolRoles: int32(scip.SymbolRole_Definition)},
+			{Range: []int32{4, 6, 12}, EnclosingRange: []int32{4, 0, 4, 24}, Symbol: calleeSymbol, SymbolRoles: int32(scip.SymbolRole_Definition)},
+		},
+	}}}
+
+	definitions, totals, matches := collectSCIPDefinitions(idx, spans)
+	if definitions[callerSymbol].line != 1 || definitions[calleeSymbol].line != 5 {
+		t.Fatalf("definitions = %+v, want TypeScript variable functions at lines 1 and 5", definitions)
+	}
+	if totals["fixture.ts"] != 2 || matches["fixture.ts"] != 2 {
+		t.Fatalf("definition coverage totals=%v matches=%v, want 2/2", totals, matches)
+	}
+}
+
+func TestSCIPDefinitionsExcludeOrdinaryLocalVariables(t *testing.T) {
+	spans := scipFileSpans{
+		"fixture.ts": {
+			{id: 1, qn: "fixture.outer", start: 1, end: 4},
+		},
+	}
+	localSymbol := "scip-typescript npm fixture 1.0 `fixture.ts`/outer().value."
+	idx := &scip.Index{Documents: []*scip.Document{{
+		RelativePath: "fixture.ts",
+		Occurrences: []*scip.Occurrence{{
+			Range:          []int32{1, 7, 12},
+			EnclosingRange: []int32{1, 1, 1, 17},
+			Symbol:         localSymbol,
+			SymbolRoles:    int32(scip.SymbolRole_Definition),
+		}},
+	}}}
+
+	definitions, totals, matches := collectSCIPDefinitions(idx, spans)
+	if _, ok := definitions[localSymbol]; ok {
+		t.Fatalf("ordinary local variable was classified as a function: %+v", definitions)
+	}
+	if totals["fixture.ts"] != 0 || matches["fixture.ts"] != 0 {
+		t.Fatalf("definition coverage totals=%v matches=%v, want 0/0", totals, matches)
+	}
+}
+
+func TestSCIPDerivesCallsToTypeScriptVariableFunctions(t *testing.T) {
+	repo := t.TempDir()
+	if err := os.WriteFile(
+		filepath.Join(repo, "fixture.ts"),
+		[]byte("const caller = () => {\n  callee();\n};\n\nconst callee = () => 1;\n"),
+		0o644,
+	); err != nil {
+		t.Fatal(err)
+	}
+	spans := scipFileSpans{
+		"fixture.ts": {
+			{id: 1, qn: "fixture.caller", start: 1, end: 3},
+			{id: 2, qn: "fixture.callee", start: 5, end: 5},
+		},
+	}
+	callerSymbol := "scip-typescript npm fixture 1.0 `fixture.ts`/caller."
+	calleeSymbol := "scip-typescript npm fixture 1.0 `fixture.ts`/callee."
+	idx := &scip.Index{Documents: []*scip.Document{{
+		RelativePath: "fixture.ts",
+		Occurrences: []*scip.Occurrence{
+			{Range: []int32{0, 6, 12}, EnclosingRange: []int32{0, 0, 2, 2}, Symbol: callerSymbol, SymbolRoles: int32(scip.SymbolRole_Definition)},
+			{Range: []int32{1, 2, 8}, Symbol: calleeSymbol},
+			{Range: []int32{4, 6, 12}, EnclosingRange: []int32{4, 0, 4, 24}, Symbol: calleeSymbol, SymbolRoles: int32(scip.SymbolRole_Definition)},
+		},
+	}}}
+	definitions, _, _ := collectSCIPDefinitions(idx, spans)
+	p := &Pipeline{RepoPath: repo, ProjectName: "fixture"}
+
+	edges, _, _ := p.deriveSCIPCalls(idx, spans, definitions, nil, "digest")
+	if len(edges) != 1 || edges[0].SourceID != 1 || edges[0].TargetID != 2 {
+		t.Fatalf("derived edges = %+v, want caller(1) -> callee(2)", edges)
+	}
+}
+
+func TestSCIPDerivesTypeScriptGenericCalls(t *testing.T) {
+	repo := t.TempDir()
+	if err := os.WriteFile(
+		filepath.Join(repo, "fixture.ts"),
+		[]byte("function caller() {\n  callee<Result<string>>(value);\n}\nfunction callee<T>(value: T) {}\n"),
+		0o644,
+	); err != nil {
+		t.Fatal(err)
+	}
+	spans := scipFileSpans{
+		"fixture.ts": {
+			{id: 1, qn: "fixture.caller", start: 1, end: 3},
+			{id: 2, qn: "fixture.callee", start: 4, end: 4},
+		},
+	}
+	symbol := "scip-typescript npm fixture 1.0 `fixture.ts`/callee()."
+	idx := &scip.Index{Documents: []*scip.Document{{
+		RelativePath: "fixture.ts",
+		Occurrences: []*scip.Occurrence{
+			{Range: []int32{1, 2, 8}, Symbol: symbol},
+			{Range: []int32{3, 9, 15}, Symbol: symbol, SymbolRoles: int32(scip.SymbolRole_Definition)},
+		},
+	}}}
+	definitions, _, _ := collectSCIPDefinitions(idx, spans)
+	p := &Pipeline{RepoPath: repo, ProjectName: "fixture"}
+
+	edges, _, callShaped := p.deriveSCIPCalls(idx, spans, definitions, nil, "digest")
+	if callShaped != 1 || len(edges) != 1 || edges[0].SourceID != 1 || edges[0].TargetID != 2 {
+		t.Fatalf("call_shaped=%d edges=%+v, want generic caller(1) -> callee(2)", callShaped, edges)
+	}
+}
+
 // The ingest pass replaces heuristic CALLS edges in SCIP-covered files
 // with occurrence-derived ones, leaves uncovered files alone, and does not
 // emit edges for non-call references (function values).

@@ -1,0 +1,11 @@
+{
+  "name": "code-graph-typescript-compiler-oracle",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "test": "node --test test.cjs"
+  },
+  "dependencies": {
+    "typescript": "5.9.3"
+  }
+}

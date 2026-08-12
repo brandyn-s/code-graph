@@ -88,6 +88,19 @@ python bench/accuracy/compare_compiler_calls.py \
   --project project-name \
   --scip-index /path/to/index.scip \
   --output compiler-report.json
+
+# Independent compiler-tier CALLS oracle (TypeScript compiler API)
+cd bench/accuracy/tools/oracle-typescript-compiler
+npm ci
+npm test
+node main.cjs /path/to/tsconfig.json > oracle.json
+cd ../../../..
+python bench/accuracy/compare_compiler_calls.py \
+  --oracle oracle.json \
+  --database /path/to/project.db \
+  --project project-name \
+  --scip-index /path/to/index.scip \
+  --output compiler-report.json
 # Output:
 #   bench/accuracy/baselines/YYYY-MM-DD-mcp-servers-report.md   (human)
 #   bench/accuracy/baselines/YYYY-MM-DD-mcp-servers-report.json (machine)

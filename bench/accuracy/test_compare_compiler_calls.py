@@ -24,6 +24,31 @@ def load_comparator():
 
 
 class CompilerCallsComparatorTests(unittest.TestCase):
+    def test_accepts_typescript_compiler_api_oracle_contract(self):
+        comparator = load_comparator()
+        with tempfile.TemporaryDirectory() as temporary:
+            oracle_path = Path(temporary) / "oracle.json"
+            oracle_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "oracle": "typescript-compiler-api-call-target-v1",
+                        "edges": [
+                            {
+                                "caller": {"file": "src/main.ts", "line": 3},
+                                "callee": {"file": "src/helper.ts", "line": 1},
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            self.assertEqual(
+                comparator.load_oracle(oracle_path),
+                {("src/main.ts", 3, "src/helper.ts", 1)},
+            )
+
     def test_exact_coordinate_metrics_and_artifact_binding(self):
         comparator = load_comparator()
         with tempfile.TemporaryDirectory() as temporary:

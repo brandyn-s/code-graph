@@ -141,6 +141,32 @@ type scipSourceCache struct {
 	lines    map[string][]string
 }
 
+func isCallSuffix(suffix string) bool {
+	suffix = strings.TrimLeft(suffix, " \t")
+	if strings.HasPrefix(suffix, "(") {
+		return true
+	}
+	if !strings.HasPrefix(suffix, "<") {
+		return false
+	}
+	depth := 0
+	for i, char := range suffix {
+		switch char {
+		case '<':
+			depth++
+		case '>':
+			depth--
+			if depth == 0 {
+				return strings.HasPrefix(strings.TrimLeft(suffix[i+1:], " \t"), "(")
+			}
+			if depth < 0 {
+				return false
+			}
+		}
+	}
+	return false
+}
+
 // innermost returns the smallest span containing line, or nil.
 func (fs scipFileSpans) innermost(file string, line int) *scipFuncSpan {
 	var best *scipFuncSpan
@@ -172,6 +198,39 @@ func isSCIPFunctionSymbol(symbol string) bool {
 	return strings.HasSuffix(symbol, ").") && !strings.HasPrefix(symbol, "local ")
 }
 
+// isSCIPFunctionDefinition accepts the explicit function-symbol shape used by
+// Go and method definitions, plus a TypeScript-specific projection for
+// top-level variable-assigned functions. scip-typescript encodes the latter as
+// value symbols ending in "."; their multi-line enclosing range lets us prove
+// that the definition covers an existing Function node. Requiring the graph
+// span to have the exact same bounds avoids promoting ordinary local variables
+// merely because they sit inside a function.
+func isSCIPFunctionDefinition(
+	symbol string,
+	file string,
+	occurrence *scip.Occurrence,
+	spans scipFileSpans,
+) bool {
+	if isSCIPFunctionSymbol(symbol) {
+		return true
+	}
+	if !strings.HasPrefix(symbol, "scip-typescript ") || !strings.HasSuffix(symbol, ".") {
+		return false
+	}
+	enclosing, err := scip.NewRange(occurrence.EnclosingRange)
+	if err != nil {
+		return false
+	}
+	start := int(enclosing.Start.Line) + 1
+	end := int(enclosing.End.Line) + 1
+	for _, span := range spans[file] {
+		if span.start == start && span.end == end {
+			return true
+		}
+	}
+	return false
+}
+
 func collectSCIPDefinitions(idx *scip.Index, spans scipFileSpans) (
 	definitions map[string]scipDefinitionLocation,
 	definitionTotals map[string]int,
@@ -182,7 +241,8 @@ func collectSCIPDefinitions(idx *scip.Index, spans scipFileSpans) (
 	definitionMatches = make(map[string]int)
 	for _, document := range idx.Documents {
 		for _, occurrence := range document.Occurrences {
-			if occurrence.SymbolRoles&int32(scip.SymbolRole_Definition) == 0 || !isSCIPFunctionSymbol(occurrence.Symbol) {
+			if occurrence.SymbolRoles&int32(scip.SymbolRole_Definition) == 0 ||
+				!isSCIPFunctionDefinition(occurrence.Symbol, document.RelativePath, occurrence, spans) {
 				continue
 			}
 			symbolRange, err := scip.NewRange(occurrence.Range)
@@ -190,9 +250,22 @@ func collectSCIPDefinitions(idx *scip.Index, spans scipFileSpans) (
 				continue
 			}
 			line := int(symbolRange.Start.Line) + 1
+			// SCIP definitions point at the symbol token, while tree-sitter
+			// nodes start at the whole declaration. Canonicalize a definition
+			// inside an existing function span to that node's start so both
+			// coordinate systems address the same graph endpoint. This matters
+			// for variable-assigned functions and decorated/multiline
+			// declarations whose symbol is not on the declaration's first line.
+			match := spans.atLine(document.RelativePath, line)
+			if match == nil {
+				match = spans.innermost(document.RelativePath, line)
+			}
+			if match != nil {
+				line = match.start
+			}
 			definitions[occurrence.Symbol] = scipDefinitionLocation{file: document.RelativePath, line: line}
 			definitionTotals[document.RelativePath]++
-			if spans.atLine(document.RelativePath, line) != nil {
+			if match != nil {
 				definitionMatches[document.RelativePath]++
 			}
 		}
@@ -257,7 +330,7 @@ func (p *Pipeline) deriveSCIPCalls(
 			continue
 		}
 		for _, occurrence := range document.Occurrences {
-			if occurrence.SymbolRoles&int32(scip.SymbolRole_Definition) != 0 || !isSCIPFunctionSymbol(occurrence.Symbol) {
+			if occurrence.SymbolRoles&int32(scip.SymbolRole_Definition) != 0 {
 				continue
 			}
 			definition, ok := definitions[occurrence.Symbol]
@@ -273,7 +346,7 @@ func (p *Pipeline) deriveSCIPCalls(
 			if int(symbolRange.End.Character) > len(line) {
 				continue
 			}
-			if !strings.HasPrefix(strings.TrimLeft(line[symbolRange.End.Character:], " \t"), "(") {
+			if !isCallSuffix(line[symbolRange.End.Character:]) {
 				continue
 			}
 			callShaped++

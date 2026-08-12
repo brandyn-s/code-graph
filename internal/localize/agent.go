@@ -137,19 +137,22 @@ func CodeLocalizeWithStrategy(ctx context.Context, st *store.Store, project, iss
 		})
 	}
 
-	// Step 2: load all edges once so BFS can index by source/target
-	// without per-step DB roundtrips. Acceptable cost for typical
-	// project sizes (~200K edges = a few MB).
-	allEdges, err := st.AllEdges(project)
+	// Step 2: load only the endpoint columns and relationship types BFS can
+	// traverse. Loading every edge used to materialize unrelated relationship
+	// families and decode their JSON properties even though localization only
+	// needs topology; that dominates latency and memory on million-edge graphs.
+	edgeTypes := make([]string, 0, len(AllowedEdgeTypes))
+	for edgeType := range AllowedEdgeTypes {
+		edgeTypes = append(edgeTypes, edgeType)
+	}
+	sort.Strings(edgeTypes)
+	allEdges, err := st.FindEdgeEndpointsByTypes(project, edgeTypes)
 	if err != nil {
-		return nil, fmt.Errorf("load edges: %w", err)
+		return nil, fmt.Errorf("load localization edges: %w", err)
 	}
 	outAdj := make(map[int64][]edgeRef, len(allEdges))
 	inAdj := make(map[int64][]edgeRef, len(allEdges))
 	for _, e := range allEdges {
-		if !AllowedEdgeTypes[e.Type] {
-			continue
-		}
 		outAdj[e.SourceID] = append(outAdj[e.SourceID], edgeRef{other: e.TargetID, etype: e.Type})
 		inAdj[e.TargetID] = append(inAdj[e.TargetID], edgeRef{other: e.SourceID, etype: e.Type})
 	}

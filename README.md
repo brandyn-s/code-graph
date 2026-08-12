@@ -214,8 +214,8 @@ project-level tier status and legacy SCIP provenance are insufficient.
 
 ### Relationship accuracy
 
-The compiler-tier CALLS behavior first released in `v0.8.0-redacted.5` and
-retained in `v0.8.0-redacted.6` is measured in
+The Go compiler-tier CALLS behavior first released in `v0.8.0-redacted.5` is
+measured in
 [`bench/accuracy/baselines/2026-08-12-compiler-tier-calls-report.md`](bench/accuracy/baselines/2026-08-12-compiler-tier-calls-report.md).
 An independent Go SSA/RTA oracle that reads neither SCIP nor graph output
 measured only `scip-ingest` edges bound to the exact input artifact. Across
@@ -224,6 +224,15 @@ recall 0.932, and F1 0.950 (3,147 true positives, 102 false positives, 231
 false negatives). A hand-enumerated synthetic gate was perfect. Dynamic RTA
 edges were excluded because the current SCIP ingestion contract emits
 statically resolved call sites.
+
+The candidate TypeScript compiler tier is independently measured in
+[`bench/accuracy/baselines/2026-08-12-typescript-compiler-tier-calls-report.md`](bench/accuracy/baselines/2026-08-12-typescript-compiler-tier-calls-report.md).
+On public `sindresorhus/ky`, a TypeScript 5.9.3 compiler-API oracle measured
+138 true positives, zero false positives, and zero false negatives (precision,
+recall, and F1 1.000). The oracle reads neither SCIP nor graph output and first
+passes a hand-enumerated fixture. The result covers project-local static calls
+and constructors represented by graph Function/Method nodes; it is not a
+dynamic JavaScript call graph or a language-general claim.
 
 The normal heuristic-tier Go CALLS measurement is
 [`bench/accuracy/baselines/2026-08-12-code-graph-go-report.md`](bench/accuracy/baselines/2026-08-12-code-graph-go-report.md).
@@ -250,10 +259,18 @@ demonstrate a distributed organizational fleet or class-leading resource
 efficiency; peak memory and warm-query latency remain explicit optimization
 targets.
 
-These are strong but bounded Go CALLS results, not a universal graph-precision
-claim. Compiler-tier Cobra recall was 0.867 and remains visible. The compiler
-oracle does not yet cover TypeScript or other languages, the current heuristic
-harness does not provide a current Go IMPORTS result, and edge-level
+A focused candidate `code_localize` query improvement is measured in
+[`bench/accuracy/baselines/2026-08-12-llvm-localize-efficiency.md`](bench/accuracy/baselines/2026-08-12-llvm-localize-efficiency.md).
+On the preserved 729,010-node / 2,308,049-edge LLVM graph, the exact same query
+improved from 12.95 seconds to 3.02 seconds repeat median (4.29×), while fresh
+peak RSS fell from 1.784 GB to 0.627 GB (64.9%). The normalized response hash
+was identical. This improves query execution; it does not reduce the 2.89 GB
+index or the original indexing peak.
+
+These are strong but bounded Go and TypeScript CALLS results, not a universal
+graph-precision claim. Compiler-tier Cobra recall was 0.867 and remains
+visible. The compiler oracle does not yet cover other languages, the current
+heuristic harness does not provide a current Go IMPORTS result, and edge-level
 precision/recall is not established for every relationship type.
 Consequential results should therefore report the effective precision tier and
 carry source or relationship evidence.
@@ -479,6 +496,12 @@ These tools are complementary — **code-search finds by meaning, code-graph fin
 | "How does error handling work?" | **code-search** first; add code-graph only when callers or flows are requested |
 
 The `get_relevant_context` tool bridges both: given files you plan to modify, it returns callers, callees, tests, and change-coupled files — everything an AI agent needs to make a safe change, in ~500 tokens instead of ~80K.
+
+A public maintenance dogfood on Chainlit is recorded in
+[`bench/accuracy/baselines/2026-08-12-search-graph-dogfood.md`](bench/accuracy/baselines/2026-08-12-search-graph-dogfood.md):
+search localized WebSocket auth/session concepts, then directed graph traces
+verified authentication, reconnect, and endpoint blast-radius relationships.
+It is workflow evidence, not a comparative accuracy benchmark.
 
 ## Troubleshooting
 

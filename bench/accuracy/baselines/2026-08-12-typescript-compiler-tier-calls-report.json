@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "measurement_date": "2026-08-12",
+  "candidate": {
+    "repository": "redacted-org/code-graph",
+    "source_revision": "candidate",
+    "change_scope": "TypeScript SCIP CALLS ingestion"
+  },
+  "fixture": {
+    "id": "sindresorhus-ky",
+    "source_revision": "3419113b48e034fdcf8fa6bd3be3da7b3d0d758f",
+    "source_files": 30,
+    "indexed_files": 58
+  },
+  "generator": {
+    "repository": "sourcegraph/scip-typescript",
+    "release": "v0.4.0",
+    "source_revision": "1962a68386220dd669c3839b69d64fb5ce34f2a6",
+    "typescript_version": "5.9.3",
+    "resolution_artifact_sha256": "a0d8c5189883056c72be55a17bb73da15e8d5f2d56082bc0399cd6207dae35c5"
+  },
+  "oracle": {
+    "name": "typescript-compiler-api-call-target-v1",
+    "implementation": "bench/accuracy/tools/oracle-typescript-compiler",
+    "scope": "project-local static calls and constructors represented by graph Function or Method nodes",
+    "uses_scip_as_truth": false,
+    "uses_code_graph_as_truth": false,
+    "hand_enumerated_fixture": {
+      "true_positive": 6,
+      "false_positive": 0,
+      "false_negative": 0
+    }
+  },
+  "before": {
+    "true_positive": 85,
+    "false_positive": 0,
+    "false_negative": 53,
+    "precision": 1.0,
+    "recall": 0.6159420289855072,
+    "f1": 0.7623318385650223
+  },
+  "after": {
+    "true_positive": 138,
+    "false_positive": 0,
+    "false_negative": 0,
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1": 1.0
+  },
+  "root_causes": [
+    "scip-typescript encodes top-level variable-assigned functions as value symbols rather than symbols ending in parentheses",
+    "generic call sites place TypeScript type arguments between the referenced symbol and the opening call parenthesis",
+    "SCIP definition symbol coordinates can be inside a declaration while graph nodes begin at the declaration boundary"
+  ],
+  "gate_result": "pass"
+}

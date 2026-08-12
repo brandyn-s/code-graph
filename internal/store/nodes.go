@@ -210,6 +210,46 @@ func (s *Store) AllNodes(project string) ([]*Node, error) {
 	return scanNodes(rows)
 }
 
+// FindNodeSeedCandidates returns the minimal node projection that could match
+// any exact-name or qualified-name token. It is used by substring seed
+// selection to avoid loading every project node and decoding properties that
+// cannot affect the match.
+func (s *Store) FindNodeSeedCandidates(project string, exactNameTokens, qnTokens []string) ([]*Node, error) {
+	conditions := make([]string, 0, len(exactNameTokens)+len(qnTokens))
+	args := make([]any, 0, 1+len(exactNameTokens)+len(qnTokens))
+	args = append(args, project)
+	for _, token := range exactNameTokens {
+		conditions = append(conditions, "name = ? COLLATE NOCASE")
+		args = append(args, token)
+	}
+	for _, token := range qnTokens {
+		conditions = append(conditions, "qualified_name LIKE ? COLLATE NOCASE")
+		args = append(args, "%"+token+"%")
+	}
+	if len(conditions) == 0 {
+		return []*Node{}, nil
+	}
+
+	query := `SELECT id, project, label, name, qualified_name, file_path, start_line, end_line
+		FROM nodes WHERE project=? AND (` + strings.Join(conditions, " OR ") + `)`
+	rows, err := s.q.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("find node seed candidates: %w", err)
+	}
+	defer rows.Close()
+
+	result := make([]*Node, 0)
+	for rows.Next() {
+		var node Node
+		if err := rows.Scan(&node.ID, &node.Project, &node.Label, &node.Name, &node.QualifiedName,
+			&node.FilePath, &node.StartLine, &node.EndLine); err != nil {
+			return nil, err
+		}
+		result = append(result, &node)
+	}
+	return result, rows.Err()
+}
+
 type scanner interface {
 	Scan(dest ...any) error
 }

@@ -186,9 +186,16 @@ func MatchSeedNodes(st *store.Store, project, query string) ([]*store.Node, erro
 	if strings.TrimSpace(query) == "" {
 		return nil, fmt.Errorf("query is required")
 	}
-	nodes, err := st.AllNodes(project)
+	tokens := tokenize(query)
+	qualifiedNameTokens := make([]string, 0, len(tokens))
+	for _, token := range tokens {
+		if len(token) >= 3 {
+			qualifiedNameTokens = append(qualifiedNameTokens, token)
+		}
+	}
+	nodes, err := st.FindNodeSeedCandidates(project, tokens, qualifiedNameTokens)
 	if err != nil {
-		return nil, fmt.Errorf("load nodes: %w", err)
+		return nil, fmt.Errorf("load seed candidates: %w", err)
 	}
 	seedIdx := matchSeeds(nodes, query)
 	out := make([]*store.Node, 0, len(seedIdx))

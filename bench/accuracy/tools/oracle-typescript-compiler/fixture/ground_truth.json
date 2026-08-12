@@ -1,0 +1,28 @@
+{
+  "edges": [
+    {
+      "callee": {"file": "src/math.ts", "line": 5, "name": "normalize"},
+      "caller": {"file": "src/main.ts", "line": 3, "name": "render"}
+    },
+    {
+      "callee": {"file": "src/math.ts", "line": 10, "name": "constructor"},
+      "caller": {"file": "src/main.ts", "line": 3, "name": "render"}
+    },
+    {
+      "callee": {"file": "src/math.ts", "line": 12, "name": "format"},
+      "caller": {"file": "src/main.ts", "line": 3, "name": "render"}
+    },
+    {
+      "callee": {"file": "src/math.ts", "line": 1, "name": "clamp"},
+      "caller": {"file": "src/math.ts", "line": 5, "name": "normalize"}
+    },
+    {
+      "callee": {"file": "src/math.ts", "line": 5, "name": "normalize"},
+      "caller": {"file": "src/math.ts", "line": 12, "name": "format"}
+    },
+    {
+      "callee": {"file": "src/math.ts", "line": 5, "name": "normalize"},
+      "caller": {"file": "src/math.ts", "line": 22, "name": "wrap"}
+    }
+  ]
+}

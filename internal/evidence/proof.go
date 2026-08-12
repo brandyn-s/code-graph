@@ -193,7 +193,8 @@ func validateEvidenceRef(ref *EvidenceRef) error {
 		return fmt.Errorf("evidence_ref cannot contain both relationship_ref and analysis_ref")
 	}
 	var expected EvidenceRef
-	if ref.AnalysisRef != nil {
+	switch {
+	case ref.AnalysisRef != nil:
 		if err := validateAnalysisRef(ref.AnalysisRef); err != nil {
 			return err
 		}
@@ -207,7 +208,7 @@ func validateEvidenceRef(ref *EvidenceRef) error {
 			return fmt.Errorf("analysis_ref requires codeql_path evidence")
 		}
 		expected = NewAnalysisEvidenceRef(*analysis)
-	} else if ref.RelationshipRef == nil {
+	case ref.RelationshipRef == nil:
 		expected = NewEvidenceRef(
 			ref.RepositoryID,
 			ref.SourceRevision,
@@ -218,7 +219,7 @@ func validateEvidenceRef(ref *EvidenceRef) error {
 			ref.EvidenceType,
 			ref.SymbolRef,
 		)
-	} else {
+	default:
 		if err := validateRelationshipRef(ref.RelationshipRef); err != nil {
 			return err
 		}
@@ -546,7 +547,7 @@ func buildAssuranceLattice(requirement *AssuranceRequirement, supporting, contra
 	}
 }
 
-func assuranceLatticeMap(lattice AssuranceLattice) map[string]any {
+func assuranceLatticeMap(lattice *AssuranceLattice) map[string]any {
 	var satisfiedBy any
 	if lattice.SatisfiedBy != nil {
 		satisfiedBy = *lattice.SatisfiedBy
@@ -616,6 +617,46 @@ func isTrustedSupport(observation *ObservationRef) bool {
 		observation.EvidenceRef.RelationshipRef.RuntimeObserved
 }
 
+func incompleteProofCaveats(
+	bundle *ProofBundle,
+	supporting []*ObservationRef,
+	invariantUnresolved bool,
+	assuranceRequired bool,
+	assuranceSatisfiedBy func(string) bool,
+) []string {
+	caveats := make([]string, 0)
+	if !bundle.ContradictionSearch.Performed {
+		caveats = append(caveats, "contradiction_search_not_performed")
+	}
+	if bundle.Coverage.State != "complete" {
+		caveats = append(caveats, "coverage_"+bundle.Coverage.State)
+	}
+	if bundle.Coverage.Unresolved > 0 {
+		caveats = append(caveats, "coverage_has_unresolved_subjects")
+	}
+	if invariantUnresolved {
+		caveats = append(caveats, "invariant_unresolved")
+	}
+	if len(supporting) == 0 {
+		caveats = append(caveats, "no_supporting_evidence")
+	} else {
+		trusted := false
+		for _, observation := range supporting {
+			if isTrustedSupport(observation) {
+				trusted = true
+				break
+			}
+		}
+		if !trusted {
+			caveats = append(caveats, "supporting_evidence_not_trustworthy")
+		}
+	}
+	if assuranceRequired && !assuranceSatisfiedBy("support") {
+		caveats = append(caveats, "required_assurance_not_satisfied")
+	}
+	return caveats
+}
+
 // EvaluateProof works from a value copy so evaluation cannot mutate caller-owned evidence.
 //
 //nolint:gocritic // The defensive copy is part of the deterministic proof contract.
@@ -666,35 +707,13 @@ func EvaluateProof(bundle ProofBundle) (ProofResult, error) {
 			verdict = VerdictContradicted
 		}
 	default:
-		if !bundle.ContradictionSearch.Performed {
-			caveats = append(caveats, "contradiction_search_not_performed")
-		}
-		if bundle.Coverage.State != "complete" {
-			caveats = append(caveats, "coverage_"+bundle.Coverage.State)
-		}
-		if bundle.Coverage.Unresolved > 0 {
-			caveats = append(caveats, "coverage_has_unresolved_subjects")
-		}
-		if invariantUnresolved {
-			caveats = append(caveats, "invariant_unresolved")
-		}
-		if len(supporting) == 0 {
-			caveats = append(caveats, "no_supporting_evidence")
-		} else {
-			trusted := false
-			for _, observation := range supporting {
-				if isTrustedSupport(observation) {
-					trusted = true
-					break
-				}
-			}
-			if !trusted {
-				caveats = append(caveats, "supporting_evidence_not_trustworthy")
-			}
-		}
-		if assuranceRequired && !assuranceSatisfiedBy("support") {
-			caveats = append(caveats, "required_assurance_not_satisfied")
-		}
+		caveats = append(caveats, incompleteProofCaveats(
+			&bundle,
+			supporting,
+			invariantUnresolved,
+			assuranceRequired,
+			assuranceSatisfiedBy,
+		)...)
 		if len(caveats) > 0 {
 			verdict = VerdictUnresolved
 		}
@@ -724,7 +743,7 @@ func EvaluateProof(bundle ProofBundle) (ProofResult, error) {
 		"caveats":                       caveats,
 	}
 	if assuranceRequired {
-		proofPayload["assurance_lattice"] = assuranceLatticeMap(assuranceLattice)
+		proofPayload["assurance_lattice"] = assuranceLatticeMap(&assuranceLattice)
 	}
 	return ProofResult{
 		ProofID:                     stableID("proof", proofPayload),

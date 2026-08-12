@@ -8,6 +8,7 @@ import (
 
 	"github.com/DeusData/codebase-memory-mcp/internal/localize"
 	"github.com/DeusData/codebase-memory-mcp/internal/ranking"
+	"github.com/DeusData/codebase-memory-mcp/internal/store"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -18,6 +19,15 @@ type crossProjectLocalizedEntity struct {
 	ProjectRank int    `json:"project_rank"`
 	GlobalRank  int    `json:"global_rank"`
 	localize.LocalizedEntity
+}
+
+type crossProjectLocalizationRequest struct {
+	query          string
+	requested      []string
+	strategy       ranking.SeedStrategy
+	depth          int
+	perProjectTopK int
+	topK           int
 }
 
 func stringSliceArg(args map[string]any, key string) ([]string, error) {
@@ -46,58 +56,49 @@ func stringSliceArg(args map[string]any, key string) ([]string, error) {
 	return out, nil
 }
 
-func (s *Server) handleLocalizeAcrossProjects(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+func boundedIntArg(args map[string]any, key string, fallback, minimum, maximum int) int {
+	value := getIntArg(args, key, fallback)
+	if value < minimum {
+		return minimum
+	}
+	if value > maximum {
+		return maximum
+	}
+	return value
+}
+
+func parseCrossProjectLocalizationRequest(req *mcp.CallToolRequest) (crossProjectLocalizationRequest, error) {
 	args, err := parseArgs(req)
 	if err != nil {
-		return errResult(err.Error()), nil
+		return crossProjectLocalizationRequest{}, err
 	}
 	query := strings.TrimSpace(getStringArg(args, "query"))
 	if query == "" {
-		return errResult("query is required"), nil
+		return crossProjectLocalizationRequest{}, fmt.Errorf("query is required")
 	}
 	requested, err := stringSliceArg(args, "projects")
 	if err != nil {
-		return errResult(err.Error()), nil
+		return crossProjectLocalizationRequest{}, err
 	}
-	requestedSet := make(map[string]bool, len(requested))
-	for _, project := range requested {
-		requestedSet[project] = true
-	}
-
 	strategyName := getStringArg(args, "seed_strategy")
 	if strategyName == "" {
 		strategyName = string(ranking.SeedStrategyHybrid)
 	}
 	strategy := ranking.SeedStrategy(strategyName)
-	if strategy != ranking.SeedStrategySubstring && strategy != ranking.SeedStrategyEmbedding && strategy != ranking.SeedStrategyHybrid {
-		return errResult("seed_strategy must be 'substring', 'embedding', or 'hybrid'"), nil
+	switch strategy {
+	case ranking.SeedStrategySubstring, ranking.SeedStrategyEmbedding, ranking.SeedStrategyHybrid:
+	default:
+		return crossProjectLocalizationRequest{}, fmt.Errorf("seed_strategy must be 'substring', 'embedding', or 'hybrid'")
 	}
-	depth := getIntArg(args, "depth", 2)
-	if depth < 0 {
-		depth = 0
-	}
-	if depth > 5 {
-		depth = 5
-	}
-	perProjectTopK := getIntArg(args, "per_project_top_k", 5)
-	if perProjectTopK < 1 {
-		perProjectTopK = 1
-	}
-	if perProjectTopK > 20 {
-		perProjectTopK = 20
-	}
-	topK := getIntArg(args, "top_k", 25)
-	if topK < 1 {
-		topK = 1
-	}
-	if topK > 100 {
-		topK = 100
-	}
+	return crossProjectLocalizationRequest{
+		query: query, requested: requested, strategy: strategy,
+		depth:          boundedIntArg(args, "depth", 2, 0, 5),
+		perProjectTopK: boundedIntArg(args, "per_project_top_k", 5, 1, 20),
+		topK:           boundedIntArg(args, "top_k", 25, 1, 100),
+	}, nil
+}
 
-	infos, err := s.router.ListProjects()
-	if err != nil {
-		return errResult(fmt.Sprintf("list projects: %v", err)), nil
-	}
+func selectedCrossProjectInfos(infos []*store.ProjectInfo, requested []string) ([]*store.ProjectInfo, bool, error) {
 	sort.Slice(infos, func(i, j int) bool { return infos[i].Name < infos[j].Name })
 	available := make(map[string]bool, len(infos))
 	for _, info := range infos {
@@ -105,45 +106,63 @@ func (s *Server) handleLocalizeAcrossProjects(ctx context.Context, req *mcp.Call
 	}
 	for _, project := range requested {
 		if !available[project] {
-			return errResult(fmt.Sprintf("project %q not found; use list_projects for canonical names", project)), nil
+			return nil, false, fmt.Errorf("project %q not found; use list_projects for canonical names", project)
 		}
 	}
-
-	perProject := make(map[string][]localize.LocalizedEntity)
-	projectContexts := make(map[string]any)
-	projectErrors := make(map[string]string)
-	attempted := 0
-	truncatedProjects := false
+	requestedSet := make(map[string]bool, len(requested))
+	for _, project := range requested {
+		requestedSet[project] = true
+	}
+	selected := make([]*store.ProjectInfo, 0, min(len(infos), maxCrossProjectIndexes))
+	truncated := false
 	for _, info := range infos {
 		if strings.HasPrefix(info.Name, "_") || (len(requestedSet) > 0 && !requestedSet[info.Name]) {
 			continue
 		}
-		if attempted == maxCrossProjectIndexes {
-			truncatedProjects = true
+		if len(selected) == maxCrossProjectIndexes {
+			truncated = true
 			break
 		}
-		attempted++
-		st, release, openErr := s.router.AcquireStore(info.Name)
-		if openErr != nil {
-			projectErrors[info.Name] = openErr.Error()
+		selected = append(selected, info)
+	}
+	return selected, truncated, nil
+}
+
+func (s *Server) localizeSelectedProjects(
+	ctx context.Context,
+	request crossProjectLocalizationRequest,
+	infos []*store.ProjectInfo,
+) (map[string][]localize.LocalizedEntity, map[string]any, map[string]string) {
+	perProject := make(map[string][]localize.LocalizedEntity)
+	projectContexts := make(map[string]any)
+	projectErrors := make(map[string]string)
+	for _, info := range infos {
+		st, release, err := s.router.AcquireStore(info.Name)
+		if err != nil {
+			projectErrors[info.Name] = err.Error()
 			continue
 		}
-		matches, localizeErr := localize.CodeLocalizeWithStrategy(ctx, st, info.Name, query, depth, perProjectTopK, strategy)
+		matches, localizeErr := localize.CodeLocalizeWithStrategy(
+			ctx, st, info.Name, request.query, request.depth, request.perProjectTopK, request.strategy,
+		)
 		contextFields := map[string]any{"root_path": info.RootPath}
 		s.addLiveIndexIdentity(contextFields, st, info.Name, info.RootPath)
 		projectContexts[info.Name] = contextFields
 		release()
-		if localizeErr != nil {
-			if strings.Contains(localizeErr.Error(), "no nodes matched") {
-				perProject[info.Name] = []localize.LocalizedEntity{}
-				continue
-			}
-			projectErrors[info.Name] = localizeErr.Error()
+		if localizeErr == nil {
+			perProject[info.Name] = matches
 			continue
 		}
-		perProject[info.Name] = matches
+		if strings.Contains(localizeErr.Error(), "no nodes matched") {
+			perProject[info.Name] = []localize.LocalizedEntity{}
+			continue
+		}
+		projectErrors[info.Name] = localizeErr.Error()
 	}
+	return perProject, projectContexts, projectErrors
+}
 
+func balanceCrossProjectResults(perProject map[string][]localize.LocalizedEntity, topK int) []crossProjectLocalizedEntity {
 	projectNames := make([]string, 0, len(perProject))
 	for project := range perProject {
 		projectNames = append(projectNames, project)
@@ -170,6 +189,25 @@ func (s *Server) handleLocalizeAcrossProjects(ctx context.Context, req *mcp.Call
 			break
 		}
 	}
+	return results
+}
+
+func (s *Server) handleLocalizeAcrossProjects(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	request, err := parseCrossProjectLocalizationRequest(req)
+	if err != nil {
+		return errResult(err.Error()), nil
+	}
+
+	infos, err := s.router.ListProjects()
+	if err != nil {
+		return errResult(fmt.Sprintf("list projects: %v", err)), nil
+	}
+	selected, truncatedProjects, err := selectedCrossProjectInfos(infos, request.requested)
+	if err != nil {
+		return errResult(err.Error()), nil
+	}
+	perProject, projectContexts, projectErrors := s.localizeSelectedProjects(ctx, request, selected)
+	results := balanceCrossProjectResults(perProject, request.topK)
 	projectsWithMatches := 0
 	for _, matches := range perProject {
 		if len(matches) > 0 {
@@ -178,8 +216,8 @@ func (s *Server) handleLocalizeAcrossProjects(ctx context.Context, req *mcp.Call
 	}
 
 	return jsonResult(map[string]any{
-		"query":                          query,
-		"projects_attempted":             attempted,
+		"query":                          request.query,
+		"projects_attempted":             len(selected),
 		"projects_with_matches":          projectsWithMatches,
 		"projects_truncated":             truncatedProjects,
 		"ranking_policy":                 "project_balanced_round_robin",

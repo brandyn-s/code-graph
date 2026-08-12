@@ -57,7 +57,7 @@ func sortedLimitedStrings(values []string, limit int) ([]string, bool) {
 	return values[:limit], true
 }
 
-func symbolLess(left, right projectIndexSymbol) bool {
+func symbolLess(left, right *projectIndexSymbol) bool {
 	if left.FilePath != right.FilePath {
 		return left.FilePath < right.FilePath
 	}
@@ -116,11 +116,12 @@ func (s *Server) handleCompareProjectIndexes(_ context.Context, req *mcp.CallToo
 	unchangedFiles := 0
 	for path, targetHash := range targetHashes {
 		baseHash, exists := baseHashes[path]
-		if !exists {
+		switch {
+		case !exists:
 			addedFiles = append(addedFiles, path)
-		} else if baseHash.SHA256 != targetHash.SHA256 {
+		case baseHash.SHA256 != targetHash.SHA256:
 			modifiedFiles = append(modifiedFiles, path)
-		} else {
+		default:
 			unchangedFiles++
 		}
 	}
@@ -148,13 +149,14 @@ func (s *Server) handleCompareProjectIndexes(_ context.Context, req *mcp.CallToo
 	unchangedSymbols := 0
 	for key, targetSymbol := range targetSymbols {
 		baseSymbol, exists := baseSymbols[key]
-		if !exists {
+		switch {
+		case !exists:
 			addedSymbols = append(addedSymbols, targetSymbol)
-		} else if baseSymbol != targetSymbol {
+		case baseSymbol != targetSymbol:
 			changedSymbols = append(changedSymbols, changedProjectIndexSymbol{
 				QualifiedName: targetSymbol.QualifiedName, Before: baseSymbol, After: targetSymbol,
 			})
-		} else {
+		default:
 			unchangedSymbols++
 		}
 	}
@@ -164,9 +166,9 @@ func (s *Server) handleCompareProjectIndexes(_ context.Context, req *mcp.CallToo
 		}
 	}
 	addedSymbolCount, removedSymbolCount, changedSymbolCount := len(addedSymbols), len(removedSymbols), len(changedSymbols)
-	sort.Slice(addedSymbols, func(i, j int) bool { return symbolLess(addedSymbols[i], addedSymbols[j]) })
-	sort.Slice(removedSymbols, func(i, j int) bool { return symbolLess(removedSymbols[i], removedSymbols[j]) })
-	sort.Slice(changedSymbols, func(i, j int) bool { return symbolLess(changedSymbols[i].After, changedSymbols[j].After) })
+	sort.Slice(addedSymbols, func(i, j int) bool { return symbolLess(&addedSymbols[i], &addedSymbols[j]) })
+	sort.Slice(removedSymbols, func(i, j int) bool { return symbolLess(&removedSymbols[i], &removedSymbols[j]) })
+	sort.Slice(changedSymbols, func(i, j int) bool { return symbolLess(&changedSymbols[i].After, &changedSymbols[j].After) })
 	symbolsTruncated := len(addedSymbols) > limit || len(removedSymbols) > limit || len(changedSymbols) > limit
 	if len(addedSymbols) > limit {
 		addedSymbols = addedSymbols[:limit]

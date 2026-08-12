@@ -48,8 +48,8 @@ func TestLocalizeAcrossProjectsReturnsStableProjectBalancedResults(t *testing.T)
 	if !ok || len(results) != 2 {
 		t.Fatalf("results = %T %v, want two", response["results"], response["results"])
 	}
-	first := results[0].(map[string]any)
-	second := results[1].(map[string]any)
+	first := requireMapValue(t, results[0], "results[0]")
+	second := requireMapValue(t, results[1], "results[1]")
 	if first["project"] != "alpha" || second["project"] != "beta" {
 		t.Fatalf("project order = %v, %v; want alpha, beta", first["project"], second["project"])
 	}

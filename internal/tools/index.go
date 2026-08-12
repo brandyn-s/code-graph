@@ -188,7 +188,7 @@ func (s *Server) handleIndexRepository(ctx context.Context, req *mcp.CallToolReq
 		}
 		return errResult(fmt.Sprintf("indexing failed: %v", err)), nil
 	}
-	s.persistGraphPrecision(projectName, precisionSelection, p.SCIPStatus)
+	s.persistGraphPrecision(projectName, precisionSelection, &p.SCIPStatus)
 	terminalIdentityGuardArmed = true
 	if err := st.SetIndexIdentityState(
 		projectName,
@@ -336,7 +336,7 @@ func (s *Server) handleIndexRepository(ctx context.Context, req *mcp.CallToolReq
 		"indexed_at":    indexedAt,
 		"_metadata":     s.stdWriteToolMetadata(outcome),
 	}
-	result["graph_precision"] = graphPrecisionResult(precisionSelection, p.SCIPStatus)
+	result["graph_precision"] = graphPrecisionResult(precisionSelection, &p.SCIPStatus)
 	if precisionSelection.Tier == graphPrecisionSCIP && p.SCIPStatus.State != "applied" {
 		result["status"] = "degraded"
 		result["precision_reason"] = "SCIP precision was requested but not applied; graph results are heuristic"

@@ -56,20 +56,24 @@ func TestCompareProjectIndexesReportsDeterministicFileAndSymbolDelta(t *testing.
 		"limit":          20,
 	})
 
-	files := response["file_delta"].(map[string]any)
+	files := requireMapValue(t, response["file_delta"], "file_delta")
 	for key, want := range map[string]float64{"added_count": 1, "removed_count": 1, "modified_count": 1, "unchanged_count": 1} {
 		if got := files[key]; got != want {
 			t.Fatalf("file_delta.%s = %v, want %v", key, got, want)
 		}
 	}
-	symbols := response["symbol_delta"].(map[string]any)
+	symbols := requireMapValue(t, response["symbol_delta"], "symbol_delta")
 	for key, want := range map[string]float64{"added_count": 1, "removed_count": 1, "changed_count": 1} {
 		if got := symbols[key]; got != want {
 			t.Fatalf("symbol_delta.%s = %v, want %v", key, got, want)
 		}
 	}
-	changed := symbols["changed"].([]any)
-	if len(changed) != 1 || changed[0].(map[string]any)["qualified_name"] != "auth.Authenticate" {
+	changed, ok := symbols["changed"].([]any)
+	if !ok || len(changed) != 1 {
+		t.Fatalf("changed symbols = %T %v, want one entry", symbols["changed"], symbols["changed"])
+	}
+	firstChanged := requireMapValue(t, changed[0], "symbol_delta.changed[0]")
+	if firstChanged["qualified_name"] != "auth.Authenticate" {
 		t.Fatalf("changed symbols = %v", changed)
 	}
 	if response["comparison_contract"] != "immutable_index_snapshot_delta" {

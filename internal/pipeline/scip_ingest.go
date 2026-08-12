@@ -126,6 +126,21 @@ type scipFuncSpan struct {
 
 type scipFileSpans map[string][]scipFuncSpan // file_path -> spans sorted by start
 
+type scipDefinitionLocation struct {
+	file string
+	line int
+}
+
+type scipEdgePair struct {
+	source int64
+	target int64
+}
+
+type scipSourceCache struct {
+	repoRoot string
+	lines    map[string][]string
+}
+
 // innermost returns the smallest span containing line, or nil.
 func (fs scipFileSpans) innermost(file string, line int) *scipFuncSpan {
 	var best *scipFuncSpan
@@ -153,6 +168,140 @@ func (fs scipFileSpans) atLine(file string, line int) *scipFuncSpan {
 	return nil
 }
 
+func isSCIPFunctionSymbol(symbol string) bool {
+	return strings.HasSuffix(symbol, ").") && !strings.HasPrefix(symbol, "local ")
+}
+
+func collectSCIPDefinitions(idx *scip.Index, spans scipFileSpans) (
+	map[string]scipDefinitionLocation,
+	map[string]int,
+	map[string]int,
+) {
+	definitions := make(map[string]scipDefinitionLocation)
+	definitionTotals := make(map[string]int)
+	definitionMatches := make(map[string]int)
+	for _, document := range idx.Documents {
+		for _, occurrence := range document.Occurrences {
+			if occurrence.SymbolRoles&int32(scip.SymbolRole_Definition) == 0 || !isSCIPFunctionSymbol(occurrence.Symbol) {
+				continue
+			}
+			symbolRange, err := scip.NewRange(occurrence.Range)
+			if err != nil {
+				continue
+			}
+			line := int(symbolRange.Start.Line) + 1
+			definitions[occurrence.Symbol] = scipDefinitionLocation{file: document.RelativePath, line: line}
+			definitionTotals[document.RelativePath]++
+			if spans.atLine(document.RelativePath, line) != nil {
+				definitionMatches[document.RelativePath]++
+			}
+		}
+	}
+	return definitions, definitionTotals, definitionMatches
+}
+
+func driftedSCIPDocuments(definitionTotals, definitionMatches map[string]int) map[string]bool {
+	drifted := make(map[string]bool)
+	for file, total := range definitionTotals {
+		if total > 0 && definitionMatches[file]*2 < total {
+			drifted[file] = true
+		}
+	}
+	return drifted
+}
+
+func coveredSCIPFiles(idx *scip.Index, drifted map[string]bool) []string {
+	coveredSet := make(map[string]struct{}, len(idx.Documents))
+	for _, document := range idx.Documents {
+		if !drifted[document.RelativePath] {
+			coveredSet[document.RelativePath] = struct{}{}
+		}
+	}
+	covered := make([]string, 0, len(coveredSet))
+	for file := range coveredSet {
+		covered = append(covered, file)
+	}
+	sort.Strings(covered)
+	return covered
+}
+
+func (cache *scipSourceCache) line(file string, number int) string {
+	lines, ok := cache.lines[file]
+	if !ok {
+		contents, err := os.ReadFile(filepath.Join(cache.repoRoot, file))
+		if err != nil {
+			cache.lines[file] = []string{}
+			return ""
+		}
+		lines = strings.Split(string(contents), "\n")
+		cache.lines[file] = lines
+	}
+	if number < 0 || number >= len(lines) {
+		return ""
+	}
+	return lines[number]
+}
+
+func (p *Pipeline) deriveSCIPCalls(
+	idx *scip.Index,
+	spans scipFileSpans,
+	definitions map[string]scipDefinitionLocation,
+	drifted map[string]bool,
+) ([]*store.Edge, int, int) {
+	cache := scipSourceCache{repoRoot: p.RepoPath, lines: make(map[string][]string)}
+	seen := make(map[scipEdgePair]bool)
+	derived := make([]*store.Edge, 0)
+	referencesSeen, callShaped := 0, 0
+	for _, document := range idx.Documents {
+		if drifted[document.RelativePath] {
+			continue
+		}
+		for _, occurrence := range document.Occurrences {
+			if occurrence.SymbolRoles&int32(scip.SymbolRole_Definition) != 0 || !isSCIPFunctionSymbol(occurrence.Symbol) {
+				continue
+			}
+			definition, ok := definitions[occurrence.Symbol]
+			if !ok || drifted[definition.file] {
+				continue
+			}
+			referencesSeen++
+			symbolRange, err := scip.NewRange(occurrence.Range)
+			if err != nil {
+				continue
+			}
+			line := cache.line(document.RelativePath, int(symbolRange.End.Line))
+			if int(symbolRange.End.Character) > len(line) {
+				continue
+			}
+			if !strings.HasPrefix(strings.TrimLeft(line[symbolRange.End.Character:], " \t"), "(") {
+				continue
+			}
+			callShaped++
+			caller := spans.innermost(document.RelativePath, int(symbolRange.Start.Line)+1)
+			if caller == nil {
+				continue
+			}
+			callee := spans.atLine(definition.file, definition.line)
+			if callee == nil {
+				callee = spans.innermost(definition.file, definition.line)
+			}
+			if callee == nil {
+				continue
+			}
+			pair := scipEdgePair{source: caller.id, target: callee.id}
+			if seen[pair] {
+				continue
+			}
+			seen[pair] = true
+			derived = append(derived, &store.Edge{
+				Project: p.ProjectName, SourceID: caller.id, TargetID: callee.id, Type: "CALLS",
+				Properties: map[string]any{"resolver_rule": "scip-ingest"},
+			})
+		}
+	}
+	return derived, referencesSeen, callShaped
+}
+
 func (p *Pipeline) passSCIPIngest() {
 	path, source := p.scipPath, p.scipSource
 	if !p.scipConfigured {
@@ -173,7 +322,6 @@ func (p *Pipeline) passSCIPIngest() {
 	p.SCIPStatus.Source = source
 }
 
-//nolint:gocognit // linear two-pass derivation over the index
 func (p *Pipeline) runSCIPIngest(path string) (retErr error) {
 	p.SCIPStatus = SCIPIngestStatus{State: "running"}
 	defer func() {
@@ -200,37 +348,9 @@ func (p *Pipeline) runSCIPIngest(path string) (retErr error) {
 		p.SCIPStatus.ProjectFunctions += len(fileSpans)
 	}
 
-	// SCIP symbols for functions/methods end with a `().` descriptor;
-	// `local N` symbols are file-local (closures, parameters).
-	isFuncSym := func(sym string) bool {
-		return strings.HasSuffix(sym, ").") && !strings.HasPrefix(sym, "local ")
-	}
-
 	// Pass 1: symbol -> definition site. SCIP lines are 0-based; node
 	// spans are 1-based tree-sitter lines, hence the +1 below.
-	type defLoc struct {
-		file string
-		line int
-	}
-	defs := make(map[string]defLoc)
-	defTotal := make(map[string]int)   // file -> function-def occurrences
-	defMatched := make(map[string]int) // file -> defs landing on a node span start
-	for _, doc := range idx.Documents {
-		for _, occ := range doc.Occurrences {
-			if occ.SymbolRoles&int32(scip.SymbolRole_Definition) == 0 || !isFuncSym(occ.Symbol) {
-				continue
-			}
-			r, rErr := scip.NewRange(occ.Range)
-			if rErr != nil {
-				continue
-			}
-			defs[occ.Symbol] = defLoc{file: doc.RelativePath, line: int(r.Start.Line) + 1}
-			defTotal[doc.RelativePath]++
-			if spans.atLine(doc.RelativePath, int(r.Start.Line)+1) != nil {
-				defMatched[doc.RelativePath]++
-			}
-		}
-	}
+	definitions, definitionTotals, definitionMatches := collectSCIPDefinitions(&idx, spans)
 
 	// Stale-index guard: if a document's definition sites no longer line up
 	// with the freshly-indexed node spans, the file changed after the SCIP
@@ -239,12 +359,7 @@ func (p *Pipeline) runSCIPIngest(path string) (retErr error) {
 	// recall 0.955 -> 0.847 with a 3-commit-old index. Drifted files are
 	// excluded from BOTH deletion and derivation (their heuristic edges
 	// stay authoritative); regenerate the index to cover them.
-	drifted := make(map[string]bool)
-	for file, total := range defTotal {
-		if total > 0 && defMatched[file]*2 < total {
-			drifted[file] = true
-		}
-	}
+	drifted := driftedSCIPDocuments(definitionTotals, definitionMatches)
 	if len(drifted) > 0 {
 		slog.Warn("pass.scip_ingest.drifted_files",
 			"count", len(drifted),
@@ -252,13 +367,8 @@ func (p *Pipeline) runSCIPIngest(path string) (retErr error) {
 	}
 	p.SCIPStatus.Documents = len(idx.Documents)
 	p.SCIPStatus.DriftedDocuments = len(drifted)
-	coveredFiles := make(map[string]struct{}, len(idx.Documents))
-	for _, doc := range idx.Documents {
-		if !drifted[doc.RelativePath] {
-			coveredFiles[doc.RelativePath] = struct{}{}
-		}
-	}
-	for file := range coveredFiles {
+	covered := coveredSCIPFiles(&idx, drifted)
+	for _, file := range covered {
 		p.SCIPStatus.CoveredFunctions += len(spans[file])
 	}
 	if p.SCIPStatus.ProjectFunctions > 0 {
@@ -266,100 +376,13 @@ func (p *Pipeline) runSCIPIngest(path string) (retErr error) {
 	}
 
 	// Pass 2: derive call edges from call-shaped reference occurrences.
-	srcCache := make(map[string][]string)
-	lineOf := func(file string, n int) string {
-		lines, ok := srcCache[file]
-		if !ok {
-			b, rErr := os.ReadFile(filepath.Join(p.RepoPath, file))
-			if rErr != nil {
-				srcCache[file] = []string{}
-				return ""
-			}
-			lines = strings.Split(string(b), "\n")
-			srcCache[file] = lines
-		}
-		if n < 0 || n >= len(lines) {
-			return ""
-		}
-		return lines[n]
-	}
-
-	type pair struct{ src, tgt int64 }
-	seen := make(map[pair]bool)
-	var derived []*store.Edge
-	refsSeen, callShaped := 0, 0
-	for _, doc := range idx.Documents {
-		if drifted[doc.RelativePath] {
-			continue
-		}
-		for _, occ := range doc.Occurrences {
-			if occ.SymbolRoles&int32(scip.SymbolRole_Definition) != 0 || !isFuncSym(occ.Symbol) {
-				continue
-			}
-			d, ok := defs[occ.Symbol]
-			if !ok {
-				continue // external symbol (stdlib / dependency) — out of corpus
-			}
-			if drifted[d.file] {
-				continue // callee position unreliable in a drifted file
-			}
-			refsSeen++
-			r, rErr := scip.NewRange(occ.Range)
-			if rErr != nil {
-				continue
-			}
-			// Call-shaped: the next non-space char after the symbol is `(`.
-			// Filters out function values, method expressions, and doc refs.
-			line := lineOf(doc.RelativePath, int(r.End.Line))
-			if int(r.End.Character) > len(line) {
-				continue
-			}
-			rest := strings.TrimLeft(line[r.End.Character:], " \t")
-			if !strings.HasPrefix(rest, "(") {
-				continue
-			}
-			callShaped++
-
-			caller := spans.innermost(doc.RelativePath, int(r.Start.Line)+1)
-			if caller == nil {
-				continue // call at file/package scope (init expressions etc.)
-			}
-			callee := spans.atLine(d.file, d.line)
-			if callee == nil {
-				callee = spans.innermost(d.file, d.line)
-			}
-			if callee == nil {
-				continue
-			}
-			pr := pair{src: caller.id, tgt: callee.id}
-			if seen[pr] {
-				continue
-			}
-			seen[pr] = true
-			derived = append(derived, &store.Edge{
-				Project:  p.ProjectName,
-				SourceID: caller.id,
-				TargetID: callee.id,
-				Type:     "CALLS",
-				Properties: map[string]any{
-					"resolver_rule": "scip-ingest",
-				},
-			})
-		}
-	}
+	derived, refsSeen, callShaped := p.deriveSCIPCalls(&idx, spans, definitions, drifted)
 
 	// Replace heuristic CALLS edges only where the index can re-derive
 	// them: BOTH endpoints must live in covered, non-drifted files. Edges
 	// into files the indexer cannot see (CGO sources, platform-gated
 	// files) and edges touching drifted files keep their heuristic
 	// fallback.
-	covered := make([]string, 0, len(idx.Documents))
-	for _, doc := range idx.Documents {
-		if !drifted[doc.RelativePath] {
-			covered = append(covered, doc.RelativePath)
-		}
-	}
-	sort.Strings(covered)
 	deleted, err := p.Store.DeleteEdgesBetweenFiles(p.ProjectName, "CALLS", covered, covered)
 	if err != nil {
 		return fmt.Errorf("replace heuristic edges: %w", err)

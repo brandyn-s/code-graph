@@ -165,7 +165,7 @@ func (s *Server) syncProject(ctx context.Context, projectName, rootPath string) 
 		}
 		return err
 	}
-	s.persistGraphPrecision(projectName, precisionSelection, p.SCIPStatus)
+	s.persistGraphPrecision(projectName, precisionSelection, &p.SCIPStatus)
 	endIdentity, endIdentityErr := captureIdentity(rootPath)
 	identityErr := persistCoherentIndexIdentity(
 		st,
@@ -480,7 +480,7 @@ func (s *Server) runAutoIndex(hasDB bool) error {
 		}
 		return fmt.Errorf("auto-index pipeline: %w", err)
 	}
-	s.persistGraphPrecision(s.sessionProject, precisionSelection, p.SCIPStatus)
+	s.persistGraphPrecision(s.sessionProject, precisionSelection, &p.SCIPStatus)
 	if err := st.SetIndexIdentityState(
 		s.sessionProject,
 		indexidentity.StatusPending,

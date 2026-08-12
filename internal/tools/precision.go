@@ -89,7 +89,7 @@ func (s *Server) configureStoredGraphPrecision(p *pipeline.Pipeline, project, re
 	return selection, nil
 }
 
-func graphPrecisionResult(selection graphPrecisionSelection, status pipeline.SCIPIngestStatus) map[string]any {
+func graphPrecisionResult(selection graphPrecisionSelection, status *pipeline.SCIPIngestStatus) map[string]any {
 	effective := graphPrecisionHeuristic
 	if selection.Tier == graphPrecisionSCIP && status.State == "applied" {
 		effective = graphPrecisionSCIP
@@ -97,12 +97,12 @@ func graphPrecisionResult(selection graphPrecisionSelection, status pipeline.SCI
 	return map[string]any{
 		"requested_tier": selection.Tier,
 		"effective_tier": effective,
-		"scip_status":    status,
+		"scip_status":    *status,
 		"analysis_scope": "CALLS edges for compiler-index-covered functions; other edges and uncovered files remain heuristic",
 	}
 }
 
-func (s *Server) persistGraphPrecision(project string, selection graphPrecisionSelection, status pipeline.SCIPIngestStatus) {
+func (s *Server) persistGraphPrecision(project string, selection graphPrecisionSelection, status *pipeline.SCIPIngestStatus) {
 	if s.config == nil {
 		return
 	}
@@ -115,9 +115,10 @@ func (s *Server) persistGraphPrecision(project string, selection graphPrecisionS
 
 func (s *Server) storedGraphPrecision(project string) map[string]any {
 	if s.config == nil {
+		status := pipeline.SCIPIngestStatus{State: "unknown"}
 		return graphPrecisionResult(
 			graphPrecisionSelection{Tier: graphPrecisionHeuristic},
-			pipeline.SCIPIngestStatus{State: "unknown"},
+			&status,
 		)
 	}
 	raw := s.config.Get(store.ConfigGraphPrecisionStatusPrefix+project, "")
@@ -126,9 +127,10 @@ func (s *Server) storedGraphPrecision(project string) map[string]any {
 		return result
 	}
 	tier := s.config.Get(store.ConfigGraphPrecisionTierPrefix+project, graphPrecisionHeuristic)
+	status := pipeline.SCIPIngestStatus{State: "unknown"}
 	return graphPrecisionResult(
 		graphPrecisionSelection{Tier: tier},
-		pipeline.SCIPIngestStatus{State: "unknown"},
+		&status,
 	)
 }
 

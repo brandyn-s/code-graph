@@ -214,7 +214,17 @@ project-level tier status and legacy SCIP provenance are insufficient.
 
 ### Relationship accuracy
 
-The current pinned Go CALLS measurement is
+The released `v0.8.0-redacted.5` compiler-tier CALLS measurement is
+[`bench/accuracy/baselines/2026-08-12-compiler-tier-calls-report.md`](bench/accuracy/baselines/2026-08-12-compiler-tier-calls-report.md).
+An independent Go SSA/RTA oracle that reads neither SCIP nor graph output
+measured only `scip-ingest` edges bound to the exact input artifact. Across
+code-graph and spf13/cobra, the real-fixture aggregate was precision 0.969,
+recall 0.932, and F1 0.950 (3,147 true positives, 102 false positives, 231
+false negatives). A hand-enumerated synthetic gate was perfect. Dynamic RTA
+edges were excluded because the current SCIP ingestion contract emits
+statically resolved call sites.
+
+The normal heuristic-tier Go CALLS measurement is
 [`bench/accuracy/baselines/2026-08-12-code-graph-go-report.md`](bench/accuracy/baselines/2026-08-12-code-graph-go-report.md).
 Against a deterministic `go/ast` oracle over five production subsets, the
 normal heuristic tier produced scope-aligned precision 0.953, recall 1.000,
@@ -223,11 +233,13 @@ negatives). Raw unscoped precision was 0.540 because 2,441 emitted edges came
 from callers outside the oracle's analyzed universe; it must not be presented
 as the same operating point.
 
-This is strong evidence for Go CALLS on one pinned fixture, not a universal
-graph-precision claim. The same current harness does not yet provide an oracle
-for Go IMPORTS, and current edge-level precision/recall is not established for
-every language and relationship type. Consequential results should therefore
-report the effective precision tier and carry source or relationship evidence.
+These are strong but bounded Go CALLS results, not a universal graph-precision
+claim. Compiler-tier Cobra recall was 0.867 and remains visible. The compiler
+oracle does not yet cover TypeScript or other languages, the current heuristic
+harness does not provide a current Go IMPORTS result, and edge-level
+precision/recall is not established for every relationship type.
+Consequential results should therefore report the effective precision tier and
+carry source or relationship evidence.
 
 ## Examples
 
@@ -528,6 +540,11 @@ No API keys, no Docker, no external databases. Single binary, zero infrastructur
 
 Releases are built via `workflow_dispatch` on `release.yml`. Download them from
 [redacted releases](https://github.com/redacted-org/code-graph/releases).
+The current plugin-bound release is `v0.8.0-redacted.5`; it was built from
+commit `41b8400951aa7a4da478e9d79486e47f7e4ae075`, has per-platform checksums and
+GitHub-hosted build provenance, and is exercised by the compiler-tier report
+above. Later documentation or benchmark commits do not change those release
+bytes.
 This is an internal package in a private repository. It is not published to the public MCP Registry,
 which does not support private package downloads. The setup scripts therefore
 require an authenticated GitHub CLI session with access to the repository.

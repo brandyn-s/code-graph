@@ -173,13 +173,13 @@ func isSCIPFunctionSymbol(symbol string) bool {
 }
 
 func collectSCIPDefinitions(idx *scip.Index, spans scipFileSpans) (
-	map[string]scipDefinitionLocation,
-	map[string]int,
-	map[string]int,
+	definitions map[string]scipDefinitionLocation,
+	definitionTotals map[string]int,
+	definitionMatches map[string]int,
 ) {
-	definitions := make(map[string]scipDefinitionLocation)
-	definitionTotals := make(map[string]int)
-	definitionMatches := make(map[string]int)
+	definitions = make(map[string]scipDefinitionLocation)
+	definitionTotals = make(map[string]int)
+	definitionMatches = make(map[string]int)
 	for _, document := range idx.Documents {
 		for _, occurrence := range document.Occurrences {
 			if occurrence.SymbolRoles&int32(scip.SymbolRole_Definition) == 0 || !isSCIPFunctionSymbol(occurrence.Symbol) {
@@ -247,11 +247,10 @@ func (p *Pipeline) deriveSCIPCalls(
 	spans scipFileSpans,
 	definitions map[string]scipDefinitionLocation,
 	drifted map[string]bool,
-) ([]*store.Edge, int, int) {
+) (derived []*store.Edge, referencesSeen int, callShaped int) {
 	cache := scipSourceCache{repoRoot: p.RepoPath, lines: make(map[string][]string)}
 	seen := make(map[scipEdgePair]bool)
-	derived := make([]*store.Edge, 0)
-	referencesSeen, callShaped := 0, 0
+	derived = make([]*store.Edge, 0)
 	for _, document := range idx.Documents {
 		if drifted[document.RelativePath] {
 			continue

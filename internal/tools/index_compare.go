@@ -70,6 +70,90 @@ func symbolLess(left, right *projectIndexSymbol) bool {
 	return left.StartLine < right.StartLine
 }
 
+func compareProjectFileHashes(
+	baseHashes, targetHashes map[string]store.FileHash,
+	limit int,
+) map[string]any {
+	addedFiles := make([]string, 0)
+	removedFiles := make([]string, 0)
+	modifiedFiles := make([]string, 0)
+	unchangedFiles := 0
+	for path, targetHash := range targetHashes {
+		baseHash, exists := baseHashes[path]
+		switch {
+		case !exists:
+			addedFiles = append(addedFiles, path)
+		case baseHash.SHA256 != targetHash.SHA256:
+			modifiedFiles = append(modifiedFiles, path)
+		default:
+			unchangedFiles++
+		}
+	}
+	for path := range baseHashes {
+		if _, exists := targetHashes[path]; !exists {
+			removedFiles = append(removedFiles, path)
+		}
+	}
+	addedCount, removedCount, modifiedCount := len(addedFiles), len(removedFiles), len(modifiedFiles)
+	addedFiles, addedTruncated := sortedLimitedStrings(addedFiles, limit)
+	removedFiles, removedTruncated := sortedLimitedStrings(removedFiles, limit)
+	modifiedFiles, modifiedTruncated := sortedLimitedStrings(modifiedFiles, limit)
+	return map[string]any{
+		"added_count": addedCount, "removed_count": removedCount,
+		"modified_count": modifiedCount, "unchanged_count": unchangedFiles,
+		"added": addedFiles, "removed": removedFiles, "modified": modifiedFiles,
+		"truncated": addedTruncated || removedTruncated || modifiedTruncated,
+	}
+}
+
+func compareProjectSymbols(
+	baseSymbols, targetSymbols map[string]projectIndexSymbol,
+	limit int,
+) map[string]any {
+	addedSymbols := make([]projectIndexSymbol, 0)
+	removedSymbols := make([]projectIndexSymbol, 0)
+	changedSymbols := make([]changedProjectIndexSymbol, 0)
+	unchangedSymbols := 0
+	for key, targetSymbol := range targetSymbols {
+		baseSymbol, exists := baseSymbols[key]
+		switch {
+		case !exists:
+			addedSymbols = append(addedSymbols, targetSymbol)
+		case baseSymbol != targetSymbol:
+			changedSymbols = append(changedSymbols, changedProjectIndexSymbol{
+				QualifiedName: targetSymbol.QualifiedName, Before: baseSymbol, After: targetSymbol,
+			})
+		default:
+			unchangedSymbols++
+		}
+	}
+	for key, baseSymbol := range baseSymbols {
+		if _, exists := targetSymbols[key]; !exists {
+			removedSymbols = append(removedSymbols, baseSymbol)
+		}
+	}
+	addedCount, removedCount, changedCount := len(addedSymbols), len(removedSymbols), len(changedSymbols)
+	sort.Slice(addedSymbols, func(i, j int) bool { return symbolLess(&addedSymbols[i], &addedSymbols[j]) })
+	sort.Slice(removedSymbols, func(i, j int) bool { return symbolLess(&removedSymbols[i], &removedSymbols[j]) })
+	sort.Slice(changedSymbols, func(i, j int) bool { return symbolLess(&changedSymbols[i].After, &changedSymbols[j].After) })
+	truncated := len(addedSymbols) > limit || len(removedSymbols) > limit || len(changedSymbols) > limit
+	if len(addedSymbols) > limit {
+		addedSymbols = addedSymbols[:limit]
+	}
+	if len(removedSymbols) > limit {
+		removedSymbols = removedSymbols[:limit]
+	}
+	if len(changedSymbols) > limit {
+		changedSymbols = changedSymbols[:limit]
+	}
+	return map[string]any{
+		"added_count": addedCount, "removed_count": removedCount,
+		"changed_count": changedCount, "unchanged_count": unchangedSymbols,
+		"added": addedSymbols, "removed": removedSymbols, "changed": changedSymbols,
+		"truncated": truncated,
+	}
+}
+
 func (s *Server) handleCompareProjectIndexes(_ context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	args, err := parseArgs(req)
 	if err != nil {
@@ -110,30 +194,7 @@ func (s *Server) handleCompareProjectIndexes(_ context.Context, req *mcp.CallToo
 	if err != nil {
 		return errResult(fmt.Sprintf("read target file snapshot: %v", err)), nil
 	}
-	addedFiles := make([]string, 0)
-	removedFiles := make([]string, 0)
-	modifiedFiles := make([]string, 0)
-	unchangedFiles := 0
-	for path, targetHash := range targetHashes {
-		baseHash, exists := baseHashes[path]
-		switch {
-		case !exists:
-			addedFiles = append(addedFiles, path)
-		case baseHash.SHA256 != targetHash.SHA256:
-			modifiedFiles = append(modifiedFiles, path)
-		default:
-			unchangedFiles++
-		}
-	}
-	for path := range baseHashes {
-		if _, exists := targetHashes[path]; !exists {
-			removedFiles = append(removedFiles, path)
-		}
-	}
-	addedCount, removedCount, modifiedCount := len(addedFiles), len(removedFiles), len(modifiedFiles)
-	addedFiles, addedTruncated := sortedLimitedStrings(addedFiles, limit)
-	removedFiles, removedTruncated := sortedLimitedStrings(removedFiles, limit)
-	modifiedFiles, modifiedTruncated := sortedLimitedStrings(modifiedFiles, limit)
+	fileDelta := compareProjectFileHashes(baseHashes, targetHashes, limit)
 
 	baseSymbols, err := indexDeclarationSymbols(baseStore, baseProject)
 	if err != nil {
@@ -143,42 +204,7 @@ func (s *Server) handleCompareProjectIndexes(_ context.Context, req *mcp.CallToo
 	if err != nil {
 		return errResult(fmt.Sprintf("read target declarations: %v", err)), nil
 	}
-	addedSymbols := make([]projectIndexSymbol, 0)
-	removedSymbols := make([]projectIndexSymbol, 0)
-	changedSymbols := make([]changedProjectIndexSymbol, 0)
-	unchangedSymbols := 0
-	for key, targetSymbol := range targetSymbols {
-		baseSymbol, exists := baseSymbols[key]
-		switch {
-		case !exists:
-			addedSymbols = append(addedSymbols, targetSymbol)
-		case baseSymbol != targetSymbol:
-			changedSymbols = append(changedSymbols, changedProjectIndexSymbol{
-				QualifiedName: targetSymbol.QualifiedName, Before: baseSymbol, After: targetSymbol,
-			})
-		default:
-			unchangedSymbols++
-		}
-	}
-	for key, baseSymbol := range baseSymbols {
-		if _, exists := targetSymbols[key]; !exists {
-			removedSymbols = append(removedSymbols, baseSymbol)
-		}
-	}
-	addedSymbolCount, removedSymbolCount, changedSymbolCount := len(addedSymbols), len(removedSymbols), len(changedSymbols)
-	sort.Slice(addedSymbols, func(i, j int) bool { return symbolLess(&addedSymbols[i], &addedSymbols[j]) })
-	sort.Slice(removedSymbols, func(i, j int) bool { return symbolLess(&removedSymbols[i], &removedSymbols[j]) })
-	sort.Slice(changedSymbols, func(i, j int) bool { return symbolLess(&changedSymbols[i].After, &changedSymbols[j].After) })
-	symbolsTruncated := len(addedSymbols) > limit || len(removedSymbols) > limit || len(changedSymbols) > limit
-	if len(addedSymbols) > limit {
-		addedSymbols = addedSymbols[:limit]
-	}
-	if len(removedSymbols) > limit {
-		removedSymbols = removedSymbols[:limit]
-	}
-	if len(changedSymbols) > limit {
-		changedSymbols = changedSymbols[:limit]
-	}
+	symbolDelta := compareProjectSymbols(baseSymbols, targetSymbols, limit)
 
 	baseContext := map[string]any{}
 	targetContext := map[string]any{}
@@ -187,21 +213,11 @@ func (s *Server) handleCompareProjectIndexes(_ context.Context, req *mcp.CallToo
 	return jsonResult(map[string]any{
 		"base_project": baseProject, "target_project": targetProject,
 		"comparison_contract": "immutable_index_snapshot_delta",
-		"file_delta": map[string]any{
-			"added_count": addedCount, "removed_count": removedCount,
-			"modified_count": modifiedCount, "unchanged_count": unchangedFiles,
-			"added": addedFiles, "removed": removedFiles, "modified": modifiedFiles,
-			"truncated": addedTruncated || removedTruncated || modifiedTruncated,
-		},
-		"symbol_delta": map[string]any{
-			"added_count": addedSymbolCount, "removed_count": removedSymbolCount,
-			"changed_count": changedSymbolCount, "unchanged_count": unchangedSymbols,
-			"added": addedSymbols, "removed": removedSymbols, "changed": changedSymbols,
-			"truncated": symbolsTruncated,
-		},
-		"project_contexts":   map[string]any{"base": baseContext, "target": targetContext},
-		"limit_per_category": limit,
-		"result_scope":       "compares two immutable local index snapshots; it does not query repository history or enforce organization ACLs",
-		"_metadata":          s.stdStatusToolMetadata(),
+		"file_delta":          fileDelta,
+		"symbol_delta":        symbolDelta,
+		"project_contexts":    map[string]any{"base": baseContext, "target": targetContext},
+		"limit_per_category":  limit,
+		"result_scope":        "compares two immutable local index snapshots; it does not query repository history or enforce organization ACLs",
+		"_metadata":           s.stdStatusToolMetadata(),
 	}), nil
 }

@@ -130,12 +130,16 @@ func selectedCrossProjectInfos(infos []*store.ProjectInfo, requested []string) (
 
 func (s *Server) localizeSelectedProjects(
 	ctx context.Context,
-	request crossProjectLocalizationRequest,
+	request *crossProjectLocalizationRequest,
 	infos []*store.ProjectInfo,
-) (map[string][]localize.LocalizedEntity, map[string]any, map[string]string) {
-	perProject := make(map[string][]localize.LocalizedEntity)
-	projectContexts := make(map[string]any)
-	projectErrors := make(map[string]string)
+) (
+	perProject map[string][]localize.LocalizedEntity,
+	projectContexts map[string]any,
+	projectErrors map[string]string,
+) {
+	perProject = make(map[string][]localize.LocalizedEntity)
+	projectContexts = make(map[string]any)
+	projectErrors = make(map[string]string)
 	for _, info := range infos {
 		st, release, err := s.router.AcquireStore(info.Name)
 		if err != nil {
@@ -206,7 +210,7 @@ func (s *Server) handleLocalizeAcrossProjects(ctx context.Context, req *mcp.Call
 	if err != nil {
 		return errResult(err.Error()), nil
 	}
-	perProject, projectContexts, projectErrors := s.localizeSelectedProjects(ctx, request, selected)
+	perProject, projectContexts, projectErrors := s.localizeSelectedProjects(ctx, &request, selected)
 	results := balanceCrossProjectResults(perProject, request.topK)
 	projectsWithMatches := 0
 	for _, matches := range perProject {

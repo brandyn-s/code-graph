@@ -247,7 +247,7 @@ func (p *Pipeline) deriveSCIPCalls(
 	spans scipFileSpans,
 	definitions map[string]scipDefinitionLocation,
 	drifted map[string]bool,
-) (derived []*store.Edge, referencesSeen int, callShaped int) {
+) (derived []*store.Edge, referencesSeen, callShaped int) {
 	cache := scipSourceCache{repoRoot: p.RepoPath, lines: make(map[string][]string)}
 	seen := make(map[scipEdgePair]bool)
 	derived = make([]*store.Edge, 0)

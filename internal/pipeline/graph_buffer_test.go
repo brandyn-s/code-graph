@@ -43,7 +43,7 @@ func TestGraphBufferFindNodesByQNSuffixUsesSegmentBoundary(t *testing.T) {
 	if len(exact) != 3 {
 		t.Fatalf("got %d exact-tail hits, want 3", len(exact))
 	}
-	if partial := buf.FindNodesByQNSuffix("ther_ctx"); len(partial) != 0 {
+	if partial := buf.FindNodesByQNSuffix("ask.ctx"); len(partial) != 0 {
 		t.Fatalf("partial QN segment unexpectedly matched: %v", partial)
 	}
 }

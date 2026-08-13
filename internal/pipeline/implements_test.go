@@ -167,3 +167,49 @@ func TestPassImplementsNoOverrideWithoutMatch(t *testing.T) {
 		t.Errorf("expected 0 OVERRIDE edges, got %d", len(overrideEdges))
 	}
 }
+
+func TestTypeScriptDeclaredRelationshipsPreserveClauseKind(t *testing.T) {
+	s, err := store.OpenMemory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+
+	project := "typescript-heritage"
+	if err := s.UpsertProject(project, "/tmp/typescript-heritage"); err != nil {
+		t.Fatal(err)
+	}
+	baseID, _ := s.UpsertNode(&store.Node{
+		Project: project, Label: "Class", Name: "BaseFormatter",
+		QualifiedName: project + ".src.types.BaseFormatter", FilePath: "src/types.ts",
+	})
+	contractID, _ := s.UpsertNode(&store.Node{
+		Project: project, Label: "Interface", Name: "Renderable",
+		QualifiedName: project + ".src.types.Renderable", FilePath: "src/types.ts",
+	})
+	richID, _ := s.UpsertNode(&store.Node{
+		Project: project, Label: "Class", Name: "RichFormatter",
+		QualifiedName: project + ".src.types.RichFormatter", FilePath: "src/types.ts",
+		Properties: map[string]any{
+			"extends_types":    []any{"BaseFormatter"},
+			"implements_types": []any{"Renderable"},
+		},
+	})
+	registry := NewFunctionRegistry()
+	registry.Register("BaseFormatter", project+".src.types.BaseFormatter", "Class")
+	registry.Register("Renderable", project+".src.types.Renderable", "Interface")
+	registry.Register("RichFormatter", project+".src.types.RichFormatter", "Class")
+	p := &Pipeline{Store: s, ProjectName: project, registry: registry}
+
+	p.passInherits()
+	p.passImplements()
+
+	inherits, _ := s.FindEdgesBySourceAndType(richID, "INHERITS")
+	if len(inherits) != 1 || inherits[0].TargetID != baseID {
+		t.Fatalf("INHERITS = %+v, want only BaseFormatter", inherits)
+	}
+	implements, _ := s.FindEdgesBySourceAndType(richID, "IMPLEMENTS")
+	if len(implements) != 1 || implements[0].TargetID != contractID {
+		t.Fatalf("IMPLEMENTS = %+v, want only Renderable", implements)
+	}
+}

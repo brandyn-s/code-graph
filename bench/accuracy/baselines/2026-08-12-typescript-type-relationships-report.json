@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "measurement_date": "2026-08-12",
+  "candidate": {
+    "repository": "redacted-org/code-graph",
+    "source_revision": "9c27eb716e5fe56f3b80cd0cb0b5162b40d1462c",
+    "change_scope": "normal-tier TypeScript declared type relationships"
+  },
+  "oracle": {
+    "name": "typescript-compiler-api-type-relationships-v1",
+    "implementation": "bench/accuracy/tools/oracle-typescript-compiler",
+    "implementation_sha256": "c831682a7b856405ccdc880fd22cda689027cf1d22a72efa6001478ac8d196bb",
+    "typescript_version": "5.9.3",
+    "scope": "compiler-resolved project-local declared extends and implements edges",
+    "uses_code_graph_as_truth": false,
+    "hand_enumerated_fixture": {
+      "true_positive": 5,
+      "false_positive": 0,
+      "false_negative": 0
+    }
+  },
+  "repositories": [
+    {
+      "id": "sindresorhus-ky",
+      "source_revision": "3419113b48e034fdcf8fa6bd3be3da7b3d0d758f",
+      "project_files": 30,
+      "project_manifest_sha256": "327ff62a9bc0f935957e29836f791ae624c0bc4c6170a75773e0af6be1d49632",
+      "before": {"true_positive": 0, "false_positive": 0, "false_negative": 5},
+      "after": {"true_positive": 5, "false_positive": 0, "false_negative": 0}
+    },
+    {
+      "id": "Chainlit-chainlit-frontend",
+      "source_revision": "8b2d4bacfd4fa2c8af72e2d140d527d20125b07b",
+      "project_files": 183,
+      "project_manifest_sha256": "7968a446d3ba926ba945fa2e13912dd1af9cea617ba2843156df1a4cbdb8bf2d",
+      "before": {"true_positive": 0, "false_positive": 0, "false_negative": 2},
+      "after": {"true_positive": 2, "false_positive": 0, "false_negative": 0}
+    },
+    {
+      "id": "blakeembrey-free-style",
+      "source_revision": "eb921ab5457f327ac24f0ea2822715d73af4cfd3",
+      "project_files": 2,
+      "project_manifest_sha256": "5a7d8ab1115a8193c72c0eed4e9fb9cbeaa931d262579860a57bc3e20e2dbf91",
+      "before": {"true_positive": 0, "false_positive": 0, "false_negative": 6},
+      "after": {"true_positive": 6, "false_positive": 0, "false_negative": 0}
+    }
+  ],
+  "aggregate_before": {
+    "true_positive": 0,
+    "false_positive": 0,
+    "false_negative": 13,
+    "precision": 0.0,
+    "recall": 0.0,
+    "f1": 0.0
+  },
+  "aggregate_after": {
+    "true_positive": 13,
+    "false_positive": 0,
+    "false_negative": 0,
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1": 1.0,
+    "by_kind": {
+      "extends": {"true_positive": 10, "false_positive": 0, "false_negative": 0},
+      "implements": {"true_positive": 3, "false_positive": 0, "false_negative": 0}
+    }
+  },
+  "gate_result": "pass"
+}

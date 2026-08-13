@@ -1,6 +1,81 @@
 package pipeline
 
-import "testing"
+import (
+	"sort"
+	"strings"
+	"testing"
+)
+
+func canonicalNamedCommunities(
+	communities map[int][]int64,
+	names map[int64]string,
+) string {
+	groups := make([]string, 0, len(communities))
+	for _, members := range communities {
+		group := make([]string, 0, len(members))
+		for _, id := range members {
+			group = append(group, names[id])
+		}
+		sort.Strings(group)
+		groups = append(groups, strings.Join(group, ","))
+	}
+	sort.Strings(groups)
+	return strings.Join(groups, "|")
+}
+
+func namedGraph(
+	names []string,
+	ids []int64,
+	edges [][2]string,
+) (map[int64]map[int64]bool, map[int64]bool, map[int64]string, []int64) {
+	byName := make(map[string]int64, len(names))
+	nameByID := make(map[int64]string, len(names))
+	all := make(map[int64]bool, len(names))
+	for i, name := range names {
+		byName[name] = ids[i]
+		nameByID[ids[i]] = name
+		all[ids[i]] = true
+	}
+	adj := make(map[int64]map[int64]bool, len(names))
+	for _, edge := range edges {
+		a, b := byName[edge[0]], byName[edge[1]]
+		if adj[a] == nil {
+			adj[a] = make(map[int64]bool)
+		}
+		if adj[b] == nil {
+			adj[b] = make(map[int64]bool)
+		}
+		adj[a][b] = true
+		adj[b][a] = true
+	}
+	ordered := append([]int64(nil), ids...)
+	return adj, all, nameByID, ordered
+}
+
+func TestLouvainDeterministicAcrossDatabaseIDs(t *testing.T) {
+	names := []string{"a", "b", "c", "d", "e", "f", "g", "h"}
+	edges := [][2]string{
+		{"a", "b"}, {"a", "c"}, {"b", "c"}, {"c", "d"},
+		{"d", "e"}, {"e", "f"}, {"d", "f"}, {"f", "g"},
+		{"g", "h"}, {"h", "a"},
+	}
+	adjA, allA, namesA, orderA := namedGraph(
+		names, []int64{1, 2, 3, 4, 5, 6, 7, 8}, edges,
+	)
+	adjB, allB, namesB, orderB := namedGraph(
+		names, []int64{81, 12, 73, 24, 65, 36, 57, 48}, edges,
+	)
+
+	gotA := canonicalNamedCommunities(
+		louvainCommunitiesInOrder(adjA, allA, orderA), namesA,
+	)
+	gotB := canonicalNamedCommunities(
+		louvainCommunitiesInOrder(adjB, allB, orderB), namesB,
+	)
+	if gotA != gotB {
+		t.Fatalf("same named graph changed communities after ID churn: %q != %q", gotA, gotB)
+	}
+}
 
 func TestGroupAndFilterMinSize3(t *testing.T) {
 	nodeCommunity := map[int64]int{

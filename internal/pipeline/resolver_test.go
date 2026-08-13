@@ -65,6 +65,32 @@ func TestFuzzyResolve_MultipleCandidates_BestByDistance(t *testing.T) {
 	}
 }
 
+func TestResolve_AmbiguousTieIsIndependentOfRegistrationOrder(t *testing.T) {
+	const (
+		caller = "proj.backend.chainlit.server"
+		first  = "proj.backend.chainlit.chat_context.ChatContext.get"
+		second = "proj.backend.chainlit.session.WebsocketSession.get"
+	)
+
+	resolve := func(order []string) string {
+		t.Helper()
+		reg := NewFunctionRegistry()
+		for _, qn := range order {
+			reg.Register("get", qn, "Method")
+		}
+		return reg.Resolve("router.get", caller, nil).QualifiedName
+	}
+
+	forward := resolve([]string{first, second})
+	reverse := resolve([]string{second, first})
+	if forward != reverse {
+		t.Fatalf("ambiguous resolution changed with registry order: forward=%q reverse=%q", forward, reverse)
+	}
+	if forward != first {
+		t.Fatalf("ambiguous resolution = %q, want deterministic lexical target %q", forward, first)
+	}
+}
+
 func TestFuzzyResolve_SimpleNameExtraction(t *testing.T) {
 	reg := NewFunctionRegistry()
 	reg.Register("DoWork", "myproject.utils.DoWork", "Function")
@@ -475,7 +501,7 @@ func TestApplyReceiverTypeFilter_DropsExternalCall(t *testing.T) {
 	}
 
 	ctx := CallContext{
-		CalleeName:   "users.execute", // method-call shape
+		CalleeName:   "users.execute",      // method-call shape
 		ReceiverType: "diesel.query.Users", // external — no internal candidate matches
 	}
 
@@ -632,9 +658,9 @@ func TestResolveCtx_ExternalReceiverDropsBinding(t *testing.T) {
 // code each strategy used pre-Phase-2.
 func TestSplitCalleeName(t *testing.T) {
 	cases := []struct {
-		in            string
-		wantPrefix    string
-		wantSuffix    string
+		in         string
+		wantPrefix string
+		wantSuffix string
 	}{
 		{"", "", ""},
 		{"bare", "bare", ""},

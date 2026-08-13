@@ -118,6 +118,20 @@ func (s *Store) DeleteNodesByLabel(project, label string) error {
 	return err
 }
 
+// DeleteOrphanNodesByLabel deletes labeled nodes with no incoming or outgoing
+// edges. Incremental passes use this after FK cascade removes changed sources.
+func (s *Store) DeleteOrphanNodesByLabel(project, label string) error {
+	_, err := s.q.Exec(`
+		DELETE FROM nodes
+		WHERE project=? AND label=?
+		  AND NOT EXISTS (
+			SELECT 1 FROM edges
+			WHERE edges.project=nodes.project
+			  AND (edges.source_id=nodes.id OR edges.target_id=nodes.id)
+		  )`, project, label)
+	return err
+}
+
 // FindNodesByIDs returns a map of nodeID → *Node for the given IDs.
 func (s *Store) FindNodesByIDs(ids []int64) (map[int64]*Node, error) {
 	if len(ids) == 0 {

@@ -290,7 +290,11 @@ func (p *Pipeline) processExplicitBases(classNode *store.Node) (linkCount, overr
 		return
 	}
 
-	baseClasses, ok := classNode.Properties["base_classes"]
+	property := "base_classes"
+	if fileLang == lang.TypeScript || fileLang == lang.TSX {
+		property = "implements_types"
+	}
+	baseClasses, ok := classNode.Properties[property]
 	if !ok {
 		return
 	}

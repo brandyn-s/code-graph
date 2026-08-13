@@ -227,6 +227,64 @@ static const char** extract_decorators(CBMArena* a, TSNode node, const char* sou
     return result;
 }
 
+static bool is_ts_heritage_name_kind(const char* kind) {
+    return strcmp(kind, "identifier") == 0 ||
+           strcmp(kind, "type_identifier") == 0 ||
+           strcmp(kind, "nested_type_identifier") == 0 ||
+           strcmp(kind, "member_expression") == 0;
+}
+
+static TSNode find_ts_heritage_clause(TSNode node, const char* clause_kind) {
+    uint32_t count = ts_node_named_child_count(node);
+    for (uint32_t i = 0; i < count; i++) {
+        TSNode child = ts_node_named_child(node, i);
+        if (strcmp(ts_node_type(child), clause_kind) == 0) return child;
+        TSNode nested = find_ts_heritage_clause(child, clause_kind);
+        if (!ts_node_is_null(nested)) return nested;
+    }
+    TSNode null_node = {0};
+    return null_node;
+}
+
+static void collect_ts_heritage_names(
+    CBMArena* a, TSNode node, const char* source, const char* excluded_kind,
+    const char** names, int* count
+) {
+    uint32_t child_count = ts_node_named_child_count(node);
+    for (uint32_t i = 0; i < child_count && *count < 63; i++) {
+        TSNode child = ts_node_named_child(node, i);
+        const char* kind = ts_node_type(child);
+        if (excluded_kind && strcmp(kind, excluded_kind) == 0) continue;
+        if (strcmp(kind, "type_arguments") == 0) continue;
+        if (is_ts_heritage_name_kind(kind)) {
+            char* text = cbm_node_text(a, child, source);
+            if (text && text[0]) names[(*count)++] = text;
+            continue;
+        }
+        collect_ts_heritage_names(a, child, source, excluded_kind, names, count);
+    }
+}
+
+static const char** extract_ts_heritage_clause(
+    CBMArena* a, TSNode node, const char* source, const char* clause_kind
+) {
+    TSNode clause = find_ts_heritage_clause(node, clause_kind);
+    if (ts_node_is_null(clause)) return NULL;
+
+    const char* names[64];
+    int count = 0;
+    collect_ts_heritage_names(a, clause, source,
+        strcmp(clause_kind, "class_heritage") == 0 ? "implements_clause" : NULL,
+        names, &count);
+    if (count == 0) return NULL;
+
+    const char** result = (const char**)cbm_arena_alloc(a, sizeof(const char*) * (count + 1));
+    if (!result) return NULL;
+    for (int i = 0; i < count; i++) result[i] = names[i];
+    result[count] = NULL;
+    return result;
+}
+
 // Extract base class names from a class node
 static const char** extract_base_classes(CBMArena* a, TSNode node, const char* source, CBMLanguage lang) {
     // Try common field names for superclass lists
@@ -860,6 +918,11 @@ static void extract_class_def(CBMExtractCtx* ctx, TSNode node, const CBMLangSpec
     def.end_line = ts_node_end_point(node).row + 1;
     def.is_exported = cbm_is_exported(name, ctx->language);
     def.base_classes = extract_base_classes(a, node, ctx->source, ctx->language);
+    if (ctx->language == CBM_LANG_TYPESCRIPT || ctx->language == CBM_LANG_TSX) {
+        def.extends_types = extract_ts_heritage_clause(a, node, ctx->source,
+            strcmp(kind, "interface_declaration") == 0 ? "extends_type_clause" : "class_heritage");
+        def.implements_types = extract_ts_heritage_clause(a, node, ctx->source, "implements_clause");
+    }
     def.decorators = extract_decorators(a, node, ctx->source, ctx->language, spec);
     def.docstring = extract_docstring(a, node, ctx->source, ctx->language);
 

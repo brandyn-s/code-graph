@@ -38,7 +38,18 @@ func (p *Pipeline) passCommunities() {
 	}
 
 	// Run Louvain community detection
-	communities := louvainCommunities(adj, allNodes)
+	// SQLite row IDs change when an edited file is deleted and reinserted. Feed
+	// Louvain a semantic QN order so those storage IDs cannot change clustering.
+	nodeMap, _ := p.Store.FindNodesByIDs(mapKeys(allNodes))
+	orderedNodes := mapKeys(allNodes)
+	sort.Slice(orderedNodes, func(i, j int) bool {
+		left, right := nodeMap[orderedNodes[i]], nodeMap[orderedNodes[j]]
+		if left != nil && right != nil && left.QualifiedName != right.QualifiedName {
+			return left.QualifiedName < right.QualifiedName
+		}
+		return orderedNodes[i] < orderedNodes[j]
+	})
+	communities := louvainCommunitiesInOrder(adj, allNodes, orderedNodes)
 
 	// Create Community nodes + MEMBER_OF edges
 	communityCount, memberOfCount := p.storeCommunities(communities)
@@ -83,11 +94,33 @@ func (p *Pipeline) passCommunities() {
 // Uses per-community degree accumulators for O(m) per iteration instead of O(N^2).
 // Returns a map of community_id → []node_id.
 func louvainCommunities(adj map[int64]map[int64]bool, allNodes map[int64]bool) map[int][]int64 {
+	orderedNodes := mapKeys(allNodes)
+	sort.Slice(orderedNodes, func(i, j int) bool { return orderedNodes[i] < orderedNodes[j] })
+	return louvainCommunitiesInOrder(adj, allNodes, orderedNodes)
+}
+
+func mapKeys(values map[int64]bool) []int64 {
+	keys := make([]int64, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	return keys
+}
+
+// louvainCommunitiesInOrder runs Louvain with an explicit stable semantic
+// order. Callers indexing persisted graphs pass qualified-name order; tests and
+// pure callers may pass numeric order. Neighbor-community ties are resolved by
+// the same initial community order, eliminating Go map iteration as an input.
+func louvainCommunitiesInOrder(
+	adj map[int64]map[int64]bool,
+	allNodes map[int64]bool,
+	orderedNodes []int64,
+) map[int][]int64 {
 	nodeCommunity := make(map[int64]int, len(allNodes))
-	commID := 0
-	for nodeID := range allNodes {
-		nodeCommunity[nodeID] = commID
-		commID++
+	for commID, nodeID := range orderedNodes {
+		if allNodes[nodeID] {
+			nodeCommunity[nodeID] = commID
+		}
 	}
 
 	// Pre-compute node degrees
@@ -105,16 +138,19 @@ func louvainCommunities(adj map[int64]map[int64]bool, allNodes map[int64]bool) m
 	// Per-community accumulator: sum of degrees of all members.
 	// Updated incrementally when nodes move between communities.
 	commSumTot := make(map[int]float64, len(allNodes))
-	for nodeID, comm := range nodeCommunity {
+	for _, nodeID := range orderedNodes {
+		comm := nodeCommunity[nodeID]
 		commSumTot[comm] = nodeDegree[nodeID]
 	}
 
 	improved := true
 	for iteration := 0; improved && iteration < 50; iteration++ {
-		improved = louvainIteration(adj, nodeCommunity, nodeDegree, commSumTot, m)
+		improved = louvainIteration(
+			adj, nodeCommunity, nodeDegree, commSumTot, m, orderedNodes,
+		)
 	}
 
-	return groupAndFilterMinSize(nodeCommunity, 3)
+	return groupAndFilterMinSizeInOrder(nodeCommunity, orderedNodes, 3)
 }
 
 // louvainIteration runs one pass of greedy modularity optimization.
@@ -126,11 +162,16 @@ func louvainIteration(
 	nodeDegree map[int64]float64,
 	commSumTot map[int]float64,
 	m float64,
+	orderedNodes []int64,
 ) bool {
 	improved := false
 	m2 := 2.0 * m * m
 
-	for nodeID, neighbors := range adj {
+	for _, nodeID := range orderedNodes {
+		neighbors := adj[nodeID]
+		if len(neighbors) == 0 {
+			continue
+		}
 		currentComm := nodeCommunity[nodeID]
 		ki := nodeDegree[nodeID]
 
@@ -148,12 +189,19 @@ func louvainIteration(
 		bestComm := currentComm
 		bestGain := 0.0
 
-		for comm, kiIn := range edgesToComm {
+		neighborCommunities := make([]int, 0, len(edgesToComm))
+		for comm := range edgesToComm {
+			neighborCommunities = append(neighborCommunities, comm)
+		}
+		sort.Ints(neighborCommunities)
+		for _, comm := range neighborCommunities {
 			if comm == currentComm {
 				continue
 			}
+			kiIn := edgesToComm[comm]
 			gain := kiIn/m - ki*commSumTot[comm]/m2 - removeCost
-			if gain > bestGain {
+			if gain > bestGain+1e-10 ||
+				(gain > 1e-10 && math.Abs(gain-bestGain) <= 1e-10 && comm < bestComm) {
 				bestGain = gain
 				bestComm = comm
 			}
@@ -176,14 +224,34 @@ func louvainIteration(
 // smaller than minSize. This reduces noise from tiny clusters (singletons and
 // pairs) that the Louvain algorithm tends to produce on medium-sized repos.
 func groupAndFilterMinSize(nodeCommunity map[int64]int, minSize int) map[int][]int64 {
+	orderedNodes := make([]int64, 0, len(nodeCommunity))
+	for nodeID := range nodeCommunity {
+		orderedNodes = append(orderedNodes, nodeID)
+	}
+	sort.Slice(orderedNodes, func(i, j int) bool { return orderedNodes[i] < orderedNodes[j] })
+	return groupAndFilterMinSizeInOrder(nodeCommunity, orderedNodes, minSize)
+}
+
+func groupAndFilterMinSizeInOrder(
+	nodeCommunity map[int64]int,
+	orderedNodes []int64,
+	minSize int,
+) map[int][]int64 {
 	communities := make(map[int][]int64)
-	for nodeID, comm := range nodeCommunity {
+	for _, nodeID := range orderedNodes {
+		comm := nodeCommunity[nodeID]
 		communities[comm] = append(communities[comm], nodeID)
 	}
 
 	filtered := make(map[int][]int64)
 	idx := 0
-	for _, members := range communities {
+	communityIDs := make([]int, 0, len(communities))
+	for comm := range communities {
+		communityIDs = append(communityIDs, comm)
+	}
+	sort.Ints(communityIDs)
+	for _, comm := range communityIDs {
+		members := communities[comm]
 		if len(members) >= minSize {
 			filtered[idx] = members
 			idx++

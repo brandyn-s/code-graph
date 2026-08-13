@@ -64,6 +64,13 @@ func (p *Pipeline) passEnvVarNodes() {
 			}
 			edgeCount++
 		}
+
+		// On incremental runs unchanged reader edges remain in the store. Keep
+		// the diagnostic count host-derived from the complete edge set rather
+		// than overwriting it with this run's changed-file subset.
+		if allReaders, findErr := p.Store.FindEdgesByTargetAndType(envNodeID, "READS_ENV"); findErr == nil {
+			_, _ = p.Store.SetNodeIntProperty(p.ProjectName, envQN, "readers", len(allReaders))
+		}
 	}
 
 	slog.Info("pass.envvar_nodes.done", "nodes", nodeCount, "edges", edgeCount)

@@ -243,6 +243,53 @@ func unused() int { return 0 }
 	}
 }
 
+// A comment-only edit must be equivalent on the incremental path too. The
+// separate fresh-store metamorphic test above cannot catch a reindex that
+// accidentally deletes unchanged structural nodes or edges.
+func TestBattery_IncrementalCommentOnlyEquivalentToFull(t *testing.T) {
+	dir := t.TempDir()
+	writeBatteryFixture(t, dir)
+	writeFile(t, filepath.Join(dir, "unchanged.go"), `package main
+
+func untouched() int { return helper() }
+`)
+	writeFile(t, filepath.Join(dir, "nested", "index.ts"), `export function envValue(): string | undefined {
+	return process.env.UNCHANGED_TOKEN;
+}
+`)
+	s, project := indexToMemory(t, dir)
+	defer s.Close()
+	beforeNodes, beforeEdges := canonicalGraph(t, s, project)
+
+	mainGo := filepath.Join(dir, "main.go")
+	source, err := os.ReadFile(mainGo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(
+		mainGo,
+		append(source, []byte("\n// incremental comment-only probe\n")...),
+		0o600,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	p := New(context.Background(), s, dir, discover.ModeFull)
+	if err := p.Run(); err != nil {
+		t.Fatalf("incremental Pipeline.Run: %v", err)
+	}
+	if p.LastIndexDelta.Mode != "incremental" {
+		t.Fatalf("index mode = %q, want incremental", p.LastIndexDelta.Mode)
+	}
+	afterNodes, afterEdges := canonicalGraph(t, s, project)
+	if !eq(beforeNodes, afterNodes) {
+		t.Errorf("comment-only incremental altered nodes:\n  %s", strings.Join(diff(beforeNodes, afterNodes), "\n  "))
+	}
+	if !eq(beforeEdges, afterEdges) {
+		t.Errorf("comment-only incremental altered edges:\n  %s", strings.Join(diff(beforeEdges, afterEdges), "\n  "))
+	}
+}
+
 func TestBattery_DeadFileInvariance(t *testing.T) {
 	d1 := t.TempDir()
 	writeBatteryFixture(t, d1)

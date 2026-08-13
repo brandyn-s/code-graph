@@ -139,9 +139,11 @@ func (s *Store) GetFileHashes(project string) (map[string]FileHash, error) {
 	return result, rows.Err()
 }
 
-// ListFilesForProject returns all distinct file paths indexed for a project.
+// ListFilesForProject returns source-file paths tracked by the incremental
+// index. Node file_path also contains directory paths for Folder/Package nodes,
+// so it is not a valid source of truth for deleted-file detection.
 func (s *Store) ListFilesForProject(project string) ([]string, error) {
-	rows, err := s.q.Query("SELECT DISTINCT file_path FROM nodes WHERE project=? AND file_path != ''", project)
+	rows, err := s.q.Query("SELECT rel_path FROM file_hashes WHERE project=? ORDER BY rel_path", project)
 	if err != nil {
 		return nil, fmt.Errorf("list files: %w", err)
 	}

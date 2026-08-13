@@ -15,6 +15,30 @@ export class Formatter {
   }
 }
 
+export interface Renderable {
+  render(): string;
+}
+
+export interface Named {
+  readonly name: string;
+}
+
+export interface NamedRenderable extends Renderable, Named {}
+
+export type OptionalNamed = Partial<Named>;
+
+export interface PartiallyNamed extends OptionalNamed {}
+
+export class BaseFormatter {}
+
+export class RichFormatter extends BaseFormatter implements NamedRenderable {
+  readonly name = "rich";
+
+  render(): string {
+    return this.name;
+  }
+}
+
 interface Callback {
   (value: number): number;
 }

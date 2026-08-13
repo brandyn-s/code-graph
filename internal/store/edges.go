@@ -343,7 +343,7 @@ func (s *Store) CallsResolutionStats(project string) (map[string]int, error) {
 // join — both present from initial schema, no migration needed. Edge
 // types are filtered explicitly rather than IN() so the planner can
 // use the composite index; the typical caller passes
-// ["CALLS", "USES", "HTTP_CALLS"].
+// ["CALLS", "USAGE", "HTTP_CALLS", "ASYNC_CALLS", "INDIRECT_CALLS"].
 //
 // Returns a deduped, sorted slice of relative file paths. Empty
 // targetFilePaths or edgeTypes returns nil without querying.

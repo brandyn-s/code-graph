@@ -335,6 +335,12 @@ func (s *Server) handleIndexRepository(ctx context.Context, req *mcp.CallToolReq
 		"edges":         edgeCount,
 		"indexed_at":    indexedAt,
 		"_metadata":     s.stdWriteToolMetadata(outcome),
+		"index_delta": map[string]any{
+			"mode":             p.LastIndexDelta.Mode,
+			"files_discovered": p.LastIndexDelta.FilesDiscovered,
+			"files_changed":    p.LastIndexDelta.FilesChanged,
+			"files_unchanged":  p.LastIndexDelta.FilesUnchanged,
+		},
 	}
 	result["graph_precision"] = graphPrecisionResult(precisionSelection, &p.SCIPStatus)
 	if precisionSelection.Tier == graphPrecisionSCIP && p.SCIPStatus.State != "applied" {

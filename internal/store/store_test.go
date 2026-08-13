@@ -1401,7 +1401,7 @@ func TestFindCallerFilesOfTargetsInFiles(t *testing.T) {
 
 	// Graph topology:
 	//   a.go::A    -- CALLS    --> changed.go::Target
-	//   b.go::B    -- USES     --> changed.go::Target
+	//   b.go::B    -- USAGE    --> changed.go::Target
 	//   c.go::C    -- INHERITS --> changed.go::Target   (NOT a call-shape)
 	//   d.go::D    -- CALLS    --> other.go::Other      (target not in changed set)
 	idA, _ := s.UpsertNode(&Node{Project: proj, Label: "Function", Name: "A", QualifiedName: "cl.a.A", FilePath: "a.go"})
@@ -1412,16 +1412,16 @@ func TestFindCallerFilesOfTargetsInFiles(t *testing.T) {
 	idOther, _ := s.UpsertNode(&Node{Project: proj, Label: "Function", Name: "Other", QualifiedName: "cl.other.Other", FilePath: "other.go"})
 
 	mustInsertEdge(t, s, proj, idA, idTarget, "CALLS", nil)
-	mustInsertEdge(t, s, proj, idB, idTarget, "USES", nil)
+	mustInsertEdge(t, s, proj, idB, idTarget, "USAGE", nil)
 	mustInsertEdge(t, s, proj, idC, idTarget, "INHERITS", nil)
 	mustInsertEdge(t, s, proj, idD, idOther, "CALLS", nil)
 
-	got, err := s.FindCallerFilesOfTargetsInFiles(proj, []string{"changed.go"}, []string{"CALLS", "USES", "HTTP_CALLS"})
+	got, err := s.FindCallerFilesOfTargetsInFiles(proj, []string{"changed.go"}, []string{"CALLS", "USAGE", "HTTP_CALLS"})
 	if err != nil {
 		t.Fatalf("FindCallerFilesOfTargetsInFiles: %v", err)
 	}
 
-	// Expected: a.go (CALLS) and b.go (USES). c.go's INHERITS is not a
+	// Expected: a.go (CALLS) and b.go (USAGE). c.go's INHERITS is not a
 	// call-shape and is excluded by edge-type filter. d.go targets
 	// other.go, not in the changed set.
 	want := []string{"a.go", "b.go"}

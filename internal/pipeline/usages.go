@@ -8,7 +8,6 @@ import (
 
 	"github.com/DeusData/codebase-memory-mcp/internal/discover"
 	"github.com/DeusData/codebase-memory-mcp/internal/lang"
-	"github.com/DeusData/codebase-memory-mcp/internal/store"
 )
 
 // passUsages creates USAGE edges using pre-extracted CBM data.
@@ -64,6 +63,7 @@ func (p *Pipeline) passUsages() {
 // passUsagesForFiles runs usage detection only for the specified files (incremental).
 func (p *Pipeline) passUsagesForFiles(files []discover.FileInfo) {
 	slog.Info("pass3b.usages.incremental", "files", len(files))
+	results := make([][]resolvedEdge, 0, len(files))
 	count := 0
 	for _, f := range files {
 		if p.ctx.Err() != nil {
@@ -74,20 +74,9 @@ func (p *Pipeline) passUsagesForFiles(files []discover.FileInfo) {
 			continue
 		}
 		edges := p.resolveFileUsagesCBM(f.RelPath, ext)
-		// Write edges directly for incremental (small count)
-		for _, re := range edges {
-			callerNode, _ := p.Store.FindNodeByQN(p.ProjectName, re.CallerQN)
-			targetNode, _ := p.Store.FindNodeByQN(p.ProjectName, re.TargetQN)
-			if callerNode != nil && targetNode != nil {
-				_, _ = p.Store.InsertEdge(&store.Edge{
-					Project:  p.ProjectName,
-					SourceID: callerNode.ID,
-					TargetID: targetNode.ID,
-					Type:     re.Type,
-				})
-				count++
-			}
-		}
+		results = append(results, edges)
+		count += len(edges)
 	}
+	p.flushResolvedEdges(results)
 	slog.Info("pass3b.usages.incremental.done", "edges", count)
 }

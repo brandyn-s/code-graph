@@ -2,6 +2,7 @@ package pipeline
 
 import (
 	"log/slog"
+	"strings"
 
 	"github.com/DeusData/codebase-memory-mcp/internal/store"
 )
@@ -19,6 +20,9 @@ func (p *Pipeline) passInherits() {
 		}
 		for _, n := range nodes {
 			bases, ok := n.Properties["base_classes"]
+			if strings.HasSuffix(n.FilePath, ".ts") || strings.HasSuffix(n.FilePath, ".tsx") {
+				bases, ok = n.Properties["extends_types"]
+			}
 			if !ok {
 				continue
 			}

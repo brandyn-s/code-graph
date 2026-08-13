@@ -55,6 +55,8 @@ typedef struct {
     const char* parent_class;   // enclosing class QN for methods (NULL if none)
     const char** decorators;    // NULL-terminated array (NULL if none)
     const char** base_classes;  // NULL-terminated array (NULL if none)
+    const char** extends_types; // declared extends targets (NULL if none)
+    const char** implements_types; // declared implements targets (NULL if none)
     const char** param_names;   // NULL-terminated array (NULL if none)
     const char** param_types;   // NULL-terminated array (NULL if none)
     const char** return_types;  // NULL-terminated array (NULL if none)

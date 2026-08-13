@@ -157,6 +157,12 @@ func cbmDefToNode(def *cbm.Definition, projectName, moduleQN string) (*store.Nod
 	if len(def.BaseClasses) > 0 {
 		props["base_classes"] = def.BaseClasses
 	}
+	if len(def.ExtendsTypes) > 0 {
+		props["extends_types"] = def.ExtendsTypes
+	}
+	if len(def.ImplementsTypes) > 0 {
+		props["implements_types"] = def.ImplementsTypes
+	}
 	if len(def.ParamNames) > 0 {
 		props["param_names"] = def.ParamNames
 	}

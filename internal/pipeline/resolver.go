@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"math"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 
@@ -282,6 +283,7 @@ func (r *FunctionRegistry) Register(name, qualifiedName, nodeLabel string) {
 			}
 		}
 		r.modules[simple] = append(r.modules[simple], qualifiedName)
+		slices.Sort(r.modules[simple])
 		return
 	}
 
@@ -294,6 +296,7 @@ func (r *FunctionRegistry) Register(name, qualifiedName, nodeLabel string) {
 		}
 	}
 	r.byName[simple] = append(r.byName[simple], qualifiedName)
+	slices.Sort(r.byName[simple])
 }
 
 // ResolveCtx is the CallContext-shaped entry point. As of Phase 2 of the

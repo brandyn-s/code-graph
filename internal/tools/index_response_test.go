@@ -865,6 +865,13 @@ func TestIndexRepositoryFirstIndexReportsCreatedWithCounts(t *testing.T) {
 	t.Cleanup(router.CloseAll)
 	srv := NewServer(router)
 	repo := writeFixtureRepo(t)
+	if err := os.WriteFile(
+		filepath.Join(repo, "other.py"),
+		[]byte("def untouched():\n    return 2\n"),
+		0o600,
+	); err != nil {
+		t.Fatalf("write second fixture file: %v", err)
+	}
 
 	args := map[string]any{"repo_path": repo, "skip_report": true}
 
@@ -881,6 +888,7 @@ func TestIndexRepositoryFirstIndexReportsCreatedWithCounts(t *testing.T) {
 	if got := indexOutcome(t, resp); got != string(ActionOutcomeCreated) {
 		t.Errorf("first index action_outcome = %q, want %q", got, ActionOutcomeCreated)
 	}
+	assertIndexDelta(t, resp, "full", 2, 2, 0)
 
 	// Re-index of the same repo: the project record already exists.
 	resp2 := metadataResponseFromHandler(t, srv.handleIndexRepository, "index_repository", args)
@@ -890,5 +898,43 @@ func TestIndexRepositoryFirstIndexReportsCreatedWithCounts(t *testing.T) {
 	nodes2, _ := resp2["nodes"].(float64)
 	if nodes2 != nodes {
 		t.Errorf("re-index reported nodes=%v, want %v (no-op incremental must re-report full counts)", nodes2, nodes)
+	}
+	assertIndexDelta(t, resp2, "noop", 2, 0, 2)
+
+	appPath := filepath.Join(repo, "app.py")
+	app, err := os.ReadFile(appPath)
+	if err != nil {
+		t.Fatalf("read fixture mutation target: %v", err)
+	}
+	if err := os.WriteFile(appPath, append(app, []byte("\n# one-file update\n")...), 0o600); err != nil {
+		t.Fatalf("mutate fixture: %v", err)
+	}
+	resp3 := metadataResponseFromHandler(t, srv.handleIndexRepository, "index_repository", args)
+	assertIndexDelta(t, resp3, "incremental", 2, 1, 1)
+}
+
+func assertIndexDelta(
+	t *testing.T,
+	resp map[string]any,
+	wantMode string,
+	wantDiscovered, wantChanged, wantUnchanged int,
+) {
+	t.Helper()
+	delta, ok := resp["index_delta"].(map[string]any)
+	if !ok {
+		t.Fatalf("response missing index_delta map: %v", resp)
+	}
+	if got, _ := delta["mode"].(string); got != wantMode {
+		t.Errorf("index_delta.mode = %q, want %q", got, wantMode)
+	}
+	for key, want := range map[string]int{
+		"files_discovered": wantDiscovered,
+		"files_changed":    wantChanged,
+		"files_unchanged":  wantUnchanged,
+	} {
+		got, ok := delta[key].(float64)
+		if !ok || int(got) != want {
+			t.Errorf("index_delta.%s = %v, want %d", key, delta[key], want)
+		}
 	}
 }

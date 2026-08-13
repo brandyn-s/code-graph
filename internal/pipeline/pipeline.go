@@ -46,6 +46,16 @@ const EnrichmentVersion = "2026.03.16.1"
 // pct: 0-100 overall percent estimate. detail: human-readable status string.
 type ProgressCallback func(phase string, pct int, detail string)
 
+// IndexDelta describes which lifecycle path the most recent Run selected.
+// It reports source classification, not inferred timing, so callers can
+// distinguish a true no-op from a fast incremental or full rebuild.
+type IndexDelta struct {
+	Mode            string
+	FilesDiscovered int
+	FilesChanged    int
+	FilesUnchanged  int
+}
+
 // Pipeline orchestrates the 3-pass indexing of a repository.
 type Pipeline struct {
 	ctx         context.Context
@@ -66,8 +76,9 @@ type Pipeline struct {
 	// exposing those values via fields propagates the truth instead of
 	// re-querying. Zero when Run() has not been called (or returned early
 	// on a no-op incremental).
-	LastNodeCount int
-	LastEdgeCount int
+	LastNodeCount  int
+	LastEdgeCount  int
+	LastIndexDelta IndexDelta
 	// SCIPStatus reports whether the optional compiler-index precision tier was
 	// applied and how much of the project's function graph it covered. It is
 	// populated by passSCIPIngest and intentionally kept separate from the
@@ -526,10 +537,16 @@ func (p *Pipeline) runPasses(files []discover.FileInfo) (bool, error) {
 
 	// Classify files as changed/unchanged using stored hashes
 	changed, unchanged := p.classifyFiles(files)
+	p.LastIndexDelta = IndexDelta{
+		FilesDiscovered: len(files),
+		FilesChanged:    len(changed),
+		FilesUnchanged:  len(unchanged),
+	}
 
 	// If all files are changed (first index or no hashes), do full pass
 	isFullIndex := len(unchanged) == 0
 	if isFullIndex {
+		p.LastIndexDelta.Mode = "full"
 		if err := p.runFullPasses(files); err != nil {
 			return true, err
 		}
@@ -548,6 +565,7 @@ func (p *Pipeline) runPasses(files []discover.FileInfo) (bool, error) {
 	if limit > 0 {
 		isf, _ := p.Store.GetIncrementalsSinceFull(p.ProjectName)
 		if isf >= limit {
+			p.LastIndexDelta.Mode = "full"
 			slog.Info("incremental.force_full",
 				"reason", "sentinel",
 				"incrementals_since_full", isf,
@@ -565,9 +583,11 @@ func (p *Pipeline) runPasses(files []discover.FileInfo) (bool, error) {
 
 	// Fast path: nothing changed → skip all heavy passes
 	if len(changed) == 0 {
+		p.LastIndexDelta.Mode = "noop"
 		slog.Info("incremental.noop", "reason", "no_changes")
 		return false, nil
 	}
+	p.LastIndexDelta.Mode = "incremental"
 
 	if err := p.runIncrementalPasses(files, changed, unchanged); err != nil {
 		return true, err
@@ -895,12 +915,28 @@ func (p *Pipeline) runIncrementalPasses(
 	allFiles []discover.FileInfo,
 	changed, unchanged []discover.FileInfo,
 ) error {
-	// Pass 1: Structure always runs on all files (fast, idempotent upserts)
-	if err := p.passStructure(allFiles); err != nil {
-		return fmt.Errorf("pass1 structure: %w", err)
-	}
-	if err := p.checkCancel(); err != nil {
-		return err
+	// Discover dependents while the previous graph is still intact. Deleting
+	// changed-file nodes first also cascades the incoming CALLS/USAGE edges that
+	// identify unchanged callers, making the invalidation set permanently too
+	// small for this run.
+	dependents := p.findDependentFiles(changed, unchanged)
+	callerDependents := p.findCallerOfTargetDependents(changed, unchanged)
+	filesToResolve := mergeFiles(changed, dependents)
+	filesToResolve = mergeFiles(filesToResolve, callerDependents)
+	slog.Info("incremental.resolve",
+		"changed", len(changed),
+		"importer_dependents", len(dependents),
+		"caller_of_target_dependents", len(callerDependents),
+		"total_to_resolve", len(filesToResolve),
+	)
+
+	if limit := incrementalCap(); limit > 0 && len(filesToResolve) > limit {
+		slog.Info("incremental.fallback_to_full",
+			"reason", "files_to_resolve_over_cap",
+			"files_to_resolve", len(filesToResolve),
+			"cap", limit,
+		)
+		return p.runFullPasses(allFiles)
 	}
 
 	// Remove stale nodes/edges for deleted files
@@ -909,6 +945,17 @@ func (p *Pipeline) runIncrementalPasses(
 	// Delete nodes for changed files (will be re-created in pass 2)
 	for _, f := range changed {
 		_ = p.Store.DeleteNodesByFile(p.ProjectName, f.RelPath)
+	}
+
+	// Pass 1 runs after stale changed-file nodes are removed so it restores the
+	// changed File node and containment edges. Structure upserts preserve
+	// semantic Module nodes when index.ts/__init__.py intentionally share their
+	// directory qualified name.
+	if err := p.passStructure(allFiles); err != nil {
+		return fmt.Errorf("pass1 structure: %w", err)
+	}
+	if err := p.checkCancel(); err != nil {
+		return err
 	}
 
 	// Pass 2: Parse changed files only
@@ -928,46 +975,13 @@ func (p *Pipeline) runIncrementalPasses(
 	}
 
 	// Re-build import maps for changed files (already done in passDefinitions)
-	// Also load import maps for unchanged files from their AST (not cached)
-	// For correctness, we need the full import map, but unchanged files don't
-	// have ASTs cached. Rebuild imports only for changed files is sufficient
-	// since unchanged file import edges still exist in DB.
+	// Dependents are extracted lazily below for call resolution. Their stored
+	// IMPORTS edges can be cascade-deleted when a changed target module is
+	// rebuilt, so their maps must be hydrated before passImports restores them.
+	p.hydrateResolutionFiles(filesToResolve)
 	p.passImports()
 	if err := p.checkCancel(); err != nil {
 		return err
-	}
-
-	// Determine which files need call re-resolution. Two sources of
-	// dependents:
-	//   (a) Direct importers of changed modules (the original heuristic).
-	//   (b) Callers of any node defined in a changed file (Plan 1 Phase 3).
-	//       Catches transitive callers, type-based dispatch, and stranded
-	//       handlers whose resolution depends on a node in a changed file
-	//       but whose own module didn't import the changed module
-	//       directly. Backed by store.FindCallerFilesOfTargetsInFiles
-	//       against the indexed (target_id, type) edge composite.
-	//
-	// If the union grows past the cap we fall through to a full reindex —
-	// at that scale the incremental's "skip unchanged files" win is gone
-	// and a full reindex is more correct and roughly the same cost.
-	dependents := p.findDependentFiles(changed, unchanged)
-	callerDependents := p.findCallerOfTargetDependents(changed, unchanged)
-	filesToResolve := mergeFiles(changed, dependents)
-	filesToResolve = mergeFiles(filesToResolve, callerDependents)
-	slog.Info("incremental.resolve",
-		"changed", len(changed),
-		"importer_dependents", len(dependents),
-		"caller_of_target_dependents", len(callerDependents),
-		"total_to_resolve", len(filesToResolve),
-	)
-
-	if limit := incrementalCap(); limit > 0 && len(filesToResolve) > limit {
-		slog.Info("incremental.fallback_to_full",
-			"reason", "files_to_resolve_over_cap",
-			"files_to_resolve", len(filesToResolve),
-			"cap", limit,
-		)
-		return p.runFullPasses(allFiles)
 	}
 
 	// Delete edges for files being re-resolved (all AST-derived edge types)
@@ -1040,9 +1054,11 @@ func (p *Pipeline) runIncrementalPasses(
 		slog.Warn("pass.httplink.err", "err", err)
 	}
 	p.passConfigLinker()
-	_ = p.Store.DeleteEdgesByType(p.ProjectName, "READS_ENV")
-	_ = p.Store.DeleteNodesByLabel(p.ProjectName, "EnvVar")
+	// Changed reader nodes were deleted above, so their READS_ENV edges were
+	// removed by FK cascade. Preserve unchanged readers and upsert only the
+	// changed keys; then remove any environment nodes left with no readers.
 	p.passEnvVarNodes()
+	_ = p.Store.DeleteOrphanNodesByLabel(p.ProjectName, "EnvVar")
 	p.passImplements()
 	p.passGitHistory()
 	p.passOPALinker()
@@ -1146,7 +1162,7 @@ func (p *Pipeline) classifyFiles(files []discover.FileInfo) (changed, unchanged 
 // findCallerOfTargetDependents returns unchanged files containing call
 // sites whose target nodes live in changed files. Complements
 // findDependentFiles (which walks the import graph one hop) by directly
-// querying the existing CALLS/USES/HTTP_CALLS edge tables for callers
+// querying existing call/usage edge tables for callers
 // of any node in a changed file. Catches transitive callers, type-based
 // dispatch resolutions, and stranded handlers — the leak classes the
 // import-graph heuristic misses.
@@ -1167,7 +1183,7 @@ func (p *Pipeline) findCallerOfTargetDependents(changed, unchanged []discover.Fi
 	callerFiles, err := p.Store.FindCallerFilesOfTargetsInFiles(
 		p.ProjectName,
 		changedPaths,
-		[]string{"CALLS", "USES", "HTTP_CALLS"},
+		[]string{"CALLS", "USAGE", "HTTP_CALLS", "ASYNC_CALLS", "INDIRECT_CALLS"},
 	)
 	if err != nil {
 		slog.Warn("incremental.caller_of_target.err", "err", err)
@@ -1283,6 +1299,10 @@ func (p *Pipeline) loadImportMapFromDB(moduleQN string) map[string]string {
 // incremental paths.
 func (p *Pipeline) passCallsForFiles(files []discover.FileInfo) {
 	slog.Info("pass3.calls.incremental", "files", len(files))
+	// Use the same QN-to-ID classification and property-preserving writer as
+	// the full path. Direct incremental inserts previously bypassed callable
+	// target classification and made the two index modes semantically diverge.
+	results := make([][]resolvedEdge, 0, len(files))
 	aggregatedUnresolved := make(map[string]int)
 	for _, f := range files {
 		if p.ctx.Err() != nil {
@@ -1304,23 +1324,11 @@ func (p *Pipeline) passCallsForFiles(files []discover.FileInfo) {
 			p.extractionCache[f.RelPath] = ext
 		}
 		edges, unresolved := p.resolveFileCallsCBM(f.RelPath, ext)
+		results = append(results, edges)
 		// Release Definitions/Imports per-file after call resolution
 		if ext.Result != nil {
 			ext.Result.Definitions = nil
 			ext.Result.Imports = nil
-		}
-		for _, re := range edges {
-			callerNode, _ := p.Store.FindNodeByQN(p.ProjectName, re.CallerQN)
-			targetNode, _ := p.Store.FindNodeByQN(p.ProjectName, re.TargetQN)
-			if callerNode != nil && targetNode != nil {
-				_, _ = p.Store.InsertEdge(&store.Edge{
-					Project:    p.ProjectName,
-					SourceID:   callerNode.ID,
-					TargetID:   targetNode.ID,
-					Type:       re.Type,
-					Properties: re.Properties,
-				})
-			}
 		}
 		// Aggregate this file's unresolved counts; defer the write to
 		// the end of the batch so a caller across multiple files gets
@@ -1331,9 +1339,39 @@ func (p *Pipeline) passCallsForFiles(files []discover.FileInfo) {
 			}
 		}
 	}
+	p.flushResolvedEdges(results)
 	for callerQN, count := range aggregatedUnresolved {
 		_, _ = p.Store.SetNodeIntProperty(p.ProjectName, callerQN, "unresolved_call_count", count)
 	}
+}
+
+// hydrateResolutionFiles ensures every changed/dependent file has current CBM
+// extraction plus import maps/bindings before incremental calls and imports are
+// resolved. It is idempotent for changed files already parsed by passDefinitions.
+func (p *Pipeline) hydrateResolutionFiles(files []discover.FileInfo) {
+	for _, f := range files {
+		if _, ok := p.extractionCache[f.RelPath]; ok {
+			continue
+		}
+		parsed := cbmParseFile(p.ProjectName, f)
+		if parsed == nil || parsed.Err != nil || parsed.CBMResult == nil {
+			continue
+		}
+		p.extractionCache[f.RelPath] = &cachedExtraction{
+			Result: parsed.CBMResult, Language: f.Language,
+		}
+		moduleQN := fqn.ModuleQN(p.ProjectName, f.RelPath)
+		if len(parsed.ImportMap) > 0 {
+			p.importMaps[moduleQN] = parsed.ImportMap
+		}
+		if len(parsed.ImportBindings) > 0 {
+			p.importBindings[moduleQN] = parsed.ImportBindings
+		}
+	}
+	// Reapply the same normalizations the full pass performs before imports and
+	// calls consume these maps.
+	p.normalizePythonRelativeImports()
+	p.normalizeJSTSRelativeImports()
 }
 
 // removeDeletedFiles removes nodes/edges for files that no longer exist on disk.
@@ -1596,9 +1634,39 @@ func (p *Pipeline) buildFileNodesEdges(files []discover.FileInfo) ([]*store.Node
 }
 
 func (p *Pipeline) batchWriteStructure(nodes []*store.Node, edges []pendingEdge) error {
+	// JS/TS index modules and Python __init__ modules intentionally share a QN
+	// with their directory. On incremental runs the semantic Module already
+	// exists in SQLite; a structural Folder/Package upsert must not demote it.
+	// The full in-memory build retains its established later-write semantics.
+	if p.buf == nil {
+		filtered := nodes[:0]
+		for _, n := range nodes {
+			if n.Label == "Folder" || n.Label == "Package" {
+				existing, err := p.Store.FindNodeByQN(p.ProjectName, n.QualifiedName)
+				if err == nil && existing != nil && existing.Label == "Module" {
+					continue
+				}
+			}
+			filtered = append(filtered, n)
+		}
+		nodes = filtered
+	}
 	idMap, err := p.upsertNodeBatch(nodes)
 	if err != nil {
 		return fmt.Errorf("pass1 batch upsert: %w", err)
+	}
+	// Include preserved collision nodes in the edge endpoint map.
+	if p.buf == nil {
+		for _, edge := range edges {
+			for _, qn := range []string{edge.SourceQN, edge.TargetQN} {
+				if _, ok := idMap[qn]; ok {
+					continue
+				}
+				if existing, findErr := p.Store.FindNodeByQN(p.ProjectName, qn); findErr == nil && existing != nil {
+					idMap[qn] = existing.ID
+				}
+			}
+		}
 	}
 
 	realEdges := make([]*store.Edge, 0, len(edges))

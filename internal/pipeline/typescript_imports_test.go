@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/DeusData/codebase-memory-mcp/internal/discover"
@@ -110,4 +111,49 @@ export function App(): null {
 `)
 
 	assertTypeScriptImport(t, dir, ".src.App", ".src.components.thing")
+}
+
+func TestTypeScriptImports_IncrementalDependentMatchesFullGraph(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "src", "icons", "Descope.tsx"), `
+export function Descope(): null { return null; }
+`)
+	writeFile(t, filepath.Join(dir, "src", "ProviderButton.tsx"), `
+import { Descope } from "./icons/Descope";
+
+export function renderProviderIcon(): null {
+    return Descope();
+}
+`)
+
+	s, err := store.OpenMemory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	p := New(context.Background(), s, dir, discover.ModeFull)
+	if err := p.Run(); err != nil {
+		t.Fatalf("initial Pipeline.Run: %v", err)
+	}
+	beforeNodes, beforeEdges := canonicalGraph(t, s, p.ProjectName)
+
+	target := filepath.Join(dir, "src", "icons", "Descope.tsx")
+	source, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(target, append(source, []byte("\n// comment only\n")...), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	p = New(context.Background(), s, dir, discover.ModeFull)
+	if err := p.Run(); err != nil {
+		t.Fatalf("incremental Pipeline.Run: %v", err)
+	}
+	afterNodes, afterEdges := canonicalGraph(t, s, p.ProjectName)
+	if !eq(beforeNodes, afterNodes) {
+		t.Errorf("incremental TypeScript nodes changed:\n  %s", strings.Join(diff(beforeNodes, afterNodes), "\n  "))
+	}
+	if !eq(beforeEdges, afterEdges) {
+		t.Errorf("incremental TypeScript edges changed:\n  %s", strings.Join(diff(beforeEdges, afterEdges), "\n  "))
+	}
 }

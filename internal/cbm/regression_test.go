@@ -1,6 +1,7 @@
 package cbm
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/DeusData/codebase-memory-mcp/internal/lang"
@@ -260,6 +261,34 @@ func TestTypeScriptClass_Regression(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertHasName(t, defsWithLabel(r, "Class"), "UserService")
+}
+
+func TestTypeScriptHeritageClauseKinds_Regression(t *testing.T) {
+	src := []byte(`
+interface Renderable {}
+interface Named {}
+interface NamedRenderable<T> extends Renderable<T>, Named {}
+class BaseFormatter {}
+class RichFormatter extends BaseFormatter<string> implements NamedRenderable<string>, Renderable<string> {}
+`)
+	r, err := ExtractFile(src, lang.TypeScript, "t", "format.ts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	definitions := make(map[string]Definition)
+	for _, definition := range r.Definitions {
+		definitions[definition.Name] = definition
+	}
+	if got := definitions["NamedRenderable"].ExtendsTypes; !slices.Equal(got, []string{"Renderable", "Named"}) {
+		t.Fatalf("NamedRenderable extends = %v, want [Renderable Named]", got)
+	}
+	rich := definitions["RichFormatter"]
+	if !slices.Equal(rich.ExtendsTypes, []string{"BaseFormatter"}) {
+		t.Fatalf("RichFormatter extends = %v, want [BaseFormatter]", rich.ExtendsTypes)
+	}
+	if !slices.Equal(rich.ImplementsTypes, []string{"NamedRenderable", "Renderable"}) {
+		t.Fatalf("RichFormatter implements = %v, want [NamedRenderable Renderable]", rich.ImplementsTypes)
+	}
 }
 
 // --- TSX ---

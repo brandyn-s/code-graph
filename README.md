@@ -246,6 +246,19 @@ covers the measured static module-resolution shapes; package-export maps,
 arbitrary `paths` globs, dynamic `import()`, and JavaScript projects without a
 `tsconfig` remain outside the established result.
 
+Normal-tier TypeScript declared type relationships have a separate compiler-
+API oracle and comparison in
+[`bench/accuracy/baselines/2026-08-12-typescript-type-relationships-report.md`](bench/accuracy/baselines/2026-08-12-typescript-type-relationships-report.md).
+Across pinned Ky, Chainlit frontend, and free-style revisions, the candidate
+graph produced 13 true positives, zero false positives, and zero false
+negatives: ten `INHERITS` edges from declared `extends` clauses and three
+`IMPLEMENTS` edges. The prior graph produced none of those 13 edges. The
+oracle reads compiler symbols and source bytes, never graph output, and first
+passes a five-edge hand-enumerated fixture. This result covers project-local
+declared relationships, including generic targets and interfaces extending
+local aliases; it does not establish structural interface satisfaction,
+runtime prototype changes, or external-package relationships.
+
 The normal heuristic-tier Go CALLS measurement is
 [`bench/accuracy/baselines/2026-08-12-code-graph-go-report.md`](bench/accuracy/baselines/2026-08-12-code-graph-go-report.md).
 Against a deterministic `go/ast` oracle over five production subsets, the
@@ -603,7 +616,13 @@ Release `.7` added the measured TypeScript compiler-tier CALLS corrections and
 a lower-memory, lower-latency `code_localize` path while preserving ranked
 output in the fixed LLVM replay. Release `.8` adds the independently measured
 TypeScript IMPORTS corrections for relative `.js` source specifiers,
-re-exports, and unambiguous project-root module paths.
+re-exports, and unambiguous project-root module paths. The next release
+candidate preserves TypeScript heritage clause kind and target identity,
+reports full/no-op/incremental source deltas, and makes incremental relationship
+reconstruction deterministic. It remains candidate behavior until its release
+workflow completes; the baseline above names the exact candidate source
+revision and binary inputs rather than treating a local commit as deployed
+state.
 This is an internal package in a private repository. It is not published to the public MCP Registry,
 which does not support private package downloads. The setup scripts therefore
 require an authenticated GitHub CLI session with access to the repository.

@@ -52,28 +52,30 @@ type ImplTrait struct {
 
 // Definition represents a function/class/variable/module extracted from source.
 type Definition struct {
-	Name          string
-	QualifiedName string
-	Label         string // "Function", "Method", "Class", "Variable", "Module", "Interface", "Enum", "Type"
-	FilePath      string
-	StartLine     int
-	EndLine       int
-	Signature     string
-	ReturnType    string
-	Receiver      string
-	Docstring     string
-	ParentClass   string
-	Decorators    []string
-	BaseClasses   []string
-	ParamNames    []string
-	ParamTypes    []string
-	ReturnTypes   []string
-	Complexity    int
-	Lines         int
-	IsExported    bool
-	IsAbstract    bool
-	IsTest        bool
-	IsEntryPoint  bool
+	Name            string
+	QualifiedName   string
+	Label           string // "Function", "Method", "Class", "Variable", "Module", "Interface", "Enum", "Type"
+	FilePath        string
+	StartLine       int
+	EndLine         int
+	Signature       string
+	ReturnType      string
+	Receiver        string
+	Docstring       string
+	ParentClass     string
+	Decorators      []string
+	BaseClasses     []string
+	ExtendsTypes    []string
+	ImplementsTypes []string
+	ParamNames      []string
+	ParamTypes      []string
+	ReturnTypes     []string
+	Complexity      int
+	Lines           int
+	IsExported      bool
+	IsAbstract      bool
+	IsTest          bool
+	IsEntryPoint    bool
 }
 
 // Call represents a raw call site (callee name + enclosing function).
@@ -252,28 +254,30 @@ func convertResult(r *C.CBMFileResult) *FileResult {
 		for i := range defs {
 			d := &defs[i]
 			fr.Definitions[i] = Definition{
-				Name:          C.GoString(d.name),
-				QualifiedName: C.GoString(d.qualified_name),
-				Label:         C.GoString(d.label),
-				FilePath:      C.GoString(d.file_path),
-				StartLine:     int(d.start_line),
-				EndLine:       int(d.end_line),
-				Signature:     goStringOrEmpty(d.signature),
-				ReturnType:    goStringOrEmpty(d.return_type),
-				Receiver:      goStringOrEmpty(d.receiver),
-				Docstring:     goStringOrEmpty(d.docstring),
-				ParentClass:   goStringOrEmpty(d.parent_class),
-				Decorators:    goStringSlice(d.decorators),
-				BaseClasses:   goStringSlice(d.base_classes),
-				ParamNames:    goStringSlice(d.param_names),
-				ParamTypes:    goStringSlice(d.param_types),
-				ReturnTypes:   goStringSlice(d.return_types),
-				Complexity:    int(d.complexity),
-				Lines:         int(d.lines),
-				IsExported:    bool(d.is_exported),
-				IsAbstract:    bool(d.is_abstract),
-				IsTest:        bool(d.is_test),
-				IsEntryPoint:  bool(d.is_entry_point),
+				Name:            C.GoString(d.name),
+				QualifiedName:   C.GoString(d.qualified_name),
+				Label:           C.GoString(d.label),
+				FilePath:        C.GoString(d.file_path),
+				StartLine:       int(d.start_line),
+				EndLine:         int(d.end_line),
+				Signature:       goStringOrEmpty(d.signature),
+				ReturnType:      goStringOrEmpty(d.return_type),
+				Receiver:        goStringOrEmpty(d.receiver),
+				Docstring:       goStringOrEmpty(d.docstring),
+				ParentClass:     goStringOrEmpty(d.parent_class),
+				Decorators:      goStringSlice(d.decorators),
+				BaseClasses:     goStringSlice(d.base_classes),
+				ExtendsTypes:    goStringSlice(d.extends_types),
+				ImplementsTypes: goStringSlice(d.implements_types),
+				ParamNames:      goStringSlice(d.param_names),
+				ParamTypes:      goStringSlice(d.param_types),
+				ReturnTypes:     goStringSlice(d.return_types),
+				Complexity:      int(d.complexity),
+				Lines:           int(d.lines),
+				IsExported:      bool(d.is_exported),
+				IsAbstract:      bool(d.is_abstract),
+				IsTest:          bool(d.is_test),
+				IsEntryPoint:    bool(d.is_entry_point),
 			}
 		}
 	}

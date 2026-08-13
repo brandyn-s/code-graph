@@ -20,6 +20,10 @@ function sha256File(file) {
   return crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex");
 }
 
+function canonicalFileManifest(fileHashes) {
+  return JSON.stringify(Object.fromEntries(Object.entries(fileHashes).sort()));
+}
+
 function projectFile(root, sourceFile) {
   const absolute = path.resolve(sourceFile.fileName);
   const relative = path.relative(root, absolute);
@@ -132,11 +136,15 @@ function extract(tsconfigPath) {
   const checker = program.getTypeChecker();
   const edgeByKey = new Map();
   const importByKey = new Map();
+  const typeRelationshipByKey = new Map();
   const projectFiles = program
     .getSourceFiles()
     .map((sourceFile) => projectFile(root, sourceFile))
     .filter((file) => file !== null)
     .sort((left, right) => left.localeCompare(right));
+  const projectFileSha256 = Object.fromEntries(
+    projectFiles.map((file) => [file, sha256File(path.join(root, file))]),
+  );
 
   function recordImport(sourceFile, moduleSpecifier) {
     if (!moduleSpecifier || !ts.isStringLiteralLike(moduleSpecifier)) {
@@ -167,6 +175,44 @@ function extract(tsconfigPath) {
     });
   }
 
+  function recordTypeRelationships(declaration) {
+    const source = coordinate(root, declaration);
+    if (!source || !source.name || !declaration.heritageClauses) {
+      return;
+    }
+    for (const clause of declaration.heritageClauses) {
+      const kind = clause.token === ts.SyntaxKind.ExtendsKeyword
+        ? "extends"
+        : clause.token === ts.SyntaxKind.ImplementsKeyword
+          ? "implements"
+          : null;
+      if (kind === null) {
+        continue;
+      }
+      for (const type of clause.types) {
+        let symbol = checker.getSymbolAtLocation(type.expression);
+        if (symbol && (symbol.flags & ts.SymbolFlags.Alias) !== 0) {
+          symbol = checker.getAliasedSymbol(symbol);
+        }
+        const targetDeclaration = symbol && symbol.declarations
+          ? symbol.declarations.find((candidate) =>
+              ts.isClassDeclaration(candidate) ||
+              ts.isInterfaceDeclaration(candidate) ||
+              ts.isTypeAliasDeclaration(candidate))
+          : null;
+        if (!targetDeclaration) {
+          continue;
+        }
+        const target = coordinate(root, targetDeclaration);
+        if (!target || !target.name) {
+          continue;
+        }
+        const key = `${kind}\0${source.file}\0${source.line}\0${target.file}\0${target.line}`;
+        typeRelationshipByKey.set(key, { kind, source, target });
+      }
+    }
+  }
+
   function visit(node) {
     if (
       (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) &&
@@ -178,6 +224,9 @@ function extract(tsconfigPath) {
       ts.isExternalModuleReference(node.moduleReference)
     ) {
       recordImport(node.getSourceFile(), node.moduleReference.expression);
+    }
+    if (ts.isClassDeclaration(node) || ts.isInterfaceDeclaration(node)) {
+      recordTypeRelationships(node);
     }
     if (ts.isCallExpression(node) || ts.isNewExpression(node)) {
       const callerDeclaration = functionLikeAncestor(node);
@@ -214,16 +263,32 @@ function extract(tsconfigPath) {
     left.source.file.localeCompare(right.source.file) ||
     left.target.file.localeCompare(right.target.file),
   );
+  const typeRelationships = [...typeRelationshipByKey.values()].sort((left, right) =>
+    left.source.file.localeCompare(right.source.file) ||
+    left.source.line - right.source.line ||
+    left.kind.localeCompare(right.kind) ||
+    left.target.file.localeCompare(right.target.file) ||
+    left.target.line - right.target.line,
+  );
   return {
     schema_version: 1,
     oracle: "typescript-compiler-api-call-target-v1",
     oracle_scope: "static_source_calls_with_function_like_callers",
     imports_oracle: "typescript-compiler-api-module-resolution-v1",
     imports_oracle_scope: "static_project_local_module_resolution",
+    type_relationships_oracle: "typescript-compiler-api-type-relationships-v1",
+    type_relationships_oracle_scope: "declared_project_local_extends_and_implements",
+    oracle_implementation_sha256: sha256File(__filename),
     typescript_version: ts.version,
     tsconfig_sha256: sha256File(configPath),
     project_files: projectFiles,
+    project_file_sha256: projectFileSha256,
+    project_manifest_sha256: crypto
+      .createHash("sha256")
+      .update(canonicalFileManifest(projectFileSha256))
+      .digest("hex"),
     imports,
+    type_relationships: typeRelationships,
     edges,
   };
 }
@@ -241,4 +306,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { extract };
+module.exports = { canonicalFileManifest, extract };

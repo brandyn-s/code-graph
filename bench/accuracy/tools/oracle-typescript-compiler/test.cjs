@@ -8,6 +8,18 @@ const test = require("node:test");
 
 const root = __dirname;
 
+function sha256(bytes) {
+  return require("node:crypto").createHash("sha256").update(bytes).digest("hex");
+}
+
+test("manifest serialization uses code-point key order", () => {
+  const { canonicalFileManifest } = require("./main.cjs");
+  assert.equal(
+    canonicalFileManifest({ "src/alpha.ts": "b", "src/Zed.ts": "a" }),
+    '{"src/Zed.ts":"a","src/alpha.ts":"b"}',
+  );
+});
+
 test("compiler oracle matches the hand-enumerated fixture", () => {
   const run = spawnSync(
     process.execPath,
@@ -28,4 +40,35 @@ test("compiler oracle matches the hand-enumerated fixture", () => {
   );
   assert.deepEqual(actual.project_files, ["src/main.ts", "src/math.ts"]);
   assert.deepEqual(actual.imports, expected.imports);
+  assert.equal(
+    actual.type_relationships_oracle,
+    "typescript-compiler-api-type-relationships-v1",
+  );
+  const expectedFileHashes = Object.fromEntries(
+    actual.project_files.map((file) => [
+      file,
+      sha256(fs.readFileSync(path.join(root, "fixture", file))),
+    ]),
+  );
+  assert.equal(
+    actual.oracle_implementation_sha256,
+    sha256(fs.readFileSync(path.join(root, "main.cjs"))),
+  );
+  assert.deepEqual(actual.project_file_sha256, expectedFileHashes);
+  assert.equal(
+    actual.project_manifest_sha256,
+    sha256(
+      JSON.stringify(
+        Object.fromEntries(Object.entries(expectedFileHashes).sort()),
+      ),
+    ),
+  );
+  const byKey = (relationships) => [...relationships].sort((left, right) =>
+    left.source.file.localeCompare(right.source.file) ||
+    left.source.line - right.source.line ||
+    left.kind.localeCompare(right.kind) ||
+    left.target.file.localeCompare(right.target.file) ||
+    left.target.line - right.target.line,
+  );
+  assert.deepEqual(actual.type_relationships, byKey(expected.type_relationships));
 });

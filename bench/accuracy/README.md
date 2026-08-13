@@ -26,6 +26,7 @@ can't serve as an independent oracle. Instead:
 | IMPORTS   | Go       | Currently ungraded; the `go/ast` harness drops IMPORTS until import paths can be mapped to internal file-qualified names | N/A |
 | CALLS     | TypeScript | TypeScript compiler API for the compiler tier | High — tested on the declared static-call scope |
 | IMPORTS   | TypeScript | TypeScript compiler API module resolution for the normal graph | High — tested on compiler-program-scoped project-local imports and re-exports |
+| INHERITS / IMPLEMENTS | TypeScript | TypeScript compiler API symbol resolution for declared type relationships | High — tested on project-local `extends` and `implements` clauses |
 
 None require human verification. Ground truth is frozen to JSON and
 re-used for every future regression run.
@@ -45,6 +46,7 @@ bench/accuracy/
   oracle_go_ast.py           CALLS ground truth via go/ast (Go heuristic tier)
   oracle_go_callgraph.py     legacy CALLS + IMPORTS experiment via go callgraph
   compare_typescript_imports.py  compiler-resolved TypeScript IMPORTS comparison
+  compare_typescript_relationships.py  compiler-resolved TypeScript type relationships
   compare.py                 TP/FP/FN/P/R/F1 reporter
   run_baseline.py            orchestrator: verifies SHA, runs all oracles, runs code-graph, produces report
   tools/oracle-rust-syn/     Cargo crate for the Rust syn-based oracle binary
@@ -114,6 +116,15 @@ python bench/accuracy/compare_typescript_imports.py \
   --database /path/to/project.db \
   --project project-name \
   --output imports-report.json
+
+# Independent TypeScript declared relationship oracle and normal-graph comparison
+python bench/accuracy/compare_typescript_relationships.py \
+  --oracle oracle.json \
+  --database /path/to/project.db \
+  --project project-name \
+  --repository-root /path/to/repo \
+  --source-revision <git-object-id> \
+  --output relationships-report.json
 # Output:
 #   bench/accuracy/baselines/YYYY-MM-DD-mcp-servers-report.md   (human)
 #   bench/accuracy/baselines/YYYY-MM-DD-mcp-servers-report.json (machine)

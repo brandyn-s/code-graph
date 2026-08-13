@@ -96,6 +96,9 @@ func cbmParseFileFromSource(projectName string, f discover.FileInfo, source []by
 				continue
 			}
 			importMap[imp.LocalName] = imp.ModulePath
+			if imp.DependencyOnly {
+				continue
+			}
 			bare := bareNameOfImport(imp.LocalName)
 			if bare != "" {
 				importBindings[bare] = imp.ModulePath
@@ -564,12 +567,12 @@ func collectLSPResolvedEdges(resolvedCalls []cbm.ResolvedCall, registry *Functio
 			TargetQN: rc.CalleeQN,
 			Type:     "CALLS",
 			Properties: map[string]any{
-				"confidence":               float64(rc.Confidence),
-				"confidence_band":          confidenceBand(float64(rc.Confidence)),
-				"resolution_strategy":      rc.Strategy,
-				"caller_node_kind":         callerKindFromContext(rc.CallerQN, "CALLS", registry),
-				"resolver_rule":            resolverRuleFromLSPStrategy(rc.Strategy),
-				CandidateSetPropertyName:   CandidateSetSizeLSPDefault,
+				"confidence":             float64(rc.Confidence),
+				"confidence_band":        confidenceBand(float64(rc.Confidence)),
+				"resolution_strategy":    rc.Strategy,
+				"caller_node_kind":       callerKindFromContext(rc.CallerQN, "CALLS", registry),
+				"resolver_rule":          resolverRuleFromLSPStrategy(rc.Strategy),
+				CandidateSetPropertyName: CandidateSetSizeLSPDefault,
 			},
 		})
 

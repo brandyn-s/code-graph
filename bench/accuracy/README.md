@@ -25,6 +25,7 @@ can't serve as an independent oracle. Instead:
 | CALLS     | Go       | `go/ast` syntactic oracle for the heuristic tier; independent SSA/RTA for the compiler tier | High — but see caveats |
 | IMPORTS   | Go       | Currently ungraded; the `go/ast` harness drops IMPORTS until import paths can be mapped to internal file-qualified names | N/A |
 | CALLS     | TypeScript | TypeScript compiler API for the compiler tier | High — tested on the declared static-call scope |
+| IMPORTS   | TypeScript | TypeScript compiler API module resolution for the normal graph | High — tested on compiler-program-scoped project-local imports and re-exports |
 
 None require human verification. Ground truth is frozen to JSON and
 re-used for every future regression run.
@@ -43,6 +44,7 @@ bench/accuracy/
   oracle_rust_syn.py         CALLS ground truth via syn 2.x (Rust)
   oracle_go_ast.py           CALLS ground truth via go/ast (Go heuristic tier)
   oracle_go_callgraph.py     legacy CALLS + IMPORTS experiment via go callgraph
+  compare_typescript_imports.py  compiler-resolved TypeScript IMPORTS comparison
   compare.py                 TP/FP/FN/P/R/F1 reporter
   run_baseline.py            orchestrator: verifies SHA, runs all oracles, runs code-graph, produces report
   tools/oracle-rust-syn/     Cargo crate for the Rust syn-based oracle binary
@@ -103,6 +105,15 @@ python bench/accuracy/compare_compiler_calls.py \
   --project project-name \
   --scip-index /path/to/index.scip \
   --output compiler-report.json
+
+# Independent TypeScript IMPORTS oracle and normal-graph comparison
+node bench/accuracy/tools/oracle-typescript-compiler/main.cjs \
+  /path/to/tsconfig.json > oracle.json
+python bench/accuracy/compare_typescript_imports.py \
+  --oracle oracle.json \
+  --database /path/to/project.db \
+  --project project-name \
+  --output imports-report.json
 # Output:
 #   bench/accuracy/baselines/YYYY-MM-DD-mcp-servers-report.md   (human)
 #   bench/accuracy/baselines/YYYY-MM-DD-mcp-servers-report.json (machine)

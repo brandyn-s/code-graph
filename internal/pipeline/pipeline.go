@@ -10,6 +10,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -2692,6 +2693,10 @@ func resolvePythonRelativeImport(targetQN, moduleQN, localName string) string {
 // leading dot is present.
 func (p *Pipeline) normalizePythonRelativeImports() {
 	for moduleQN, importMap := range p.importMaps {
+		moduleNode, _ := p.findNodeByQN(p.ProjectName, moduleQN)
+		if moduleNode == nil || strings.ToLower(filepath.Ext(moduleNode.FilePath)) != ".py" {
+			continue
+		}
 		for localName, targetQN := range importMap {
 			resolved := resolvePythonRelativeImport(targetQN, moduleQN, localName)
 			if resolved != targetQN {
@@ -2711,6 +2716,66 @@ func (p *Pipeline) normalizePythonRelativeImports() {
 	}
 }
 
+var jsTsModuleExtensions = map[string]struct{}{
+	".js": {}, ".jsx": {}, ".ts": {}, ".tsx": {},
+	".mjs": {}, ".cjs": {}, ".mts": {}, ".cts": {},
+}
+
+// resolveJSTSRelativeImport converts a project-local ES module specifier into
+// the same canonical module QN used by the graph's Module nodes. In NodeNext
+// projects, source commonly says `./math.js` while the compiler resolves that
+// specifier to `math.ts`; ModuleQN deliberately strips either extension, so the
+// file-pair resolution remains exact without guessing a symbol target.
+func resolveJSTSRelativeImport(target, importerFile, projectName string) string {
+	if !strings.HasPrefix(target, "./") && !strings.HasPrefix(target, "../") {
+		return target
+	}
+	if _, ok := jsTsModuleExtensions[strings.ToLower(filepath.Ext(importerFile))]; !ok {
+		return target
+	}
+	// Keep non-code assets out of the TypeScript module graph. Without this,
+	// `./App.css` and `App.tsx` collapse to the same extensionless ModuleQN and
+	// manufacture a self IMPORTS edge.
+	targetExt := strings.ToLower(path.Ext(target))
+	if targetExt != "" {
+		if _, ok := jsTsModuleExtensions[targetExt]; !ok {
+			return target
+		}
+	}
+	resolvedPath := path.Clean(path.Join(path.Dir(filepath.ToSlash(importerFile)), target))
+	if resolvedPath == ".." || strings.HasPrefix(resolvedPath, "../") {
+		return target
+	}
+	return fqn.ModuleQN(projectName, resolvedPath)
+}
+
+// normalizeJSTSRelativeImports makes the resolved module identity available to
+// both passImports and the later call resolver. This is intentionally limited
+// to explicit relative ES-module specifiers; package exports and tsconfig path
+// aliases require compiler metadata and remain outside the heuristic tier.
+func (p *Pipeline) normalizeJSTSRelativeImports() {
+	for moduleQN, importMap := range p.importMaps {
+		moduleNode, _ := p.findNodeByQN(p.ProjectName, moduleQN)
+		if moduleNode == nil {
+			continue
+		}
+		for localName, targetQN := range importMap {
+			importMap[localName] = resolveJSTSRelativeImport(
+				targetQN, moduleNode.FilePath, p.ProjectName,
+			)
+		}
+		bindings, ok := p.importBindings[moduleQN]
+		if !ok {
+			continue
+		}
+		for bareName, targetQN := range bindings {
+			bindings[bareName] = resolveJSTSRelativeImport(
+				targetQN, moduleNode.FilePath, p.ProjectName,
+			)
+		}
+	}
+}
+
 // passImports creates IMPORTS edges from the import maps built during pass 2.
 func (p *Pipeline) passImports() {
 	slog.Info("pass2b.imports")
@@ -2719,6 +2784,7 @@ func (p *Pipeline) passImports() {
 	// them. Without this, the resolver's applyImportBindingFilter sees
 	// raw leading-dot paths and drops Python `from .X import Y` calls.
 	p.normalizePythonRelativeImports()
+	p.normalizeJSTSRelativeImports()
 	count := 0
 	suffixHits := 0
 	for moduleQN, importMap := range p.importMaps {
@@ -2765,6 +2831,13 @@ func (p *Pipeline) passImports() {
 				//   `flask.ctx.X` -> `flask.ctx` (drop trailing segment)
 				//   (Rust) `foo::bar::Baz` -> `foo.bar.Baz` -> `foo.bar`
 				dotted := strings.ReplaceAll(targetQN, "::", ".")
+				if _, isJSTS := jsTsModuleExtensions[strings.ToLower(filepath.Ext(moduleNode.FilePath))]; isJSTS &&
+					!strings.HasPrefix(targetQN, "@") {
+					// TypeScript baseUrl-style imports (`components/Button`) are
+					// project-root-relative. Convert only for the existing unique,
+					// Module-only suffix resolver; ambiguity still fails closed.
+					dotted = strings.ReplaceAll(filepath.ToSlash(dotted), "/", ".")
+				}
 				candidates := []string{dotted}
 				if idx := strings.LastIndex(dotted, "."); idx > 0 {
 					candidates = append(candidates, dotted[:idx])

@@ -22,4 +22,10 @@ test("compiler oracle matches the hand-enumerated fixture", () => {
   );
   assert.equal(actual.oracle, "typescript-compiler-api-call-target-v1");
   assert.deepEqual(actual.edges, expected.edges);
+  assert.equal(
+    actual.imports_oracle,
+    "typescript-compiler-api-module-resolution-v1",
+  );
+  assert.deepEqual(actual.project_files, ["src/main.ts", "src/math.ts"]);
+  assert.deepEqual(actual.imports, expected.imports);
 });

@@ -92,6 +92,7 @@ typedef struct {
 typedef struct {
     const char* local_name;    // local alias or name
     const char* module_path;   // resolved module path / QN
+    bool dependency_only;      // re-export: dependency edge, not a local binding
 } CBMImport;
 
 typedef struct {

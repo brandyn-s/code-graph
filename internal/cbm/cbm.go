@@ -97,8 +97,9 @@ type Call struct {
 
 // Import represents a local name -> module path mapping.
 type Import struct {
-	LocalName  string
-	ModulePath string
+	LocalName      string
+	ModulePath     string
+	DependencyOnly bool
 }
 
 // Usage represents a reference to an identifier (not a call or import).
@@ -296,8 +297,9 @@ func convertResult(r *C.CBMFileResult) *FileResult {
 		imports := unsafe.Slice(r.imports.items, r.imports.count)
 		for i, imp := range imports {
 			fr.Imports[i] = Import{
-				LocalName:  C.GoString(imp.local_name),
-				ModulePath: C.GoString(imp.module_path),
+				LocalName:      C.GoString(imp.local_name),
+				ModulePath:     C.GoString(imp.module_path),
+				DependencyOnly: bool(imp.dependency_only),
 			}
 		}
 	}

@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 "use strict";
 
-// Independent TypeScript CALLS oracle. This reads source through the public
-// TypeScript compiler API and never reads SCIP, code-graph databases, or graph
-// output. Its comparison key is the caller/callee declaration coordinate.
+// Independent TypeScript CALLS and IMPORTS oracle. This reads source through
+// the public TypeScript compiler API and never reads SCIP, code-graph
+// databases, or graph output. CALLS keys are declaration coordinates; IMPORTS
+// keys are compiler-resolved project-local source-file pairs.
 
 const crypto = require("node:crypto");
 const fs = require("node:fs");
@@ -130,8 +131,54 @@ function extract(tsconfigPath) {
   });
   const checker = program.getTypeChecker();
   const edgeByKey = new Map();
+  const importByKey = new Map();
+  const projectFiles = program
+    .getSourceFiles()
+    .map((sourceFile) => projectFile(root, sourceFile))
+    .filter((file) => file !== null)
+    .sort((left, right) => left.localeCompare(right));
+
+  function recordImport(sourceFile, moduleSpecifier) {
+    if (!moduleSpecifier || !ts.isStringLiteralLike(moduleSpecifier)) {
+      return;
+    }
+    const resolved = ts.resolveModuleName(
+      moduleSpecifier.text,
+      sourceFile.fileName,
+      parsed.options,
+      ts.sys,
+    ).resolvedModule;
+    if (!resolved) {
+      return;
+    }
+    const targetSource = program.getSourceFile(resolved.resolvedFileName);
+    if (!targetSource) {
+      return;
+    }
+    const source = projectFile(root, sourceFile);
+    const target = projectFile(root, targetSource);
+    if (source === null || target === null || source === target) {
+      return;
+    }
+    const key = `${source}\0${target}`;
+    importByKey.set(key, {
+      source: { file: source },
+      target: { file: target },
+    });
+  }
 
   function visit(node) {
+    if (
+      (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) &&
+      node.moduleSpecifier
+    ) {
+      recordImport(node.getSourceFile(), node.moduleSpecifier);
+    } else if (
+      ts.isImportEqualsDeclaration(node) &&
+      ts.isExternalModuleReference(node.moduleReference)
+    ) {
+      recordImport(node.getSourceFile(), node.moduleReference.expression);
+    }
     if (ts.isCallExpression(node) || ts.isNewExpression(node)) {
       const callerDeclaration = functionLikeAncestor(node);
       const signature = checker.getResolvedSignature(node);
@@ -163,12 +210,20 @@ function extract(tsconfigPath) {
     left.callee.file.localeCompare(right.callee.file) ||
     left.callee.line - right.callee.line,
   );
+  const imports = [...importByKey.values()].sort((left, right) =>
+    left.source.file.localeCompare(right.source.file) ||
+    left.target.file.localeCompare(right.target.file),
+  );
   return {
     schema_version: 1,
     oracle: "typescript-compiler-api-call-target-v1",
     oracle_scope: "static_source_calls_with_function_like_callers",
+    imports_oracle: "typescript-compiler-api-module-resolution-v1",
+    imports_oracle_scope: "static_project_local_module_resolution",
     typescript_version: ts.version,
     tsconfig_sha256: sha256File(configPath),
+    project_files: projectFiles,
+    imports,
     edges,
   };
 }

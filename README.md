@@ -235,6 +235,17 @@ passes a hand-enumerated fixture. The result covers project-local static calls
 and constructors represented by graph Function/Method nodes; it is not a
 dynamic JavaScript call graph or a language-general claim.
 
+The normal TypeScript `IMPORTS` resolver is independently measured in
+[`bench/accuracy/baselines/2026-08-12-typescript-compiler-imports-report.md`](bench/accuracy/baselines/2026-08-12-typescript-compiler-imports-report.md).
+Against compiler-resolved project-local imports and re-exports in public
+`sindresorhus/ky` and the `Chainlit/chainlit` frontend, it produced 456 true
+positives, zero false positives, and zero false negatives (precision, recall,
+and F1 1.000). The comparison scopes observed source files to each exact
+`tsconfig` program but retains out-of-scope targets as false positives. It
+covers the measured static module-resolution shapes; package-export maps,
+arbitrary `paths` globs, dynamic `import()`, and JavaScript projects without a
+`tsconfig` remain outside the established result.
+
 The normal heuristic-tier Go CALLS measurement is
 [`bench/accuracy/baselines/2026-08-12-code-graph-go-report.md`](bench/accuracy/baselines/2026-08-12-code-graph-go-report.md).
 Against a deterministic `go/ast` oracle over five production subsets, the
@@ -269,11 +280,12 @@ peak RSS fell from 1.784 GB to 0.627 GB (64.9%). The normalized response hash
 was identical. This improves query execution; it does not reduce the 2.89 GB
 index or the original indexing peak.
 
-These are strong but bounded Go and TypeScript CALLS results, not a universal
-graph-precision claim. Compiler-tier Cobra recall was 0.867 and remains
-visible. The compiler oracle does not yet cover other languages, the current
-heuristic harness does not provide a current Go IMPORTS result, and edge-level
-precision/recall is not established for every relationship type.
+These are strong but bounded Go and TypeScript CALLS results plus a bounded
+TypeScript IMPORTS result, not a universal graph-precision claim.
+Compiler-tier Cobra recall was 0.867 and remains visible. Independent
+compiler-derived coverage is still limited to the declared Go and TypeScript
+scopes, the current harness does not provide a current Go IMPORTS result, and
+edge-level precision/recall is not established for every relationship type.
 Consequential results should therefore report the effective precision tier and
 carry source or relationship evidence.
 
@@ -582,15 +594,16 @@ No API keys, no Docker, no external databases. Single binary, zero infrastructur
 
 Releases are built via `workflow_dispatch` on `release.yml`. Download them from
 [redacted releases](https://github.com/redacted-org/code-graph/releases).
-The current plugin-bound release is `v0.8.0-redacted.7`; it was built from
-commit `d10625db5b63ea8df4bfac924a11693c949fa19f`, has per-platform checksums and
-GitHub-hosted build provenance, and retains the compiler-tier behavior measured
-above. Relative to `.5`, `.6` indexes qualified-name suffix lookups used during
-import resolution instead of scanning every graph node for each candidate; an
-exact-match regression test preserves that lookup contract. Release `.7` adds
-the measured TypeScript compiler-tier CALLS corrections and a lower-memory,
-lower-latency `code_localize` path while preserving ranked output in the fixed
-LLVM replay.
+The current release is `v0.8.0-redacted.8`. Its workflow publishes per-platform
+checksums and GitHub-hosted build provenance and retains the compiler-tier
+behavior measured above. Relative to `.5`, `.6` indexes qualified-name suffix
+lookups used during import resolution instead of scanning every graph node for
+each candidate; an exact-match regression test preserves that lookup contract.
+Release `.7` added the measured TypeScript compiler-tier CALLS corrections and
+a lower-memory, lower-latency `code_localize` path while preserving ranked
+output in the fixed LLVM replay. Release `.8` adds the independently measured
+TypeScript IMPORTS corrections for relative `.js` source specifiers,
+re-exports, and unambiguous project-root module paths.
 This is an internal package in a private repository. It is not published to the public MCP Registry,
 which does not support private package downloads. The setup scripts therefore
 require an authenticated GitHub CLI session with access to the repository.

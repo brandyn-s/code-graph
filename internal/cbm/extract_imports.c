@@ -242,6 +242,24 @@ static void walk_es_imports(CBMExtractCtx* ctx, TSNode node) {
     CBMArena* a = ctx->arena;
     const char* kind = ts_node_type(node);
 
+    if (strcmp(kind, "export_statement") == 0) {
+        // Re-exports (`export {X} from "./x.js"`, `export * from ...`)
+        // create a module dependency without introducing a local binding.
+        TSNode source_node = ts_node_child_by_field_name(node, "source", 6);
+        if (!ts_node_is_null(source_node)) {
+            char* path = strip_quotes(a, cbm_node_text(a, source_node, ctx->source));
+            if (path && path[0]) {
+                CBMImport imp = {
+                    .local_name = path,
+                    .module_path = path,
+                    .dependency_only = true,
+                };
+                cbm_imports_push(&ctx->result->imports, a, imp);
+            }
+        }
+        return;
+    }
+
     if (strcmp(kind, "import_statement") == 0) {
         TSNode source_node = ts_node_child_by_field_name(node, "source", 6);
         if (ts_node_is_null(source_node)) {

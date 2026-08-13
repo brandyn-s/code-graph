@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "measurement_date": "2026-08-12",
+  "candidate": {
+    "repository": "redacted-org/code-graph",
+    "source_revision": "candidate",
+    "change_scope": "TypeScript module IMPORTS resolution"
+  },
+  "oracle": {
+    "name": "typescript-compiler-api-module-resolution-v1",
+    "implementation": "bench/accuracy/tools/oracle-typescript-compiler",
+    "scope": "compiler-resolved project-local static imports and re-exports",
+    "uses_code_graph_as_truth": false,
+    "hand_enumerated_fixture": {
+      "true_positive": 1,
+      "false_positive": 0,
+      "false_negative": 0
+    }
+  },
+  "repositories": [
+    {
+      "id": "sindresorhus-ky",
+      "source_revision": "3419113b48e034fdcf8fa6bd3be3da7b3d0d758f",
+      "project_files": 30,
+      "before": {
+        "true_positive": 0,
+        "false_positive": 0,
+        "false_negative": 83,
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0
+      },
+      "after": {
+        "true_positive": 83,
+        "false_positive": 0,
+        "false_negative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      }
+    },
+    {
+      "id": "Chainlit-chainlit-frontend",
+      "source_revision": "8b2d4bacfd4fa2c8af72e2d140d527d20125b07b",
+      "project_files": 183,
+      "after": {
+        "true_positive": 373,
+        "false_positive": 0,
+        "false_negative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      }
+    }
+  ],
+  "aggregate_after": {
+    "true_positive": 456,
+    "false_positive": 0,
+    "false_negative": 0,
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1": 1.0
+  },
+  "gate_result": "pass"
+}

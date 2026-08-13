@@ -5,9 +5,9 @@ quality through `code_localize` improve deterministic file localization?
 
 The baseline flattened every matched seed to score `1.0`. A node matching two
 independent anchors therefore started equal to a generic node matching only
-one, and graph expansion amplified the generic seed set. The candidate carries
-the already-computed exact-name and qualified-name match quality into BFS
-personalization.
+one, and graph expansion amplified the generic seed set. The measured change
+carries the already-computed exact-name and qualified-name match quality into
+BFS personalization.
 
 ## Frozen method
 
@@ -43,7 +43,8 @@ operating point remains below code-search on conceptual discovery.
 
 A broader compound-token expansion was also tested and rejected before
 shipping. It raised Acc@10 to 0.4625 but reduced Acc@1 back to 0.175 and caused
-7 regressions. Those changes are not present in the candidate.
+7 regressions. Those changes are not present in the released `.11`
+implementation.
 
 ## Interpretation boundary
 

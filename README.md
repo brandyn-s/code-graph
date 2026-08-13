@@ -616,7 +616,7 @@ No API keys, no Docker, no external databases. Single binary, zero infrastructur
 
 Releases are built via `workflow_dispatch` on `release.yml`. Download them from
 [redacted releases](https://github.com/redacted-org/code-graph/releases).
-The current release is `v0.8.0-redacted.10`. Its workflow publishes per-platform
+The current release is `v0.8.0-redacted.11`. Its workflow publishes per-platform
 checksums and GitHub-hosted build provenance and retains the compiler-tier
 behavior measured above. Relative to `.5`, `.6` indexes qualified-name suffix
 lookups used during import resolution instead of scanning every graph node for
@@ -630,11 +630,12 @@ TypeScript heritage clause kind and target identity, reports
 full/no-op/incremental source deltas, and makes incremental relationship
 reconstruction deterministic. Release `.10` adds independently measured
 TypeScript/TSX direct method override and implementation relationships and
-makes publication-equivalent lint a required pull-request check. The lexical
-seed-quality localization change measured above remains candidate behavior
-until its release workflow completes; its baseline names the exact candidate
-source revision and binary inputs rather than treating a local commit as
-deployed state.
+makes publication-equivalent lint a required pull-request check. Release `.11`
+preserves lexical seed quality through graph expansion, the change measured
+above, and scopes the lint job's audited egress to its two expected installer
+and runtime endpoints. Its paired baseline retains the exact measured source
+and binary identities; the release is separately bound to its merge commit,
+checksums, and build provenance.
 This is an internal package in a private repository. It is not published to the public MCP Registry,
 which does not support private package downloads. The setup scripts therefore
 require an authenticated GitHub CLI session with access to the repository.

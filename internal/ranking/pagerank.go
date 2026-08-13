@@ -211,23 +211,45 @@ type seedMatchQuality struct {
 	qualifiedNames int
 }
 
+func seedQuality(node *store.Node, tokens []string, tokenRes []*regexp.Regexp) seedMatchQuality {
+	var quality seedMatchQuality
+	nameLower := strings.ToLower(node.Name)
+	qnLower := strings.ToLower(node.QualifiedName)
+	for index, token := range tokens {
+		if nameLower == token {
+			quality.exactNames++
+		}
+		if re := tokenRes[index]; re != nil && re.MatchString(qnLower) {
+			quality.qualifiedNames++
+		}
+	}
+	return quality
+}
+
+// SeedMatchScore preserves lexical seed quality when downstream graph
+// traversal assigns its personalization weights. Exact-name matches retain
+// precedence over qualified-name-only matches, while nodes matching more
+// independent query tokens receive more weight. Embedding-only seeds receive
+// the neutral score 1.
+func SeedMatchScore(node *store.Node, query string) float64 {
+	if node == nil {
+		return 1
+	}
+	tokens := tokenize(query)
+	tokenRes := compileTokenBoundaryRegexes(tokens)
+	quality := seedQuality(node, tokens, tokenRes)
+	if quality.exactNames == 0 && quality.qualifiedNames == 0 {
+		return 1
+	}
+	return float64(quality.exactNames*(len(tokens)+1) + quality.qualifiedNames)
+}
+
 func sortSeedNodes(nodes []*store.Node, query string) {
 	tokens := tokenize(query)
 	tokenRes := compileTokenBoundaryRegexes(tokens)
 	quality := make(map[int64]seedMatchQuality, len(nodes))
 	for _, node := range nodes {
-		var current seedMatchQuality
-		nameLower := strings.ToLower(node.Name)
-		qnLower := strings.ToLower(node.QualifiedName)
-		for index, token := range tokens {
-			if nameLower == token {
-				current.exactNames++
-			}
-			if re := tokenRes[index]; re != nil && re.MatchString(qnLower) {
-				current.qualifiedNames++
-			}
-		}
-		quality[node.ID] = current
+		quality[node.ID] = seedQuality(node, tokens, tokenRes)
 	}
 
 	sort.Slice(nodes, func(i, j int) bool {

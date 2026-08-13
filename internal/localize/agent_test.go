@@ -108,6 +108,30 @@ func TestCodeLocalize_BFSExpansion(t *testing.T) {
 	}
 }
 
+// A seed that matches multiple independent query anchors must outrank a
+// generic exact-name seed. The localizer previously discarded the lexical
+// match quality established by ranking.MatchSeedNodes and assigned every seed
+// score 1.0, so stable file-path order decided this case.
+func TestCodeLocalizeRanksMultiAnchorSeedAboveGenericExactName(t *testing.T) {
+	st := testStoreOrSkip(t)
+	project := "multi-anchor-seed"
+	ensureProject(t, st, project)
+
+	insertNode(t, st, project, "pkg.generic.predict", "Method", "a_generic.py")
+	insertNode(t, st, project, "pkg.IsolationForest.predict", "Method", "z_iforest.py")
+
+	results, err := CodeLocalize(st, project, "IsolationForest predict", 0, 10)
+	if err != nil {
+		t.Fatalf("CodeLocalize: %v", err)
+	}
+	if len(results) != 2 {
+		t.Fatalf("got %d results, want 2: %+v", len(results), results)
+	}
+	if got := results[0].FilePath; got != "z_iforest.py" {
+		t.Fatalf("multi-anchor seed ranked behind generic seed: got %q first; results=%+v", got, results)
+	}
+}
+
 // TestCodeLocalize_DepthClamp ensures BFS does not expand beyond `depth`.
 //
 // Graph: a --CALLS--> b --CALLS--> c --CALLS--> d

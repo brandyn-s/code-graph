@@ -109,6 +109,13 @@ class CoreCIWorkflowContractTests(unittest.TestCase):
         self.assertIn("version: v2.10", action)
         self.assertIn("--new-from-rev=${{ inputs.baseline }}", action)
 
+    def test_core_declares_release_lint_network_endpoints(self) -> None:
+        core = job_block(self.workflow, "core")
+
+        self.assertIn("allowed-endpoints: >", core)
+        self.assertIn("raw.githubusercontent.com:443", core)
+        self.assertIn("golangci-lint.run:443", core)
+
     def test_merge_gate_fails_closed_over_both_required_jobs(self) -> None:
         merge_gate = job_block(self.workflow, "merge-gate")
 

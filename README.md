@@ -293,6 +293,15 @@ peak RSS fell from 1.784 GB to 0.627 GB (64.9%). The normalized response hash
 was identical. This improves query execution; it does not reduce the 2.89 GB
 index or the original indexing peak.
 
+A separate same-index, zero-LLM replay over the frozen balanced public
+LocBench `n=80` cohort is recorded in
+[`bench/accuracy/baselines/2026-08-13-graph-concept-localize-seed-quality.md`](bench/accuracy/baselines/2026-08-13-graph-concept-localize-seed-quality.md).
+Preserving lexical seed quality through graph expansion improved file Acc@1
+from 0.175 to 0.200, Acc@10 from 0.350 to 0.400, and MRR@10 from 0.219 to
+0.260, with 12 cases improved and 2 regressed. This is paired iteration
+evidence, not a fresh independent benchmark; conceptual discovery remains
+search-primary when the relevant concept is present only in source text.
+
 These are strong but bounded Go and TypeScript CALLS results plus a bounded
 TypeScript IMPORTS result, not a universal graph-precision claim.
 Compiler-tier Cobra recall was 0.867 and remains visible. Independent
@@ -607,7 +616,7 @@ No API keys, no Docker, no external databases. Single binary, zero infrastructur
 
 Releases are built via `workflow_dispatch` on `release.yml`. Download them from
 [redacted releases](https://github.com/redacted-org/code-graph/releases).
-The current release is `v0.8.0-redacted.8`. Its workflow publishes per-platform
+The current release is `v0.8.0-redacted.10`. Its workflow publishes per-platform
 checksums and GitHub-hosted build provenance and retains the compiler-tier
 behavior measured above. Relative to `.5`, `.6` indexes qualified-name suffix
 lookups used during import resolution instead of scanning every graph node for
@@ -616,13 +625,16 @@ Release `.7` added the measured TypeScript compiler-tier CALLS corrections and
 a lower-memory, lower-latency `code_localize` path while preserving ranked
 output in the fixed LLVM replay. Release `.8` adds the independently measured
 TypeScript IMPORTS corrections for relative `.js` source specifiers,
-re-exports, and unambiguous project-root module paths. The next release
-candidate preserves TypeScript heritage clause kind and target identity,
-reports full/no-op/incremental source deltas, and makes incremental relationship
-reconstruction deterministic. It remains candidate behavior until its release
-workflow completes; the baseline above names the exact candidate source
-revision and binary inputs rather than treating a local commit as deployed
-state.
+re-exports, and unambiguous project-root module paths. Release `.9` preserves
+TypeScript heritage clause kind and target identity, reports
+full/no-op/incremental source deltas, and makes incremental relationship
+reconstruction deterministic. Release `.10` adds independently measured
+TypeScript/TSX direct method override and implementation relationships and
+makes publication-equivalent lint a required pull-request check. The lexical
+seed-quality localization change measured above remains candidate behavior
+until its release workflow completes; its baseline names the exact candidate
+source revision and binary inputs rather than treating a local commit as
+deployed state.
 This is an internal package in a private repository. It is not published to the public MCP Registry,
 which does not support private package downloads. The setup scripts therefore
 require an authenticated GitHub CLI session with access to the repository.

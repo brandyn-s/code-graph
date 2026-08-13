@@ -133,7 +133,7 @@ func CodeLocalizeWithStrategy(ctx context.Context, st *store.Store, project, iss
 			Name:          n.Name,
 			QualifiedName: n.QualifiedName,
 			FilePath:      n.FilePath,
-			Score:         1.0, // uniform seed weight; BFS distance does the discrimination
+			Score:         ranking.SeedMatchScore(n, issue),
 		})
 	}
 

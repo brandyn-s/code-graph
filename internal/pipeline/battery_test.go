@@ -266,6 +266,7 @@ func untouched() int { return helper() }
 	if err != nil {
 		t.Fatal(err)
 	}
+	// #nosec G703 -- mainGo is a fixed child of the test-owned TempDir.
 	if err := os.WriteFile(
 		mainGo,
 		append(source, []byte("\n// incremental comment-only probe\n")...),

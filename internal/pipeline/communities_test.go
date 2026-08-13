@@ -27,7 +27,12 @@ func namedGraph(
 	names []string,
 	ids []int64,
 	edges [][2]string,
-) (map[int64]map[int64]bool, map[int64]bool, map[int64]string, []int64) {
+) (
+	adjacency map[int64]map[int64]bool,
+	allNodes map[int64]bool,
+	namesByID map[int64]string,
+	orderedIDs []int64,
+) {
 	byName := make(map[string]int64, len(names))
 	nameByID := make(map[int64]string, len(names))
 	all := make(map[int64]bool, len(names))

@@ -142,6 +142,7 @@ export function renderProviderIcon(): null {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// #nosec G703 -- target is a fixed child of the test-owned TempDir.
 	if err := os.WriteFile(target, append(source, []byte("\n// comment only\n")...), 0o600); err != nil {
 		t.Fatal(err)
 	}

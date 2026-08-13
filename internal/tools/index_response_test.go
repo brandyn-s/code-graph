@@ -906,6 +906,7 @@ func TestIndexRepositoryFirstIndexReportsCreatedWithCounts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read fixture mutation target: %v", err)
 	}
+	// #nosec G703 -- appPath is a fixed child of the test-owned TempDir.
 	if err := os.WriteFile(appPath, append(app, []byte("\n# one-file update\n")...), 0o600); err != nil {
 		t.Fatalf("mutate fixture: %v", err)
 	}

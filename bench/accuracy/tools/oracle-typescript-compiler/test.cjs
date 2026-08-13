@@ -44,6 +44,14 @@ test("compiler oracle matches the hand-enumerated fixture", () => {
     actual.type_relationships_oracle,
     "typescript-compiler-api-type-relationships-v1",
   );
+  assert.equal(
+    actual.method_relationships_oracle,
+    "typescript-compiler-api-method-relationships-v1",
+  );
+  assert.equal(
+    actual.method_relationships_oracle_scope,
+    "direct_declared_project_local_overrides_and_implements",
+  );
   const expectedFileHashes = Object.fromEntries(
     actual.project_files.map((file) => [
       file,
@@ -71,4 +79,5 @@ test("compiler oracle matches the hand-enumerated fixture", () => {
     left.target.line - right.target.line,
   );
   assert.deepEqual(actual.type_relationships, byKey(expected.type_relationships));
+  assert.deepEqual(actual.method_relationships, byKey(expected.method_relationships));
 });

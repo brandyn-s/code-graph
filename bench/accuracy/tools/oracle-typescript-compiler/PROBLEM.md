@@ -27,9 +27,17 @@ repository.
 
 The same compiler program also enumerates project-local `extends` and
 `implements` heritage clauses. It preserves the clause kind and binds both
-endpoints to declaration coordinates. The production graph currently projects
-both clause kinds as `INHERITS`; the comparison may score that common edge
-vocabulary while retaining the compiler's kind as a diagnostic dimension.
+endpoints to declaration coordinates. The production graph projects them as
+`INHERITS` and `IMPLEMENTS`, respectively.
+
+For classes, the oracle additionally compares directly declared, uniquely
+named methods with methods declared directly on each project-local heritage
+target. Matching methods on a directly extended class are `overrides`; matching
+methods on a directly implemented class or interface are `implements`. The
+scope deliberately excludes inherited interface members, structural
+satisfaction without an `implements` clause, fields/accessors, overload sets,
+external declarations, mixins, and prototype mutation. Those exclusions keep
+each compiler edge exactly representable by the graph's method-node vocabulary.
 
 ## Independence and limits
 
@@ -37,7 +45,10 @@ The implementation shares no code, parser, resolver, or data path with the
 tree-sitter production relationship resolver and never reads code-graph
 output. For CALLS it does use the TypeScript compiler front end, as does
 `scip-typescript`, so the hand-enumerated fixture is the independent check on
-that oracle. For normal-tier type relationships, the compiler and production
-parser stacks are independent. This supports accuracy claims only for the
-tested static, project-local declarations—not dynamic mixins, declaration-only
-packages, or language-wide relationship completeness.
+that oracle. For normal-tier type and method relationships, the compiler and
+production parser stacks are independent. The comparator recovers method
+relationship kind from the owning type pair (`INHERITS` or `IMPLEMENTS`) rather
+than treating every graph `OVERRIDE` edge as equivalent. This supports accuracy
+claims only for the tested static, direct, project-local declarations—not
+dynamic mixins, declaration-only packages, overloads, or language-wide
+relationship completeness.

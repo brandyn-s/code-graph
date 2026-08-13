@@ -42,6 +42,12 @@ class TypeScriptRelationshipComparatorTests(unittest.TestCase):
                         "type_relationships_oracle_scope": (
                             "declared_project_local_extends_and_implements"
                         ),
+                        "method_relationships_oracle": (
+                            "typescript-compiler-api-method-relationships-v1"
+                        ),
+                        "method_relationships_oracle_scope": (
+                            "direct_declared_project_local_overrides_and_implements"
+                        ),
                         "oracle_implementation_sha256": "b" * 64,
                         "typescript_version": "5.9.3",
                         "tsconfig_sha256": "c" * 64,
@@ -51,6 +57,21 @@ class TypeScriptRelationshipComparatorTests(unittest.TestCase):
                             bound_hashes
                         ),
                         "type_relationships": [],
+                        "method_relationships": [
+                            {
+                                "kind": "overrides",
+                                "source": {
+                                    "file": "src/main.ts",
+                                    "line": 1,
+                                    "name": "run",
+                                },
+                                "target": {
+                                    "file": "src/main.ts",
+                                    "line": 1,
+                                    "name": "run",
+                                },
+                            }
+                        ],
                     }
                 ),
                 encoding="utf-8",
@@ -81,6 +102,12 @@ class TypeScriptRelationshipComparatorTests(unittest.TestCase):
                         ),
                         "type_relationships_oracle_scope": (
                             "declared_project_local_extends_and_implements"
+                        ),
+                        "method_relationships_oracle": (
+                            "typescript-compiler-api-method-relationships-v1"
+                        ),
+                        "method_relationships_oracle_scope": (
+                            "direct_declared_project_local_overrides_and_implements"
                         ),
                         "oracle_implementation_sha256": "c" * 64,
                         "typescript_version": "5.9.3",
@@ -115,6 +142,34 @@ class TypeScriptRelationshipComparatorTests(unittest.TestCase):
                                     "file": "src/base.ts",
                                     "line": 5,
                                     "name": "Contract",
+                                },
+                            },
+                        ],
+                        "method_relationships": [
+                            {
+                                "kind": "overrides",
+                                "source": {
+                                    "file": "src/main.ts",
+                                    "line": 4,
+                                    "name": "run",
+                                },
+                                "target": {
+                                    "file": "src/base.ts",
+                                    "line": 2,
+                                    "name": "run",
+                                },
+                            },
+                            {
+                                "kind": "implements",
+                                "source": {
+                                    "file": "src/main.ts",
+                                    "line": 4,
+                                    "name": "run",
+                                },
+                                "target": {
+                                    "file": "src/base.ts",
+                                    "line": 6,
+                                    "name": "run",
                                 },
                             },
                         ],
@@ -157,6 +212,9 @@ class TypeScriptRelationshipComparatorTests(unittest.TestCase):
                 INSERT INTO nodes VALUES (2, 'fixture', 'src/base.ts', 1);
                 INSERT INTO nodes VALUES (3, 'fixture', 'src/base.ts', 5);
                 INSERT INTO nodes VALUES (4, 'fixture', 'src/base.ts', 9);
+                INSERT INTO nodes VALUES (5, 'fixture', 'src/main.ts', 4);
+                INSERT INTO nodes VALUES (6, 'fixture', 'src/base.ts', 2);
+                INSERT INTO nodes VALUES (7, 'fixture', 'src/base.ts', 6);
                 """
             )
             connection.executemany(
@@ -177,6 +235,16 @@ class TypeScriptRelationshipComparatorTests(unittest.TestCase):
                     (2, "INHERITS", json.dumps({"confidence_tier": "INFERRED"})),
                     (3, "IMPLEMENTS", json.dumps({"confidence_tier": "INFERRED"})),
                     (4, "IMPLEMENTS", json.dumps({"confidence_tier": "AMBIGUOUS"})),
+                    (5, "DEFINES_METHOD", json.dumps({})),
+                ],
+            )
+            connection.executemany(
+                "INSERT INTO edges VALUES ('fixture', ?, ?, ?, ?)",
+                [
+                    (2, 6, "DEFINES_METHOD", json.dumps({})),
+                    (3, 7, "DEFINES_METHOD", json.dumps({})),
+                    (5, 6, "OVERRIDE", json.dumps({"confidence_tier": "INFERRED"})),
+                    (5, 7, "OVERRIDE", json.dumps({"confidence_tier": "INFERRED"})),
                 ],
             )
             connection.commit()
@@ -196,14 +264,14 @@ class TypeScriptRelationshipComparatorTests(unittest.TestCase):
             self.assertEqual(
                 result["operating_points"]["all_bands"],
                 {
-                    "oracle_edges": 2,
-                    "observed_edges": 3,
-                    "true_positive": 2,
+                    "oracle_edges": 4,
+                    "observed_edges": 5,
+                    "true_positive": 4,
                     "false_positive": 1,
                     "false_negative": 0,
-                    "precision": 2 / 3,
+                    "precision": 4 / 5,
                     "recall": 1.0,
-                    "f1": 0.8,
+                    "f1": 2 * (4 / 5) / ((4 / 5) + 1),
                 },
             )
             self.assertEqual(
@@ -211,11 +279,23 @@ class TypeScriptRelationshipComparatorTests(unittest.TestCase):
                 0,
             )
             self.assertEqual(
-                result["by_kind"]["extends"]["all_bands"]["true_positive"],
+                result["by_kind"]["type_extends"]["all_bands"]["true_positive"],
                 1,
             )
             self.assertEqual(
-                result["by_kind"]["implements"]["all_bands"]["true_positive"],
+                result["by_kind"]["type_implements"]["all_bands"]["true_positive"],
+                1,
+            )
+            self.assertEqual(
+                result["by_kind"]["method_overrides"]["all_bands"][
+                    "true_positive"
+                ],
+                1,
+            )
+            self.assertEqual(
+                result["by_kind"]["method_implements"]["all_bands"][
+                    "true_positive"
+                ],
                 1,
             )
 

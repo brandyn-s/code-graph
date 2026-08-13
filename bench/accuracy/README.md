@@ -27,6 +27,7 @@ can't serve as an independent oracle. Instead:
 | CALLS     | TypeScript | TypeScript compiler API for the compiler tier | High — tested on the declared static-call scope |
 | IMPORTS   | TypeScript | TypeScript compiler API module resolution for the normal graph | High — tested on compiler-program-scoped project-local imports and re-exports |
 | INHERITS / IMPLEMENTS | TypeScript | TypeScript compiler API symbol resolution for declared type relationships | High — tested on project-local `extends` and `implements` clauses |
+| OVERRIDE | TypeScript | TypeScript compiler API symbol resolution for declared method relationships | High in the measured direct project-local scope; see the [2026-08-13 public report](baselines/2026-08-13-typescript-method-relationships-report.md) for local-class and overload limits |
 
 None require human verification. Ground truth is frozen to JSON and
 re-used for every future regression run.
@@ -117,7 +118,7 @@ python bench/accuracy/compare_typescript_imports.py \
   --project project-name \
   --output imports-report.json
 
-# Independent TypeScript declared relationship oracle and normal-graph comparison
+# Independent TypeScript declared type/method oracle and normal-graph comparison
 python bench/accuracy/compare_typescript_relationships.py \
   --oracle oracle.json \
   --database /path/to/project.db \
@@ -216,7 +217,8 @@ Minimum re-baseline scope per affected directory:
 | Python parser/resolver | `mcp-servers` (production Python) + one adversarial Python fixture |
 | Rust parser/resolver | `psm-rust` (production Rust, all subsets) |
 | Go parser/resolver | `code-graph-go` (production Go) + `cobra-go` |
-| Pipeline / cross-cutting | All four production fixtures |
+| TypeScript parser/resolver | One compiler-oracle TypeScript relationship or call fixture |
+| Pipeline / cross-cutting | All four production fixtures, or a narrower independent oracle when the changed pass is language-scoped |
 
 Why this is mechanical, not nightly cron: the harness takes 10-30 min
 per fixture (re-index + oracle + compare). Authors who just modified
@@ -261,3 +263,8 @@ the full repo while PyCG only walks 5 service entry points.
   module import paths can be mapped deterministically to internal file-qualified
   graph nodes.
 - **Oracle scope ≠ code-graph scope**: oracles only walk source files with explicit `fn`/`def`; code-graph also indexes Cargo.toml (as config nodes), infrascan artifacts, and `diesel` query DSL macros. These show up as legitimate code-graph edges the oracle doesn't see. Scope-aligned metric filters this artifact.
+- **TypeScript method relationships are a declared, direct scope**: the compiler
+  oracle and graph comparison cover project-local overrides and implementations.
+  Function-local classes, structural satisfaction, inherited interface members,
+  overload-set identity, external declarations, and dynamic prototype behavior
+  remain outside the measured normal-graph contract.

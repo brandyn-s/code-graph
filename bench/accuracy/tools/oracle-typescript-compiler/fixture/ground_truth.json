@@ -12,18 +12,30 @@
     },
     {
       "kind": "extends",
-      "source": {"file": "src/math.ts", "line": 34, "name": "RichFormatter"},
-      "target": {"file": "src/math.ts", "line": 32, "name": "BaseFormatter"}
+      "source": {"file": "src/math.ts", "line": 40, "name": "RichFormatter"},
+      "target": {"file": "src/math.ts", "line": 34, "name": "BaseFormatter"}
     },
     {
       "kind": "implements",
-      "source": {"file": "src/math.ts", "line": 34, "name": "RichFormatter"},
+      "source": {"file": "src/math.ts", "line": 40, "name": "RichFormatter"},
       "target": {"file": "src/math.ts", "line": 26, "name": "NamedRenderable"}
     },
     {
       "kind": "extends",
-      "source": {"file": "src/math.ts", "line": 30, "name": "PartiallyNamed"},
-      "target": {"file": "src/math.ts", "line": 28, "name": "OptionalNamed"}
+      "source": {"file": "src/math.ts", "line": 32, "name": "PartiallyNamed"},
+      "target": {"file": "src/math.ts", "line": 30, "name": "OptionalNamed"}
+    }
+  ],
+  "method_relationships": [
+    {
+      "kind": "overrides",
+      "source": {"file": "src/math.ts", "line": 43, "name": "render"},
+      "target": {"file": "src/math.ts", "line": 35, "name": "render"}
+    },
+    {
+      "kind": "implements",
+      "source": {"file": "src/math.ts", "line": 47, "name": "describe"},
+      "target": {"file": "src/math.ts", "line": 27, "name": "describe"}
     }
   ],
   "imports": [
@@ -55,7 +67,7 @@
     },
     {
       "callee": {"file": "src/math.ts", "line": 5, "name": "normalize"},
-      "caller": {"file": "src/math.ts", "line": 46, "name": "wrap"}
+      "caller": {"file": "src/math.ts", "line": 56, "name": "wrap"}
     }
   ]
 }

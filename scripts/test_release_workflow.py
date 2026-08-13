@@ -3,6 +3,7 @@ from pathlib import Path
 
 WORKFLOW = Path(".github/workflows/release.yml")
 RELEASE_HELPER = Path("scripts/release_workflow.sh")
+RELEASE_LINT_ACTION = Path(".github/actions/release-lint/action.yml")
 SECURITY_POLICY = Path(".github/repo-security-policy.yml")
 README = Path("README.md")
 BASELINE = "832bede03d6118827919fc8727f3c17854047d06"
@@ -14,6 +15,7 @@ class ReleaseWorkflowContractTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.workflow = WORKFLOW.read_text(encoding="utf-8")
         cls.release_helper = RELEASE_HELPER.read_text(encoding="utf-8")
+        cls.release_lint_action = RELEASE_LINT_ACTION.read_text(encoding="utf-8")
         cls.security_policy = SECURITY_POLICY.read_text(encoding="utf-8")
         cls.readme = README.read_text(encoding="utf-8")
 
@@ -34,15 +36,19 @@ class ReleaseWorkflowContractTests(unittest.TestCase):
         )
 
     def test_uses_reachable_no_new_lint_gate(self) -> None:
-        self.assertIn(f"LINT_BASELINE: {BASELINE}", self.workflow)
+        self.assertIn(f'default: "{BASELINE}"', self.release_lint_action)
         self.assertIn("fetch-depth: 0", self.workflow)
         self.assertIn(
-            'git merge-base --is-ancestor "$LINT_BASELINE" "$GITHUB_SHA"',
-            self.workflow,
+            'git merge-base --is-ancestor "$baseline" "$GITHUB_SHA"',
+            self.release_lint_action,
         )
         self.assertIn(
-            "--new-from-rev=${{ env.LINT_BASELINE }}",
-            self.workflow,
+            "--new-from-rev=${{ inputs.baseline }}",
+            self.release_lint_action,
+        )
+        self.assertEqual(
+            self.workflow.count("uses: ./.github/actions/release-lint"),
+            1,
         )
         self.assertIn("continue-on-error: true", self.workflow)
 

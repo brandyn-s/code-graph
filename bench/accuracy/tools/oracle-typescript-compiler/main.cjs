@@ -137,6 +137,7 @@ function extract(tsconfigPath) {
   const edgeByKey = new Map();
   const importByKey = new Map();
   const typeRelationshipByKey = new Map();
+  const methodRelationshipByKey = new Map();
   const projectFiles = program
     .getSourceFiles()
     .map((sourceFile) => projectFile(root, sourceFile))
@@ -175,6 +176,19 @@ function extract(tsconfigPath) {
     });
   }
 
+  function heritageTargetDeclaration(type) {
+    let symbol = checker.getSymbolAtLocation(type.expression);
+    if (symbol && (symbol.flags & ts.SymbolFlags.Alias) !== 0) {
+      symbol = checker.getAliasedSymbol(symbol);
+    }
+    return symbol && symbol.declarations
+      ? symbol.declarations.find((candidate) =>
+          ts.isClassDeclaration(candidate) ||
+          ts.isInterfaceDeclaration(candidate) ||
+          ts.isTypeAliasDeclaration(candidate))
+      : null;
+  }
+
   function recordTypeRelationships(declaration) {
     const source = coordinate(root, declaration);
     if (!source || !source.name || !declaration.heritageClauses) {
@@ -190,16 +204,7 @@ function extract(tsconfigPath) {
         continue;
       }
       for (const type of clause.types) {
-        let symbol = checker.getSymbolAtLocation(type.expression);
-        if (symbol && (symbol.flags & ts.SymbolFlags.Alias) !== 0) {
-          symbol = checker.getAliasedSymbol(symbol);
-        }
-        const targetDeclaration = symbol && symbol.declarations
-          ? symbol.declarations.find((candidate) =>
-              ts.isClassDeclaration(candidate) ||
-              ts.isInterfaceDeclaration(candidate) ||
-              ts.isTypeAliasDeclaration(candidate))
-          : null;
+        const targetDeclaration = heritageTargetDeclaration(type);
         if (!targetDeclaration) {
           continue;
         }
@@ -209,6 +214,68 @@ function extract(tsconfigPath) {
         }
         const key = `${kind}\0${source.file}\0${source.line}\0${target.file}\0${target.line}`;
         typeRelationshipByKey.set(key, { kind, source, target });
+      }
+    }
+  }
+
+  function directNamedMethods(declaration) {
+    const byName = new Map();
+    for (const member of declaration.members || []) {
+      if (!ts.isMethodDeclaration(member) && !ts.isMethodSignature(member)) {
+        continue;
+      }
+      const name = declarationName(member);
+      if (name === null) {
+        continue;
+      }
+      const declarations = byName.get(name) || [];
+      declarations.push(member);
+      byName.set(name, declarations);
+    }
+    return byName;
+  }
+
+  function recordMethodRelationships(declaration) {
+    if (!declaration.heritageClauses) {
+      return;
+    }
+    const sourceMethods = directNamedMethods(declaration);
+    for (const clause of declaration.heritageClauses) {
+      const kind = clause.token === ts.SyntaxKind.ExtendsKeyword
+        ? "overrides"
+        : clause.token === ts.SyntaxKind.ImplementsKeyword
+          ? "implements"
+          : null;
+      if (kind === null) {
+        continue;
+      }
+      for (const type of clause.types) {
+        const targetDeclaration = heritageTargetDeclaration(type);
+        if (
+          !targetDeclaration ||
+          (kind === "overrides" && !ts.isClassDeclaration(targetDeclaration)) ||
+          (kind === "implements" &&
+            !ts.isClassDeclaration(targetDeclaration) &&
+            !ts.isInterfaceDeclaration(targetDeclaration))
+        ) {
+          continue;
+        }
+        const targetMethods = directNamedMethods(targetDeclaration);
+        for (const [name, sourceDeclarations] of sourceMethods) {
+          const targetDeclarations = targetMethods.get(name) || [];
+          // Overload sets do not map cleanly onto the graph's one-node-per-name
+          // vocabulary, so this bounded oracle scores only unambiguous pairs.
+          if (sourceDeclarations.length !== 1 || targetDeclarations.length !== 1) {
+            continue;
+          }
+          const source = coordinate(root, sourceDeclarations[0]);
+          const target = coordinate(root, targetDeclarations[0]);
+          if (!source || !source.name || !target || !target.name) {
+            continue;
+          }
+          const key = `${kind}\0${source.file}\0${source.line}\0${target.file}\0${target.line}`;
+          methodRelationshipByKey.set(key, { kind, source, target });
+        }
       }
     }
   }
@@ -227,6 +294,9 @@ function extract(tsconfigPath) {
     }
     if (ts.isClassDeclaration(node) || ts.isInterfaceDeclaration(node)) {
       recordTypeRelationships(node);
+    }
+    if (ts.isClassDeclaration(node)) {
+      recordMethodRelationships(node);
     }
     if (ts.isCallExpression(node) || ts.isNewExpression(node)) {
       const callerDeclaration = functionLikeAncestor(node);
@@ -270,6 +340,13 @@ function extract(tsconfigPath) {
     left.target.file.localeCompare(right.target.file) ||
     left.target.line - right.target.line,
   );
+  const methodRelationships = [...methodRelationshipByKey.values()].sort((left, right) =>
+    left.source.file.localeCompare(right.source.file) ||
+    left.source.line - right.source.line ||
+    left.kind.localeCompare(right.kind) ||
+    left.target.file.localeCompare(right.target.file) ||
+    left.target.line - right.target.line,
+  );
   return {
     schema_version: 1,
     oracle: "typescript-compiler-api-call-target-v1",
@@ -278,6 +355,8 @@ function extract(tsconfigPath) {
     imports_oracle_scope: "static_project_local_module_resolution",
     type_relationships_oracle: "typescript-compiler-api-type-relationships-v1",
     type_relationships_oracle_scope: "declared_project_local_extends_and_implements",
+    method_relationships_oracle: "typescript-compiler-api-method-relationships-v1",
+    method_relationships_oracle_scope: "direct_declared_project_local_overrides_and_implements",
     oracle_implementation_sha256: sha256File(__filename),
     typescript_version: ts.version,
     tsconfig_sha256: sha256File(configPath),
@@ -289,6 +368,7 @@ function extract(tsconfigPath) {
       .digest("hex"),
     imports,
     type_relationships: typeRelationships,
+    method_relationships: methodRelationships,
     edges,
   };
 }

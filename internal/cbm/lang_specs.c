@@ -67,7 +67,7 @@ static const char* js_var_types[] = {"lexical_declaration","variable_declaration
 static const char* js_throw_types[] = {"throw_statement",NULL};
 
 // ==================== TYPESCRIPT ====================
-static const char* ts_func_types[] = {"function_declaration","generator_function_declaration","function_expression","arrow_function","method_definition","function_signature",NULL};
+static const char* ts_func_types[] = {"function_declaration","generator_function_declaration","function_expression","arrow_function","method_definition","method_signature","abstract_method_signature","function_signature",NULL};
 static const char* ts_class_types[] = {"class_declaration","class","abstract_class_declaration","enum_declaration","interface_declaration","type_alias_declaration","internal_module",NULL};
 static const char* ts_decorator_types[] = {"decorator",NULL};
 

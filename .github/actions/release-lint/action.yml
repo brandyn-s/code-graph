@@ -1,0 +1,29 @@
+name: Release lint
+description: Run the exact blocking lint contract used before publication
+
+inputs:
+  baseline:
+    description: Reviewed ancestor that bounds inherited lint debt
+    required: false
+    default: "832bede03d6118827919fc8727f3c17854047d06"
+  timeout:
+    description: golangci-lint timeout
+    required: false
+    default: "10m"
+
+runs:
+  using: composite
+  steps:
+    - name: Verify lint baseline ancestry
+      shell: bash
+      env:
+        LINT_BASELINE: ${{ inputs.baseline }}
+      run: |
+        baseline="$LINT_BASELINE"
+        git merge-base --is-ancestor "$baseline" "$GITHUB_SHA"
+
+    - name: Reject findings introduced after the reviewed baseline
+      uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+      with:
+        version: v2.10
+        args: --timeout=${{ inputs.timeout }} --new-from-rev=${{ inputs.baseline }}

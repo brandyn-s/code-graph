@@ -13,6 +13,7 @@ func (p *Pipeline) passInherits() {
 	slog.Info("pass.inherits")
 
 	count := 0
+	overrideCount := 0
 	for _, label := range []string{"Class", "Type", "Interface", "Enum"} {
 		nodes, err := p.findNodesByLabel(p.ProjectName, label)
 		if err != nil {
@@ -61,11 +62,15 @@ func (p *Pipeline) passInherits() {
 					},
 				})
 				count++
+				if n.Label == "Class" && targetNode.Label == "Class" &&
+					(strings.HasSuffix(n.FilePath, ".ts") || strings.HasSuffix(n.FilePath, ".tsx")) {
+					overrideCount += p.createOverrideEdgesExplicit(n, targetNode)
+				}
 			}
 		}
 	}
 
-	slog.Info("pass.inherits.done", "edges", count)
+	slog.Info("pass.inherits.done", "edges", count, "overrides", overrideCount)
 }
 
 // qualifiedNamePrefix returns the module QN portion of a fully qualified name.

@@ -249,9 +249,11 @@ func TestTypeScriptInterface_Regression(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(r.Definitions) < 1 {
-		t.Error("expected >=1 definition from TypeScript interface")
-	}
+	assertHasName(t, defsWithLabel(r, "Interface"), "Repository")
+	methods := defsWithLabel(r, "Method")
+	assertHasName(t, methods, "findById")
+	assertHasName(t, methods, "save")
+	assertHasName(t, methods, "delete")
 }
 
 func TestTypeScriptClass_Regression(t *testing.T) {

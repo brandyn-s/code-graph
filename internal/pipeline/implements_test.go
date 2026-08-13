@@ -213,3 +213,68 @@ func TestTypeScriptDeclaredRelationshipsPreserveClauseKind(t *testing.T) {
 		t.Fatalf("IMPLEMENTS = %+v, want only Renderable", implements)
 	}
 }
+
+func TestTypeScriptClassInheritanceCreatesOverrideEdges(t *testing.T) {
+	s, err := store.OpenMemory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+
+	project := "typescript-method-override"
+	if err := s.UpsertProject(project, "/tmp/typescript-method-override"); err != nil {
+		t.Fatal(err)
+	}
+	baseID, _ := s.UpsertNode(&store.Node{
+		Project: project, Label: "Class", Name: "BaseFormatter",
+		QualifiedName: project + ".src.types.BaseFormatter", FilePath: "src/types.ts",
+	})
+	richID, _ := s.UpsertNode(&store.Node{
+		Project: project, Label: "Class", Name: "RichFormatter",
+		QualifiedName: project + ".src.types.RichFormatter", FilePath: "src/types.ts",
+		Properties: map[string]any{"extends_types": []any{"BaseFormatter"}},
+	})
+	baseMethodID, _ := s.UpsertNode(&store.Node{
+		Project: project, Label: "Method", Name: "render",
+		QualifiedName: project + ".src.types.BaseFormatter.render", FilePath: "src/types.ts",
+	})
+	richMethodID, _ := s.UpsertNode(&store.Node{
+		Project: project, Label: "Method", Name: "render",
+		QualifiedName: project + ".src.types.RichFormatter.render", FilePath: "src/types.ts",
+	})
+	baseConstructorID, _ := s.UpsertNode(&store.Node{
+		Project: project, Label: "Method", Name: "constructor",
+		QualifiedName: project + ".src.types.BaseFormatter.constructor", FilePath: "src/types.ts",
+	})
+	richConstructorID, _ := s.UpsertNode(&store.Node{
+		Project: project, Label: "Method", Name: "constructor",
+		QualifiedName: project + ".src.types.RichFormatter.constructor", FilePath: "src/types.ts",
+	})
+	_, _ = s.InsertEdge(&store.Edge{
+		Project: project, SourceID: baseID, TargetID: baseMethodID, Type: "DEFINES_METHOD",
+	})
+	_, _ = s.InsertEdge(&store.Edge{
+		Project: project, SourceID: richID, TargetID: richMethodID, Type: "DEFINES_METHOD",
+	})
+	_, _ = s.InsertEdge(&store.Edge{
+		Project: project, SourceID: baseID, TargetID: baseConstructorID, Type: "DEFINES_METHOD",
+	})
+	_, _ = s.InsertEdge(&store.Edge{
+		Project: project, SourceID: richID, TargetID: richConstructorID, Type: "DEFINES_METHOD",
+	})
+	registry := NewFunctionRegistry()
+	registry.Register("BaseFormatter", project+".src.types.BaseFormatter", "Class")
+	registry.Register("RichFormatter", project+".src.types.RichFormatter", "Class")
+	p := &Pipeline{Store: s, ProjectName: project, registry: registry}
+
+	p.passInherits()
+
+	overrides, _ := s.FindEdgesBySourceAndType(richMethodID, "OVERRIDE")
+	if len(overrides) != 1 || overrides[0].TargetID != baseMethodID {
+		t.Fatalf("OVERRIDE = %+v, want RichFormatter.render -> BaseFormatter.render", overrides)
+	}
+	constructorOverrides, _ := s.FindEdgesBySourceAndType(richConstructorID, "OVERRIDE")
+	if len(constructorOverrides) != 0 {
+		t.Fatalf("constructors do not override base constructors: %+v", constructorOverrides)
+	}
+}

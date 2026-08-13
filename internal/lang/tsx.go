@@ -10,6 +10,8 @@ func init() {
 			"function_expression",
 			"arrow_function",
 			"method_definition",
+			"method_signature",
+			"abstract_method_signature",
 			"function_signature",
 		},
 		ClassNodeTypes: []string{

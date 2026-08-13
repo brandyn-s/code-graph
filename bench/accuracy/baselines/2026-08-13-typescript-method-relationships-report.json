@@ -1,0 +1,186 @@
+{
+  "schema_version": 1,
+  "measurement_date": "2026-08-13",
+  "status": "measured_improvement_with_bounded_remaining_gaps",
+  "candidate": {
+    "repository": "redacted-org/code-graph",
+    "baseline_source_revision": "1185a16ae85ba38b33c02fc55294a901c6d3c897",
+    "candidate_source_revision": "86b3219ad98b55306c9b49ec91bcbf68e0ccf4fd",
+    "change_scope": "normal-tier TypeScript and TSX direct declared method overrides and implementations",
+    "baseline_binary_sha256": "c8a462c1c82d7998bfc2ce91949c2bef794736b14be755974e3c34731d80b224",
+    "candidate_binary_sha256": "ebca219a36477fc085bf165f3e289675ce75cb723ee9c99f56c987bce9f10705"
+  },
+  "oracle": {
+    "name": "typescript-compiler-api-method-relationships-v1",
+    "implementation": "bench/accuracy/tools/oracle-typescript-compiler",
+    "implementation_sha256": "419b120fade8b739f34586979dede32cc2f74873598fef33f12587c4126cc58b",
+    "typescript_version": "5.9.3",
+    "scope": "direct declared project-local overrides and implements relationships",
+    "uses_code_graph_as_truth": false,
+    "hand_enumerated_fixture": {
+      "before": {
+        "method_true_positive": 0,
+        "method_false_positive": 0,
+        "method_false_negative": 2
+      },
+      "after": {
+        "method_true_positive": 2,
+        "method_false_positive": 0,
+        "method_false_negative": 0,
+        "all_relationship_true_positive": 7,
+        "all_relationship_false_positive": 0,
+        "all_relationship_false_negative": 0
+      },
+      "oracle_sha256": "aa855ecd1f51c558042fd8043f57085121e41b73290080ac7ccc22ac4c0fa618",
+      "before_report_sha256": "e5a2600ec224516d7f847ebbd02594e931b35a2d76f79a1719f6d747221f67b9",
+      "after_report_sha256": "7c5e9e130fa6c430f34f139be064c7e005a87abe82f1d7032b19eb376f55bf14"
+    }
+  },
+  "repositories": [
+    {
+      "id": "microsoft-tsyringe",
+      "url": "https://github.com/microsoft/tsyringe",
+      "source_revision": "e033769d97cfb6cc4a8569e2b50eb32015453302",
+      "project_files": 41,
+      "project_manifest_sha256": "e23f3f92b6423387a7ccb607e148ef45a47d189c0b6c17f201106ba841608b5a",
+      "oracle_sha256": "9098cbef45a0b6782e78401686fb19811f414b9f729e545c5df49b15b400f71d",
+      "before_report_sha256": "a0ff6702b1a23ba63cc02f3e9daaab3a8aa435ecf7dcc9ff496909508661c2c2",
+      "after_report_sha256": "5f256b4efabcf910aafd503b5b36da974e41b9a119d4ab37532ce1ea328602e9",
+      "before": {
+        "true_positive": 0,
+        "false_positive": 0,
+        "false_negative": 11
+      },
+      "after": {
+        "true_positive": 11,
+        "false_positive": 2,
+        "false_negative": 0
+      }
+    },
+    {
+      "id": "inversify-InversifyJS",
+      "url": "https://github.com/inversify/InversifyJS",
+      "source_revision": "fdd9186891e777884012984c64c271e576155f08",
+      "project_files": 30,
+      "project_manifest_sha256": "7b1c1b0ed203e3b635d97462e8327d7010b9ca5ecfadb34a963348c02dee93a3",
+      "oracle_sha256": "09e02ed1bc96b164b9430e70b656ddf894fe8ea37456990eb865e8d92cc36dc4",
+      "before_report_sha256": "75945b897ee84488a19e27675a3f1015645157af5401fa69ef9ad4bf6688be57",
+      "after_report_sha256": "75945b897ee84488a19e27675a3f1015645157af5401fa69ef9ad4bf6688be57",
+      "before": {
+        "true_positive": 0,
+        "false_positive": 0,
+        "false_negative": 27
+      },
+      "after": {
+        "true_positive": 0,
+        "false_positive": 0,
+        "false_negative": 27
+      },
+      "failure_cell": "all 27 compiler relationships are declared on function-local test classes, for which the normal graph emits no class or method endpoints"
+    },
+    {
+      "id": "blakeembrey-free-style",
+      "url": "https://github.com/blakeembrey/free-style",
+      "source_revision": "eb921ab5457f327ac24f0ea2822715d73af4cfd3",
+      "project_files": 2,
+      "project_manifest_sha256": "5a7d8ab1115a8193c72c0eed4e9fb9cbeaa931d262579860a57bc3e20e2dbf91",
+      "oracle_sha256": "b2879654b88ced6b7b6760c2b43e7552001f45ec84d2102a4fda0debd359eaa0",
+      "before_report_sha256": "99e25f6f28fff8a82a8acc6544794dfe3a27f5197f5e3ad9a148132ea709b57b",
+      "after_report_sha256": "0acba1b659712bbd987325785c8e00903d5012bfc1bb837b702a3207d8de711b",
+      "before": {
+        "true_positive": 0,
+        "false_positive": 0,
+        "false_negative": 9
+      },
+      "after": {
+        "true_positive": 9,
+        "false_positive": 0,
+        "false_negative": 0
+      }
+    },
+    {
+      "id": "nestjs-nest-core",
+      "url": "https://github.com/nestjs/nest",
+      "source_revision": "674ac31d4f02d399fca9c491f352f5066d57b62d",
+      "measurement_root": "packages/core",
+      "project_files": 178,
+      "project_manifest_sha256": "9a1c6d9d62d42aa87ca37481a481877083531358bb65251c201ff76c4602488d",
+      "oracle_sha256": "bc60fb05ad26d6d36014d121c3e5672e404847646c2b8186f9399ec25aae0a63",
+      "before_report_sha256": "81acc494ff201c5e27188b17c12e1045cc42373e2f89df322cedd4450aed4786",
+      "after_report_sha256": "df07f983071ce6499d2922ea88248f84c50937dff91ee8a917f9dee7be4dff5f",
+      "before": {
+        "true_positive": 0,
+        "false_positive": 0,
+        "false_negative": 23
+      },
+      "after": {
+        "true_positive": 23,
+        "false_positive": 2,
+        "false_negative": 0
+      },
+      "overrides_after": {
+        "true_positive": 15,
+        "false_positive": 2,
+        "false_negative": 0,
+        "precision": 0.8823529411764706,
+        "recall": 1.0,
+        "f1": 0.9375
+      }
+    }
+  ],
+  "aggregate_before": {
+    "true_positive": 0,
+    "false_positive": 0,
+    "false_negative": 70,
+    "precision": 0.0,
+    "recall": 0.0,
+    "f1": 0.0
+  },
+  "aggregate_after": {
+    "true_positive": 43,
+    "false_positive": 4,
+    "false_negative": 27,
+    "precision": 0.9148936170212766,
+    "recall": 0.6142857142857143,
+    "f1": 0.7350427350427351,
+    "by_kind": {
+      "overrides": {
+        "true_positive": 15,
+        "false_positive": 2,
+        "false_negative": 2,
+        "precision": 0.8823529411764706,
+        "recall": 0.8823529411764706,
+        "f1": 0.8823529411764706
+      },
+      "implements": {
+        "true_positive": 28,
+        "false_positive": 2,
+        "false_negative": 25,
+        "precision": 0.9333333333333333,
+        "recall": 0.5283018867924528,
+        "f1": 0.6746987951807228
+      }
+    }
+  },
+  "represented_type_subset_after": {
+    "definition": "repositories whose in-scope compiler types are represented by normal-graph class or interface nodes",
+    "repository_ids": [
+      "microsoft-tsyringe",
+      "blakeembrey-free-style",
+      "nestjs-nest-core"
+    ],
+    "true_positive": 43,
+    "false_positive": 4,
+    "false_negative": 0,
+    "precision": 0.9148936170212766,
+    "recall": 1.0,
+    "f1": 0.9555555555555556
+  },
+  "failure_decomposition": {
+    "false_negatives": "27 function-local InversifyJS test-class relationships; local classes are absent from the current normal-graph vocabulary",
+    "false_positives": "four name-level overloaded method-family edges: register, registerSingleton, and two get families; the strict oracle excludes overload sets",
+    "type_relationship_regression": "none observed; the baseline and candidate type-relationship cells are unchanged on every measured repository"
+  },
+  "claim_boundary": "Evidence covers direct declared project-local relationships in four pinned public repositories. It does not establish language-wide compiler-grade accuracy, structural interface satisfaction, inherited interface members, overload-set identity, function-local classes, external declarations, dynamic mixins, or prototype mutation.",
+  "result": "pass_measured_improvement"
+}

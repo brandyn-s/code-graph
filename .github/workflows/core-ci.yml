@@ -21,6 +21,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Setup Go
@@ -28,6 +29,9 @@ jobs:
         with:
           go-version: "1.26"
           cache: true
+
+      - name: Run publication-equivalent lint
+        uses: ./.github/actions/release-lint
 
       - name: Test
         run: go test ./...

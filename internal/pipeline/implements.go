@@ -364,6 +364,11 @@ func (p *Pipeline) createOverrideEdgesExplicit(classNode, ifaceNode *store.Node)
 		if ifaceMethodNode == nil {
 			continue
 		}
+		// Constructors initialize one concrete class; they do not participate
+		// in method override/implementation relationships.
+		if ifaceMethodNode.Name == "constructor" {
+			continue
+		}
 		classMethodID, ok := classMethodByName[ifaceMethodNode.Name]
 		if !ok {
 			continue

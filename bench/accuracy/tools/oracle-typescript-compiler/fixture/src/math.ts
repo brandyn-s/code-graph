@@ -23,19 +23,29 @@ export interface Named {
   readonly name: string;
 }
 
-export interface NamedRenderable extends Renderable, Named {}
+export interface NamedRenderable extends Renderable, Named {
+  describe(): string;
+}
 
 export type OptionalNamed = Partial<Named>;
 
 export interface PartiallyNamed extends OptionalNamed {}
 
-export class BaseFormatter {}
+export class BaseFormatter {
+  render(): string {
+    return "base";
+  }
+}
 
 export class RichFormatter extends BaseFormatter implements NamedRenderable {
   readonly name = "rich";
 
-  render(): string {
+  override render(): string {
     return this.name;
+  }
+
+  describe(): string {
+    return `formatter:${this.name}`;
   }
 }
 

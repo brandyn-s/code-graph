@@ -16,12 +16,6 @@ concurrency:
   group: code-graph-release
   cancel-in-progress: false
 
-env:
-  # Full-repository lint currently contains inherited debt. This accepted
-  # ancestor is fixed, and the blocking gate below rejects findings added
-  # after it. Move this baseline only through a reviewed debt-baseline change.
-  LINT_BASELINE: 832bede03d6118827919fc8727f3c17854047d06
-
 # Workflow-level default. Jobs are read-only unless they declare the narrowly
 # scoped write permissions needed to attest or publish a release.
 permissions:
@@ -70,17 +64,12 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Verify lint baseline ancestry
-        run: git merge-base --is-ancestor "$LINT_BASELINE" "$GITHUB_SHA"
-
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: "1.26"
 
-      - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
-        with:
-          version: v2.10
-          args: --timeout=10m --new-from-rev=${{ env.LINT_BASELINE }}
+      - name: Run publication-equivalent lint
+        uses: ./.github/actions/release-lint
 
       - name: Report full lint debt
         continue-on-error: true

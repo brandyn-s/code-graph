@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "measurement_date": "2026-08-13",
+  "status": "preregistered_before_graph_measurement",
+  "candidate_revision": "86b3219ad98b55306c9b49ec91bcbf68e0ccf4fd",
+  "oracle": {
+    "name": "typescript-compiler-api-method-relationships-v1",
+    "implementation_sha256": "419b120fade8b739f34586979dede32cc2f74873598fef33f12587c4126cc58b",
+    "typescript_version": "5.9.3",
+    "scope": "direct_declared_project_local_overrides_and_implements",
+    "uses_code_graph_as_truth": false
+  },
+  "repository": {
+    "id": "nestjs-nest-core",
+    "url": "https://github.com/nestjs/nest",
+    "source_revision": "674ac31d4f02d399fca9c491f352f5066d57b62d",
+    "measurement_root": "packages/core",
+    "tsconfig": "tsconfig.build.json",
+    "tsconfig_sha256": "9e94003deebfed030d20888ade49daf8d388e957cf2efeddf74670fa2ff638b3",
+    "project_files": 178,
+    "project_manifest_sha256": "9a1c6d9d62d42aa87ca37481a481877083531358bb65251c201ff76c4602488d",
+    "oracle_method_edges": {
+      "overrides": 15,
+      "implements": 8
+    }
+  },
+  "selection_rule": "Nest core was selected from source/compiler-oracle output for a positive top-level public override cell before either baseline or candidate graph output was queried.",
+  "operating_points": [
+    "all_bands",
+    "non_ambiguous"
+  ],
+  "comparison_rule": "Run the already-built pre-change and candidate binaries against fresh isolated stores and compare both to the same frozen oracle bytes."
+}

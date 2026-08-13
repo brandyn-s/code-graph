@@ -1,20 +1,27 @@
 #!/usr/bin/env python3
-"""Compare TypeScript graph type relationships with a compiler API oracle."""
+"""Compare TypeScript graph type/method relationships with a compiler oracle."""
 
 from __future__ import annotations
 
 import argparse
 import hashlib
 import json
-import sqlite3
 import os
+import sqlite3
 from pathlib import Path
 from typing import NamedTuple
 
 
-ORACLE = "typescript-compiler-api-type-relationships-v1"
-ORACLE_SCOPE = "declared_project_local_extends_and_implements"
-KINDS = {"extends": "INHERITS", "implements": "IMPLEMENTS"}
+TYPE_ORACLE = "typescript-compiler-api-type-relationships-v1"
+TYPE_ORACLE_SCOPE = "declared_project_local_extends_and_implements"
+METHOD_ORACLE = "typescript-compiler-api-method-relationships-v1"
+METHOD_ORACLE_SCOPE = "direct_declared_project_local_overrides_and_implements"
+KINDS = {
+    "type_extends": "INHERITS",
+    "type_implements": "IMPLEMENTS",
+    "method_overrides": "OVERRIDE",
+    "method_implements": "OVERRIDE",
+}
 
 
 class Relationship(NamedTuple):
@@ -33,6 +40,8 @@ class ObservedRelationship(NamedTuple):
 class OracleDocument(NamedTuple):
     oracle: str
     oracle_scope: str
+    method_oracle: str
+    method_oracle_scope: str
     oracle_implementation_sha256: str
     typescript_version: str
     tsconfig_sha256: str
@@ -97,8 +106,10 @@ def load_oracle(path: Path) -> OracleDocument:
     if (
         not isinstance(document, dict)
         or document.get("schema_version") != 1
-        or document.get("type_relationships_oracle") != ORACLE
-        or document.get("type_relationships_oracle_scope") != ORACLE_SCOPE
+        or document.get("type_relationships_oracle") != TYPE_ORACLE
+        or document.get("type_relationships_oracle_scope") != TYPE_ORACLE_SCOPE
+        or document.get("method_relationships_oracle") != METHOD_ORACLE
+        or document.get("method_relationships_oracle_scope") != METHOD_ORACLE_SCOPE
         or not isinstance(document.get("typescript_version"), str)
         or not document.get("typescript_version")
         or not isinstance(files, list)
@@ -109,6 +120,7 @@ def load_oracle(path: Path) -> OracleDocument:
         or set(file_hashes) != set(files)
         or any(_digest(value, "project_file_sha256") != value for value in file_hashes.values())
         or not isinstance(document.get("type_relationships"), list)
+        or not isinstance(document.get("method_relationships"), list)
     ):
         raise ValueError("oracle has an unsupported type-relationship contract")
     project_files = frozenset(files)
@@ -121,20 +133,46 @@ def load_oracle(path: Path) -> OracleDocument:
     relationships: set[Relationship] = set()
     for entry in document["type_relationships"]:
         kind = entry.get("kind") if isinstance(entry, dict) else None
-        if kind not in KINDS:
+        if kind not in {"extends", "implements"}:
             raise ValueError("oracle relationship has invalid kind")
         source_file, source_line = _endpoint(entry, "source", project_files)
         target_file, target_line = _endpoint(entry, "target", project_files)
         relationships.add(
-            Relationship(kind, source_file, source_line, target_file, target_line)
+            Relationship(
+                f"type_{kind}",
+                source_file,
+                source_line,
+                target_file,
+                target_line,
+            )
         )
-    if len(relationships) != len(document["type_relationships"]):
+    for entry in document["method_relationships"]:
+        kind = entry.get("kind") if isinstance(entry, dict) else None
+        if kind not in {"overrides", "implements"}:
+            raise ValueError("oracle method relationship has invalid kind")
+        source_file, source_line = _endpoint(entry, "source", project_files)
+        target_file, target_line = _endpoint(entry, "target", project_files)
+        relationships.add(
+            Relationship(
+                f"method_{kind}",
+                source_file,
+                source_line,
+                target_file,
+                target_line,
+            )
+        )
+    declared_relationship_count = len(document["type_relationships"]) + len(
+        document["method_relationships"]
+    )
+    if len(relationships) != declared_relationship_count:
         raise ValueError("oracle relationships must be unique")
     if not relationships:
         raise ValueError("oracle relationship scope is empty")
     return OracleDocument(
-        oracle=ORACLE,
+        oracle=TYPE_ORACLE,
         oracle_scope=document["type_relationships_oracle_scope"],
+        method_oracle=METHOD_ORACLE,
+        method_oracle_scope=document["method_relationships_oracle_scope"],
         oracle_implementation_sha256=_digest(
             document.get("oracle_implementation_sha256"),
             "oracle_implementation_sha256",
@@ -194,7 +232,7 @@ def load_observed(
             raise ValueError("measured source files do not match the oracle")
         if manifest_sha256(actual_hashes) != project_manifest_sha256:
             raise ValueError("measured project manifest does not match the oracle")
-        edge_rows = connection.execute(
+        type_rows = connection.execute(
             """
             SELECT edge.type,
                    source.file_path, source.start_line,
@@ -207,17 +245,70 @@ def load_observed(
             """,
             (project,),
         ).fetchall()
+        method_rows = connection.execute(
+            """
+            SELECT owner_relationship.type,
+                   source.file_path, source.start_line,
+                   target.file_path, target.start_line,
+                   COALESCE(json_extract(edge.properties, '$.confidence_tier'), 'EXTRACTED')
+            FROM edges AS edge
+            JOIN nodes AS source ON source.id = edge.source_id
+            JOIN nodes AS target ON target.id = edge.target_id
+            JOIN edges AS source_definition
+              ON source_definition.project = edge.project
+             AND source_definition.target_id = source.id
+             AND source_definition.type = 'DEFINES_METHOD'
+            JOIN edges AS target_definition
+              ON target_definition.project = edge.project
+             AND target_definition.target_id = target.id
+             AND target_definition.type = 'DEFINES_METHOD'
+            JOIN edges AS owner_relationship
+              ON owner_relationship.project = edge.project
+             AND owner_relationship.source_id = source_definition.source_id
+             AND owner_relationship.target_id = target_definition.source_id
+             AND owner_relationship.type IN ('INHERITS', 'IMPLEMENTS')
+            WHERE edge.project = ? AND edge.type = 'OVERRIDE'
+            """,
+            (project,),
+        ).fetchall()
     finally:
         connection.close()
-    kind_by_type = {edge_type: kind for kind, edge_type in KINDS.items()}
+    type_kind_by_edge = {
+        "INHERITS": "type_extends",
+        "IMPLEMENTS": "type_implements",
+    }
     observed = {
         ObservedRelationship(
-            Relationship(kind_by_type[edge_type], source, source_line, target, target_line),
+            Relationship(
+                type_kind_by_edge[edge_type],
+                source,
+                source_line,
+                target,
+                target_line,
+            ),
             confidence,
         )
-        for edge_type, source, source_line, target, target_line, confidence in edge_rows
-        if source in project_files
+        for edge_type, source, source_line, target, target_line, confidence in type_rows
+        if source in project_files and target in project_files
     }
+    method_kind_by_owner_edge = {
+        "INHERITS": "method_overrides",
+        "IMPLEMENTS": "method_implements",
+    }
+    observed.update(
+        ObservedRelationship(
+            Relationship(
+                method_kind_by_owner_edge[owner_edge],
+                source,
+                source_line,
+                target,
+                target_line,
+            ),
+            confidence,
+        )
+        for owner_edge, source, source_line, target, target_line, confidence in method_rows
+        if source in project_files and target in project_files
+    )
     return frozenset(observed)
 
 
@@ -278,6 +369,8 @@ def build_metrics(
         "schema_version": 1,
         "oracle": oracle.oracle,
         "oracle_scope": oracle.oracle_scope,
+        "method_oracle": oracle.method_oracle,
+        "method_oracle_scope": oracle.method_oracle_scope,
         "oracle_implementation_sha256": oracle.oracle_implementation_sha256,
         "typescript_version": oracle.typescript_version,
         "tsconfig_sha256": oracle.tsconfig_sha256,

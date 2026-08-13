@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "measurement_date": "2026-08-13",
+  "status": "preregistered_before_graph_measurement",
+  "candidate_baseline_revision": "ff45412358bc80124c6436757c82b527b1af08e2",
+  "oracle": {
+    "name": "typescript-compiler-api-method-relationships-v1",
+    "implementation_sha256": "419b120fade8b739f34586979dede32cc2f74873598fef33f12587c4126cc58b",
+    "typescript_version": "5.9.3",
+    "scope": "direct_declared_project_local_overrides_and_implements",
+    "uses_code_graph_as_truth": false
+  },
+  "repositories": [
+    {
+      "id": "microsoft-tsyringe",
+      "url": "https://github.com/microsoft/tsyringe",
+      "source_revision": "e033769d97cfb6cc4a8569e2b50eb32015453302",
+      "tsconfig": "tsconfig.json",
+      "tsconfig_sha256": "a7acc549f26a0891225a99254c5be2be016b8ef71f8ab7c6ce6b16037e48f3ea",
+      "project_files": 41,
+      "project_manifest_sha256": "e23f3f92b6423387a7ccb607e148ef45a47d189c0b6c17f201106ba841608b5a",
+      "oracle_method_edges": 11
+    },
+    {
+      "id": "inversify-InversifyJS",
+      "url": "https://github.com/inversify/InversifyJS",
+      "source_revision": "fdd9186891e777884012984c64c271e576155f08",
+      "tsconfig": "tsconfig.json",
+      "tsconfig_sha256": "ece0217281638c0307990e80e7d0303326754cf26738fc011c04894c9ae47e36",
+      "project_files": 30,
+      "project_manifest_sha256": "7b1c1b0ed203e3b635d97462e8327d7010b9ca5ecfadb34a963348c02dee93a3",
+      "oracle_method_edges": 27
+    },
+    {
+      "id": "blakeembrey-free-style",
+      "url": "https://github.com/blakeembrey/free-style",
+      "source_revision": "eb921ab5457f327ac24f0ea2822715d73af4cfd3",
+      "tsconfig": "tsconfig.json",
+      "tsconfig_sha256": "f5f4d59cdc37d9eb36abb05da947e9f35ed6744bb35802912ae31a0850991d36",
+      "project_files": 2,
+      "project_manifest_sha256": "5a7d8ab1115a8193c72c0eed4e9fb9cbeaa931d262579860a57bc3e20e2dbf91",
+      "oracle_method_edges": 9
+    }
+  ],
+  "selection_rule": "Repositories were frozen after source/compiler-oracle inspection and before any graph query; all contain positive in-scope method relationships.",
+  "metrics": [
+    "precision",
+    "recall",
+    "f1",
+    "true_positive",
+    "false_positive",
+    "false_negative"
+  ],
+  "operating_points": [
+    "all_bands",
+    "non_ambiguous"
+  ],
+  "change_rule": "Modify production graph generation only for the dominant measured method-relationship failure cell, then rerun the same frozen repositories and oracle bytes."
+}

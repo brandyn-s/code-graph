@@ -10,7 +10,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"os"
-	"path"
+	slashpath "path"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -2736,13 +2736,13 @@ func resolveJSTSRelativeImport(target, importerFile, projectName string) string 
 	// Keep non-code assets out of the TypeScript module graph. Without this,
 	// `./App.css` and `App.tsx` collapse to the same extensionless ModuleQN and
 	// manufacture a self IMPORTS edge.
-	targetExt := strings.ToLower(path.Ext(target))
+	targetExt := strings.ToLower(slashpath.Ext(target))
 	if targetExt != "" {
 		if _, ok := jsTsModuleExtensions[targetExt]; !ok {
 			return target
 		}
 	}
-	resolvedPath := path.Clean(path.Join(path.Dir(filepath.ToSlash(importerFile)), target))
+	resolvedPath := slashpath.Clean(slashpath.Join(slashpath.Dir(filepath.ToSlash(importerFile)), target))
 	if resolvedPath == ".." || strings.HasPrefix(resolvedPath, "../") {
 		return target
 	}

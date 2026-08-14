@@ -131,6 +131,21 @@ python bench/accuracy/compare_typescript_relationships.py \
 #   bench/accuracy/baselines/YYYY-MM-DD-mcp-servers-report.json (machine)
 ```
 
+Incremental graph correctness is measured separately from edge-oracle
+accuracy. It uses the same final source tree in a persistent incremental store
+and a fresh clean store, canonicalizes row IDs, and requires exact whole-graph
+node/edge equivalence across rename, deletion, re-export, receiver-type, and
+import-target changes:
+
+```bash
+go test ./internal/pipeline \
+  -run TestIncrementalMatchesCleanAcrossChangeClasses \
+  -count=5 -v
+```
+
+The current result, including latency and physical SQLite observations, is
+[`baselines/2026-08-13-incremental-clean-equivalence.md`](baselines/2026-08-13-incremental-clean-equivalence.md).
+
 ## Prove-the-instrument gate
 
 Before measuring code-graph on a real fixture, every oracle must first pass a

@@ -73,6 +73,7 @@ type AnalysisRef struct {
 	DatabaseContentSHA256   string             `json:"database_content_sha256"`
 	DatabaseQuality         DatabaseQuality    `json:"database_quality"`
 	QueryPackManifestSHA256 string             `json:"query_pack_manifest_sha256"`
+	QueryAttestationSHA256  string             `json:"query_attestation_sha256,omitempty"`
 	SARIFSHA256             string             `json:"sarif_sha256"`
 	QueryID                 string             `json:"query_id"`
 	ResultIndex             int                `json:"result_index"`
@@ -146,7 +147,7 @@ func symbolRefMap(ref *SymbolRef) map[string]any {
 	if ref == nil {
 		return nil
 	}
-	return map[string]any{
+	payload := map[string]any{
 		"id":              ref.ID,
 		"schema_version":  ref.SchemaVersion,
 		"repository_id":   ref.RepositoryID,
@@ -157,6 +158,7 @@ func symbolRefMap(ref *SymbolRef) map[string]any {
 		"start_line":      ref.StartLine,
 		"end_line":        ref.EndLine,
 	}
+	return payload
 }
 
 func relationshipRefMap(ref *RelationshipRef) map[string]any {
@@ -212,7 +214,7 @@ func analysisRefMap(ref *AnalysisRef) map[string]any {
 	for _, step := range ref.PathSteps {
 		steps = append(steps, analysisPathStepMap(step))
 	}
-	return map[string]any{
+	payload := map[string]any{
 		"id":                         ref.ID,
 		"schema_version":             ref.SchemaVersion,
 		"repository_id":              ref.RepositoryID,
@@ -234,6 +236,10 @@ func analysisRefMap(ref *AnalysisRef) map[string]any {
 		"thread_flow_index":          ref.ThreadFlowIndex,
 		"path_steps":                 steps,
 	}
+	if ref.QueryAttestationSHA256 != "" {
+		payload["query_attestation_sha256"] = ref.QueryAttestationSHA256
+	}
+	return payload
 }
 
 func evidenceRefMap(ref *EvidenceRef) map[string]any {
@@ -394,6 +400,40 @@ func NewCodeQLAnalysisRef(
 	resultIndex, codeFlowIndex, threadFlowIndex int,
 	pathSteps []AnalysisPathStep,
 ) AnalysisRef {
+	return NewAttestedCodeQLAnalysisRef(
+		repositoryID,
+		sourceRevision,
+		indexGeneration,
+		analyzerVersion,
+		extractorVersion,
+		language,
+		databaseManifestSHA256,
+		databaseContentSHA256,
+		databaseQuality,
+		queryPackManifestSHA256,
+		sarifSHA256,
+		"",
+		queryID,
+		resultIndex,
+		codeFlowIndex,
+		threadFlowIndex,
+		pathSteps,
+	)
+}
+
+// NewAttestedCodeQLAnalysisRef additionally binds the operator-owned receipt
+// that classifies the selected CodeQL query as variable-level taint analysis.
+// An un-attested CodeQL path remains useful source evidence but cannot satisfy
+// the variable_level_taint assurance capability.
+func NewAttestedCodeQLAnalysisRef(
+	repositoryID, sourceRevision, indexGeneration,
+	analyzerVersion, extractorVersion, language,
+	databaseManifestSHA256, databaseContentSHA256 string,
+	databaseQuality DatabaseQuality,
+	queryPackManifestSHA256, sarifSHA256, queryAttestationSHA256, queryID string,
+	resultIndex, codeFlowIndex, threadFlowIndex int,
+	pathSteps []AnalysisPathStep,
+) AnalysisRef {
 	canonicalSteps := make([]AnalysisPathStep, len(pathSteps))
 	copy(canonicalSteps, pathSteps)
 	for i := range canonicalSteps {
@@ -419,6 +459,7 @@ func NewCodeQLAnalysisRef(
 			ExtractorErrors: databaseQuality.ExtractorErrors,
 		},
 		QueryPackManifestSHA256: queryPackManifestSHA256,
+		QueryAttestationSHA256:  canonicalToken(queryAttestationSHA256),
 		SARIFSHA256:             sarifSHA256,
 		QueryID:                 strings.TrimSpace(queryID),
 		ResultIndex:             resultIndex,

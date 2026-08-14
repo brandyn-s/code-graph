@@ -120,6 +120,47 @@ func TestBidirectionalPageRank_PureSourcesStayVisible(t *testing.T) {
 	}
 }
 
+func TestRankByQueryBreaksEqualScoreTiesCanonically(t *testing.T) {
+	st := testStoreOrSkip(t)
+	project := "deterministic-ties"
+	ensureProject(t, st, project)
+	for _, node := range []*store.Node{
+		{Project: project, Label: "Function", Name: "route", QualifiedName: "pkg.zeta.route", FilePath: "zeta.go", StartLine: 7},
+		{Project: project, Label: "Function", Name: "route", QualifiedName: "pkg.alpha.route", FilePath: "alpha.go", StartLine: 3},
+	} {
+		if _, err := st.UpsertNode(node); err != nil {
+			t.Fatalf("upsert node %q: %v", node.QualifiedName, err)
+		}
+	}
+
+	results, err := RankByQuery(st, project, "route", 2)
+	if err != nil {
+		t.Fatalf("RankByQuery: %v", err)
+	}
+	if len(results) != 2 {
+		t.Fatalf("got %d results, want 2: %+v", len(results), results)
+	}
+	if results[0].Score != results[1].Score {
+		t.Fatalf("fixture scores differ: %+v", results)
+	}
+	if got := results[0].FilePath; got != "alpha.go" {
+		t.Fatalf("equal-score tie is not canonical: got %q first; results=%+v", got, results)
+	}
+}
+
+func TestSortRankedNodesBreaksTiesIndependentOfInputOrder(t *testing.T) {
+	results := []RankedNode{
+		{ID: 2, Label: "Function", Name: "route", QualifiedName: "pkg.zeta.route", FilePath: "zeta.go", Score: 1},
+		{ID: 1, Label: "Function", Name: "route", QualifiedName: "pkg.alpha.route", FilePath: "alpha.go", Score: 1},
+	}
+
+	sortRankedNodes(results)
+
+	if got := results[0].FilePath; got != "alpha.go" {
+		t.Fatalf("equal-score tie depends on input order: got %q first; results=%+v", got, results)
+	}
+}
+
 // TestRankByQuery_EmptyProject returns a helpful error when the project
 // has no nodes, rather than panicking.
 func TestRankByQuery_EmptyProject(t *testing.T) {

@@ -339,6 +339,7 @@ func (s *Server) handleIndexRepository(ctx context.Context, req *mcp.CallToolReq
 			"mode":             p.LastIndexDelta.Mode,
 			"files_discovered": p.LastIndexDelta.FilesDiscovered,
 			"files_changed":    p.LastIndexDelta.FilesChanged,
+			"files_deleted":    p.LastIndexDelta.FilesDeleted,
 			"files_unchanged":  p.LastIndexDelta.FilesUnchanged,
 		},
 	}

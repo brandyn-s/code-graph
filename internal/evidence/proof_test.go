@@ -301,6 +301,41 @@ func TestEvaluateProofRejectsUnboundLegacySCIPCompilerCapability(t *testing.T) {
 	}
 }
 
+func TestEvaluateProofRejectsMalformedCodeQLArtifactDigest(t *testing.T) {
+	bundle := proofFixture()
+	analysis := NewAttestedCodeQLAnalysisRef(
+		bundle.Claim.RepositoryID,
+		strings.Repeat("s", 40),
+		bundle.IndexState.IndexGeneration,
+		"2.23.1",
+		"codeql/go-all@4.0.0",
+		"go",
+		"not-a-digest",
+		strings.Repeat("d", 64),
+		DatabaseQuality{Status: "pass", SourceFiles: 2, BaselineLines: 6, ExtractorErrors: 0},
+		strings.Repeat("c", 64),
+		strings.Repeat("f", 64),
+		strings.Repeat("a", 64),
+		"go/sql-injection",
+		0,
+		0,
+		0,
+		[]AnalysisPathStep{
+			{Position: 0, Role: "source", RelativePath: "source.go", StartLine: 1, StartColumn: 1, EndLine: 1, EndColumn: 2},
+			{Position: 1, Role: "sink", RelativePath: "sink.go", StartLine: 1, StartColumn: 1, EndLine: 1, EndColumn: 2},
+		},
+	)
+	evidenceRef := NewAnalysisEvidenceRef(analysis)
+	bundle.Observations = []ObservationRef{
+		NewObservationRef(evidenceRef, "support", "codeql", "codeql_path", "high"),
+	}
+
+	_, err := EvaluateProof(bundle)
+	if err == nil || !strings.Contains(err.Error(), "database_manifest_sha256") {
+		t.Fatalf("expected malformed CodeQL digest error, got %v", err)
+	}
+}
+
 func TestProofValidationRejectsRelationshipProvenanceOverrides(t *testing.T) {
 	t.Run("confidence", func(t *testing.T) {
 		bundle := proofFixture()

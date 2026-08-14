@@ -110,6 +110,8 @@ func main() {
 			os.Exit(runUpdate(remaining[1:]))
 		case "config":
 			os.Exit(runConfig(remaining[1:]))
+		case "import-codeql":
+			os.Exit(runCodeQLImport(remaining[1:], os.Stdout, os.Stderr))
 		case "cli":
 			if len(remaining) >= 2 {
 				os.Exit(runCLI(remaining[1:]))
@@ -224,6 +226,7 @@ func printHelpUsage() {
   codebase-memory-mcp uninstall               Remove MCP registrations and skills
   codebase-memory-mcp update                  Self-update to the latest release
   codebase-memory-mcp config <command>        Manage server configuration
+  codebase-memory-mcp import-codeql <flags>   Import attested CodeQL SARIF evidence
   codebase-memory-mcp --version               Print version and exit
   codebase-memory-mcp --help                  Show this help
 

@@ -250,6 +250,26 @@ func validateAnalysisRef(ref *AnalysisRef) error {
 	if ref.DatabaseQuality.Status != "pass" || ref.DatabaseQuality.SourceFiles <= 0 || ref.DatabaseQuality.BaselineLines <= 0 || ref.DatabaseQuality.ExtractorErrors < 0 {
 		return fmt.Errorf("analysis_ref database quality is not passing")
 	}
+	for _, artifact := range []struct {
+		name   string
+		digest string
+	}{
+		{name: "database_manifest_sha256", digest: ref.DatabaseManifestSHA256},
+		{name: "database_content_sha256", digest: ref.DatabaseContentSHA256},
+		{name: "query_pack_manifest_sha256", digest: ref.QueryPackManifestSHA256},
+		{name: "sarif_sha256", digest: ref.SARIFSHA256},
+	} {
+		decoded, err := hex.DecodeString(artifact.digest)
+		if err != nil || len(decoded) != sha256.Size || strings.ToLower(artifact.digest) != artifact.digest {
+			return fmt.Errorf("analysis_ref %s must be 64 lowercase hex characters", artifact.name)
+		}
+	}
+	if ref.QueryAttestationSHA256 != "" {
+		decoded, err := hex.DecodeString(ref.QueryAttestationSHA256)
+		if err != nil || len(decoded) != sha256.Size || strings.ToLower(ref.QueryAttestationSHA256) != ref.QueryAttestationSHA256 {
+			return fmt.Errorf("analysis_ref query_attestation_sha256 must be 64 lowercase hex characters")
+		}
+	}
 	if len(ref.PathSteps) < 2 {
 		return fmt.Errorf("analysis_ref path must contain at least two steps")
 	}
@@ -268,7 +288,7 @@ func validateAnalysisRef(ref *AnalysisRef) error {
 			return fmt.Errorf("analysis_ref path step %d has invalid coordinates", i)
 		}
 	}
-	expected := NewCodeQLAnalysisRef(
+	expected := NewAttestedCodeQLAnalysisRef(
 		ref.RepositoryID,
 		ref.SourceRevision,
 		ref.IndexGeneration,
@@ -280,6 +300,7 @@ func validateAnalysisRef(ref *AnalysisRef) error {
 		ref.DatabaseQuality,
 		ref.QueryPackManifestSHA256,
 		ref.SARIFSHA256,
+		ref.QueryAttestationSHA256,
 		ref.QueryID,
 		ref.ResultIndex,
 		ref.CodeFlowIndex,
@@ -472,7 +493,8 @@ func observationCapabilities(observation *ObservationRef) map[string]bool {
 		capabilities["lexical_retrieval"] = true
 	case "codeql_path":
 		if analysis := observation.EvidenceRef.AnalysisRef; analysis != nil &&
-			analysis.Analyzer == "codeql" && analysis.AnalysisKind == "variable_level_taint" {
+			analysis.Analyzer == "codeql" && analysis.AnalysisKind == "variable_level_taint" &&
+			analysis.QueryAttestationSHA256 != "" {
 			capabilities["variable_level_taint"] = true
 		}
 	}

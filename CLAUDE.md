@@ -32,8 +32,8 @@ gofmt -w .
 - **Parsing**: tree-sitter AST for 27 languages via vendored C grammars (CGO). Go gets enhanced LSP-style type resolution. 38 unused grammars were cut on 2026-06-10 (usage audit: none of the 38 appeared in any redacted repo; the 10 largest grammars were all unused — ~390MB of 770MB vendored source). PowerShell was added in the same change (airbus-cert/tree-sitter-powershell @ d3984418, MIT) — used by 2 redacted repos that previously had no coverage. Restoring a cut language = restore its four files from git history at that commit: `internal/cbm/vendored/grammars/<dir>/`, `internal/cbm/grammar_<name>.c`, `internal/lang/<name>.go`, plus the enum/spec/switch entries in `internal/cbm/cbm.h`, `internal/cbm/lang_specs.c`, `internal/cbm/cbm.go`, and `internal/lang/lang.go`.
 - **Pipeline**: Multi-pass indexing (structure -> definitions -> calls -> HTTP links -> OPA policy -> communities -> tests)
 - **Cypher engine**: Custom lexer/parser/planner/executor. Read-only subset with variable-length paths.
-- **Auto-sync**: Background watcher polls mtime+size, triggers incremental reindex. Adaptive polling intervals.
-- **Security tools**: `query_security_surfaces` (auth/crypto/input patterns), `query_stig_evidence` (control -> code mapping), `trace_data_flow` (CALLS/READS/WRITES/USAGE reachability; not variable-level taint)
+- **Auto-sync**: Background watcher polls mtime+size, triggers incremental reindex. Stored file hashes also detect deletion-only edits; deleted targets invalidate unchanged callers/importers before cascade removal. Adaptive polling intervals.
+- **Security tools**: `query_security_surfaces` (auth/crypto/input patterns), `query_stig_evidence` (control -> code mapping), `trace_data_flow` (CALLS/READS/WRITES/USAGE reachability; not variable-level taint), plus the operator-only offline `import-codeql` CLI for attested CodeQL SARIF paths
 - **Skills**: 4 embedded skills (exploring, tracing, quality, reference) installed via `codebase-memory-mcp install`
 
 ## Testing
@@ -50,6 +50,9 @@ go test ./internal/pipeline/ -run TestASTDump -v
 
 # Integration
 go test ./internal/pipeline/ -run TestPipeline -v
+
+# Incremental-vs-clean correctness and resource observations
+go test ./internal/pipeline/ -run TestIncrementalMatchesCleanAcrossChangeClasses -count=5 -v
 ```
 
 ## redacted Additions (beyond upstream)
@@ -59,6 +62,7 @@ go test ./internal/pipeline/ -run TestPipeline -v
 |------|-----------|---------|
 | `query_security_surfaces` | `internal/tools/security.go` | Auth, crypto, input validation pattern discovery; results are graph evidence, not a taint proof |
 | `trace_data_flow` | `internal/tools/dataflow.go` | Interprocedural graph reachability; variable-level taint requests fail closed to a CodeQL handoff |
+| `import-codeql` CLI | `internal/codeqlimport/`, `cmd/codebase-memory-mcp/codeql_import.go` | Offline conversion of operator-attested CodeQL SARIF into immutable analysis evidence; never launches CodeQL or mutates graph state. Contract: `docs/codeql-evidence-import.md` |
 | `query_stig_evidence` | `internal/tools/stig_evidence.go` | STIG control → code evidence mapping |
 | `index_health` | `internal/tools/health.go` | Graph coverage and quality report. Includes unsupported-extension telemetry (2026-06-11): `cut_language_files` (extensions from the 2026-06-10 grammar cut, reported at any count — the language-adoption canary; hint map in `internal/discover/cut_languages.go`), `unknown_extensions` (top 10 other extensions with ≥ 3 files), `unsupported_extension_files` (total). Tallied in `discover.Discover` via `Options.UnsupportedTally` — counts only files that survived every ignore filter. |
 
@@ -92,11 +96,15 @@ go test ./internal/pipeline/ -run TestPipeline -v
 ### Code Localization & Ranking Tools
 | Tool | Source File | Purpose |
 |------|-----------|---------|
-| `rank_by_query` | `internal/tools/rank.go` | Bidirectional weighted PageRank seeded on query-matched nodes; returns top-K most relevant entities. Best for SPECIFIC SYMBOL queries. (Aider repo-map pattern) |
+| `rank_by_query` | `internal/tools/rank.go` | Bidirectional weighted PageRank seeded uniformly on query-matched nodes; canonical deterministic tie order. Best for SPECIFIC SYMBOL queries. Query-anchor weighting was measured and rejected after an Acc@10 regression. (Aider repo-map pattern) |
 | `code_localize` | `internal/tools/localize.go` | LocAgent BFS-style graph-guided localization: seed-match + bidirectional BFS over CALLS/DEFINES/IMPORTS/CONTAINS edges. Best for SPECIFIC SYMBOL queries. Primitives-only, deterministic, ~50ms. (LocAgent ACL 2025) |
 | `code_localize_agent` | `internal/tools/localize_agent.go` | LLM-driven LocAgent variant: wraps the primitives in a multi-turn agent loop. Best for VERBOSE natural-language issues where the issue talks about A but the fix is in B. ~30-60s wall, ~$0.04-0.05/query at Haiku 4.5. Requires `ANTHROPIC_API_KEY`. |
 
 > **Pick by query shape**: short symbol names → `rank_by_query` / `code_localize`. Multi-paragraph natural-language issue → `code_localize_agent`. Both primitive tools accept `seed_strategy`: `substring` (legacy), `embedding` (Voyage cosine), or `hybrid` (default; substring + embedding deduped, falls back to substring if no `VOYAGE_API_KEY`).
+
+The rejected PageRank personalization pilot and its no-regression decision are
+recorded in `bench/accuracy/baselines/2026-08-13-query-anchor-pagerank-pilot.md`.
+Do not reintroduce query-anchor weighting without a new preregistered replay.
 
 #### Measured Loc-Bench accuracy
 

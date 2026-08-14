@@ -88,7 +88,13 @@ RETURN DISTINCT g.name
 
 The graph is stored in SQLite (WAL mode) at `~/.cache/codebase-memory-mcp/`. It persists across sessions — index once, and the graph is available every time Claude Code starts.
 
-A background watcher polls for file changes (mtime + size) and triggers incremental re-indexing. Adaptive polling intervals reduce overhead for inactive projects. Content-hash-based change detection ensures only actually modified files get re-indexed.
+A background watcher polls for file changes (mtime + size) and triggers
+incremental re-indexing. Adaptive polling intervals reduce overhead for
+inactive projects. Content-hash-based change detection re-indexes modified
+files, while stored-path comparison detects deletion-only edits and invalidates
+unchanged callers/importers before removed nodes cascade. The clean-rebuild
+equivalence matrix is recorded in
+[`bench/accuracy/baselines/2026-08-13-incremental-clean-equivalence.md`](bench/accuracy/baselines/2026-08-13-incremental-clean-equivalence.md).
 
 ## Benchmarks
 
@@ -171,7 +177,7 @@ See [BENCHMARK.md](BENCHMARK.md) for the full per-language breakdown with detail
 
 | Tool | Purpose |
 |------|---------|
-| `index_repository` | Index a repo into the graph (incremental, content-hash based) |
+| `index_repository` | Index a repo into the graph (incremental, content-hash/deletion aware); `index_delta` reports full/no-op/incremental plus discovered, changed, deleted, and unchanged file counts |
 | `index_status` | Index stats, source identity, and the requested/effective graph precision tier for a project |
 | `index_health` | Graph coverage report — parse failures, missing edges, stale files |
 | `list_projects` | Show all indexed projects with node/edge counts |
@@ -301,6 +307,13 @@ from 0.175 to 0.200, Acc@10 from 0.350 to 0.400, and MRR@10 from 0.219 to
 0.260, with 12 cases improved and 2 regressed. This is paired iteration
 evidence, not a fresh independent benchmark; conceptual discovery remains
 search-primary when the relevant concept is present only in source text.
+
+A follow-on query-anchor-weighted PageRank hypothesis was tested and rejected
+on the 20 frozen stores still retained from the public run. Acc@1, Acc@3, and
+MRR@10 improved, but Acc@10 regressed from 0.45 to 0.40, violating the
+no-regression gate. Uniform personalization therefore remains; only
+deterministic canonical tie ordering was retained. See
+[`bench/accuracy/baselines/2026-08-13-query-anchor-pagerank-pilot.md`](bench/accuracy/baselines/2026-08-13-query-anchor-pagerank-pilot.md).
 
 These are strong but bounded Go and TypeScript CALLS results plus a bounded
 TypeScript IMPORTS result, not a universal graph-precision claim.
@@ -572,6 +585,14 @@ required; the tool returns a structured `requires_external_analyzer` response
 with a CodeQL handoff instead of returning a reachability path under a taint
 label.
 
+After an operator runs CodeQL, the offline `import-codeql` CLI can convert one
+attested SARIF 2.1.0 path run into immutable `analysis_ref` evidence. The
+importer launches no analyzer and writes no graph state; it binds a clean Git
+identity, SARIF hash, query-attestation hash, database/query-pack digests, and
+validated source coordinates. See
+[`docs/codeql-evidence-import.md`](docs/codeql-evidence-import.md) for the
+receipt contract and exact trust boundary.
+
 ## Troubleshooting
 
 | Problem | Cause | Fix |
@@ -636,6 +657,13 @@ above, and scopes the lint job's audited egress to its two expected installer
 and runtime endpoints. Its paired baseline retains the exact measured source
 and binary identities; the release is separately bound to its merge commit,
 checksums, and build provenance.
+
+Current source after `.11` also contains the operator-only attested CodeQL
+SARIF importer, canonical deterministic PageRank tie ordering, and the
+deletion/re-export incremental-equivalence fixes described above. These source
+changes are not part of the `.11` release until they are merged, tagged, built,
+and installed through the normal release path.
+
 This is an internal package in a private repository. It is not published to the public MCP Registry,
 which does not support private package downloads. The setup scripts therefore
 require an authenticated GitHub CLI session with access to the repository.

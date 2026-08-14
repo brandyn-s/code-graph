@@ -888,7 +888,7 @@ func TestIndexRepositoryFirstIndexReportsCreatedWithCounts(t *testing.T) {
 	if got := indexOutcome(t, resp); got != string(ActionOutcomeCreated) {
 		t.Errorf("first index action_outcome = %q, want %q", got, ActionOutcomeCreated)
 	}
-	assertIndexDelta(t, resp, "full", 2, 2, 0)
+	assertIndexDelta(t, resp, "full", 2, 2, 0, 0)
 
 	// Re-index of the same repo: the project record already exists.
 	resp2 := metadataResponseFromHandler(t, srv.handleIndexRepository, "index_repository", args)
@@ -899,7 +899,7 @@ func TestIndexRepositoryFirstIndexReportsCreatedWithCounts(t *testing.T) {
 	if nodes2 != nodes {
 		t.Errorf("re-index reported nodes=%v, want %v (no-op incremental must re-report full counts)", nodes2, nodes)
 	}
-	assertIndexDelta(t, resp2, "noop", 2, 0, 2)
+	assertIndexDelta(t, resp2, "noop", 2, 0, 0, 2)
 
 	appPath := filepath.Join(repo, "app.py")
 	app, err := os.ReadFile(appPath)
@@ -911,14 +911,22 @@ func TestIndexRepositoryFirstIndexReportsCreatedWithCounts(t *testing.T) {
 		t.Fatalf("mutate fixture: %v", err)
 	}
 	resp3 := metadataResponseFromHandler(t, srv.handleIndexRepository, "index_repository", args)
-	assertIndexDelta(t, resp3, "incremental", 2, 1, 1)
+	assertIndexDelta(t, resp3, "incremental", 2, 1, 0, 1)
+
+	// A deletion with no simultaneous file edit must still select the
+	// incremental path and make the removed-file count observable.
+	if err := os.Remove(filepath.Join(repo, "other.py")); err != nil {
+		t.Fatalf("delete second fixture file: %v", err)
+	}
+	resp4 := metadataResponseFromHandler(t, srv.handleIndexRepository, "index_repository", args)
+	assertIndexDelta(t, resp4, "incremental", 1, 0, 1, 1)
 }
 
 func assertIndexDelta(
 	t *testing.T,
 	resp map[string]any,
 	wantMode string,
-	wantDiscovered, wantChanged, wantUnchanged int,
+	wantDiscovered, wantChanged, wantDeleted, wantUnchanged int,
 ) {
 	t.Helper()
 	delta, ok := resp["index_delta"].(map[string]any)
@@ -931,6 +939,7 @@ func assertIndexDelta(
 	for key, want := range map[string]int{
 		"files_discovered": wantDiscovered,
 		"files_changed":    wantChanged,
+		"files_deleted":    wantDeleted,
 		"files_unchanged":  wantUnchanged,
 	} {
 		got, ok := delta[key].(float64)

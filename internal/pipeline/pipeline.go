@@ -15,6 +15,7 @@ import (
 	"regexp"
 	"runtime"
 	"runtime/debug"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -53,6 +54,7 @@ type IndexDelta struct {
 	Mode            string
 	FilesDiscovered int
 	FilesChanged    int
+	FilesDeleted    int
 	FilesUnchanged  int
 }
 
@@ -536,10 +538,11 @@ func (p *Pipeline) runPasses(files []discover.FileInfo) (bool, error) {
 	}
 
 	// Classify files as changed/unchanged using stored hashes
-	changed, unchanged := p.classifyFiles(files)
+	changed, unchanged, deleted := p.classifyFiles(files)
 	p.LastIndexDelta = IndexDelta{
 		FilesDiscovered: len(files),
 		FilesChanged:    len(changed),
+		FilesDeleted:    len(deleted),
 		FilesUnchanged:  len(unchanged),
 	}
 
@@ -579,17 +582,17 @@ func (p *Pipeline) runPasses(files []discover.FileInfo) (bool, error) {
 		}
 	}
 
-	slog.Info("incremental.classify", "changed", len(changed), "unchanged", len(unchanged), "total", len(files))
+	slog.Info("incremental.classify", "changed", len(changed), "deleted", len(deleted), "unchanged", len(unchanged), "total", len(files))
 
 	// Fast path: nothing changed → skip all heavy passes
-	if len(changed) == 0 {
+	if len(changed) == 0 && len(deleted) == 0 {
 		p.LastIndexDelta.Mode = "noop"
 		slog.Info("incremental.noop", "reason", "no_changes")
 		return false, nil
 	}
 	p.LastIndexDelta.Mode = "incremental"
 
-	if err := p.runIncrementalPasses(files, changed, unchanged); err != nil {
+	if err := p.runIncrementalPasses(files, changed, unchanged, deleted); err != nil {
 		return true, err
 	}
 	_ = p.Store.IncrementIncrementalsSinceFull(p.ProjectName)
@@ -913,18 +916,23 @@ func (p *Pipeline) logEdgeCounts() {
 // runIncrementalPasses re-indexes only changed files + their dependents.
 func (p *Pipeline) runIncrementalPasses(
 	allFiles []discover.FileInfo,
-	changed, unchanged []discover.FileInfo,
+	changed, unchanged, deleted []discover.FileInfo,
 ) error {
 	// Discover dependents while the previous graph is still intact. Deleting
 	// changed-file nodes first also cascades the incoming CALLS/USAGE edges that
 	// identify unchanged callers, making the invalidation set permanently too
 	// small for this run.
-	dependents := p.findDependentFiles(changed, unchanged)
-	callerDependents := p.findCallerOfTargetDependents(changed, unchanged)
+	// Deleted paths remain valid invalidation targets until removeDeletedFiles
+	// cascades their nodes and incoming edges. Including them here is what lets
+	// a pure deletion or file rename re-resolve unchanged importers/callers.
+	invalidationTargets := mergeFiles(changed, deleted)
+	dependents := p.findDependentFiles(invalidationTargets, unchanged)
+	callerDependents := p.findCallerOfTargetDependents(invalidationTargets, unchanged)
 	filesToResolve := mergeFiles(changed, dependents)
 	filesToResolve = mergeFiles(filesToResolve, callerDependents)
 	slog.Info("incremental.resolve",
 		"changed", len(changed),
+		"deleted", len(deleted),
 		"importer_dependents", len(dependents),
 		"caller_of_target_dependents", len(callerDependents),
 		"total_to_resolve", len(filesToResolve),
@@ -1086,15 +1094,28 @@ func (p *Pipeline) runIncrementalPasses(
 	return nil
 }
 
-// classifyFiles splits files into changed and unchanged based on stored hashes.
+// classifyFiles splits files into changed, unchanged, and deleted based on
+// stored hashes. Deleted paths are returned as RelPath-only FileInfo values so
+// dependency discovery can inspect their still-live graph nodes before the
+// incremental writer removes them.
 // Uses stat (mtime+size) as a fast pre-filter: files whose mtime and size match
 // the stored values are assumed unchanged without reading/hashing. Only files
 // with changed stat (or missing from the store) are hashed.
-func (p *Pipeline) classifyFiles(files []discover.FileInfo) (changed, unchanged []discover.FileInfo) {
+func (p *Pipeline) classifyFiles(files []discover.FileInfo) (changed, unchanged, deleted []discover.FileInfo) {
 	storedHashes, err := p.Store.GetFileHashes(p.ProjectName)
 	if err != nil || len(storedHashes) == 0 {
-		return files, nil // no hashes → full index
+		return files, nil, nil // no hashes → full index
 	}
+	currentPaths := make(map[string]struct{}, len(files))
+	for _, f := range files {
+		currentPaths[f.RelPath] = struct{}{}
+	}
+	for relPath := range storedHashes {
+		if _, ok := currentPaths[relPath]; !ok {
+			deleted = append(deleted, discover.FileInfo{RelPath: relPath})
+		}
+	}
+	sort.Slice(deleted, func(i, j int) bool { return deleted[i].RelPath < deleted[j].RelPath })
 
 	// Stage 1: stat pre-filter — separate files into "stat-unchanged" and "needs-hash"
 	var needsHash []discover.FileInfo
@@ -1118,7 +1139,7 @@ func (p *Pipeline) classifyFiles(files []discover.FileInfo) (changed, unchanged 
 	}
 
 	if len(needsHash) == 0 {
-		return changed, unchanged // nothing to hash
+		return changed, unchanged, deleted // nothing to hash
 	}
 
 	// Stage 2: hash only files that need it
@@ -1156,7 +1177,7 @@ func (p *Pipeline) classifyFiles(files []discover.FileInfo) (changed, unchanged 
 			changed = append(changed, f)
 		}
 	}
-	return changed, unchanged
+	return changed, unchanged, deleted
 }
 
 // findCallerOfTargetDependents returns unchanged files containing call
@@ -2813,6 +2834,14 @@ func resolveJSTSRelativeImport(target, importerFile, projectName string) string 
 	resolvedPath := slashpath.Clean(slashpath.Join(slashpath.Dir(filepath.ToSlash(importerFile)), target))
 	if resolvedPath == ".." || strings.HasPrefix(resolvedPath, "../") {
 		return target
+	}
+	// Extensionless `./index` specifiers still refer to the JS/TS index module.
+	// ModuleQN can only apply its index-file canonicalization when it can see a
+	// JS/TS extension, so borrow the importer's extension for this identity-only
+	// conversion. This keeps clean-buffer and incremental-SQLite resolution on
+	// the same canonical folder QN.
+	if slashpath.Ext(resolvedPath) == "" && slashpath.Base(resolvedPath) == "index" {
+		resolvedPath += strings.ToLower(filepath.Ext(importerFile))
 	}
 	return fqn.ModuleQN(projectName, resolvedPath)
 }

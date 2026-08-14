@@ -160,11 +160,33 @@ func RankByQueryWithStrategy(ctx context.Context, st *store.Store, project, quer
 		})
 	}
 
-	sort.Slice(combined, func(i, j int) bool { return combined[i].Score > combined[j].Score })
+	sortRankedNodes(combined)
 	if topK > len(combined) {
 		topK = len(combined)
 	}
 	return combined[:topK], nil
+}
+
+func sortRankedNodes(nodes []RankedNode) {
+	sort.Slice(nodes, func(i, j int) bool {
+		left, right := nodes[i], nodes[j]
+		if left.Score != right.Score {
+			return left.Score > right.Score
+		}
+		if left.FilePath != right.FilePath {
+			return left.FilePath < right.FilePath
+		}
+		if left.QualifiedName != right.QualifiedName {
+			return left.QualifiedName < right.QualifiedName
+		}
+		if left.Label != right.Label {
+			return left.Label < right.Label
+		}
+		if left.Name != right.Name {
+			return left.Name < right.Name
+		}
+		return left.ID < right.ID
+	})
 }
 
 // MatchSeedNodes returns the seed nodes for a query — the subset of

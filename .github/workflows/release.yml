@@ -133,6 +133,9 @@ jobs:
         with:
           name: codebase-memory-mcp-${{ matrix.goos }}-${{ matrix.goarch }}
           path: "*.tar.gz"
+          # The GitHub Release is the durable distribution artifact. These
+          # intermediate files only need to survive attestation and publish.
+          retention-days: 1
 
   build-windows:
     if: github.repository_owner_id != '186206138'
@@ -187,6 +190,7 @@ jobs:
         with:
           name: codebase-memory-mcp-windows-amd64
           path: "*.zip"
+          retention-days: 1
 
   attest:
     if: github.repository_owner_id != '186206138'

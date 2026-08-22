@@ -30,10 +30,11 @@ gofmt -w .
 
 - **Graph storage**: SQLite WAL mode at `~/.cache/codebase-memory-mcp/`. Louvain community detection for clustering.
 - **Parsing**: tree-sitter AST for 27 languages via vendored C grammars (CGO). Go gets enhanced LSP-style type resolution. 38 unused grammars were cut on 2026-06-10 (usage audit: none of the 38 appeared in any redacted repo; the 10 largest grammars were all unused — ~390MB of 770MB vendored source). PowerShell was added in the same change (airbus-cert/tree-sitter-powershell @ d3984418, MIT) — used by 2 redacted repos that previously had no coverage. Restoring a cut language = restore its four files from git history at that commit: `internal/cbm/vendored/grammars/<dir>/`, `internal/cbm/grammar_<name>.c`, `internal/lang/<name>.go`, plus the enum/spec/switch entries in `internal/cbm/cbm.h`, `internal/cbm/lang_specs.c`, `internal/cbm/cbm.go`, and `internal/lang/lang.go`.
-- **Pipeline**: Multi-pass indexing (structure -> definitions -> calls -> HTTP links -> OPA policy -> communities -> tests)
+- **Pipeline**: Multi-stage indexing (discovery/identity -> structure -> definitions/imports/calls/usages -> flush -> optional SCIP -> tests/services/security/policy/history/communities/embeddings). Full, no-op, and dependency-aware incremental paths share the same source-identity fence.
 - **Cypher engine**: Custom lexer/parser/planner/executor. Read-only subset with variable-length paths.
 - **Auto-sync**: Background watcher polls mtime+size, triggers incremental reindex. Stored file hashes also detect deletion-only edits; deleted targets invalidate unchanged callers/importers before cascade removal. Adaptive polling intervals.
 - **Security tools**: `query_security_surfaces` (auth/crypto/input patterns), `query_stig_evidence` (control -> code mapping), `trace_data_flow` (CALLS/READS/WRITES/USAGE reachability; not variable-level taint), plus the operator-only offline `import-codeql` CLI for attested CodeQL SARIF paths
+- **Evidence**: `search_graph` and `get_relationship_evidence` issue immutable source/relationship references bound to repository, revision, generation, resolver, confidence, and optional SCIP artifact. `internal/evidence/proof.go` is an internal assurance-lattice contract, not an MCP tool.
 - **Skills**: 4 embedded skills (exploring, tracing, quality, reference) installed via `codebase-memory-mcp install`
 
 ## Testing

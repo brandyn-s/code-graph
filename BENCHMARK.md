@@ -1,5 +1,14 @@
 # Codebase Memory MCP -- v0.3.0 Language Benchmark
 
+> **Historical benchmark notice (reviewed 2026-08-13):** this file records the
+> v0.3.0 functional-coverage exercise and is not the current language or
+> release scorecard. It includes language adapters later removed from the
+> production registry. The current source supports 27 registered languages;
+> use `internal/lang/` for that exact surface and
+> `bench/accuracy/baselines/` for current, revision-bound relationship and
+> resource measurements. Preserve the results below as historical evidence;
+> do not generalize them to the current implementation.
+
 ## Why This Benchmark Exists
 
 A code knowledge graph is only useful if it accurately represents the codebase it indexes. If function calls are missed, dead code detection gives false positives. If inheritance isn't traced, type hierarchy queries return incomplete results. If indexing fails on certain languages, those parts of the codebase become invisible.

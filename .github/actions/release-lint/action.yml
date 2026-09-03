@@ -5,7 +5,7 @@ inputs:
   baseline:
     description: Reviewed ancestor that bounds inherited lint debt
     required: false
-    default: "832bede03d6118827919fc8727f3c17854047d06"
+    default: "8e145eea43f188e80c7f92aba9a4627fd22b0b35"
   timeout:
     description: golangci-lint timeout
     required: false

@@ -23,7 +23,7 @@ except (AttributeError, OSError):
     pass
 
 REPO = Path(__file__).parent.parent.parent.parent
-OUT = REPO / "bench" / "research" / "arxiv-bench" / "_generated_tool_schemas.py"
+OUT = REPO / "bench" / "research" / "agent-effectiveness" / "_generated_tool_schemas.py"
 EXPORT_COMMAND = ("go", "run", "./cmd/export-tool-schemas")
 
 HEADER = '''"""Auto-generated tool schemas. DO NOT EDIT BY HAND.

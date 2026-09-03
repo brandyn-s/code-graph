@@ -79,7 +79,7 @@ func cacheDir() (string, error) {
 		if absErr != nil {
 			return "", fmt.Errorf("resolve CODE_GRAPH_CACHE_DIR: %w", absErr)
 		}
-		if err := os.MkdirAll(cleaned, 0o750); err != nil {
+		if err := os.MkdirAll(cleaned, 0o750); err != nil { //nolint:gosec // G703: operator-chosen cache directory from the process environment, cleaned above; not user-controlled request input.
 			return "", fmt.Errorf("mkdir cache: %w", err)
 		}
 		return cleaned, nil

@@ -12,7 +12,7 @@ Usage:
   python correlate_cbm_audit_to_db.py \\
       --audit audit.jsonl \\
       --project-prefix PROJECT \\
-      --db ~/.cache/codebase-memory-mcp/PROJECT.db
+      --db ~/.cache/code-graph/PROJECT.db
 
 Originally written for Phase A''' of the ABC future-arcs roadmap
 (2026-05-14). Finding on assetman: 4780 CBMCalls extracted, 548 edges

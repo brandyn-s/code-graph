@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/discover"
-	"github.com/DeusData/codebase-memory-mcp/internal/store"
+	"github.com/brandyn-s/code-graph/internal/discover"
+	"github.com/brandyn-s/code-graph/internal/store"
 )
 
 func TestPassUsagesCreatesEdges(t *testing.T) {

@@ -3,9 +3,9 @@ package tools
 import (
 	"fmt"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/evidence"
-	"github.com/DeusData/codebase-memory-mcp/internal/indexidentity"
-	"github.com/DeusData/codebase-memory-mcp/internal/store"
+	"github.com/brandyn-s/code-graph/internal/evidence"
+	"github.com/brandyn-s/code-graph/internal/indexidentity"
+	"github.com/brandyn-s/code-graph/internal/store"
 )
 
 func copyStringAnyMap(source map[string]any) map[string]any {

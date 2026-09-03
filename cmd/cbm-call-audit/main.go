@@ -1,4 +1,4 @@
-// cbm-call-audit — Phase A''' diagnostic for the C extractor's CALLS
+// cbm-call-audit — Phase A”' diagnostic for the C extractor's CALLS
 // under-emission on Rust function bodies (2026-05-14 ABC roadmap).
 //
 // Reads one or more Rust source files, runs cbm.ExtractFile, and reports
@@ -39,8 +39,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/cbm"
-	"github.com/DeusData/codebase-memory-mcp/internal/lang"
+	"github.com/brandyn-s/code-graph/internal/cbm"
+	"github.com/brandyn-s/code-graph/internal/lang"
 )
 
 type funcRow struct {
@@ -50,7 +50,7 @@ type funcRow struct {
 	CallsPerLine float64 `json:"calls_per_line"`
 }
 
-// callRow is emitted per CBMCall when --detail=true. Phase A''''
+// callRow is emitted per CBMCall when --detail=true. Phase A””
 // (2026-05-14) uses this to classify each extracted call as
 // emitted (in DB) / unemitted-external / unemitted-internal-suspect.
 type callRow struct {

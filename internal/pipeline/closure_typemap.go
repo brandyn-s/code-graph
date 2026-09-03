@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/cbm"
+	"github.com/brandyn-s/code-graph/internal/cbm"
 )
 
 // augmentRustClosureTypeMap scans a Rust source file for closure patterns

@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/indexidentity"
+	"github.com/brandyn-s/code-graph/internal/indexidentity"
 )
 
 func createPreIdentityDatabase(t *testing.T) string {

@@ -15,7 +15,7 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/selfupdate"
+	"github.com/brandyn-s/code-graph/internal/selfupdate"
 )
 
 // newCommand wraps exec.Command for testability.
@@ -34,7 +34,7 @@ func runUpdate(args []string) int {
 	}
 
 	currentVersion := strings.TrimPrefix(strings.TrimSuffix(version, "-dev"), "v")
-	fmt.Printf("\ncodebase-memory-mcp %s — checking for updates...\n", version)
+	fmt.Printf("\ncode-graph %s — checking for updates...\n", version)
 
 	if runtime.GOOS == "windows" {
 		fmt.Println("Self-update is not supported on Windows.")
@@ -202,7 +202,7 @@ func extractBinaryFromTarGz(data []byte) ([]byte, error) {
 		if err != nil {
 			return nil, fmt.Errorf("tar: %w", err)
 		}
-		if hdr.Typeflag == tar.TypeReg && strings.HasPrefix(filepath.Base(hdr.Name), "codebase-memory-mcp") {
+		if hdr.Typeflag == tar.TypeReg && strings.HasPrefix(filepath.Base(hdr.Name), "code-graph") {
 			if hdr.Size > maxBinarySize {
 				return nil, fmt.Errorf("binary size %d exceeds maximum %d bytes", hdr.Size, maxBinarySize)
 			}
@@ -227,7 +227,7 @@ func verifyBinary(path string) error {
 		return fmt.Errorf("--version failed: %w", err)
 	}
 	output := strings.TrimSpace(string(out))
-	if !strings.Contains(output, "codebase-memory-mcp") {
+	if !strings.Contains(output, "code-graph") {
 		return fmt.Errorf("unexpected output: %s", output)
 	}
 	return nil

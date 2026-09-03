@@ -1,0 +1,23 @@
+name: Feature request
+description: A new tool, language, relationship type, or integration
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What question about a codebase can you not answer today, or what workflow is awkward?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+      description: Tool, flag, or behavior you have in mind. If it is a language or edge type, name the language constructs involved.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Including other tools (an LSP, Sourcegraph, CodeQL, code-search) and why they do not fit.

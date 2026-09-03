@@ -29,6 +29,8 @@ env:
   PIN: bench/accuracy/baselines/data/2026-06-12-matched-depth-n200/locbench-n200-pin.json
   LOCBENCH_REVISION: c44cf3b74e07ca642cec841b471a9939907c12a7
   LOCBENCH_SHA256: 8df0833c2c1276c5837aab923d489ab97d7654529abe759d0f59242c4978a662
+  # TODO(public release): re-pin to the first brandyn-s/code-search release wheel
+  # (dist name code-search-mcp, file code_search_mcp-<version>-py3-none-any.whl).
   CODE_SEARCH_WHEEL: redacted_code_search-0.2.1-py3-none-any.whl
   CODE_SEARCH_SHA256: 567d4caabdd3b5446bcaa789afc7104fb8cce142ff69d7fc8f1294398532e7e9
 
@@ -256,7 +258,7 @@ jobs:
 
       - name: Build graph binaries
         run: |
-          CGO_ENABLED=1 go build -o bin/codebase-memory-mcp ./cmd/codebase-memory-mcp/
+          CGO_ENABLED=1 go build -o bin/code-graph ./cmd/code-graph/
           CGO_ENABLED=1 go build -o bench/research/eval_rank_localize/eval ./bench/research/eval_rank_localize/
 
       - name: Write exact repository pin

@@ -50,7 +50,7 @@ type ReleaseFunc func()
 // Each project gets its own .db file in the cache directory.
 // Idle stores are evicted after idleTimeout (configurable) to free memory.
 type StoreRouter struct {
-	dir         string                 // ~/.cache/codebase-memory-mcp/
+	dir         string                 // ~/.cache/code-graph/
 	entries     map[string]*storeEntry // project name → entry (lazy)
 	mu          sync.Mutex
 	idleTimeout time.Duration

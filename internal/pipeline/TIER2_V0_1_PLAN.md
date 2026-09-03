@@ -364,7 +364,7 @@ After Tasks 1+2 land, re-run:
 
 ```bash
 # 1. Build v0.1 binary
-CGO_ENABLED=1 go build -o /tmp/cmm-tier2-v01.exe ./cmd/codebase-memory-mcp/
+CGO_ENABLED=1 go build -o /tmp/cmm-tier2-v01.exe ./cmd/code-graph/
 
 # 2. Force-reindex PSM (binary version delta isn't detected by
 #    incremental hash check — same gotcha as the v0.3 flow)

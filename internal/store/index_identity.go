@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/indexidentity"
+	"github.com/brandyn-s/code-graph/internal/indexidentity"
 )
 
 // SetIndexIdentity persists a successfully captured checkout identity.

@@ -1,7 +1,7 @@
 """Verify the pandas StringMethods._validate is now extracted after PR #94."""
 import sqlite3
 
-DB = "file:C:/Users/user/.cache/codebase-memory-mcp/c-tmp-locbench-batch-pandas-dev__pandas-59900.db?mode=ro"
+DB = "file:C:/Users/user/.cache/code-graph/c-tmp-locbench-batch-pandas-dev__pandas-59900.db?mode=ro"
 
 con = sqlite3.connect(DB, uri=True)
 cur = con.cursor()

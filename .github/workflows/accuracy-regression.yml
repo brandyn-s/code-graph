@@ -73,7 +73,7 @@ jobs:
 
       - name: Build code-graph
         run: |
-          CGO_ENABLED=1 go build -o bin/codebase-memory-mcp ./cmd/codebase-memory-mcp/
+          CGO_ENABLED=1 go build -o bin/code-graph ./cmd/code-graph/
 
       - name: Run CBM↔resolver QN-format contract tests (Family A — incident #2 coverage)
         run: |
@@ -226,7 +226,7 @@ jobs:
           # a reasonable range vs the frozen baseline. Store/Cypher are
           # well-tested, so large drops indicate regression.
           mkdir -p /tmp/cg-cache
-          HOME=/tmp/cg-home ./bin/codebase-memory-mcp cli index_repository \
+          HOME=/tmp/cg-home ./bin/code-graph cli index_repository \
             '{"repo_path":"internal/store","skip_report":true,"force":true}' | tail -5
           # Count CALLS edges in the indexed project.
           PROJECT="tmp-cg-home--root-work-code-graph-code-graph-internal-store"

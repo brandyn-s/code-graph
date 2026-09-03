@@ -23,8 +23,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/pipeline"
-	"github.com/DeusData/codebase-memory-mcp/internal/store"
+	"github.com/brandyn-s/code-graph/internal/pipeline"
+	"github.com/brandyn-s/code-graph/internal/store"
 )
 
 // invariantFixtureMarker is a distinctive token embedded in the fixture

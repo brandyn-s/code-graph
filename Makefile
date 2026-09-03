@@ -1,12 +1,12 @@
 .PHONY: build release test lint clean install check bench-memory bench-negative bench-negative-baseline bench-post-battery bench-rust-reqwest bench-react-fetch bench-handler-resolution
 
-BINARY=codebase-memory-mcp
-MODULE=github.com/DeusData/codebase-memory-mcp
+BINARY=code-graph
+MODULE=github.com/brandyn-s/code-graph
 
 # Stamp git describe into the binary so callers can audit which fixes
 # are loaded. Falls back to "dev" when not in a git checkout (e.g.,
 # building from a downloaded tarball). The version stamp is consumed
-# by `main.version` (cmd/codebase-memory-mcp/main.go) and surfaced via
+# by `main.version` (cmd/code-graph/main.go) and surfaced via
 # the MCP server's startup banner + `--version` flag.
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 
@@ -29,7 +29,7 @@ else
 endif
 
 build:
-	CGO_ENABLED=1 go build $(BUILD_LDFLAGS) -o bin/$(BINARY)$(BINARY_EXT) ./cmd/codebase-memory-mcp/
+	CGO_ENABLED=1 go build $(BUILD_LDFLAGS) -o bin/$(BINARY)$(BINARY_EXT) ./cmd/code-graph/
 
 # Release build: strip the symbol table and DWARF (-s -w) and remove local
 # path prefixes (-trimpath). Saves ~10MB (151 -> 141MB measured 2026-06-10);
@@ -38,7 +38,7 @@ build:
 # size lever. Keep `make build` for development (stack traces keep symbols
 # either way in Go, but debuggers want the DWARF from the default build).
 release:
-	CGO_ENABLED=1 go build -trimpath $(RELEASE_LDFLAGS) -o bin/$(BINARY)$(BINARY_EXT) ./cmd/codebase-memory-mcp/
+	CGO_ENABLED=1 go build -trimpath $(RELEASE_LDFLAGS) -o bin/$(BINARY)$(BINARY_EXT) ./cmd/code-graph/
 
 test:
 	go test ./... -v
@@ -52,7 +52,7 @@ clean:
 	rm -rf bin/
 
 install:
-	go install ./cmd/codebase-memory-mcp/
+	go install ./cmd/code-graph/
 
 bench-memory:  ## Run memory stability benchmark
 	go test -run TestMemoryStability -v -count=1 -timeout=5m ./internal/pipeline/

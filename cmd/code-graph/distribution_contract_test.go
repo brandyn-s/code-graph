@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	redactedRepository = "brandyn-s/code-graph"
+	releaseRepository = "brandyn-s/code-graph"
 )
 
 func repositoryRoot(t *testing.T) string {
@@ -33,16 +33,59 @@ func readRepositoryFile(t *testing.T, path string) []byte {
 	return data
 }
 
-func TestInternalDistributionUsesAuthenticatedGitHubCLI(t *testing.T) {
+// TestPublicInstallerContract pins the dependency-free public install path:
+// the README leads with the curl one-liner and `go install`, and install.sh
+// verifies the archive against checksums.txt without requiring the GitHub CLI.
+func TestPublicInstallerContract(t *testing.T) {
+	readme := string(readRepositoryFile(t, "README.md"))
+	for _, want := range []string{
+		"curl -fsSL https://raw.githubusercontent.com/" + releaseRepository + "/main/install.sh | bash",
+		"go install github.com/" + releaseRepository + "/cmd/code-graph@latest",
+		"claude mcp add code-graph",
+	} {
+		if !strings.Contains(readme, want) {
+			t.Errorf("README.md must document the public install path %q", want)
+		}
+	}
+	for _, unwanted := range []string{"private repository", "not published to the public MCP Registry", "codebase-memory-mcp-"} {
+		if strings.Contains(readme, unwanted) {
+			t.Errorf("README.md must not describe internal distribution: %q", unwanted)
+		}
+	}
+
+	installer := string(readRepositoryFile(t, "install.sh"))
+	for _, want := range []string{
+		`REPO="${CODE_GRAPH_REPO:-` + releaseRepository + `}"`,
+		"checksums.txt",
+		"sha256sum",
+		"shasum -a 256",
+		"gh attestation verify",
+		"Build provenance not verified",
+	} {
+		if !strings.Contains(installer, want) {
+			t.Errorf("install.sh must contain %q", want)
+		}
+	}
+	for _, unwanted := range []string{"gh release download", "gh auth login"} {
+		if strings.Contains(installer, unwanted) {
+			t.Errorf("install.sh must not require the GitHub CLI: %q", unwanted)
+		}
+	}
+	checksumAt := strings.Index(installer, "Checksum mismatch")
+	extractAt := strings.Index(installer, "tar -xzf")
+	if checksumAt < 0 || extractAt < 0 || checksumAt > extractAt {
+		t.Errorf("install.sh must verify the checksum before extracting (checksum=%d extract=%d)", checksumAt, extractAt)
+	}
+}
+
+// TestVerifiedInstallersUseAuthenticatedGitHubCLI pins the fully verified
+// install path (scripts/setup.sh, scripts/setup-windows.ps1): release
+// membership and provenance are checked through an authenticated GitHub CLI
+// and no anonymous download flow is used.
+func TestVerifiedInstallersUseAuthenticatedGitHubCLI(t *testing.T) {
 	manifestPath := filepath.Join(repositoryRoot(t), "server.json")
 	if _, err := os.Stat(manifestPath); !os.IsNotExist(err) {
-		t.Errorf("server.json must not exist for a private package; stat error = %v", err)
-	}
-	readme := string(readRepositoryFile(t, "README.md"))
-	for _, want := range []string{"private repository", "not published to the public MCP Registry"} {
-		if !strings.Contains(readme, want) {
-			t.Errorf("README.md must document internal distribution with %q", want)
-		}
+		t.Errorf("server.json is not maintained in this repository; stat error = %v", err)
 	}
 
 	tests := []struct {
@@ -51,11 +94,11 @@ func TestInternalDistributionUsesAuthenticatedGitHubCLI(t *testing.T) {
 	}{
 		{
 			path:       "scripts/setup.sh",
-			repository: `REPO="` + redactedRepository + `"`,
+			repository: `REPO="` + releaseRepository + `"`,
 		},
 		{
 			path:       "scripts/setup-windows.ps1",
-			repository: `$Repo = "` + redactedRepository + `"`,
+			repository: `$Repo = "` + releaseRepository + `"`,
 		},
 	}
 	required := []string{
@@ -80,7 +123,7 @@ func TestInternalDistributionUsesAuthenticatedGitHubCLI(t *testing.T) {
 		t.Run(tt.path, func(t *testing.T) {
 			content := string(readRepositoryFile(t, tt.path))
 			if !strings.Contains(content, tt.repository) {
-				t.Errorf("%s must install from %s", tt.path, redactedRepository)
+				t.Errorf("%s must install from %s", tt.path, releaseRepository)
 			}
 			for _, want := range required {
 				if !strings.Contains(content, want) {
@@ -96,14 +139,14 @@ func TestInternalDistributionUsesAuthenticatedGitHubCLI(t *testing.T) {
 	}
 }
 
-func TestUnixInstallerHelpDisclosesPrivateAuthentication(t *testing.T) {
+func TestUnixInstallerHelpDisclosesAuthentication(t *testing.T) {
 	script := filepath.Join(repositoryRoot(t), "scripts", "setup.sh")
 	output, err := exec.CommandContext(t.Context(), "bash", script, "--help").CombinedOutput()
 	if err != nil {
 		t.Fatalf("setup.sh --help: %v\n%s", err, output)
 	}
 	if !strings.Contains(string(output), "authenticated GitHub CLI") {
-		t.Errorf("setup.sh --help must disclose private-repository authentication:\n%s", output)
+		t.Errorf("setup.sh --help must disclose that it needs an authenticated GitHub CLI:\n%s", output)
 	}
 }
 
@@ -115,8 +158,6 @@ func TestInstallersVerifyArchiveBeforeExtraction(t *testing.T) {
 		releaseVerify    string
 		provenanceVerify string
 		extract          string
-		historicalTag    string
-		historicalNotice string
 	}{
 		{
 			name:             "unix",
@@ -125,8 +166,6 @@ func TestInstallersVerifyArchiveBeforeExtraction(t *testing.T) {
 			releaseVerify:    `gh release verify-asset "$tag" "$archive_path"`,
 			provenanceVerify: `gh attestation verify "$archive_path"`,
 			extract:          `tar -xzf "$archive_path"`,
-			historicalTag:    `HISTORICAL_NO_PROVENANCE_TAG="v0.7.0-redacted.2"`,
-			historicalNotice: "has no build provenance; immutable release membership verified",
 		},
 		{
 			name:             "windows",
@@ -135,8 +174,6 @@ func TestInstallersVerifyArchiveBeforeExtraction(t *testing.T) {
 			releaseVerify:    `gh release verify-asset $tag $tmpZip`,
 			provenanceVerify: `gh attestation verify $tmpZip`,
 			extract:          `Expand-Archive -Path $tmpZip`,
-			historicalTag:    `$HistoricalNoProvenanceTag = "v0.7.0-redacted.2"`,
-			historicalNotice: "has no build provenance; immutable release membership verified",
 		},
 	}
 
@@ -148,8 +185,6 @@ func TestInstallersVerifyArchiveBeforeExtraction(t *testing.T) {
 				tt.releaseVerify,
 				tt.provenanceVerify,
 				tt.extract,
-				tt.historicalTag,
-				tt.historicalNotice,
 				"https://slsa.dev/provenance/v1",
 			} {
 				if !strings.Contains(content, required) {
@@ -230,7 +265,7 @@ func TestUnixInstallerMigratesLegacySourceRemote(t *testing.T) {
 			repo := t.TempDir()
 			for _, args := range [][]string{
 				{"init", repo},
-				{"-C", repo, "remote", "add", "origin", "https://github.com/DeusData/codebase-memory-mcp.git"},
+				{"-C", repo, "remote", "add", "origin", "https://github.com/brandyn-s/code-graph.git"},
 			} {
 				output, err := exec.CommandContext(t.Context(), "git", args...).CombinedOutput()
 				if err != nil {

@@ -117,18 +117,18 @@ jobs:
           CLEAN_VERSION="${VERSION#v}"
           CGO_ENABLED=1 go build \
             -ldflags "-X main.version=$CLEAN_VERSION" \
-            -o codebase-memory-mcp \
-            ./cmd/codebase-memory-mcp/
+            -o code-graph \
+            ./cmd/code-graph/
 
       - name: Smoke test
-        run: bash scripts/smoke-test.sh ./codebase-memory-mcp
+        run: bash scripts/smoke-test.sh ./code-graph
 
       - name: Create archive
-        run: tar -czf codebase-memory-mcp-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz codebase-memory-mcp
+        run: tar -czf code-graph-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz code-graph
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: codebase-memory-mcp-${{ matrix.goos }}-${{ matrix.goarch }}
+          name: code-graph-${{ matrix.goos }}-${{ matrix.goarch }}
           path: "*.tar.gz"
           # The GitHub Release is the durable distribution artifact. These
           # intermediate files only need to survive attestation and publish.
@@ -171,20 +171,20 @@ jobs:
           CLEAN_VERSION="${VERSION#v}"
           CGO_ENABLED=1 CC=gcc go build \
             -ldflags "-X main.version=$CLEAN_VERSION -extldflags '-static'" \
-            -o codebase-memory-mcp.exe \
-            ./cmd/codebase-memory-mcp/
+            -o code-graph.exe \
+            ./cmd/code-graph/
 
       - name: Smoke test
         shell: msys2 {0}
-        run: bash scripts/smoke-test.sh ./codebase-memory-mcp.exe
+        run: bash scripts/smoke-test.sh ./code-graph.exe
 
       - name: Create archive
         shell: pwsh
-        run: Compress-Archive -Path codebase-memory-mcp.exe -DestinationPath codebase-memory-mcp-windows-amd64.zip
+        run: Compress-Archive -Path code-graph.exe -DestinationPath code-graph-windows-amd64.zip
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: codebase-memory-mcp-windows-amd64
+          name: code-graph-windows-amd64
           path: "*.zip"
           retention-days: 1
 

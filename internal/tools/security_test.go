@@ -3,7 +3,7 @@ package tools
 import (
 	"testing"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/store"
+	"github.com/brandyn-s/code-graph/internal/store"
 )
 
 // --- Pure function tests (no store needed) ---

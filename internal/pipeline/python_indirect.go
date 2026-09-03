@@ -19,7 +19,7 @@
 package pipeline
 
 import (
-	"github.com/DeusData/codebase-memory-mcp/internal/store"
+	"github.com/brandyn-s/code-graph/internal/store"
 )
 
 // IndirectCallEdge is a candidate INDIRECT_CALLS edge surfaced by the
@@ -39,9 +39,13 @@ type IndirectCallEdge struct {
 //
 // TODO(v0.1): walk the AST for `Call(Attribute(Name(executor), "submit"))`.
 // TODO(v0.1): verify `executor` is bound to a `ThreadPoolExecutor` /
-//             `ProcessPoolExecutor` via local scope assignment lookup.
+//
+//	`ProcessPoolExecutor` via local scope assignment lookup.
+//
 // TODO(v0.1): resolve the first arg (a Name node) to a def in the same
-//             module via the existing fqn.Compute infrastructure.
+//
+//	module via the existing fqn.Compute infrastructure.
+//
 // TODO(v0.1): emit one IndirectCallEdge per resolved dispatch site.
 //
 // Returns: empty slice in v0.1 stub. Test
@@ -63,10 +67,13 @@ func AnalyzePythonIndirectCalls(filePath string, source []byte) []IndirectCallEd
 // TODO(v0.1): wire into Pipeline.runPostFlushPasses or runSemanticEdgePasses.
 // TODO(v0.1): for each Python file, call AnalyzePythonIndirectCalls.
 // TODO(v0.1): for each returned edge, look up source_id and target_id via
-//             store.FindNodeByQN, then store.InsertEdge with type='INDIRECT_CALLS'.
+//
+//	store.FindNodeByQN, then store.InsertEdge with type='INDIRECT_CALLS'.
+//
 // TODO(v0.1): increment the existing unresolved_call_count diagnostic appropriately
-//             (now that some of those calls ARE resolved as INDIRECT_CALLS,
-//             they should not double-count toward speculative band).
+//
+//	(now that some of those calls ARE resolved as INDIRECT_CALLS,
+//	they should not double-count toward speculative band).
 //
 // Wiring note: the existing INDIRECT_CALLS edge type is in
 // internal/store/edges.go; the schema is ready. Only the pass is missing.

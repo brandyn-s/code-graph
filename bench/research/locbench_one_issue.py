@@ -16,7 +16,7 @@ from pathlib import Path
 REPO_ROOT = Path(r"C:/Users/user/Documents/GitHub/code-graph")
 PARQUET = REPO_ROOT / "bench/research/locbench.parquet"
 EVAL_BIN = REPO_ROOT / "bench/research/eval_rank_localize/eval.exe"
-PIP_DB = Path(r"C:/Users/user/.cache/codebase-memory-mcp/c-Users-user-tmp-pip-locbench.db")
+PIP_DB = Path(r"C:/Users/user/.cache/code-graph/c-Users-user-tmp-pip-locbench.db")
 
 
 def main() -> int:

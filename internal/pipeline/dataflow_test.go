@@ -3,8 +3,8 @@ package pipeline
 import (
 	"testing"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/cbm"
-	"github.com/DeusData/codebase-memory-mcp/internal/store"
+	"github.com/brandyn-s/code-graph/internal/cbm"
+	"github.com/brandyn-s/code-graph/internal/store"
 )
 
 func TestPassDataflowCreatesParameterNodes(t *testing.T) {

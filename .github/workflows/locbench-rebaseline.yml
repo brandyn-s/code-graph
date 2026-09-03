@@ -56,7 +56,7 @@ jobs:
 
       - name: Build binaries (harness hard-codes .exe names)
         run: |
-          CGO_ENABLED=1 go build -o bin/codebase-memory-mcp.exe ./cmd/codebase-memory-mcp/
+          CGO_ENABLED=1 go build -o bin/code-graph.exe ./cmd/code-graph/
           CGO_ENABLED=1 go build -o bench/research/eval_rank_localize/eval.exe ./bench/research/eval_rank_localize/
 
       - name: Download Loc-Bench parquet

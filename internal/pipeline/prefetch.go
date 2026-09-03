@@ -7,7 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/discover"
+	"github.com/brandyn-s/code-graph/internal/discover"
 )
 
 // prefetcher warms the OS page cache ahead of worker consumption.

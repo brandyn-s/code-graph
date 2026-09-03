@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/store"
+	"github.com/brandyn-s/code-graph/internal/store"
 )
 
 // GraphBuffer holds all nodes and edges in memory during the buffered indexing phase.

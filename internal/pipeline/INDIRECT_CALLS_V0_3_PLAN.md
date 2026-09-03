@@ -218,7 +218,7 @@ After Steps 1-4 land, run the runner from the harness repo:
 
 ```bash
 # Rebuild v0.3 binary
-CGO_ENABLED=1 go build -o /tmp/cmm-v0.3.exe ./cmd/codebase-memory-mcp/
+CGO_ENABLED=1 go build -o /tmp/cmm-v0.3.exe ./cmd/code-graph/
 
 # In ../claude-knowledge-base
 python3 harness/runners/run_code_graph_trace.py \

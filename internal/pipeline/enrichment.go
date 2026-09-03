@@ -3,7 +3,7 @@ package pipeline
 import (
 	"strings"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/store"
+	"github.com/brandyn-s/code-graph/internal/store"
 )
 
 // buildSymbolSummary creates a compact symbol list for File node enrichment.

@@ -26,7 +26,7 @@
 // Usage:
 //
 //	go run ./bench/research/mcp_latency_baseline \
-//	    -project codebase-memory-mcp \
+//	    -project code-graph \
 //	    -iterations 50 \
 //	    [-include-llm] \
 //	    [-output bench/research/baselines/2026-05-06-mcp-latency.json]
@@ -50,8 +50,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/store"
-	"github.com/DeusData/codebase-memory-mcp/internal/tools"
+	"github.com/brandyn-s/code-graph/internal/store"
+	"github.com/brandyn-s/code-graph/internal/tools"
 )
 
 // probe defines a single tool to measure.
@@ -341,8 +341,8 @@ func percentile(sorted []int64, q float64) int64 {
 }
 
 func main() {
-	project := flag.String("project", "codebase-memory-mcp", "project to query against (must be already indexed)")
-	storageDir := flag.String("storage", "", "storage directory (default: $HOME/.cache/codebase-memory-mcp)")
+	project := flag.String("project", "code-graph", "project to query against (must be already indexed)")
+	storageDir := flag.String("storage", "", "storage directory (default: $HOME/.cache/code-graph)")
 	iterations := flag.Int("iterations", 50, "iterations per tool (LLM probes use a smaller fixed value)")
 	output := flag.String("output", "", "output JSON path (default: bench/research/baselines/<date>-mcp-latency.json)")
 	includeLLM := flag.Bool("include-llm", false, "include LLM-using tools (e.g. code_localize_agent ~$0.05/call)")
@@ -350,7 +350,7 @@ func main() {
 
 	if *storageDir == "" {
 		home, _ := os.UserHomeDir()
-		*storageDir = filepath.Join(home, ".cache", "codebase-memory-mcp")
+		*storageDir = filepath.Join(home, ".cache", "code-graph")
 	}
 
 	// Verify storage exists.

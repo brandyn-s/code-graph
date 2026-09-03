@@ -8,7 +8,7 @@ import (
 // TestReleaseURLPointsAtFork pins the update-check endpoint to the redacted
 // fork. An upstream (DeusData) URL is a footgun: upstream's 0.8.x tags
 // compare newer than 0.7.0-redacted.x, so the notice would tell operators to
-// run `codebase-memory-mcp update`, replacing the fork binary with an
+// run `code-graph update`, replacing the fork binary with an
 // upstream build that lacks every redacted addition.
 func TestReleaseURLPointsAtFork(t *testing.T) {
 	if !strings.Contains(releaseURL, "brandyn-s/code-graph") {

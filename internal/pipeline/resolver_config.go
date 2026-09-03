@@ -3,7 +3,7 @@ package pipeline
 import (
 	"os"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/lang"
+	"github.com/brandyn-s/code-graph/internal/lang"
 )
 
 // LanguageResolverConfig holds the per-language gates the resolver
@@ -20,7 +20,7 @@ import (
 //
 // Backward-compatibility contract: the four env vars listed below
 // remain the public configuration API. Operator runbooks, CI
-// configs, and the Phase A''''-2 / E playbooks continue to work
+// configs, and the Phase A””-2 / E playbooks continue to work
 // unchanged. Internal call sites just stop reading os.Getenv
 // inline.
 type LanguageResolverConfig struct {

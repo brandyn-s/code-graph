@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/store"
+	"github.com/brandyn-s/code-graph/internal/store"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -30,7 +30,7 @@ func newAdversarialTestServer(t *testing.T) *Server {
 // (b) doesn't return success on garbage input, and (c) gracefully surfaces
 // the error via IsError or an error-prefixed text response.
 //
-// Mirrors the 23-payload audit suite documented in upstream codebase-memory-mcp
+// Mirrors the 23-payload audit suite documented in upstream code-graph
 // arXiv:2603.27277 Section 3.8 (8-Layer CI Audit Suite, MCP robustness testing).
 //
 // Categories covered:

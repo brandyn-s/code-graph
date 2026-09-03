@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/selfupdate"
+	"github.com/brandyn-s/code-graph/internal/selfupdate"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -25,6 +25,8 @@ func TestCompareVersions(t *testing.T) {
 		{"0.0.1", "0.0.2", -1},
 		{"0.7.1-redacted.1", "0.7.0-redacted.9", 1},
 		{"0.7.0-redacted.10", "0.7.0-redacted.2", 1},
+		{"0.9.0", "0.8.0-redacted.11", 1},
+		{"0.8.0", "0.8.0-redacted.11", 1},
 	}
 	for _, tt := range tests {
 		t.Run(fmt.Sprintf("%s_vs_%s", tt.a, tt.b), func(t *testing.T) {
@@ -92,7 +94,7 @@ func TestCheckForUpdate_NewerAvailable(t *testing.T) {
 	if !strings.Contains(notice, "v99.0.0") {
 		t.Fatalf("notice should mention v99.0.0, got: %s", notice)
 	}
-	if !strings.Contains(notice, "codebase-memory-mcp update") {
+	if !strings.Contains(notice, "code-graph update") {
 		t.Fatalf("notice should contain update command, got: %s", notice)
 	}
 }

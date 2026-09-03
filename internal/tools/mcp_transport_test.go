@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/store"
+	"github.com/brandyn-s/code-graph/internal/store"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -17,7 +17,7 @@ import (
 // real tool response even when an update notice is prepended.
 //
 // Companion to:
-//   - cmd/codebase-memory-mcp/main.go CLI-extraction fix (banner-skip)
+//   - cmd/code-graph/main.go CLI-extraction fix (banner-skip)
 //   - bench/research/agent-effectiveness/ category 1 questions
 //
 // The bug we shipped 2026-05-12: CLI extraction read `result.Content[0]` and
@@ -37,7 +37,7 @@ func TestMCPTransport_ContentExtraction(t *testing.T) {
 	// Force an update notice into the server state. The notice is set
 	// by checkForUpdate() when a newer release is found; we simulate
 	// that condition here without needing network.
-	s.updateNotice.Store("⚡ Update available: vtest → v0.6.1 — run: codebase-memory-mcp update")
+	s.updateNotice.Store("⚡ Update available: vtest → v0.6.1 — run: code-graph update")
 
 	// Use search_graph: it calls addUpdateNotice on its success path and
 	// always returns at least 1 JSON Content block when a project is
@@ -249,7 +249,7 @@ func TestMCPTransport_BannerPlusRealResponse_OnAllNoticeCallers(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			s := newServerWithSeededProject(t)
-			s.updateNotice.Store("⚡ Update available: vtest → v0.6.1 — run: codebase-memory-mcp update")
+			s.updateNotice.Store("⚡ Update available: vtest → v0.6.1 — run: code-graph update")
 			req := &mcp.CallToolRequest{
 				Params: &mcp.CallToolParamsRaw{
 					Name:      tc.name,

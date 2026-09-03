@@ -10,7 +10,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/cbm"
+	"github.com/brandyn-s/code-graph/internal/cbm"
 )
 
 // goDepCache caches parsed third-party module definitions.

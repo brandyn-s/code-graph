@@ -14,18 +14,18 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 HELPER = REPOSITORY_ROOT / "scripts" / "release_workflow.sh"
 RELEASE_VERSION = REPOSITORY_ROOT / "scripts" / "release_version.py"
 
-VERSION = "v0.8.0-redacted.1"
-LATEST_VERSION = "v0.7.0-redacted.2"
+VERSION = "v0.9.0"
+LATEST_VERSION = "v0.8.0-redacted.11"
 GITHUB_SHA = "a" * 40
 OTHER_SHA = "b" * 40
 GITHUB_REPOSITORY = "brandyn-s/code-graph"
 
 EXPECTED_ASSETS = (
-    "codebase-memory-mcp-linux-amd64.tar.gz",
-    "codebase-memory-mcp-linux-arm64.tar.gz",
-    "codebase-memory-mcp-darwin-amd64.tar.gz",
-    "codebase-memory-mcp-darwin-arm64.tar.gz",
-    "codebase-memory-mcp-windows-amd64.zip",
+    "code-graph-linux-amd64.tar.gz",
+    "code-graph-linux-arm64.tar.gz",
+    "code-graph-darwin-amd64.tar.gz",
+    "code-graph-darwin-arm64.tar.gz",
+    "code-graph-windows-amd64.zip",
     "checksums.txt",
 )
 
@@ -906,7 +906,9 @@ class ReleaseWorkflowAcceptanceTests(unittest.TestCase):
         self.assert_no_dangerous_operations()
 
     def test_validation_runs_canonical_version_ordering_check(self) -> None:
-        result = self.run_helper("validate", VERSION=LATEST_VERSION)
+        # A canonical candidate whose base is older than the published
+        # (legacy-scheme) latest must be rejected by the ordering check.
+        result = self.run_helper("validate", VERSION="v0.7.9")
 
         self.assert_rejected(result)
         self.assertIn("must be newer", result.stderr)

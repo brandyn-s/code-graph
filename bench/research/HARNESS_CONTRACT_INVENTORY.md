@@ -136,11 +136,11 @@ runtime; no Python-side schema for the wrapper Go ↔ Python boundary.
 **Suggested independent verification**: enumerate every oracle output
 schema, write a single round-trip test per oracle.
 
-### 9. cmd/codebase-memory-mcp/install.go config writes
+### 9. cmd/code-graph/install.go config writes
 
 | Aspect | Value |
 |---|---|
-| Writer | `cmd/codebase-memory-mcp/install.go` (manipulates user settings JSON) |
+| Writer | `cmd/code-graph/install.go` (manipulates user settings JSON) |
 | Reader | Claude Desktop, Claude Code |
 | Schema status | **dict** (free-form JSON edits to user config files) |
 | Suspect flags | **key-rename risk** — write path uses string-keyed maps; read path is in another process entirely (Claude clients). |

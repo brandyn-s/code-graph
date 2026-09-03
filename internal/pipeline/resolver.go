@@ -8,7 +8,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/lang"
+	"github.com/brandyn-s/code-graph/internal/lang"
 )
 
 // tier2DebugEnabled gates the diagnostic slog records in applyReceiverTypeFilter.

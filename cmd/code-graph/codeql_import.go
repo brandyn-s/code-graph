@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/codeqlimport"
+	"github.com/brandyn-s/code-graph/internal/codeqlimport"
 )
 
 func runCodeQLImport(args []string, stdout, stderr io.Writer) int {

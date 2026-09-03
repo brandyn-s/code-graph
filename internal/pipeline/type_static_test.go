@@ -26,7 +26,7 @@ func TestTypeStaticDispatch_ExternalDropped(t *testing.T) {
 	// Vec is std — no internal class. Strategy must drop, not phantom-match.
 	r := NewFunctionRegistry()
 	r.Register("Foo", "proj.src.foo.Foo", "Struct")
-	r.Register("new", "proj.src.foo.Foo.new", "Method")  // internal Foo.new
+	r.Register("new", "proj.src.foo.Foo.new", "Method") // internal Foo.new
 
 	ctx := CallContext{
 		CalleeName:     "Vec::new",

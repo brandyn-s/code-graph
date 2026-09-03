@@ -36,7 +36,7 @@ const orientationHookMatcher = "Glob|Grep"
 // the current project has a report. `CLAUDE_PROJECT_DIR` is set by Claude
 // Code for every hook invocation.
 const orientationHookScript = `#!/bin/sh
-# Installed by: codebase-memory-mcp install
+# Installed by: code-graph install
 # Purpose: surface ARCHITECTURE_REPORT.md when the agent is about to grep/glob
 # on a repo the code-graph MCP has already indexed.
 # codebase-memory-orientation hook

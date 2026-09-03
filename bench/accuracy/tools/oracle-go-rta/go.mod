@@ -1,4 +1,4 @@
-module github.com/DeusData/codebase-memory-mcp/bench/oracle-go-rta
+module github.com/brandyn-s/code-graph/bench/oracle-go-rta
 
 go 1.26
 

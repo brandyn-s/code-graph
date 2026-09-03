@@ -14,9 +14,9 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/discover"
-	"github.com/DeusData/codebase-memory-mcp/internal/safegit"
-	"github.com/DeusData/codebase-memory-mcp/internal/store"
+	"github.com/brandyn-s/code-graph/internal/discover"
+	"github.com/brandyn-s/code-graph/internal/safegit"
+	"github.com/brandyn-s/code-graph/internal/store"
 )
 
 // watchStrategy determines how the watcher detects file changes for a project.

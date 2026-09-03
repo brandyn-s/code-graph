@@ -1,4 +1,4 @@
-module github.com/DeusData/codebase-memory-mcp
+module github.com/brandyn-s/code-graph
 
 go 1.26
 

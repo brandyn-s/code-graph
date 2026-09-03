@@ -268,7 +268,7 @@ func TestCodexInstructionsCreation(t *testing.T) {
 	setTestHome(t, home)
 
 	instrDir := filepath.Join(home, ".codex", "instructions")
-	instrFile := filepath.Join(instrDir, "codebase-memory-mcp.md")
+	instrFile := filepath.Join(instrDir, "code-graph.md")
 
 	if err := os.MkdirAll(instrDir, 0o750); err != nil {
 		t.Fatal(err)
@@ -319,7 +319,7 @@ func TestEditorMCPInstall(t *testing.T) {
 	setTestHome(t, home)
 
 	configPath := filepath.Join(home, ".cursor", "mcp.json")
-	binaryPath := "/usr/local/bin/codebase-memory-mcp"
+	binaryPath := "/usr/local/bin/code-graph"
 
 	// First install — creates file from scratch
 	installEditorMCP(binaryPath, configPath, "Cursor", installConfig{})
@@ -336,9 +336,9 @@ func TestEditorMCPInstall(t *testing.T) {
 	if !ok {
 		t.Fatal("expected mcpServers key")
 	}
-	entry, ok := servers["codebase-memory-mcp"].(map[string]any)
+	entry, ok := servers["code-graph"].(map[string]any)
 	if !ok {
-		t.Fatal("expected codebase-memory-mcp entry")
+		t.Fatal("expected code-graph entry")
 	}
 	if cmd, _ := entry["command"].(string); cmd != binaryPath {
 		t.Fatalf("expected command %q, got %q", binaryPath, cmd)
@@ -350,7 +350,7 @@ func TestEditorMCPInstallIdempotent(t *testing.T) {
 	setTestHome(t, home)
 
 	configPath := filepath.Join(home, ".cursor", "mcp.json")
-	binaryPath := "/usr/local/bin/codebase-memory-mcp"
+	binaryPath := "/usr/local/bin/code-graph"
 
 	// Install twice — second install should preserve valid JSON
 	installEditorMCP(binaryPath, configPath, "Cursor", installConfig{})
@@ -388,7 +388,7 @@ func TestEditorMCPPreservesOtherServers(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	installEditorMCP("/usr/local/bin/codebase-memory-mcp", configPath, "Cursor", installConfig{})
+	installEditorMCP("/usr/local/bin/code-graph", configPath, "Cursor", installConfig{})
 
 	data, err := os.ReadFile(configPath)
 	if err != nil {
@@ -408,8 +408,8 @@ func TestEditorMCPPreservesOtherServers(t *testing.T) {
 	if _, ok = servers["other-server"]; !ok {
 		t.Fatal("other-server was removed")
 	}
-	if _, ok := servers["codebase-memory-mcp"]; !ok {
-		t.Fatal("codebase-memory-mcp not added")
+	if _, ok := servers["code-graph"]; !ok {
+		t.Fatal("code-graph not added")
 	}
 }
 
@@ -420,7 +420,7 @@ func TestEditorMCPUninstall(t *testing.T) {
 	configPath := filepath.Join(home, ".cursor", "mcp.json")
 
 	// Install then uninstall
-	installEditorMCP("/usr/local/bin/codebase-memory-mcp", configPath, "Cursor", installConfig{})
+	installEditorMCP("/usr/local/bin/code-graph", configPath, "Cursor", installConfig{})
 	removeEditorMCP(configPath, "Cursor", installConfig{})
 
 	data, err := os.ReadFile(configPath)
@@ -435,8 +435,8 @@ func TestEditorMCPUninstall(t *testing.T) {
 	if !ok {
 		t.Fatal("mcpServers is not a map")
 	}
-	if _, exists := servers["codebase-memory-mcp"]; exists {
-		t.Fatal("codebase-memory-mcp should be removed after uninstall")
+	if _, exists := servers["code-graph"]; exists {
+		t.Fatal("code-graph should be removed after uninstall")
 	}
 }
 
@@ -458,7 +458,7 @@ func TestGeminiMCPInstall(t *testing.T) {
 	setTestHome(t, home)
 
 	configPath := filepath.Join(home, ".gemini", "settings.json")
-	binaryPath := "/usr/local/bin/codebase-memory-mcp"
+	binaryPath := "/usr/local/bin/code-graph"
 
 	// Gemini uses same mcpServers format as Cursor
 	installEditorMCP(binaryPath, configPath, "Gemini CLI", installConfig{})
@@ -475,8 +475,8 @@ func TestGeminiMCPInstall(t *testing.T) {
 	if !ok {
 		t.Fatal("expected mcpServers key")
 	}
-	if _, ok := servers["codebase-memory-mcp"]; !ok {
-		t.Fatal("codebase-memory-mcp not registered")
+	if _, ok := servers["code-graph"]; !ok {
+		t.Fatal("code-graph not registered")
 	}
 }
 
@@ -485,7 +485,7 @@ func TestVSCodeMCPInstall(t *testing.T) {
 	setTestHome(t, home)
 
 	configPath := filepath.Join(home, "Code", "User", "mcp.json")
-	binaryPath := "/usr/local/bin/codebase-memory-mcp"
+	binaryPath := "/usr/local/bin/code-graph"
 
 	installVSCodeMCP(binaryPath, configPath, installConfig{})
 
@@ -501,9 +501,9 @@ func TestVSCodeMCPInstall(t *testing.T) {
 	if !ok {
 		t.Fatal("expected servers key")
 	}
-	entry, ok := servers["codebase-memory-mcp"].(map[string]any)
+	entry, ok := servers["code-graph"].(map[string]any)
 	if !ok {
-		t.Fatal("codebase-memory-mcp not registered")
+		t.Fatal("code-graph not registered")
 	}
 	if entry["type"] != "stdio" {
 		t.Fatalf("expected type=stdio, got %v", entry["type"])
@@ -518,7 +518,7 @@ func TestVSCodeMCPUninstall(t *testing.T) {
 	setTestHome(t, home)
 
 	configPath := filepath.Join(home, "Code", "User", "mcp.json")
-	binaryPath := "/usr/local/bin/codebase-memory-mcp"
+	binaryPath := "/usr/local/bin/code-graph"
 
 	installVSCodeMCP(binaryPath, configPath, installConfig{})
 	removeVSCodeMCP(configPath, installConfig{})
@@ -535,8 +535,8 @@ func TestVSCodeMCPUninstall(t *testing.T) {
 	if !ok {
 		t.Fatal("servers key missing")
 	}
-	if _, exists := servers["codebase-memory-mcp"]; exists {
-		t.Fatal("codebase-memory-mcp should be removed")
+	if _, exists := servers["code-graph"]; exists {
+		t.Fatal("code-graph should be removed")
 	}
 }
 
@@ -545,7 +545,7 @@ func TestZedMCPInstall(t *testing.T) {
 	setTestHome(t, home)
 
 	configPath := filepath.Join(home, ".config", "zed", "settings.json")
-	binaryPath := "/usr/local/bin/codebase-memory-mcp"
+	binaryPath := "/usr/local/bin/code-graph"
 
 	installZedMCP(binaryPath, configPath, installConfig{})
 
@@ -561,9 +561,9 @@ func TestZedMCPInstall(t *testing.T) {
 	if !ok {
 		t.Fatal("expected context_servers key")
 	}
-	entry, ok := servers["codebase-memory-mcp"].(map[string]any)
+	entry, ok := servers["code-graph"].(map[string]any)
 	if !ok {
-		t.Fatal("codebase-memory-mcp not registered")
+		t.Fatal("code-graph not registered")
 	}
 	if entry["source"] != "custom" {
 		t.Fatalf("expected source=custom, got %v", entry["source"])
@@ -588,7 +588,7 @@ func TestZedMCPPreservesSettings(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	installZedMCP("/usr/local/bin/codebase-memory-mcp", configPath, installConfig{})
+	installZedMCP("/usr/local/bin/code-graph", configPath, installConfig{})
 
 	data, err := os.ReadFile(configPath)
 	if err != nil {
@@ -610,8 +610,8 @@ func TestZedMCPPreservesSettings(t *testing.T) {
 	if !ok {
 		t.Fatal("context_servers missing")
 	}
-	if _, ok := servers["codebase-memory-mcp"]; !ok {
-		t.Fatal("codebase-memory-mcp not added")
+	if _, ok := servers["code-graph"]; !ok {
+		t.Fatal("code-graph not added")
 	}
 }
 
@@ -620,7 +620,7 @@ func TestZedMCPUninstall(t *testing.T) {
 	setTestHome(t, home)
 
 	configPath := filepath.Join(home, ".config", "zed", "settings.json")
-	binaryPath := "/usr/local/bin/codebase-memory-mcp"
+	binaryPath := "/usr/local/bin/code-graph"
 
 	installZedMCP(binaryPath, configPath, installConfig{})
 	removeZedMCP(configPath, installConfig{})
@@ -637,15 +637,15 @@ func TestZedMCPUninstall(t *testing.T) {
 	if !ok {
 		t.Fatal("context_servers key missing")
 	}
-	if _, exists := servers["codebase-memory-mcp"]; exists {
-		t.Fatal("codebase-memory-mcp should be removed")
+	if _, exists := servers["code-graph"]; exists {
+		t.Fatal("code-graph should be removed")
 	}
 }
 
 func TestEditorMCPInstall_BackupsInvalidJSON(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "mcp.json")
-	binaryPath := "/usr/local/bin/codebase-memory-mcp"
+	binaryPath := "/usr/local/bin/code-graph"
 
 	// Write invalid JSON to the config
 	invalidJSON := `{"mcpServers": {"other-tool": {"command": "other"}} THIS IS BROKEN`
@@ -679,8 +679,8 @@ func TestEditorMCPInstall_BackupsInvalidJSON(t *testing.T) {
 	if !ok {
 		t.Fatal("expected mcpServers key")
 	}
-	if _, exists := servers["codebase-memory-mcp"]; !exists {
-		t.Fatal("expected codebase-memory-mcp server entry")
+	if _, exists := servers["code-graph"]; !exists {
+		t.Fatal("expected code-graph server entry")
 	}
 }
 
@@ -688,7 +688,7 @@ func TestRemoveOldMonolithicSkill(t *testing.T) {
 	home := t.TempDir()
 	setTestHome(t, home)
 
-	oldDir := filepath.Join(home, ".claude", "skills", "codebase-memory-mcp")
+	oldDir := filepath.Join(home, ".claude", "skills", "code-graph")
 	if err := os.MkdirAll(oldDir, 0o750); err != nil {
 		t.Fatal(err)
 	}

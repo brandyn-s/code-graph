@@ -538,13 +538,10 @@
         <h2>Install, index, verify, query.</h2>
         <div class="grid two">
           <article class="card search">
-            <span class="kicker">code-search v0.3.6</span>
+            <span class="kicker">code-search</span>
             <h3>Python package</h3>
-            <pre><code>git clone https://github.com/brandyn-s/code-search
-cd code-search
-git checkout v0.3.6
-uv venv --python 3.12
-uv pip install --python .venv/bin/python -e .
+            <pre><code>uv tool install code-search-mcp   # or: pip install code-search-mcp
+claude mcp add code-search --scope user -- code-search-mcp
 
 # In the MCP client
 index_directory(directory_path="/absolute/repository")
@@ -553,18 +550,15 @@ search_code(query="request authorization", search_mode="auto")
 search_code_evidence(query="request authorization")</code></pre>
           </article>
           <article class="card graph">
-            <span class="kicker">code-graph v0.8.0-redacted.11</span>
+            <span class="kicker">code-graph</span>
             <h3>Release binary</h3>
-            <pre><code>REPO=brandyn-s/code-graph
-TAG=v0.8.0-redacted.11
-ASSET=codebase-memory-mcp-darwin-arm64.tar.gz
+            <pre><code># macOS / Linux (verifies SHA-256; also build provenance if gh is logged in)
+curl -fsSL https://raw.githubusercontent.com/brandyn-s/code-graph/main/install.sh | bash
 
-gh release download "$TAG" --repo "$REPO" \
-  --pattern "$ASSET" --pattern checksums.txt
-shasum -a 256 -c checksums.txt --ignore-missing
-gh attestation verify "$ASSET" --repo "$REPO"
-tar -xzf "$ASSET"
-./codebase-memory-mcp install
+# or with Go 1.26+
+go install github.com/brandyn-s/code-graph/cmd/code-graph@latest
+
+claude mcp add code-graph --scope user -- ~/.local/bin/code-graph
 
 # In the MCP client
 index_repository(repo_path="/absolute/repository", skip_report=true)
@@ -580,14 +574,14 @@ trace_call_path(project="project-name", function_name="authenticate")</code></pr
 
     <section id="state">
       <div class="wrap">
-        <span class="eyebrow">State reviewed 2026-08-13</span>
+        <span class="eyebrow">State reviewed 2026-09-03</span>
         <h2>Source, release, and runtime are named separately.</h2>
         <div class="table-wrap">
           <table>
             <thead><tr><th>Component</th><th>Reviewed source</th><th>Published release</th><th>Relationship</th></tr></thead>
             <tbody>
-              <tr><td>code-search</td><td><code>cbdb9bd</code></td><td><code>v0.3.6</code></td><td><span class="state current">exact match</span></td></tr>
-              <tr><td>code-graph</td><td><code>4d7d103</code></td><td><code>v0.8.0-redacted.11</code> at <code>45250f8</code></td><td><span class="state split">main ahead</span></td></tr>
+              <tr><td>code-search</td><td><code>main</code> on brandyn-s/code-search</td><td>next public release (PyPI <code>code-search-mcp</code>)</td><td><span class="state split">release pending</span></td></tr>
+              <tr><td>code-graph</td><td><code>main</code> on brandyn-s/code-graph</td><td>next public release <code>v0.9.0</code></td><td><span class="state split">release pending</span></td></tr>
               <tr><td>Installed runtime</td><td colspan="2">Not asserted by this document</td><td>Inspect MCP configuration, executable path, version, and live handshake.</td></tr>
             </tbody>
           </table>

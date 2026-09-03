@@ -20,7 +20,7 @@ package tools
 import (
 	"testing"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/store"
+	"github.com/brandyn-s/code-graph/internal/store"
 )
 
 const fixtureProject = "phase-e-fixture"
@@ -28,11 +28,11 @@ const fixtureProject = "phase-e-fixture"
 // fixtureNode is a synthetic test case: name + planted tags + whether
 // the tool SHOULD surface it for the given role.
 type fixtureNode struct {
-	name           string
-	qualifiedName  string
-	label          string
-	filePath       string
-	securityRole   string
+	name            string
+	qualifiedName   string
+	label           string
+	filePath        string
+	securityRole    string
 	securitySubtype string
 }
 
@@ -267,9 +267,9 @@ func TestE2_StigEvidenceMappingFidelity(t *testing.T) {
 // sensitive_sink is "tainted." A path that traverses an auth_boundary
 // or sanitizer node is "sanitized." We construct three flow shapes:
 //
-//   1. INPUT → SINK             (tainted, NO sanitizer)
-//   2. INPUT → SANITIZER → SINK (sanitized)
-//   3. INPUT → AUTH → SINK      (sanitized — auth_boundary acts as gate)
+//  1. INPUT → SINK             (tainted, NO sanitizer)
+//  2. INPUT → SANITIZER → SINK (sanitized)
+//  3. INPUT → AUTH → SINK      (sanitized — auth_boundary acts as gate)
 //
 // The test verifies the BFS traversal logic finds these paths and the
 // sanitizer-detection annotates them correctly.

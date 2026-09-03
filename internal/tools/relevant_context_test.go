@@ -3,7 +3,7 @@ package tools
 import (
 	"testing"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/store"
+	"github.com/brandyn-s/code-graph/internal/store"
 )
 
 // setupTestGraph creates a small in-memory graph for testing get_relevant_context.

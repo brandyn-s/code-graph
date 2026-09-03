@@ -141,8 +141,8 @@ export VOYAGE_API_KEY=pa-...
 # Build the eval binary against the latest main
 CGO_ENABLED=1 go build -o bench/research/eval_rank_localize/eval.exe \
   ./bench/research/eval_rank_localize/
-CGO_ENABLED=1 go build -o bin/codebase-memory-mcp.exe \
-  ./cmd/codebase-memory-mcp/
+CGO_ENABLED=1 go build -o bin/code-graph.exe \
+  ./cmd/code-graph/
 
 # Run with seed 42 (same as this report)
 python bench/research/eval_locbench_batch.py \

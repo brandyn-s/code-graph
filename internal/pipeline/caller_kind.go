@@ -101,21 +101,21 @@ const (
 // direct access, so we rely on QN-shape and edgeType heuristics).
 //
 // Decision order (first match wins):
-//   1. edgeType == "CALLS_PSEUDO"           → CallerKindFileBlock
-//      (synthetic module-level caller; the resolver substituted moduleQN
-//      because EnclosingFuncQN was empty)
-//   2. caller QN's last segment is "init"   → CallerKindPackageInit
-//      (Go init() and Python module __init__ render as `<module>.init`)
-//   3. registryLabel(callerQN) == "Method"  → CallerKindMethod
-//   4. registryLabel(callerQN) == "Function":
-//        a. simpleName starts with "Test" or "Benchmark" or "Example"
-//           AND the caller's file basename contains "_test." or
-//           "test_"                          → CallerKindTest
-//        b. otherwise                        → CallerKindFunction
-//   5. registry has no label for callerQN    → CallerKindUnknown
-//      (caller QN was synthesized externally, e.g. by an LSP path that
-//      points to a stub/external symbol; healthy callers always exist
-//      in the registry)
+//  1. edgeType == "CALLS_PSEUDO"           → CallerKindFileBlock
+//     (synthetic module-level caller; the resolver substituted moduleQN
+//     because EnclosingFuncQN was empty)
+//  2. caller QN's last segment is "init"   → CallerKindPackageInit
+//     (Go init() and Python module __init__ render as `<module>.init`)
+//  3. registryLabel(callerQN) == "Method"  → CallerKindMethod
+//  4. registryLabel(callerQN) == "Function":
+//     a. simpleName starts with "Test" or "Benchmark" or "Example"
+//     AND the caller's file basename contains "_test." or
+//     "test_"                          → CallerKindTest
+//     b. otherwise                        → CallerKindFunction
+//  5. registry has no label for callerQN    → CallerKindUnknown
+//     (caller QN was synthesized externally, e.g. by an LSP path that
+//     points to a stub/external symbol; healthy callers always exist
+//     in the registry)
 //
 // Test-name detection without file context: we accept TestXxx /
 // BenchmarkXxx / ExampleXxx as a sufficient signal even if the caller's

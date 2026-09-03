@@ -45,8 +45,8 @@ SYNTHETIC_ROOT = REPO_ROOT / "bench" / "accuracy" / "synthetic"
 # Match Makefile: BINARY_EXT=.exe on Windows_NT, empty otherwise.
 _BIN_DIR = REPO_ROOT / "bin"
 _BINARY_CANDIDATES = [
-    _BIN_DIR / "codebase-memory-mcp.exe",
-    _BIN_DIR / "codebase-memory-mcp",
+    _BIN_DIR / "code-graph.exe",
+    _BIN_DIR / "code-graph",
 ]
 BINARY = next((p for p in _BINARY_CANDIDATES if p.exists()), _BINARY_CANDIDATES[0])
 BASELINES_FILE = REPO_ROOT / "bench" / "accuracy" / "negative_baselines.json"
@@ -102,7 +102,7 @@ def rewrite_qn_to_current_project(qn: str, current_project: str) -> str:
 
 
 def db_path_for(project: str) -> Path:
-    return Path.home() / ".cache" / "codebase-memory-mcp" / f"{project}.db"
+    return Path.home() / ".cache" / "code-graph" / f"{project}.db"
 
 
 def index_fixture(fixture_root: Path) -> None:
@@ -302,7 +302,7 @@ def main() -> int:
         sys.stderr.write(
             f"Binary not built: {BINARY}\n"
             "Run `make build` (Windows) or "
-            "`CGO_ENABLED=1 go build -o bin/codebase-memory-mcp ./cmd/codebase-memory-mcp/` (Linux/macOS).\n"
+            "`CGO_ENABLED=1 go build -o bin/code-graph ./cmd/code-graph/` (Linux/macOS).\n"
         )
         return 2
 

@@ -1,6 +1,6 @@
 // gen-go-stdlib.go generates C source data for Go stdlib type information.
 // It parses GOROOT/src/ packages and emits static arrays that can be compiled
-// into the codebase-memory-mcp binary, providing stdlib type information
+// into the code-graph binary, providing stdlib type information
 // without requiring a Go toolchain at indexing time.
 //
 // Usage: go run scripts/gen-go-stdlib.go > internal/cbm/lsp/generated/go_stdlib_data.c

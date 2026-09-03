@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/store"
+	"github.com/brandyn-s/code-graph/internal/store"
 )
 
 // configDefaults documents all known config keys, their defaults, and descriptions.
@@ -31,19 +31,19 @@ func runConfig(args []string) int {
 		return configList()
 	case "get":
 		if len(args) < 2 {
-			fmt.Fprintln(os.Stderr, "Usage: codebase-memory-mcp config get <key>")
+			fmt.Fprintln(os.Stderr, "Usage: code-graph config get <key>")
 			return 1
 		}
 		return configGet(args[1])
 	case "set":
 		if len(args) < 3 {
-			fmt.Fprintln(os.Stderr, "Usage: codebase-memory-mcp config set <key> <value>")
+			fmt.Fprintln(os.Stderr, "Usage: code-graph config set <key> <value>")
 			return 1
 		}
 		return configSet(args[1], args[2])
 	case "reset":
 		if len(args) < 2 {
-			fmt.Fprintln(os.Stderr, "Usage: codebase-memory-mcp config reset <key>")
+			fmt.Fprintln(os.Stderr, "Usage: code-graph config reset <key>")
 			return 1
 		}
 		return configReset(args[1])
@@ -171,7 +171,7 @@ func configReset(key string) int {
 }
 
 func printConfigHelp() {
-	fmt.Fprintf(os.Stderr, `Usage: codebase-memory-mcp config <command> [args]
+	fmt.Fprintf(os.Stderr, `Usage: code-graph config <command> [args]
 
 Commands:
   list             Show all config values (with defaults)
@@ -186,11 +186,11 @@ Config keys:
 	}
 	fmt.Fprintf(os.Stderr, `
 Examples:
-  codebase-memory-mcp config set auto_index true     Enable auto-indexing on session start
-  codebase-memory-mcp config set auto_index false    Disable auto-indexing (default)
-  codebase-memory-mcp config set auto_index_limit 20000
-  codebase-memory-mcp config set report.skip.<project> true   Sticky skip_report for one project
-  codebase-memory-mcp config list                    Show all settings
+  code-graph config set auto_index true     Enable auto-indexing on session start
+  code-graph config set auto_index false    Disable auto-indexing (default)
+  code-graph config set auto_index_limit 20000
+  code-graph config set report.skip.<project> true   Sticky skip_report for one project
+  code-graph config list                    Show all settings
 `)
 }
 

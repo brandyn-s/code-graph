@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/safegit"
+	"github.com/brandyn-s/code-graph/internal/safegit"
 )
 
 // validBranchName matches safe git ref names: alphanumeric, slashes, dots, hyphens, underscores.

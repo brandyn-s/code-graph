@@ -183,14 +183,7 @@ class ReleaseWorkflowContractTests(unittest.TestCase):
             "gh release verify-asset TAG PATH -R brandyn-s/code-graph",
             self.readme,
         )
-        self.assertIn(
-            "`v0.7.0-redacted.2` has an immutable-release attestation",
-            self.readme,
-        )
-        self.assertIn(
-            "does not have retroactive build provenance",
-            self.readme,
-        )
+        self.assertIn("Every public release from `v0.9.0` on ships", self.readme)
 
 
 if __name__ == "__main__":

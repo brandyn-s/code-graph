@@ -68,7 +68,7 @@ def repo_is_dirty(repo_path: Path) -> bool:
 
 
 class Harness:
-    """Wrapper around `codebase-memory-mcp cli <tool> <json_args>`."""
+    """Wrapper around `code-graph cli <tool> <json_args>`."""
 
     def __init__(self, binary: str, with_embeddings: bool = False):
         self.binary = str(expand(binary))

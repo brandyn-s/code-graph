@@ -13,7 +13,7 @@ IMPORTS: shells out to `go list -json ./...`, extracts the Imports field
 QN format: code-graph's Go registry (internal/pipeline/go_dep_registry.go)
   stores Go function nodes as `importPath + "." + funcName` and methods as
   `importPath + "." + recvType + "." + funcName`. We emit the same form.
-  Example: `github.com/DeusData/codebase-memory-mcp/internal/store.NewStore`
+  Example: `github.com/brandyn-s/code-graph/internal/store.NewStore`
 
 Scope filter: edges whose caller package path matches one of the fixture's
   subset entries (e.g., internal/store, internal/cypher).

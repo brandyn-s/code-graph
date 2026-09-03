@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/tools"
+	"github.com/brandyn-s/code-graph/internal/tools"
 )
 
 func main() {

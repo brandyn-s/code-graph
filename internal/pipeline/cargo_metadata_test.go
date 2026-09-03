@@ -92,12 +92,12 @@ func TestParseCargoMetadataMalformed(t *testing.T) {
 // TestNormalizeCargoCrateName pins the `-` → `_` convention.
 func TestNormalizeCargoCrateName(t *testing.T) {
 	cases := map[string]string{
-		"serde":          "serde",
-		"serde_json":     "serde_json",
-		"serde-json":     "serde_json",
-		"futures-util":   "futures_util",
-		"tracing":        "tracing",
-		"a-b-c":          "a_b_c",
+		"serde":        "serde",
+		"serde_json":   "serde_json",
+		"serde-json":   "serde_json",
+		"futures-util": "futures_util",
+		"tracing":      "tracing",
+		"a-b-c":        "a_b_c",
 	}
 	for in, want := range cases {
 		if got := normalizeCargoCrateName(in); got != want {

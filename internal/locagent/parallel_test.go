@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/store"
+	"github.com/brandyn-s/code-graph/internal/store"
 )
 
 // withStubRunOnce temporarily replaces runOnceFn with a stub for the

@@ -60,13 +60,35 @@ type Edge struct {
 	Properties map[string]any
 }
 
+// legacyCacheDirName is the pre-rename cache directory (the binary used to be
+// called code-graph). Existing installs keep their indexes there; we
+// keep using that directory when it exists and the new one does not, so a
+// rename never orphans a user's databases.
+const legacyCacheDirName = "codebase-memory-mcp"
+
 // cacheDir returns the default cache directory for databases.
+//
+// Resolution order: CODE_GRAPH_CACHE_DIR if set, then ~/.cache/code-graph,
+// falling back to the legacy ~/.cache/code-graph when only the
+// legacy directory exists.
 func cacheDir() (string, error) {
+	if override := os.Getenv("CODE_GRAPH_CACHE_DIR"); override != "" {
+		if err := os.MkdirAll(override, 0o750); err != nil {
+			return "", fmt.Errorf("mkdir cache: %w", err)
+		}
+		return override, nil
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("home dir: %w", err)
 	}
-	dir := filepath.Join(home, ".cache", "codebase-memory-mcp")
+	dir := filepath.Join(home, ".cache", "code-graph")
+	legacy := filepath.Join(home, ".cache", legacyCacheDirName)
+	if _, statErr := os.Stat(dir); os.IsNotExist(statErr) {
+		if info, legacyErr := os.Stat(legacy); legacyErr == nil && info.IsDir() {
+			return legacy, nil
+		}
+	}
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return "", fmt.Errorf("mkdir cache: %w", err)
 	}

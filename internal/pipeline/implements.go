@@ -5,9 +5,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/fqn"
-	"github.com/DeusData/codebase-memory-mcp/internal/lang"
-	"github.com/DeusData/codebase-memory-mcp/internal/store"
+	"github.com/brandyn-s/code-graph/internal/fqn"
+	"github.com/brandyn-s/code-graph/internal/lang"
+	"github.com/brandyn-s/code-graph/internal/store"
 )
 
 // ifaceMethodInfo holds a method name and its qualified name for OVERRIDE edge creation.

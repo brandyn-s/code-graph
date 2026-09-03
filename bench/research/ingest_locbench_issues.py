@@ -3,7 +3,7 @@
 Reads ~/.cache/code-graph/episodic-memory/locbench-issues.jsonl (mined by
 mine_locbench_issues.py), embeds each via Voyage AI, and writes IssueMemory
 nodes + embeddings to a dedicated code-graph project at
-~/.cache/codebase-memory-mcp/episodic-memory-locbench.db.
+~/.cache/code-graph/episodic-memory-locbench.db.
 
 This is a STANDALONE ingestion path (not the regular tree-sitter pipeline).
 The corpus is one-shot mined from external repos and ingested into its own
@@ -161,7 +161,7 @@ def main() -> None:
         "--db",
         type=Path,
         default=None,
-        help="SQLite output path. Defaults to ~/.cache/codebase-memory-mcp/{project}.db",
+        help="SQLite output path. Defaults to ~/.cache/code-graph/{project}.db",
     )
     parser.add_argument(
         "--project",
@@ -182,7 +182,7 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true", help="Embed but don't write to DB")
     args = parser.parse_args()
     if args.db is None:
-        args.db = Path.home() / ".cache" / "codebase-memory-mcp" / f"{args.project}.db"
+        args.db = Path.home() / ".cache" / "code-graph" / f"{args.project}.db"
     if args.root_path is None:
         args.root_path = (
             DEFAULT_ROOT_PATH if args.project == DEFAULT_PROJECT_NAME

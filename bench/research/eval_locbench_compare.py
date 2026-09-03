@@ -60,8 +60,8 @@ import pandas as pd
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PARQUET = REPO_ROOT / "bench/research/locbench.parquet"
 DEFAULT_EVAL_BIN = REPO_ROOT / "bench/research/eval_rank_localize/eval.exe"
-DEFAULT_INDEX_BIN = REPO_ROOT / "bin/codebase-memory-mcp.exe"
-CACHE_DIR = Path.home() / ".cache" / "codebase-memory-mcp"
+DEFAULT_INDEX_BIN = REPO_ROOT / "bin/code-graph.exe"
+CACHE_DIR = Path.home() / ".cache" / "code-graph"
 
 # Stable snapshot cache for Loc-Bench instances (2026-05-12).
 # Motivated by the finding that 67 of 200 Loc-Bench instances are

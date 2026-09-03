@@ -26,8 +26,8 @@ GROUND_TRUTH = FIXTURE_ROOT / "ground_truth.json"
 
 _BIN_DIR = REPO_ROOT / "bin"
 _BINARY_CANDIDATES = [
-    _BIN_DIR / "codebase-memory-mcp.exe",
-    _BIN_DIR / "codebase-memory-mcp",
+    _BIN_DIR / "code-graph.exe",
+    _BIN_DIR / "code-graph",
 ]
 BINARY = next((p for p in _BINARY_CANDIDATES if p.exists()), _BINARY_CANDIDATES[0])
 
@@ -44,7 +44,7 @@ def project_for_path(p: Path) -> str:
 
 
 def db_path_for(project: str) -> Path:
-    return Path.home() / ".cache" / "codebase-memory-mcp" / f"{project}.db"
+    return Path.home() / ".cache" / "code-graph" / f"{project}.db"
 
 
 def index_fixture() -> None:

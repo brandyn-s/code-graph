@@ -311,7 +311,7 @@ class Category6ResponseContractTests(unittest.TestCase):
             stdout = StringIO()
             stderr = StringIO()
             completed_process = subprocess.CompletedProcess(
-                args=["codebase-memory-mcp", "cli"],
+                args=["code-graph", "cli"],
                 returncode=returncode,
                 stdout=json.dumps(response).encode(),
                 stderr=stderr_text.encode(),
@@ -400,7 +400,7 @@ class Category6ResponseContractTests(unittest.TestCase):
     def test_cli_invocation_preserves_nonzero_exit_and_stderr(self) -> None:
         response = VALID_CATEGORY_6_RESPONSES[31]
         completed_process = subprocess.CompletedProcess(
-            args=["codebase-memory-mcp", "cli"],
+            args=["code-graph", "cli"],
             returncode=7,
             stdout=json.dumps(response).encode(),
             stderr=b"fixture subprocess failed",
@@ -419,7 +419,7 @@ class Category6ResponseContractTests(unittest.TestCase):
     def test_nonzero_cli_exit_marks_schema_row_failed_despite_valid_stdout(self) -> None:
         question = self.question(31)
         completed_process = subprocess.CompletedProcess(
-            args=["codebase-memory-mcp", "cli"],
+            args=["code-graph", "cli"],
             returncode=7,
             stdout=json.dumps(VALID_CATEGORY_6_RESPONSES[31]).encode(),
             stderr=b"fixture subprocess failed",

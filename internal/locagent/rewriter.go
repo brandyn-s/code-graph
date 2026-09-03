@@ -29,7 +29,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/anthropic"
+	"github.com/brandyn-s/code-graph/internal/anthropic"
 )
 
 const rewriterSystemPrompt = `You extract code-search keywords from issue descriptions. Output a SHORT
@@ -108,10 +108,10 @@ func RewriteIssue(ctx context.Context, client *anthropic.Client, issue string) (
 // rewriteResult is what RewriteIssue logs into the transcript so the
 // audit trail shows the input → output transformation.
 type rewriteResult struct {
-	OriginalLen int    `json:"original_len"`
-	Rewritten   string `json:"rewritten"`
-	InputTokens int    `json:"input_tokens"`
-	OutputTokens int   `json:"output_tokens"`
+	OriginalLen  int    `json:"original_len"`
+	Rewritten    string `json:"rewritten"`
+	InputTokens  int    `json:"input_tokens"`
+	OutputTokens int    `json:"output_tokens"`
 }
 
 // jsonForTranscript is a small helper for adding a structured rewrite

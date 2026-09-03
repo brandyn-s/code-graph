@@ -45,8 +45,8 @@ def _node_text(node: ts.Node) -> str:
 
 def _attrpath_segments(attrpath: ts.Node) -> list[str]:
     """Return the dotted segments of an attrpath node, e.g.
-    ['options', 'redacted', 'services', 'demo'] for the binding
-    `options.redacted.services.demo = ...`."""
+    ['options', 'services', 'demo'] for the binding
+    `options.services.demo = ...`."""
     segs = []
     for child in attrpath.children:
         if child.type == "identifier":
@@ -110,11 +110,11 @@ def _walk_bindings(root: ts.Node, info: NixOracleTS) -> None:
     """Walk all binding nodes in the source tree, pattern-match each.
 
     Patterns of interest:
-      - options.redacted.services.<X> → set service_name = X
+      - options.services.<X> → set service_name = X
       - baf.pub_topic{,_<suffix>} = mkOption { default = "Y"; } → pub_topic
       - baf.<X>_sub_topic = mkOption { default = "Y"; } → singular sub
       - baf.sub_topics = mkOption { default = [ ... ]; } → sub_topics
-      - redacted.services.<X>.additional_sub_topics = [ ... ]
+      - services.<X>.additional_sub_topics = [ ... ]
     """
     def visit(node: ts.Node) -> None:
         if node.type == "binding":
@@ -124,11 +124,11 @@ def _walk_bindings(root: ts.Node, info: NixOracleTS) -> None:
                 return
             segs = _attrpath_segments(ap)
 
-            # options.redacted.services.<X>
-            if (len(segs) == 4 and segs[0] == "options"
-                    and segs[1] == "redacted" and segs[2] == "services"):
+            # options.services.<X>
+            if (len(segs) == 3 and segs[0] == "options"
+                    and segs[1] == "services"):
                 if not info.service_name:
-                    info.service_name = segs[3]
+                    info.service_name = segs[2]
 
             # baf.pub_topic[_<suffix>]
             if (len(segs) == 2 and segs[0] == "baf"
@@ -157,11 +157,11 @@ def _walk_bindings(root: ts.Node, info: NixOracleTS) -> None:
                 if default_node is not None and default_node.type == "list_expression":
                     info.sub_topics.extend(_list_string_values(default_node))
 
-            # redacted.services.<X>.additional_sub_topics = [ ... ]
-            if (len(segs) == 4 and segs[0] == "redacted"
-                    and segs[1] == "services" and segs[3] == "additional_sub_topics"
+            # services.<X>.additional_sub_topics = [ ... ]
+            if (len(segs) == 3 and segs[0] == "services"
+                    and segs[2] == "additional_sub_topics"
                     and ex.type == "list_expression"):
-                target = segs[2]
+                target = segs[1]
                 info.additional_subs.setdefault(target, []).extend(_list_string_values(ex))
 
         # Recurse into children.
@@ -172,13 +172,13 @@ def _walk_bindings(root: ts.Node, info: NixOracleTS) -> None:
 
 
 def _scan_for_runs_binaries(source: bytes) -> list[str]:
-    """Tree-sitter walks don't easily catch `${pkgs.redacted.X}/bin/Y` since
+    """Tree-sitter walks don't easily catch `${pkgs.X}/bin/Y` since
     the string-interpolation handling depends on grammar internals. Use a
     string scan over the raw source — same approach as the regex oracle —
     since this isn't where tree-sitter adds value."""
     # Reuse the regex from oracle_nix_pubsub.py to keep behavior consistent.
     import re
-    pattern = re.compile(rb"\$\{pkgs\.redacted\.([a-zA-Z0-9_-]+)\}/bin/([a-zA-Z_][a-zA-Z0-9_-]*)\b")
+    pattern = re.compile(rb"\$\{pkgs\.([a-zA-Z0-9_-]+)\}/bin/([a-zA-Z_][a-zA-Z0-9_-]*)\b")
     seen = set()
     out = []
     for m in pattern.finditer(source):

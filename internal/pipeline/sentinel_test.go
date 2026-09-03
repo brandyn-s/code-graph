@@ -3,8 +3,8 @@ package pipeline
 import (
 	"testing"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/discover"
-	"github.com/DeusData/codebase-memory-mcp/internal/store"
+	"github.com/brandyn-s/code-graph/internal/discover"
+	"github.com/brandyn-s/code-graph/internal/store"
 )
 
 // TestFullReindexEveryEnvParsing pins env-var parsing for the sentinel
@@ -97,9 +97,9 @@ func TestSentinelThresholdPredicate(t *testing.T) {
 	}{
 		{0, 50, false},
 		{49, 50, false},
-		{50, 50, true},  // at limit, fire
-		{51, 50, true},  // over limit, fire
-		{5, 0, false},   // limit=0 disables
+		{50, 50, true}, // at limit, fire
+		{51, 50, true}, // over limit, fire
+		{5, 0, false},  // limit=0 disables
 		{1000, 0, false},
 	}
 	for _, c := range cases {

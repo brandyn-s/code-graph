@@ -10,7 +10,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/store"
+	"github.com/brandyn-s/code-graph/internal/store"
 )
 
 // RouteHandler represents a discovered HTTP route handler.
@@ -1004,8 +1004,9 @@ func isRustFile(path string) bool {
 
 // extractActixBuilderRoutes extracts Rust actix-web BUILDER-style route
 // registrations from function source. Pattern:
-//   web::scope("/prefix")
-//       .route(PATH, web::METHOD().to(HANDLER))
+//
+//	web::scope("/prefix")
+//	    .route(PATH, web::METHOD().to(HANDLER))
 //
 // Phase C (2026-05-08, plan 2026-05-08-psm-first-code-graph-search-fix):
 // closes the dominant HTTP_CALLS recall gap on PSM. Pre-Phase C, the only

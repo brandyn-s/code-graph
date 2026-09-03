@@ -92,7 +92,7 @@ flowchart TB
 `index_repository` accepts an absolute repository path, applies path guards,
 derives a project identity, opens that project's store, and serializes index
 writes under a project lock. Project databases live beneath
-`~/.cache/codebase-memory-mcp/`; one project's graph is never merged silently
+`~/.cache/code-graph/`; one project's graph is never merged silently
 into another's.
 
 The router keeps an active database reference throughout indexing so idle
@@ -297,7 +297,7 @@ switch to the selected project and obtain project-bound evidence.
 
 | Concern | Primary source |
 |---|---|
-| MCP registration | `internal/tools/tools.go`, `cmd/codebase-memory-mcp/` |
+| MCP registration | `internal/tools/tools.go`, `cmd/code-graph/` |
 | Tool implementations | `internal/tools/` |
 | Tool schemas and exact export | `internal/tools/`, `cmd/export-tool-schemas/` |
 | Language registry | `internal/lang/` |
@@ -307,7 +307,7 @@ switch to the selected project and obtain project-bound evidence.
 | Cypher engine | `internal/cypher/` |
 | SCIP ingestion | `internal/pipeline/scip_ingest.go` and adjacent tests |
 | Source/evidence references | `internal/evidence/` |
-| CodeQL evidence import | `internal/codeqlimport/`, `cmd/codebase-memory-mcp/codeql_import.go` |
+| CodeQL evidence import | `internal/codeqlimport/`, `cmd/code-graph/codeql_import.go` |
 | Incremental equivalence | `internal/pipeline/incremental_equivalence_test.go` and adjacent tests |
 | Accuracy baselines | `bench/accuracy/baselines/` |
 

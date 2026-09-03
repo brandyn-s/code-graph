@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/lang"
-	"github.com/DeusData/codebase-memory-mcp/internal/store"
+	"github.com/brandyn-s/code-graph/internal/lang"
+	"github.com/brandyn-s/code-graph/internal/store"
 )
 
 // passTests derives TESTS and TESTS_FILE edges from existing CALLS/IMPORTS data.

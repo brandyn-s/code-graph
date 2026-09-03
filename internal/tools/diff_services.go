@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/safegit"
+	"github.com/brandyn-s/code-graph/internal/safegit"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 

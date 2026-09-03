@@ -58,7 +58,7 @@ caveat: the corpus is fully reachable and the current engine reproduces.
 LOCAGENT_ITERATIONS unset (binary default = 2)
 eval_locbench_compare.py --instances <200-pin, seed-42 shuffled>
   --modes hybrid-agent --workers 4 --budget-usd 55
-  --eval-bin .../eval --index-bin .../codebase-memory-mcp
+  --eval-bin .../eval --index-bin .../code-graph
 ```
 
 - **Pin**: the 200 instance IDs from the 2026-05-04 baseline doc, in a

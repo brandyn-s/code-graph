@@ -52,6 +52,11 @@ func TestCompareVersions(t *testing.T) {
 		{"0.7.0-redacted.2", "0.7.0-redacted.1", 1},
 		{"0.7.0-redacted.10", "0.7.0-redacted.2", 1},
 		{"0.7.0-redacted.1", "0.7.0-redacted.1", 0},
+		{"0.9.0", "0.8.0-redacted.11", 1},
+		{"0.8.0", "0.8.0-redacted.11", 1},
+		{"0.8.0-redacted.11", "0.9.0", -1},
+		{"0.9.0-rc.1", "0.9.0", -1},
+		{"0.9.0-rc.2", "0.9.0-rc.1", 1},
 	}
 	for _, tt := range tests {
 		t.Run(fmt.Sprintf("%s_vs_%s", tt.a, tt.b), func(t *testing.T) {
@@ -70,7 +75,7 @@ func TestCompareVersions(t *testing.T) {
 
 func TestAssetName(t *testing.T) {
 	name := AssetName()
-	expected := fmt.Sprintf("codebase-memory-mcp-%s-%s", runtime.GOOS, runtime.GOARCH)
+	expected := fmt.Sprintf("code-graph-%s-%s", runtime.GOOS, runtime.GOARCH)
 	if runtime.GOOS == "windows" {
 		expected += ".zip"
 	} else {
@@ -86,7 +91,7 @@ func TestFetchLatestRelease(t *testing.T) {
 		fmt.Fprint(w, `{
 			"tag_name": "v1.0.0",
 			"assets": [
-				{"name": "codebase-memory-mcp-linux-amd64.tar.gz", "browser_download_url": "https://example.com/linux.tar.gz", "size": 1024},
+				{"name": "code-graph-linux-amd64.tar.gz", "browser_download_url": "https://example.com/linux.tar.gz", "size": 1024},
 				{"name": "checksums.txt", "browser_download_url": "https://example.com/checksums.txt", "size": 256}
 			]
 		}`)
@@ -183,7 +188,7 @@ func TestDownloadAsset_PrivateAssetUsesAuthenticatedGitHubCLI(t *testing.T) {
 		return []byte("private release bytes"), nil
 	})
 	rawURL := "https://github.com/brandyn-s/code-graph/releases/" +
-		"download/v1.2.3/codebase-memory-mcp-linux-amd64.tar.gz"
+		"download/v1.2.3/code-graph-linux-amd64.tar.gz"
 
 	data, err := DownloadAsset(context.Background(), rawURL)
 
@@ -200,7 +205,7 @@ func TestDownloadAsset_PrivateAssetUsesAuthenticatedGitHubCLI(t *testing.T) {
 		"--repo",
 		"brandyn-s/code-graph",
 		"--pattern",
-		"codebase-memory-mcp-linux-amd64.tar.gz",
+		"code-graph-linux-amd64.tar.gz",
 		"--output",
 		"-",
 	}
@@ -237,7 +242,7 @@ func TestDownloadAsset_PrivateAssetFailureHasNoAnonymousFallback(t *testing.T) {
 
 func TestVerifyReleaseAsset_VerifiesMembershipBeforeSLSA(t *testing.T) {
 	archive := []byte("authenticated release archive")
-	const assetName = "codebase-memory-mcp-linux-amd64.tar.gz"
+	const assetName = "code-graph-linux-amd64.tar.gz"
 
 	var calls [][]string
 	var verificationPath string
@@ -322,59 +327,6 @@ func TestVerifyReleaseAsset_VerifiesMembershipBeforeSLSA(t *testing.T) {
 	if _, err := os.Stat(verificationPath); !os.IsNotExist(err) {
 		t.Fatalf("verification archive was not removed: %v", err)
 	}
-}
-
-func TestVerifyReleaseAsset_HistoricalTagStillRequiresMembership(t *testing.T) {
-	const historicalTag = "v0.7.0-redacted.2"
-	const assetName = "codebase-memory-mcp-linux-amd64.tar.gz"
-
-	t.Run("membership succeeds without SLSA attestation", func(t *testing.T) {
-		var calls [][]string
-		withGitHubCLIRunner(t, func(_ context.Context, args ...string) ([]byte, error) {
-			calls = append(calls, append([]string(nil), args...))
-			return nil, nil
-		})
-
-		err := VerifyReleaseAsset(
-			context.Background(),
-			historicalTag,
-			assetName,
-			[]byte("historical archive"),
-		)
-		if err != nil {
-			t.Fatalf("VerifyReleaseAsset() error: %v", err)
-		}
-		if len(calls) != 1 {
-			t.Fatalf("gh calls = %q, want one membership verification", calls)
-		}
-		if got := calls[0][:3]; !slices.Equal(
-			got,
-			[]string{"release", "verify-asset", historicalTag},
-		) {
-			t.Fatalf("gh call = %q, want release membership verification", calls[0])
-		}
-	})
-
-	t.Run("membership failure aborts historical update", func(t *testing.T) {
-		var calls int
-		withGitHubCLIRunner(t, func(_ context.Context, _ ...string) ([]byte, error) {
-			calls++
-			return nil, errors.New("asset is not in the release")
-		})
-
-		err := VerifyReleaseAsset(
-			context.Background(),
-			historicalTag,
-			assetName,
-			[]byte("untrusted archive"),
-		)
-		if err == nil || !strings.Contains(err.Error(), "membership") {
-			t.Fatalf("VerifyReleaseAsset() error = %v, want membership failure", err)
-		}
-		if calls != 1 {
-			t.Fatalf("gh calls = %d, want exactly one membership attempt", calls)
-		}
-	})
 }
 
 func TestVerifyReleaseAsset_RejectsInvalidTagOrAssetBasename(t *testing.T) {

@@ -21,7 +21,7 @@ func TestMain(m *testing.M) {
 		panic("create temp dir: " + err.Error())
 	}
 
-	binName := "codebase-memory-mcp"
+	binName := "code-graph"
 	if runtime.GOOS == "windows" {
 		binName += ".exe"
 	}
@@ -73,7 +73,7 @@ func TestCLI_Version(t *testing.T) {
 		t.Fatalf("--version failed: %v\n%s", err, out)
 	}
 	output := strings.TrimSpace(string(out))
-	if !strings.HasPrefix(output, "codebase-memory-mcp") {
+	if !strings.HasPrefix(output, "code-graph") {
 		t.Fatalf("unexpected --version output: %q", output)
 	}
 }
@@ -179,7 +179,8 @@ func TestCLI_InstallRemovesOldSkill(t *testing.T) {
 	home := t.TempDir()
 	emptyPath := t.TempDir()
 
-	oldDir := filepath.Join(home, ".claude", "skills", "codebase-memory-mcp")
+	// The pre-rename monolithic skill directory must be cleaned up on install.
+	oldDir := filepath.Join(home, ".claude", "skills", legacyMCPServerKey)
 	if err := os.MkdirAll(oldDir, 0o750); err != nil {
 		t.Fatal(err)
 	}
@@ -282,7 +283,7 @@ func TestCLI_InstallPATHAppend(t *testing.T) {
 	if !strings.Contains(string(data), "export PATH=") {
 		t.Fatal("expected PATH export in .zshrc")
 	}
-	if !strings.Contains(string(data), "codebase-memory-mcp install") {
+	if !strings.Contains(string(data), "code-graph install") {
 		t.Fatal("expected install comment in .zshrc")
 	}
 }

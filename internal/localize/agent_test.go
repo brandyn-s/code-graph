@@ -4,8 +4,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/ranking"
-	"github.com/DeusData/codebase-memory-mcp/internal/store"
+	"github.com/brandyn-s/code-graph/internal/ranking"
+	"github.com/brandyn-s/code-graph/internal/store"
 )
 
 func testStoreOrSkip(t *testing.T) *store.Store {

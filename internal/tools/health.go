@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/discover"
-	"github.com/DeusData/codebase-memory-mcp/internal/pipeline"
+	"github.com/brandyn-s/code-graph/internal/discover"
+	"github.com/brandyn-s/code-graph/internal/pipeline"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 

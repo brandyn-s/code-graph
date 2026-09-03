@@ -8,10 +8,10 @@ import (
 	"path/filepath"
 	"strconv"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/discover"
-	"github.com/DeusData/codebase-memory-mcp/internal/indexidentity"
-	"github.com/DeusData/codebase-memory-mcp/internal/pipeline"
-	"github.com/DeusData/codebase-memory-mcp/internal/store"
+	"github.com/brandyn-s/code-graph/internal/discover"
+	"github.com/brandyn-s/code-graph/internal/indexidentity"
+	"github.com/brandyn-s/code-graph/internal/pipeline"
+	"github.com/brandyn-s/code-graph/internal/store"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -207,7 +207,7 @@ func (s *Server) handleIndexRepository(ctx context.Context, req *mcp.CallToolReq
 	s.watcher.Watch(projectName, absPath)
 
 	// Refresh ARCHITECTURE_REPORT.md at the repo root so the PreToolUse hook
-	// (installed via `codebase-memory-mcp install`) has fresh content to
+	// (installed via `code-graph install`) has fresh content to
 	// surface next time Glob/Grep fires. Report generation failure must NOT
 	// fail the overall index — a stale or missing report is less bad than a
 	// failed index, and the user can regenerate manually via generate_report.

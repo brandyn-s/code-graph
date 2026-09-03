@@ -11,7 +11,7 @@ This is the smallest possible fixture that exercises:
   - cross-file additional_sub_topics (betad → alphad gets "extra-cross-file")
 
 The gate runs in CI without the live MCP server — it shells out to
-`bin/codebase-memory-mcp.exe cli` directly, then queries the resulting
+`bin/code-graph.exe cli` directly, then queries the resulting
 SQLite DB.
 """
 
@@ -92,11 +92,11 @@ def query_actual(db_path: Path, project: str) -> tuple[set[tuple[str, str, str]]
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--binary", type=Path, required=True,
-                    help="path to codebase-memory-mcp.exe")
+                    help="path to code-graph.exe")
     ap.add_argument("--fixture", type=Path, required=True,
                     help="path to bench/accuracy/synthetic/nix-pubsub-minimal/")
     ap.add_argument("--db-dir", type=Path,
-                    default=Path.home() / ".cache" / "codebase-memory-mcp")
+                    default=Path.home() / ".cache" / "code-graph")
     args = ap.parse_args(argv[1:])
 
     fixture_root = args.fixture.resolve()

@@ -6,7 +6,7 @@ import (
 )
 
 // TestReleaseURLPointsAtFork pins the self-update endpoint to the redacted
-// fork. `codebase-memory-mcp update` replaces the running binary with
+// fork. `code-graph update` replaces the running binary with
 // whatever this URL serves — an upstream (DeusData) URL would silently
 // swap in a build without any redacted additions.
 func TestReleaseURLPointsAtFork(t *testing.T) {

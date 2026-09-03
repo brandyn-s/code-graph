@@ -25,12 +25,12 @@ import (
 	"github.com/zeebo/xxh3"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/cbm"
-	"github.com/DeusData/codebase-memory-mcp/internal/discover"
-	"github.com/DeusData/codebase-memory-mcp/internal/fqn"
-	"github.com/DeusData/codebase-memory-mcp/internal/httplink"
-	"github.com/DeusData/codebase-memory-mcp/internal/lang"
-	"github.com/DeusData/codebase-memory-mcp/internal/store"
+	"github.com/brandyn-s/code-graph/internal/cbm"
+	"github.com/brandyn-s/code-graph/internal/discover"
+	"github.com/brandyn-s/code-graph/internal/fqn"
+	"github.com/brandyn-s/code-graph/internal/httplink"
+	"github.com/brandyn-s/code-graph/internal/lang"
+	"github.com/brandyn-s/code-graph/internal/store"
 )
 
 // EnrichmentVersion tracks the version of post-flush enrichment passes.

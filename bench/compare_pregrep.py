@@ -14,7 +14,7 @@ Stop-ship (PR 3):
 
 Protocol
 --------
-1. Install the hook:  codebase-memory-mcp install
+1. Install the hook:  code-graph install
    (writes ~/.claude/hooks/codebase-memory-orientation.sh + registers
    a PreToolUse matcher `Glob|Grep` in ~/.claude/settings.json)
 2. Restart Claude Code so the hook takes effect.

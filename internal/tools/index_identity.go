@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/indexidentity"
-	"github.com/DeusData/codebase-memory-mcp/internal/store"
+	"github.com/brandyn-s/code-graph/internal/indexidentity"
+	"github.com/brandyn-s/code-graph/internal/store"
 )
 
 const missingIdentityReason = "index predates identity tracking; re-run index_repository to capture a coherent checkout identity"

@@ -13,13 +13,15 @@ import (
 	"runtime/pprof"
 	"strings"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/cbm"
-	"github.com/DeusData/codebase-memory-mcp/internal/store"
-	"github.com/DeusData/codebase-memory-mcp/internal/tools"
+	"github.com/brandyn-s/code-graph/internal/cbm"
+	"github.com/brandyn-s/code-graph/internal/store"
+	"github.com/brandyn-s/code-graph/internal/tools"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-var version = "dev"
+// version is stamped by the build (-X main.version=...). The fallback names
+// the release line so unstamped builds still identify themselves.
+var version = "0.9.0-dev"
 
 // configureSlogOutput routes slog to a file when CODE_GRAPH_LOG_FILE is
 // set. Without this, slog writes to stderr, which Claude Code's MCP
@@ -97,7 +99,7 @@ func main() {
 	if len(remaining) > 0 {
 		switch remaining[0] {
 		case "--version":
-			fmt.Println("codebase-memory-mcp", version)
+			fmt.Println("code-graph", version)
 			os.Exit(0)
 		case "--help", "-h", "help":
 			printTopLevelHelp()
@@ -118,6 +120,8 @@ func main() {
 			}
 		}
 	}
+
+	applyEmbeddingMode()
 
 	router, err := store.NewRouter()
 	if err != nil {
@@ -211,7 +215,7 @@ func parseByteSize(s string) (int64, error) {
 }
 
 func printTopLevelHelp() {
-	fmt.Fprintf(os.Stderr, "codebase-memory-mcp %s — Code knowledge graph MCP server\n\n", version)
+	fmt.Fprintf(os.Stderr, "code-graph %s — Code knowledge graph MCP server\n\n", version)
 	printHelpUsage()
 	printHelpTools()
 	printHelpIgnoring()
@@ -220,15 +224,15 @@ func printTopLevelHelp() {
 
 func printHelpUsage() {
 	fmt.Fprint(os.Stderr, `Usage:
-  codebase-memory-mcp                         Start the MCP server (stdio transport)
-  codebase-memory-mcp cli <tool> [json_args]  Invoke a tool directly from the shell
-  codebase-memory-mcp install [--dry-run]     Auto-detect and configure MCP clients
-  codebase-memory-mcp uninstall               Remove MCP registrations and skills
-  codebase-memory-mcp update                  Self-update to the latest release
-  codebase-memory-mcp config <command>        Manage server configuration
-  codebase-memory-mcp import-codeql <flags>   Import attested CodeQL SARIF evidence
-  codebase-memory-mcp --version               Print version and exit
-  codebase-memory-mcp --help                  Show this help
+  code-graph                         Start the MCP server (stdio transport)
+  code-graph cli <tool> [json_args]  Invoke a tool directly from the shell
+  code-graph install [--dry-run]     Auto-detect and configure MCP clients
+  code-graph uninstall               Remove MCP registrations and skills
+  code-graph update                  Self-update to the latest release
+  code-graph config <command>        Manage server configuration
+  code-graph import-codeql <flags>   Import attested CodeQL SARIF evidence
+  code-graph --version               Print version and exit
+  code-graph --help                  Show this help
 
 Supported MCP clients:
   Claude Code, Codex CLI, Cursor, Windsurf, Gemini CLI, VS Code, Zed
@@ -367,28 +371,28 @@ func printHelpIgnoring() {
 
 func printHelpCLI() {
 	fmt.Fprint(os.Stderr, `CLI invocation:
-  codebase-memory-mcp cli <tool_name> '<json_args>'
-  codebase-memory-mcp cli --raw <tool_name> '<json_args>'   (full JSON output)
+  code-graph cli <tool_name> '<json_args>'
+  code-graph cli --raw <tool_name> '<json_args>'   (full JSON output)
 
   Tools are called with a single JSON object as the argument. All parameters
   are passed as JSON keys. String values must be quoted. Arrays use JSON syntax.
 
 CLI examples:
-  codebase-memory-mcp cli index_repository '{"repo_path": "/path/to/repo"}'
-  codebase-memory-mcp cli search_graph '{"name_pattern": ".*Handler.*", "label": "Function"}'
-  codebase-memory-mcp cli trace_call_path '{"function_name": "main", "direction": "outbound"}'
-  codebase-memory-mcp cli search_code '{"pattern": "TODO", "file_pattern": "*.go"}'
-  codebase-memory-mcp cli get_architecture '{"aspects": ["languages", "packages"]}'
-  codebase-memory-mcp cli --raw list_projects | jq .
-  codebase-memory-mcp cli get_code_snippet '{"qualified_name": "HandleRequest"}'
+  code-graph cli index_repository '{"repo_path": "/path/to/repo"}'
+  code-graph cli search_graph '{"name_pattern": ".*Handler.*", "label": "Function"}'
+  code-graph cli trace_call_path '{"function_name": "main", "direction": "outbound"}'
+  code-graph cli search_code '{"pattern": "TODO", "file_pattern": "*.go"}'
+  code-graph cli get_architecture '{"aspects": ["languages", "packages"]}'
+  code-graph cli --raw list_projects | jq .
+  code-graph cli get_code_snippet '{"qualified_name": "HandleRequest"}'
 
 Configuration:
-  codebase-memory-mcp config list              Show all settings
-  codebase-memory-mcp config set <key> <val>   Set a config value
-  codebase-memory-mcp config get <key>         Get a config value
+  code-graph config list              Show all settings
+  code-graph config set <key> <val>   Set a config value
+  code-graph config get <key>         Get a config value
 
 Data storage:
-  ~/.cache/codebase-memory-mcp/   SQLite databases (WAL mode, persists across restarts)
+  ~/.cache/code-graph/   SQLite databases (WAL mode, persists across restarts)
 
 For more information: https://github.com/brandyn-s/code-graph
 `)
@@ -416,7 +420,7 @@ func runCLI(args []string) int {
 
 	if len(positional) == 0 || positional[0] == "--help" || positional[0] == "-h" {
 		srv := tools.NewServer(router)
-		fmt.Fprintf(os.Stderr, "Usage: codebase-memory-mcp cli [--raw] <tool_name> [json_args]\n\n")
+		fmt.Fprintf(os.Stderr, "Usage: code-graph cli [--raw] <tool_name> [json_args]\n\n")
 		fmt.Fprintf(os.Stderr, "Flags:\n  --raw    Print full JSON output (default: human-friendly summary)\n\n")
 		fmt.Fprintf(os.Stderr, "Available tools:\n  %s\n", strings.Join(srv.ToolNames(), "\n  "))
 		return 0

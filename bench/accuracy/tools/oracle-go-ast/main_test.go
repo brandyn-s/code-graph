@@ -304,7 +304,6 @@ func deep(cmd *Command) {
 	}
 }
 
-
 // TestT3a_CGOCalleesSkipped — Plan 4 T3a (2026-05-06 roundtable):
 // CGO selector calls must not emit edges. Code-graph's CALLS extractor
 // doesn't emit them; the oracle previously did, producing inflated
@@ -365,7 +364,6 @@ func bar() {
 		t.Errorf("bare-ident C() (local variable) must NOT be filtered as CGO")
 	}
 }
-
 
 // --- Plan 5 Phase E: local-variable receiver patterns ---
 // These tests pin the four Go method-call shapes for local variables.

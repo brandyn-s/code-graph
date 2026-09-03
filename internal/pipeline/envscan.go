@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/discover"
+	"github.com/brandyn-s/code-graph/internal/discover"
 )
 
 // EnvBinding represents an extracted environment variable with a URL value.

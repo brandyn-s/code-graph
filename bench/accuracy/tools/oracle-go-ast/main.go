@@ -359,6 +359,7 @@ func (v *visitor) recordVarDecl(gd *ast.GenDecl) {
 //   - complex expressions (`s := getS(x).child`)
 //   - multi-value assignments where one side is a simple struct and the
 //     other isn't (rare)
+//
 // Skipped cases just leave the variable's type un-recorded; the oracle
 // keeps emitting the pre-substitution form, which the wrapper drops as
 // unresolvable. Safe by construction — false-positives don't appear.
@@ -430,7 +431,7 @@ func receiverTypeName(e ast.Expr) string {
 //   - `a, b *Command`       -> {"a": "Command", "b": "Command"}
 //   - `cmd Command`         -> {"cmd": "Command"}
 //   - `args ...*Command`    -> {} (variadic skipped — calling args.Method
-//                             on a slice is a different shape)
+//     on a slice is a different shape)
 //
 // SKIPPED (returned as empty entries / not added):
 //   - Interface types (io.Writer, context.Context) — methods aren't owned

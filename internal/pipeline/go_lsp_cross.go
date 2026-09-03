@@ -10,9 +10,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/cbm"
-	"github.com/DeusData/codebase-memory-mcp/internal/fqn"
-	"github.com/DeusData/codebase-memory-mcp/internal/lang"
+	"github.com/brandyn-s/code-graph/internal/cbm"
+	"github.com/brandyn-s/code-graph/internal/fqn"
+	"github.com/brandyn-s/code-graph/internal/lang"
 )
 
 // goLSPDefIndex indexes cross-file definitions by Go import path for LSP resolution.

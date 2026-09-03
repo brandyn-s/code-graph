@@ -31,8 +31,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/fqn"
-	"github.com/DeusData/codebase-memory-mcp/internal/lang"
+	"github.com/brandyn-s/code-graph/internal/fqn"
+	"github.com/brandyn-s/code-graph/internal/lang"
 )
 
 // goFixtureCases enumerates the QN-format shapes that have historically

@@ -50,9 +50,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/discover"
-	"github.com/DeusData/codebase-memory-mcp/internal/pipeline"
-	"github.com/DeusData/codebase-memory-mcp/internal/store"
+	"github.com/brandyn-s/code-graph/internal/discover"
+	"github.com/brandyn-s/code-graph/internal/pipeline"
+	"github.com/brandyn-s/code-graph/internal/store"
 )
 
 type phaseTiming struct {
@@ -103,7 +103,7 @@ func percentile(sorted []int64, q float64) int64 {
 
 func main() {
 	target := flag.String("target", ".", "Directory to index (default: current dir)")
-	storageDir := flag.String("storage", "", "Storage directory (default: $HOME/.cache/codebase-memory-mcp-throughput-bench)")
+	storageDir := flag.String("storage", "", "Storage directory (default: $HOME/.cache/code-graph-throughput-bench)")
 	mode := flag.String("mode", "full", "Index mode: full | fast | incremental")
 	output := flag.String("output", "", "Output JSON path (default: bench/research/baselines/<today>-indexing-throughput.json)")
 	keepDB := flag.Bool("keep-db", false, "Keep the bench DB after measurement (default: clean up)")
@@ -123,7 +123,7 @@ func main() {
 
 	if *storageDir == "" {
 		home, _ := os.UserHomeDir()
-		*storageDir = filepath.Join(home, ".cache", "codebase-memory-mcp-throughput-bench")
+		*storageDir = filepath.Join(home, ".cache", "code-graph-throughput-bench")
 	}
 	if err := os.MkdirAll(*storageDir, 0o755); err != nil {
 		fmt.Fprintf(os.Stderr, "mkdir storage: %v\n", err)

@@ -25,7 +25,7 @@ package cypher
 import (
 	"testing"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/store"
+	"github.com/brandyn-s/code-graph/internal/store"
 )
 
 // setupStoreWithManyTaggedEdges builds a fixture whose ONE interesting edge is

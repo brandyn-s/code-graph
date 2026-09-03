@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/anthropic"
-	"github.com/DeusData/codebase-memory-mcp/internal/locagent"
+	"github.com/brandyn-s/code-graph/internal/anthropic"
+	"github.com/brandyn-s/code-graph/internal/locagent"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 

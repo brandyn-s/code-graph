@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/store"
+	"github.com/brandyn-s/code-graph/internal/store"
 )
 
 // OTLPExport represents the top-level structure of an OTLP JSON export.

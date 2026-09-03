@@ -1,4 +1,4 @@
-# codebase-memory-mcp setup script (Windows)
+# code-graph setup script (Windows)
 # INTERNAL: requires an authenticated GitHub CLI session with access to the
 # brandyn-s/code-graph repository.
 # Default: download pre-built native Windows binary
@@ -12,9 +12,8 @@ param(
 $ErrorActionPreference = "Stop"
 
 $Repo = "brandyn-s/code-graph"
-$HistoricalNoProvenanceTag = "v0.7.0-redacted.2"
-$BinaryName = "codebase-memory-mcp"
-$InstallDir = Join-Path $env:LOCALAPPDATA "codebase-memory-mcp"
+$BinaryName = "code-graph"
+$InstallDir = Join-Path $env:LOCALAPPDATA "code-graph"
 
 # --- Helpers ---
 
@@ -80,7 +79,7 @@ function Write-SettingsJson($Path, $Settings) {
 
 function Configure-ClaudeCode($McpConfig) {
     Write-Host ""
-    $answer = Read-Host "Configure Claude Code to use codebase-memory-mcp? [y/N]"
+    $answer = Read-Host "Configure Claude Code to use code-graph? [y/N]"
 
     if ($answer -match '^[Yy]$') {
         $settingsPath = Join-Path $env:USERPROFILE ".claude\settings.json"
@@ -96,14 +95,14 @@ function Configure-ClaudeCode($McpConfig) {
             $settings["mcpServers"] = [ordered]@{}
         }
 
-        $settings["mcpServers"]["codebase-memory-mcp"] = $McpConfig
+        $settings["mcpServers"]["code-graph"] = $McpConfig
         Write-SettingsJson $settingsPath $settings
         Write-Ok "Updated $settingsPath"
     } else {
         Write-Host ""
         Write-Host "  Add this to your .mcp.json or %USERPROFILE%\.claude\settings.json:" -ForegroundColor White
         Write-Host ""
-        $snippet = @{ mcpServers = @{ "codebase-memory-mcp" = $McpConfig } }
+        $snippet = @{ mcpServers = @{ "code-graph" = $McpConfig } }
         $snippet | ConvertTo-Json -Depth 10 | Write-Host
     }
 }
@@ -176,7 +175,7 @@ if ($Help) {
 }
 
 Write-Host ""
-Write-Host "codebase-memory-mcp installer (Windows)" -ForegroundColor White
+Write-Host "code-graph installer (Windows)" -ForegroundColor White
 Write-Host ""
 
 if ($FromSource) {
@@ -267,7 +266,7 @@ if ($FromSource) {
 
     # Clone or update
     Write-Host ""
-    $sourceDir = "/home/$wslUser/.local/share/codebase-memory-mcp"
+    $sourceDir = "/home/$wslUser/.local/share/code-graph"
     $sourceExists = $true
     try {
         Invoke-WSL "test -d $sourceDir/.git" | Out-Null
@@ -290,7 +289,7 @@ if ($FromSource) {
     Write-Host ""
     Write-Host "Building binary (this may take a minute)..." -ForegroundColor White
     $wslBinaryPath = "/home/$wslUser/.local/bin/$BinaryName"
-    Invoke-WSL "mkdir -p /home/$wslUser/.local/bin && cd $sourceDir && CGO_ENABLED=1 go build -buildvcs=false -o $wslBinaryPath ./cmd/codebase-memory-mcp/"
+    Invoke-WSL "mkdir -p /home/$wslUser/.local/bin && cd $sourceDir && CGO_ENABLED=1 go build -buildvcs=false -o $wslBinaryPath ./cmd/code-graph/"
     Write-Ok "Built to $wslBinaryPath (inside WSL)"
 
     # Verify
@@ -317,7 +316,7 @@ if ($FromSource) {
     Write-Host "  To uninstall:" -ForegroundColor White
     Write-Host "    wsl.exe -- rm $wslBinaryPath"
     Write-Host "    wsl.exe -- rm -rf $sourceDir"
-    Write-Host "    wsl.exe -- rm -rf ~/.cache/codebase-memory-mcp/"
+    Write-Host "    wsl.exe -- rm -rf ~/.cache/code-graph/"
 
 } else {
     # --- Download pre-built native Windows binary ---
@@ -334,7 +333,7 @@ if ($FromSource) {
     $tag = ($tag | Out-String).Trim()
     Write-Ok "Latest release: $tag"
 
-    $asset = "codebase-memory-mcp-windows-amd64.zip"
+    $asset = "code-graph-windows-amd64.zip"
 
     Write-Host "Downloading $asset..." -ForegroundColor White
 
@@ -343,7 +342,7 @@ if ($FromSource) {
         New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
     }
 
-    $tmpDir = Join-Path $env:TEMP ("codebase-memory-mcp-" + [guid]::NewGuid().ToString("N"))
+    $tmpDir = Join-Path $env:TEMP ("code-graph-" + [guid]::NewGuid().ToString("N"))
     New-Item -ItemType Directory -Path $tmpDir -Force | Out-Null
     & gh release download $tag --repo $Repo --pattern $asset --dir $tmpDir
     if ($LASTEXITCODE -ne 0) {
@@ -361,18 +360,14 @@ if ($FromSource) {
         exit 1
     }
 
-    if ($tag -eq $HistoricalNoProvenanceTag) {
-        Write-Warn "$tag has no build provenance; immutable release membership verified"
-    } else {
-        Write-Host "Verifying SLSA build provenance..." -ForegroundColor White
-        & gh attestation verify $tmpZip --repo $Repo --predicate-type "https://slsa.dev/provenance/v1"
-        if ($LASTEXITCODE -ne 0) {
-            Remove-Item -Recurse -Force $tmpDir
-            Write-Fail "SLSA build provenance verification failed for $asset."
-            exit 1
-        }
-        Write-Ok "SLSA build provenance verified"
+    Write-Host "Verifying SLSA build provenance..." -ForegroundColor White
+    & gh attestation verify $tmpZip --repo $Repo --predicate-type "https://slsa.dev/provenance/v1"
+    if ($LASTEXITCODE -ne 0) {
+        Remove-Item -Recurse -Force $tmpDir
+        Write-Fail "SLSA build provenance verification failed for $asset."
+        exit 1
     }
+    Write-Ok "SLSA build provenance verified"
 
     # Extract
     Expand-Archive -Path $tmpZip -DestinationPath $InstallDir -Force
@@ -426,5 +421,5 @@ if ($FromSource) {
     Write-Host ""
     Write-Host "  To uninstall:" -ForegroundColor White
     Write-Host "    Remove-Item -Recurse -Force '$InstallDir'"
-    Write-Host "    Remove-Item -Recurse -Force `"$env:LOCALAPPDATA\codebase-memory-mcp`"  # graph database"
+    Write-Host "    Remove-Item -Recurse -Force `"$env:LOCALAPPDATA\code-graph`"  # graph database"
 }

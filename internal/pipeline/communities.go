@@ -6,7 +6,7 @@ import (
 	"math"
 	"sort"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/store"
+	"github.com/brandyn-s/code-graph/internal/store"
 )
 
 // passCommunities runs Louvain community detection on the CALLS graph

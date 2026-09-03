@@ -1,10 +1,10 @@
 { config, lib, pkgs, ... }:
 with lib;
 let
-  cfg = config.redacted.services.alphad;
+  cfg = config.services.alphad;
 in
 {
-  options.redacted.services.alphad = {
+  options.services.alphad = {
     enable = mkEnableOption "alphad";
     baf.pub_topic = mkOption {
       type = types.str;
@@ -23,9 +23,9 @@ in
       description = "Alpha synthetic test daemon";
       script = ''
         set -aeuo pipefail
-        ${pkgs.redacted.submsg}/bin/submsg ${builtins.concatStringsSep " " cfg.baf.sub_topics} \
-          | ${pkgs.redacted.alphad}/bin/alphad \
-          | ${pkgs.redacted.pubmsg}/bin/pubmsg ${cfg.baf.pub_topic}
+        ${pkgs.submsg}/bin/submsg ${builtins.concatStringsSep " " cfg.baf.sub_topics} \
+          | ${pkgs.alphad}/bin/alphad \
+          | ${pkgs.pubmsg}/bin/pubmsg ${cfg.baf.pub_topic}
       '';
     };
   };

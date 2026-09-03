@@ -15,12 +15,12 @@ func TestHeapLimitBytesParsing(t *testing.T) {
 		raw  string
 		want uint64
 	}{
-		{"", 0},                 // unset → disabled
-		{"0", 0},                // explicit zero → disabled
-		{"not-a-number", 0},     // garbage → disabled (fail-safe)
-		{"1", 1 << 20},          // 1 MB
-		{"4096", 4096 << 20},    // 4 GB
-		{"16384", 16384 << 20},  // 16 GB
+		{"", 0},                // unset → disabled
+		{"0", 0},               // explicit zero → disabled
+		{"not-a-number", 0},    // garbage → disabled (fail-safe)
+		{"1", 1 << 20},         // 1 MB
+		{"4096", 4096 << 20},   // 4 GB
+		{"16384", 16384 << 20}, // 16 GB
 	}
 	for _, c := range cases {
 		t.Setenv("CODE_GRAPH_HEAP_LIMIT_MB", c.raw)

@@ -46,10 +46,15 @@ jobs:
         run: go test ./...
 
       - name: Build production binary
-        run: CGO_ENABLED=1 go build -o /tmp/codebase-memory-mcp ./cmd/codebase-memory-mcp/
+        run: CGO_ENABLED=1 go build -o /tmp/code-graph ./cmd/code-graph/
 
       - name: Smoke test production binary
-        run: bash scripts/smoke-test.sh /tmp/codebase-memory-mcp
+        run: bash scripts/smoke-test.sh /tmp/code-graph
+
+      - name: Lint shell installers
+        run: |
+          bash -n install.sh scripts/setup.sh scripts/smoke-test.sh scripts/release_workflow.sh
+          shellcheck install.sh scripts/setup.sh scripts/smoke-test.sh
 
   agent-contract:
     runs-on: ubuntu-latest
@@ -91,17 +96,17 @@ jobs:
         run: python3 -m unittest scripts.test_core_ci_workflow
 
       - name: Build contract-test binary
-        run: CGO_ENABLED=1 go build -o /tmp/codebase-memory-mcp ./cmd/codebase-memory-mcp/
+        run: CGO_ENABLED=1 go build -o /tmp/code-graph ./cmd/code-graph/
 
       - name: Index checked-in Go fixture
         run: |
           fixture_path="$GITHUB_WORKSPACE/bench/accuracy/synthetic/go-minimal"
           args="$(python3 -c 'import json,sys; print(json.dumps({"repo_path": sys.argv[1], "skip_report": True}))' "$fixture_path")"
-          /tmp/codebase-memory-mcp cli --raw index_repository "$args"
+          /tmp/code-graph cli --raw index_repository "$args"
 
       - name: Run zero-cost category-6 battery
         env:
-          CODE_GRAPH_BIN: /tmp/codebase-memory-mcp
+          CODE_GRAPH_BIN: /tmp/code-graph
           CORPUS_RIPGREP_PATH: ${{ github.workspace }}/bench/accuracy/synthetic/go-minimal
           AGENT_EFFECTIVENESS_RESULTS_FILE: ${{ runner.temp }}/agent-effectiveness-results.jsonl
         run: |

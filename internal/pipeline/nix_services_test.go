@@ -15,10 +15,10 @@ func TestParseNixServiceFile_AppliedPattern(t *testing.T) {
 	src := `{ config, lib, pkgs, ... }:
 with lib;
 let
-  cfg = config.redacted.services.appliedd;
+  cfg = config.services.appliedd;
 in
 {
-  options.redacted.services.appliedd = {
+  options.services.appliedd = {
     enable = mkEnableOption "appliedd";
     baf.pub_topic = mkOption {
       type = types.str;
@@ -35,8 +35,8 @@ in
   config = mkIf cfg.enable {
     systemd.services.appliedd = {
       script = ''
-        ${pkgs.redacted.submsg}/bin/submsg ${"builtins.concatStringsSep"} " " cfg.baf.sub_topics \
-        | ${pkgs.redacted.appliedd}/bin/appliedd | ${pkgs.redacted.pubmsg}/bin/pubmsg ${"cfg.baf.pub_topic"}
+        ${pkgs.submsg}/bin/submsg ${"builtins.concatStringsSep"} " " cfg.baf.sub_topics \
+        | ${pkgs.appliedd}/bin/appliedd | ${pkgs.pubmsg}/bin/pubmsg ${"cfg.baf.pub_topic"}
       '';
     };
   };
@@ -67,14 +67,14 @@ func TestParseNixServiceFile_HardcodedTopic(t *testing.T) {
 
 	src := `{ config, lib, pkgs, ... }:
 {
-  options.redacted.services.canstatd = {
+  options.services.canstatd = {
     enable = mkEnableOption "canstatd";
   };
 
   config = mkIf cfg.enable {
     systemd.services.canstatd = {
       script = ''
-        ${pkgs.redacted.canstatd}/bin/canstatd | ${pkgs.redacted.pubmsg}/bin/pubmsg canstatd
+        ${pkgs.canstatd}/bin/canstatd | ${pkgs.pubmsg}/bin/pubmsg canstatd
       '';
     };
   };
@@ -102,15 +102,15 @@ func TestParseNixServiceFile_AdditionalSubTopics(t *testing.T) {
 	src := `{ pkgs, config, lib, ... }:
 {
   config = {
-    redacted.services.mock-proteuscore.enable = true;
-    redacted.services.tocarod.enable = true;
-    redacted.services.trackerd.additional_sub_topics = [ "simd" "mock-data" ];
+    services.mock-proteuscore.enable = true;
+    services.tocarod.enable = true;
+    services.trackerd.additional_sub_topics = [ "simd" "mock-data" ];
   };
 }`
 
 	info := parseNixServiceFile(src)
 
-	// No options.redacted.services.X declaration — no service node from this file
+	// No options.services.X declaration — no service node from this file
 	if info.serviceName != "" {
 		t.Errorf("serviceName: want empty got %q", info.serviceName)
 	}
@@ -168,7 +168,7 @@ func TestStripNixInterpolations(t *testing.T) {
 	cases := map[string]string{
 		"hello ${world}":               "hello ",
 		"${a} ${b} c":                  "  c",
-		"topic ${pkgs.redacted.bin}":    "topic ",
+		"topic ${pkgs.bin}":            "topic ",
 		"${outer ${inner}} after":      " after",
 		"no interpolation":             "no interpolation",
 		"${builtins.toString cfg.x} z": " z",
@@ -214,7 +214,7 @@ func TestParseNixServiceFile_ConditionalSubTopics(t *testing.T) {
 
 	src := `{ config, lib, pkgs, ... }:
 {
-  options.redacted.services.apid = {
+  options.services.apid = {
     baf.sub_topics = mkOption {
       type = types.listOf types.str;
       default = [
@@ -253,23 +253,23 @@ func TestParseNixServiceFile_ConditionalSubTopics(t *testing.T) {
 	}
 }
 
-// TestParseNixServiceFile_RunsBinary covers extraction of `${pkgs.redacted.X}/bin/Y`
+// TestParseNixServiceFile_RunsBinary covers extraction of `${pkgs.X}/bin/Y`
 // references with the pubmsg/submsg helpers filtered out.
 func TestParseNixServiceFile_RunsBinary(t *testing.T) {
 	t.Parallel()
 
 	src := `{ config, lib, pkgs, ... }:
 {
-  options.redacted.services.demo = {
+  options.services.demo = {
     enable = mkEnableOption "demo";
   };
 
   config = mkIf cfg.enable {
     systemd.services.demo = {
       script = ''
-        ${pkgs.redacted.demo}/bin/demo \
-          | ${pkgs.redacted.helper-tool}/bin/helper-tool \
-          | ${pkgs.redacted.pubmsg}/bin/pubmsg demo
+        ${pkgs.demo}/bin/demo \
+          | ${pkgs.helper-tool}/bin/helper-tool \
+          | ${pkgs.pubmsg}/bin/pubmsg demo
       '';
     };
   };
@@ -301,7 +301,7 @@ func TestParseNixServiceFile_PubTopicVariants(t *testing.T) {
 	t.Parallel()
 
 	src := `{
-  options.redacted.services.anavd = {
+  options.services.anavd = {
     baf.pub_topic = mkOption {
       type = types.str;
       default = "anavd";
@@ -329,7 +329,7 @@ func TestParseNixServiceFile_SingularSubTopic(t *testing.T) {
 	t.Parallel()
 
 	src := `{
-  options.redacted.services.adsbd = {
+  options.services.adsbd = {
     baf.pub_topic = mkOption {
       type = types.str;
       default = "adsbd";
@@ -359,5 +359,60 @@ func TestUniqueStrings(t *testing.T) {
 	want := []string{"a", "b", "c"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("want %v got %v", want, got)
+	}
+}
+
+// TestParseNixServiceFile_CustomPrefixes covers organizations that nest their
+// options under a namespace (options.acme.services.<name>) and their packages
+// under a sub-set (${pkgs.acme.<pkg>}).
+func TestParseNixServiceFile_CustomPrefixes(t *testing.T) {
+	t.Parallel()
+
+	src := `{ config, lib, pkgs, ... }:
+{
+  options.acme.services.alphad = {
+    baf.pub_topic = mkOption { default = "alphad"; };
+    baf.sub_topics = mkOption { default = [ "broker-a" ]; };
+  };
+  config = {
+    systemd.services.alphad.script = ''
+      ${pkgs.acme.submsg}/bin/submsg broker-a | ${pkgs.acme.alphad}/bin/alphad | ${pkgs.acme.pubmsg}/bin/pubmsg alphad
+    '';
+    acme.services.betad.additional_sub_topics = [ "extra" ];
+  };
+}`
+	np := newNixPatterns("acme.services", "pkgs.acme")
+	info := parseNixServiceFileWith(np, src)
+	if info.serviceName != "alphad" {
+		t.Fatalf("serviceName = %q, want alphad", info.serviceName)
+	}
+	if got := info.additionalSubsByService["betad"]; len(got) != 1 || got[0] != "extra" {
+		t.Fatalf("additionalSubsByService[betad] = %v, want [extra]", got)
+	}
+	if len(info.runsBinaries) != 1 || info.runsBinaries[0] != "alphad" {
+		t.Fatalf("runsBinaries = %v, want [alphad] (pubmsg/submsg filtered)", info.runsBinaries)
+	}
+
+	// The default patterns must NOT see a namespaced declaration.
+	def := parseNixServiceFileWith(newNixPatterns("", ""), src)
+	if def.serviceName != "" {
+		t.Fatalf("default patterns matched namespaced service %q", def.serviceName)
+	}
+}
+
+func TestSanitizeNixPrefix(t *testing.T) {
+	t.Parallel()
+	cases := map[string]string{
+		"":                "services",
+		"  ":              "services",
+		"services":        "services",
+		".acme.services.": "acme.services",
+		"bad prefix":      "services",
+		"a;b":             "services",
+	}
+	for in, want := range cases {
+		if got := sanitizeNixPrefix(in, "services"); got != want {
+			t.Errorf("sanitizeNixPrefix(%q) = %q, want %q", in, got, want)
+		}
 	}
 }

@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/lang"
+	"github.com/brandyn-s/code-graph/internal/lang"
 )
 
 // FullModeMaxFileSize returns the per-file size cutoff for full-mode

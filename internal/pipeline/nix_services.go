@@ -1,17 +1,25 @@
 // Package pipeline: Nix service extraction.
 //
-// Scans Nix module files (nix/modules/*.nix and similar) for redacted
+// Scans Nix module files (nix/modules/*.nix and similar) for NixOS-style
 // service declarations that define pub/sub topic bindings:
 //
-//   options.redacted.services.<name> = {
+//   options.services.<name> = {
 //     baf.pub_topic = mkOption { default = "<topic>"; };
 //     baf.sub_topics = mkOption { default = [ "a" "b" ]; };
 //   };
 //
 // and for imperative topic declarations in systemd service scripts:
 //
-//   ${pkgs.redacted.pubmsg}/bin/pubmsg <topic>
-//   ${pkgs.redacted.submsg}/bin/submsg <topic1> <topic2>
+//   ${pkgs.pubmsg}/bin/pubmsg <topic>
+//   ${pkgs.submsg}/bin/submsg <topic1> <topic2>
+//
+// The option-set prefix (`services`) and package-set prefix (`pkgs`) are
+// conventions that differ between organizations, so both are configurable:
+//
+//   CODE_GRAPH_NIX_SERVICE_OPTION_PREFIX  default "services"
+//                                         (e.g. "acme.services" for options.acme.services.<name>)
+//   CODE_GRAPH_NIX_PKGS_PREFIX            default "pkgs"
+//                                         (e.g. "pkgs.acme" for ${pkgs.acme.<pkg>}/bin/<binary>)
 //
 // Emits Service nodes + PUBLISHES_TO / SUBSCRIBES_TO edges connecting
 // Services to Topic nodes (unified with Zenoh's Topic label).
@@ -22,16 +30,16 @@
 //   the declarative pub/sub graph that Zenoh regex extraction can't see.
 //
 // MVP scope (v0):
-//   - `options.redacted.services.<name>` declarations → Service nodes
+//   - `options.<prefix>.<name>` declarations → Service nodes
 //   - `baf.pub_topic = mkOption { default = "<literal>"; }` → PUBLISHES_TO
 //   - `baf.sub_topics = mkOption { default = [ "a" "b" ]; }` → SUBSCRIBES_TO
-//   - `redacted.services.<name>.additional_sub_topics = [ "X" ]` → SUBSCRIBES_TO
+//   - `<prefix>.<name>.additional_sub_topics = [ "X" ]` → SUBSCRIBES_TO
 //   - `pubmsg <topic>` / `submsg <topics>` in script blocks → PUBLISHES_TO/SUBSCRIBES_TO
 //
 // Deferred:
 //   - Conditional appends (`++ (if x then [...] else [])`) — MVP captures base list only
 //   - Topic variable resolution (`default = cfg.baf.pub_topic`)
-//   - RUNS_BINARY edges (Service → Rust binary via pkgs.redacted.<name>)
+//   - RUNS_BINARY edges (Service → Rust binary via <pkgs-prefix>.<name>)
 //   - Nix flake output resolution
 //   - Tree-sitter-based AST walking (regex is sufficient for these patterns)
 
@@ -43,19 +51,13 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/discover"
-	"github.com/DeusData/codebase-memory-mcp/internal/store"
+	"github.com/brandyn-s/code-graph/internal/discover"
+	"github.com/brandyn-s/code-graph/internal/store"
 )
 
 var (
-	// options.redacted.services.<NAME> = { ... }
-	// Captures the service name. Anchored to `options.` to avoid matching
-	// usage-side `redacted.services.X.Y = ...` (handled by separate patterns).
-	reNixServiceDecl = regexp.MustCompile(
-		`(?m)^\s*options\.redacted\.services\.([a-zA-Z_][a-zA-Z0-9_-]*)\s*=`,
-	)
-
 	// baf.pub_topic[_<suffix>] = mkOption { ... default = "<topic>"; ... }
 	// Matches the canonical baf.pub_topic AND named variants like
 	// baf.pub_topic_fast (anavd has both — separate topics for different
@@ -93,12 +95,6 @@ var (
 		`(?s)baf\.sub_topics\s*=\s*mkOption\s*\{[^}]*?default\s*=\s*([^;]+);`,
 	)
 
-	// redacted.services.<NAME>.additional_sub_topics = [ "X" "Y" ];
-	// Captures (service_name, list_contents).
-	reNixAdditionalSubTopics = regexp.MustCompile(
-		`(?s)redacted\.services\.([a-zA-Z_][a-zA-Z0-9_-]*)\.additional_sub_topics\s*=\s*\[([^\]]*)\]`,
-	)
-
 	// A string literal inside a Nix list — used to split `[ "a" "b" "c" ]`.
 	reNixStringLiteral = regexp.MustCompile(`"([^"]+)"`)
 
@@ -126,17 +122,6 @@ var (
 		`\b([a-zA-Z_][a-zA-Z0-9_-]*)\b`,
 	)
 
-	// `${pkgs.redacted.<package>}/bin/<binary>` — the redacted-Nix idiom for
-	// invoking a Rust binary from a systemd script. Captures (package, binary).
-	// Used to emit `Service ── RUNS_BINARY ──> Module` edges, which close
-	// the service-to-implementation loop ("show me the code for canstatd").
-	//
-	// Filters out pubmsg/submsg here — those are framework helpers, not the
-	// service implementation itself.
-	reNixredactedBinary = regexp.MustCompile(
-		`\$\{pkgs\.redacted\.([a-zA-Z0-9_-]+)\}/bin/([a-zA-Z_][a-zA-Z0-9_-]*)\b`,
-	)
-
 	// Cargo.toml [package] name = "X". Standalone package manifests only
 	// (workspace-only Cargo.toml has no [package] section, returns no match).
 	reCargoPackageName = regexp.MustCompile(
@@ -151,9 +136,106 @@ var (
 	)
 )
 
+// Nix prefix configuration ---------------------------------------------------
+
+const (
+	// NixServiceOptionPrefixEnv overrides the option-set prefix that service
+	// declarations live under (default "services" → options.services.<name>).
+	NixServiceOptionPrefixEnv = "CODE_GRAPH_NIX_SERVICE_OPTION_PREFIX"
+	// NixPkgsPrefixEnv overrides the package-set prefix used to detect the
+	// binary a service runs (default "pkgs" → ${pkgs.<pkg>}/bin/<binary>).
+	NixPkgsPrefixEnv = "CODE_GRAPH_NIX_PKGS_PREFIX"
+
+	defaultNixServiceOptionPrefix = "services"
+	defaultNixPkgsPrefix          = "pkgs"
+)
+
+// nixPatterns holds the prefix-dependent regexes for one configuration.
+type nixPatterns struct {
+	optionPrefix string
+	pkgsPrefix   string
+	// options.<prefix>.<NAME> = { ... } — captures the service name. Anchored
+	// to `options.` to avoid matching usage-side `<prefix>.X.Y = ...`.
+	serviceDecl *regexp.Regexp
+	// <prefix>.<NAME>.additional_sub_topics = [ "X" "Y" ]; — (service, list).
+	additionalSubTopics *regexp.Regexp
+	// ${<pkgs>.<package>}/bin/<binary> — (package, binary). Used to emit
+	// Service ── RUNS_BINARY ──> Module edges. pubmsg/submsg are filtered
+	// out by the caller (framework helpers, not the service implementation).
+	runsBinary *regexp.Regexp
+	// keywords are prefix segments that must never be treated as topic names
+	// when splitting imperative submsg argument lists.
+	keywords map[string]bool
+}
+
+var (
+	nixPatternsMu    sync.Mutex
+	nixPatternsCache = map[[2]string]*nixPatterns{}
+	reNixPrefixSeg   = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_-]*$`)
+)
+
+// sanitizeNixPrefix validates a dotted identifier prefix (e.g. "services" or
+// "acme.services"); anything else falls back to the default.
+func sanitizeNixPrefix(value, fallback string) string {
+	value = strings.Trim(strings.TrimSpace(value), ".")
+	if value == "" {
+		return fallback
+	}
+	for _, seg := range strings.Split(value, ".") {
+		if !reNixPrefixSeg.MatchString(seg) {
+			slog.Warn("nix.prefix.invalid", "value", value, "fallback", fallback)
+			return fallback
+		}
+	}
+	return value
+}
+
+// newNixPatterns compiles the prefix-dependent regexes for the given prefixes.
+func newNixPatterns(optionPrefix, pkgsPrefix string) *nixPatterns {
+	optionPrefix = sanitizeNixPrefix(optionPrefix, defaultNixServiceOptionPrefix)
+	pkgsPrefix = sanitizeNixPrefix(pkgsPrefix, defaultNixPkgsPrefix)
+	opt := regexp.QuoteMeta(optionPrefix)
+	pk := regexp.QuoteMeta(pkgsPrefix)
+	np := &nixPatterns{
+		optionPrefix: optionPrefix,
+		pkgsPrefix:   pkgsPrefix,
+		serviceDecl: regexp.MustCompile(
+			`(?m)^\s*options\.` + opt + `\.([a-zA-Z_][a-zA-Z0-9_-]*)\s*=`,
+		),
+		additionalSubTopics: regexp.MustCompile(
+			`(?s)` + opt + `\.([a-zA-Z_][a-zA-Z0-9_-]*)\.additional_sub_topics\s*=\s*\[([^\]]*)\]`,
+		),
+		runsBinary: regexp.MustCompile(
+			`\$\{` + pk + `\.([a-zA-Z0-9_-]+)\}/bin/([a-zA-Z_][a-zA-Z0-9_-]*)\b`,
+		),
+		keywords: map[string]bool{},
+	}
+	for _, seg := range strings.Split(optionPrefix+"."+pkgsPrefix, ".") {
+		np.keywords[seg] = true
+	}
+	return np
+}
+
+// activeNixPatterns returns the patterns for the current environment,
+// compiling each distinct prefix pair once.
+func activeNixPatterns() *nixPatterns {
+	key := [2]string{
+		sanitizeNixPrefix(os.Getenv(NixServiceOptionPrefixEnv), defaultNixServiceOptionPrefix),
+		sanitizeNixPrefix(os.Getenv(NixPkgsPrefixEnv), defaultNixPkgsPrefix),
+	}
+	nixPatternsMu.Lock()
+	defer nixPatternsMu.Unlock()
+	if np, ok := nixPatternsCache[key]; ok {
+		return np
+	}
+	np := newNixPatterns(key[0], key[1])
+	nixPatternsCache[key] = np
+	return np
+}
+
 // nixServiceInfo is one parsed Nix service module.
 type nixServiceInfo struct {
-	serviceName string // from options.redacted.services.<name>
+	serviceName string // from options.<prefix>.<name>
 	pubTopic    string // primary baf.pub_topic default; "" if not declared
 	// pubTopicVariants captures additional `baf.pub_topic_<suffix>` defaults
 	// (e.g., anavd's `baf.pub_topic_fast = "anavd-fast"`). Each variant is
@@ -171,14 +253,14 @@ type nixServiceInfo struct {
 	// additional_sub_topics keyed by target service name (often references a
 	// different service, e.g., nazgul-radar-services.nix adds "simd" to trackerd).
 	additionalSubsByService map[string][]string
-	// runsBinaries: package names referenced via `${pkgs.redacted.<pkg>}/bin/<binary>`.
+	// runsBinaries: package names referenced via `${<pkgs-prefix>.<pkg>}/bin/<binary>`.
 	// Filtered to exclude pubmsg/submsg (framework helpers, not service code).
 	// Used to emit Service ── RUNS_BINARY ──> Module edges.
 	runsBinaries []string
 	declaredIn   string
 }
 
-// passNixServices walks .nix files under RepoPath, parses redacted service
+// passNixServices walks .nix files under RepoPath, parses NixOS-style service
 // declarations, and emits Service + Topic nodes with PUBLISHES_TO/
 // SUBSCRIBES_TO edges. No-op silently on repos with no matching patterns.
 func (p *Pipeline) passNixServices() {
@@ -407,12 +489,17 @@ func (p *Pipeline) insertNixRunsBinaryEdge(srcID, tgtID int64, binaryName string
 // parseNixServiceFile extracts service + topic bindings from one Nix file.
 // Pure function — safe to unit-test with raw source strings.
 func parseNixServiceFile(source string) nixServiceInfo {
+	return parseNixServiceFileWith(activeNixPatterns(), source)
+}
+
+// parseNixServiceFileWith is parseNixServiceFile with explicit prefix patterns.
+func parseNixServiceFileWith(np *nixPatterns, source string) nixServiceInfo {
 	info := nixServiceInfo{
 		additionalSubsByService: make(map[string][]string),
 	}
 
 	// Service name (first declaration wins; most files declare one).
-	if m := reNixServiceDecl.FindStringSubmatch(source); len(m) == 2 {
+	if m := np.serviceDecl.FindStringSubmatch(source); len(m) == 2 {
 		info.serviceName = m[1]
 	}
 
@@ -460,7 +547,7 @@ func parseNixServiceFile(source string) nixServiceInfo {
 	}
 
 	// additional_sub_topics (often on OTHER services in common config files)
-	for _, m := range reNixAdditionalSubTopics.FindAllStringSubmatch(source, -1) {
+	for _, m := range np.additionalSubTopics.FindAllStringSubmatch(source, -1) {
 		targetSvc := m[1]
 		topics := extractNixStringList(m[2])
 		info.additionalSubsByService[targetSvc] = append(
@@ -476,10 +563,10 @@ func parseNixServiceFile(source string) nixServiceInfo {
 		info.impSubTopics = append(info.impSubTopics, extractSubmsgTopics(m[1])...)
 	}
 
-	// `${pkgs.redacted.X}/bin/Y` references — Y is the binary the service runs.
+	// `${<pkgs-prefix>.X}/bin/Y` references — Y is the binary the service runs.
 	// Filter out pubmsg/submsg (framework helpers, not the service code itself).
 	seen := make(map[string]struct{})
-	for _, m := range reNixredactedBinary.FindAllStringSubmatch(source, -1) {
+	for _, m := range np.runsBinary.FindAllStringSubmatch(source, -1) {
 		bin := m[2]
 		if bin == "pubmsg" || bin == "submsg" {
 			continue
@@ -504,7 +591,7 @@ type rustBinaryEntry struct {
 // a map from binary name to crate. Binary name defaults to the package
 // name; if `[[bin]] name = "X"` is present, X is used.
 //
-// Used by RUNS_BINARY edge emission to resolve `${pkgs.redacted.X}/bin/Y`
+// Used by RUNS_BINARY edge emission to resolve `${<pkgs-prefix>.X}/bin/Y`
 // references in Nix scripts back to the Rust crate's Module node.
 func (p *Pipeline) buildRustBinaryMap() map[string]rustBinaryEntry {
 	out := make(map[string]rustBinaryEntry)
@@ -633,11 +720,11 @@ func stripNixInterpolations(s string) string {
 func isNixKeyword(tok string) bool {
 	switch tok {
 	case "if", "then", "else", "let", "in", "with", "true", "false", "null",
-		"builtins", "toString", "concatStringsSep", "pkgs", "redacted",
+		"builtins", "toString", "concatStringsSep", "pkgs",
 		"cfg", "baf", "bin":
 		return true
 	}
-	return false
+	return activeNixPatterns().keywords[tok]
 }
 
 // uniqueStrings returns the input slice with duplicates removed, preserving order.

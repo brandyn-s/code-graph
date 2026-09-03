@@ -30,11 +30,11 @@ Usage:
     python bench/research/grammar_drift_check.py --update-baseline python
         Updates baseline for one language only.
 
-This harness uses the existing `bin/codebase-memory-mcp.exe` to drive
+This harness uses the existing `bin/code-graph.exe` to drive
 the parser via a debug-only command. It does NOT call into tree-sitter
 Python bindings; it goes through the same CGO path as production.
 
-Requires: bin/codebase-memory-mcp.exe built (see CLAUDE.md "Key Commands").
+Requires: bin/code-graph.exe built (see CLAUDE.md "Key Commands").
 """
 from __future__ import annotations
 
@@ -47,7 +47,7 @@ from typing import Any
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 CANARIES_DIR = REPO_ROOT / "bench" / "research" / "grammar_canaries"
 BASELINE_PATH = CANARIES_DIR / "baselines.json"
-BIN_PATH = REPO_ROOT / "bin" / "codebase-memory-mcp.exe"
+BIN_PATH = REPO_ROOT / "bin" / "code-graph.exe"
 
 LANGUAGES = {
     "python": "py",
@@ -74,7 +74,7 @@ def fingerprint(canary_path: pathlib.Path, lang: str) -> dict[str, Any]:
     if not canary_path.exists():
         return {"error": f"canary missing: {canary_path}"}
 
-    # The bin/codebase-memory-mcp.exe binary supports "cli" subcommand
+    # The bin/code-graph.exe binary supports "cli" subcommand
     # invocation. We expect a future grammar-fingerprint subcommand;
     # for now, surface that the canary file exists and record its size
     # + first-200-bytes hash as a placeholder fingerprint. Real

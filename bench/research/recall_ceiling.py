@@ -20,7 +20,7 @@ import sqlite3
 import sys
 from pathlib import Path
 
-CACHE_DIR = Path.home() / ".cache" / "codebase-memory-mcp"
+CACHE_DIR = Path.home() / ".cache" / "code-graph"
 
 # The 3 instances where hybrid-agent scored file=N in the n=16 run
 # (locbench-scored-cosine0.md). vllm had a separate SHM-corruption issue

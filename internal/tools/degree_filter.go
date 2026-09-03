@@ -13,7 +13,7 @@ import (
 // CALLS edge type for a given node label.
 //
 // Motivated by PSM head-to-head Q9 (2026-05-12): both our binary AND upstream
-// codebase-memory-mcp v0.6.1 exhaust max_turns trying to express "functions
+// code-graph v0.6.1 exhaust max_turns trying to express "functions
 // with no callers" via Cypher on an 80K-node graph. Neither engine plans the
 // degree-filter query efficiently enough for an agent to converge within its
 // turn budget. A dedicated tool with a direct SQL aggregate sidesteps the

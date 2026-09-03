@@ -29,8 +29,8 @@ import sqlite3
 import sys
 from pathlib import Path
 
-H_DB = os.environ.get("H_DB", "/tmp/claude/cbm-h2/.cache/codebase-memory-mcp/Users-brandyn.schult-Documents-GitHub-code-graph.db")
-S_DB = os.environ.get("S_DB", "/tmp/claude/cbm-s2/.cache/codebase-memory-mcp/Users-brandyn.schult-Documents-GitHub-code-graph.db")
+H_DB = os.environ.get("H_DB", "/tmp/claude/cbm-h2/.cache/code-graph/Users-brandyn.schult-Documents-GitHub-code-graph.db")
+S_DB = os.environ.get("S_DB", "/tmp/claude/cbm-s2/.cache/code-graph/Users-brandyn.schult-Documents-GitHub-code-graph.db")
 REPO = Path(os.environ.get("ORACLE_REPO", str(Path.home() / "Documents/GitHub/code-graph")))
 DATASET = Path("/tmp/claude/type_oracle_n200_dataset.json")
 RESULTS = Path("/tmp/claude/type_oracle_n200_results.json")

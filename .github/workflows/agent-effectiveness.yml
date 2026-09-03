@@ -25,7 +25,7 @@ on:
     paths:
       - 'internal/tools/**'
       - 'internal/store/**'
-      - 'cmd/codebase-memory-mcp/**'
+      - 'cmd/code-graph/**'
       - 'bench/research/agent-effectiveness/**'
       - '.github/workflows/agent-effectiveness.yml'
   workflow_dispatch:
@@ -84,8 +84,8 @@ jobs:
 
       - name: Build code-graph binary
         run: |
-          CGO_ENABLED=1 go build -o bin/codebase-memory-mcp ./cmd/codebase-memory-mcp/
-          chmod +x bin/codebase-memory-mcp
+          CGO_ENABLED=1 go build -o bin/code-graph ./cmd/code-graph/
+          chmod +x bin/code-graph
 
       - name: Clone ripgrep fixture
         run: |
@@ -94,7 +94,7 @@ jobs:
 
       - name: Index ripgrep
         env:
-          CODE_GRAPH_BIN: ${{ github.workspace }}/bin/codebase-memory-mcp
+          CODE_GRAPH_BIN: ${{ github.workspace }}/bin/code-graph
         run: |
           "$CODE_GRAPH_BIN" cli index_repository "{\"path\":\"$HOME/fixture/ripgrep\"}"
 
@@ -120,7 +120,7 @@ jobs:
 
       - name: Run category 6 (schema validation; no API cost)
         env:
-          CODE_GRAPH_BIN: ${{ github.workspace }}/bin/codebase-memory-mcp
+          CODE_GRAPH_BIN: ${{ github.workspace }}/bin/code-graph
         run: |
           cd bench/research/agent-effectiveness
           # corpus.json hard-codes a developer-machine ripgrep path +
@@ -140,7 +140,7 @@ jobs:
       - name: Run category 1 (banner; ~$2 on ripgrep)
         if: env.ANTHROPIC_SKIP != '1'
         env:
-          CODE_GRAPH_BIN: ${{ github.workspace }}/bin/codebase-memory-mcp
+          CODE_GRAPH_BIN: ${{ github.workspace }}/bin/code-graph
         run: |
           cd bench/research/agent-effectiveness
           export CORPUS_RIPGREP_PATH="$HOME/fixture/ripgrep"
@@ -149,7 +149,7 @@ jobs:
       - name: Run additional categories on manual dispatch
         if: github.event_name == 'workflow_dispatch' && env.ANTHROPIC_SKIP != '1'
         env:
-          CODE_GRAPH_BIN: ${{ github.workspace }}/bin/codebase-memory-mcp
+          CODE_GRAPH_BIN: ${{ github.workspace }}/bin/code-graph
         run: |
           cd bench/research/agent-effectiveness
           export CORPUS_RIPGREP_PATH="$HOME/fixture/ripgrep"

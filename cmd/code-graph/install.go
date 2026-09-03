@@ -35,7 +35,7 @@ func runInstall(args []string) int {
 		return 1
 	}
 
-	fmt.Printf("\ncodebase-memory-mcp %s — install\n", version)
+	fmt.Printf("\ncode-graph %s — install\n", version)
 	fmt.Printf("Binary: %s\n\n", binaryPath)
 
 	// PATH check
@@ -97,7 +97,7 @@ func runUninstall(args []string) int {
 		}
 	}
 
-	fmt.Printf("\ncodebase-memory-mcp %s — uninstall\n\n", version)
+	fmt.Printf("\ncode-graph %s — uninstall\n\n", version)
 
 	// Remove Claude Code skills
 	removeClaudeSkills(cfg)
@@ -198,7 +198,7 @@ func ensurePATH(binaryPath string, cfg installConfig) {
 			return
 		}
 		defer f.Close()
-		fmt.Fprintf(f, "\n# Added by codebase-memory-mcp install\n%s\n", line)
+		fmt.Fprintf(f, "\n# Added by code-graph install\n%s\n", line)
 		fmt.Printf("  ✓ Added to %s: %s\n", rcFile, line)
 		fmt.Printf("  → Run: source %s (or restart terminal)\n", rcFile)
 	}
@@ -241,7 +241,7 @@ func installSkills(cfg installConfig) {
 	fmt.Println("[Skills]")
 
 	// Remove old monolithic skill if it exists
-	oldSkillDir := filepath.Join(home, ".claude", "skills", "codebase-memory-mcp")
+	oldSkillDir := filepath.Join(home, ".claude", "skills", legacyMCPServerKey)
 	if info, err := os.Stat(oldSkillDir); err == nil && info.IsDir() {
 		if cfg.dryRun {
 			fmt.Printf("  [dry-run] Would remove old skill: %s\n", oldSkillDir)
@@ -284,12 +284,14 @@ func installSkills(cfg installConfig) {
 // registerClaudeCodeMCP registers the MCP server with Claude Code CLI.
 func registerClaudeCodeMCP(binaryPath, claudePath string, cfg installConfig) {
 	if cfg.dryRun {
-		fmt.Printf("  [dry-run] Would run: %s mcp remove -s user codebase-memory-mcp\n", claudePath)
-		fmt.Printf("  [dry-run] Would run: %s mcp add --scope user codebase-memory-mcp -- %s\n", claudePath, binaryPath)
+		fmt.Printf("  [dry-run] Would run: %s mcp remove -s user code-graph\n", claudePath)
+		fmt.Printf("  [dry-run] Would run: %s mcp add --scope user code-graph -- %s\n", claudePath, binaryPath)
 	} else {
-		// Silent remove (may fail if not registered — that's fine)
-		_ = execCLI(claudePath, "mcp", "remove", "-s", "user", "codebase-memory-mcp")
-		if err := execCLI(claudePath, "mcp", "add", "--scope", "user", "codebase-memory-mcp", "--", binaryPath); err != nil {
+		// Silent remove (may fail if not registered — that's fine). Also drop
+		// the pre-rename registration so users don't end up with two servers.
+		_ = execCLI(claudePath, "mcp", "remove", "-s", "user", legacyMCPServerKey)
+		_ = execCLI(claudePath, "mcp", "remove", "-s", "user", "code-graph")
+		if err := execCLI(claudePath, "mcp", "add", "--scope", "user", "code-graph", "--", binaryPath); err != nil {
 			fmt.Printf("  ⚠ MCP registration failed: %v\n", err)
 		} else {
 			fmt.Println("  ✓ MCP server registered (scope: user)")
@@ -307,7 +309,7 @@ func installCodex(binaryPath, _ string, cfg installConfig) {
 
 	// Register MCP server via config.toml
 	configFile := filepath.Join(home, ".codex", "config.toml")
-	mcpSection := fmt.Sprintf("\n[mcp_servers.codebase-memory-mcp]\ncommand = %q\n", binaryPath)
+	mcpSection := fmt.Sprintf("\n[mcp_servers.code-graph]\ncommand = %q\n", binaryPath)
 
 	if cfg.dryRun {
 		fmt.Printf("  [dry-run] Would add MCP server to: %s\n", configFile)
@@ -323,7 +325,7 @@ func installCodex(binaryPath, _ string, cfg installConfig) {
 
 	// Write instructions file
 	instrDir := filepath.Join(home, ".codex", "instructions")
-	instrFile := filepath.Join(instrDir, "codebase-memory-mcp.md")
+	instrFile := filepath.Join(instrDir, "code-graph.md")
 
 	if cfg.dryRun {
 		fmt.Printf("  [dry-run] Would write: %s\n", instrFile)
@@ -340,7 +342,7 @@ func installCodex(binaryPath, _ string, cfg installConfig) {
 	}
 }
 
-// upsertCodexMCP adds or updates the codebase-memory-mcp section in config.toml.
+// upsertCodexMCP adds or updates the code-graph section in config.toml.
 func upsertCodexMCP(configFile, mcpSection, binaryPath string) error {
 	content, err := os.ReadFile(configFile)
 	if err != nil && !os.IsNotExist(err) {
@@ -349,8 +351,11 @@ func upsertCodexMCP(configFile, mcpSection, binaryPath string) error {
 
 	text := string(content)
 
+	// Drop the pre-rename section so the renamed binary is registered once.
+	text = removeCodexSection(text, "[mcp_servers."+legacyMCPServerKey+"]")
+
 	// If section already exists, replace the command line
-	const sectionHeader = "[mcp_servers.codebase-memory-mcp]"
+	const sectionHeader = "[mcp_servers.code-graph]"
 	if idx := strings.Index(text, sectionHeader); idx >= 0 {
 		// Find the end of this section (next [ or EOF)
 		rest := text[idx+len(sectionHeader):]
@@ -366,6 +371,21 @@ func upsertCodexMCP(configFile, mcpSection, binaryPath string) error {
 	}
 
 	return os.WriteFile(configFile, []byte(text), 0o600)
+}
+
+// removeCodexSection deletes one TOML table (header through the next table
+// header or EOF) from text. Returns text unchanged when the header is absent.
+func removeCodexSection(text, header string) string {
+	idx := strings.Index(text, header)
+	if idx < 0 {
+		return text
+	}
+	rest := text[idx+len(header):]
+	endIdx := strings.Index(rest, "\n[")
+	if endIdx < 0 {
+		return strings.TrimRight(text[:idx], "\n") + "\n"
+	}
+	return text[:idx] + strings.TrimLeft(rest[endIdx:], "\n")
 }
 
 // removeClaudeSkills removes all 4 skill directories.
@@ -396,9 +416,9 @@ func removeClaudeSkills(cfg installConfig) {
 // deregisterMCP removes the MCP server registration from a CLI.
 func deregisterMCP(cliPath, cliName string, cfg installConfig) {
 	if cfg.dryRun {
-		fmt.Printf("  [dry-run] Would run: %s mcp remove -s user codebase-memory-mcp\n", cliPath)
+		fmt.Printf("  [dry-run] Would run: %s mcp remove -s user code-graph\n", cliPath)
 	} else {
-		if err := execCLI(cliPath, "mcp", "remove", "-s", "user", "codebase-memory-mcp"); err != nil {
+		if err := execCLI(cliPath, "mcp", "remove", "-s", "user", "code-graph"); err != nil {
 			fmt.Printf("  ⚠ %s MCP deregistration: %v\n", cliName, err)
 		} else {
 			fmt.Printf("  ✓ %s MCP server deregistered\n", cliName)
@@ -406,7 +426,7 @@ func deregisterMCP(cliPath, cliName string, cfg installConfig) {
 	}
 }
 
-// removeCodexMCP removes the codebase-memory-mcp section from Codex config.toml.
+// removeCodexMCP removes the code-graph section from Codex config.toml.
 func removeCodexMCP(cfg installConfig) {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -419,7 +439,7 @@ func removeCodexMCP(cfg installConfig) {
 	}
 
 	text := string(content)
-	const sectionHeader = "[mcp_servers.codebase-memory-mcp]"
+	const sectionHeader = "[mcp_servers.code-graph]"
 	idx := strings.Index(text, sectionHeader)
 	if idx < 0 {
 		return
@@ -452,7 +472,7 @@ func removeCodexInstructions(cfg installConfig) {
 	if err != nil {
 		return
 	}
-	instrFile := filepath.Join(home, ".codex", "instructions", "codebase-memory-mcp.md")
+	instrFile := filepath.Join(home, ".codex", "instructions", "code-graph.md")
 	if _, err := os.Stat(instrFile); os.IsNotExist(err) {
 		return
 	}
@@ -509,7 +529,11 @@ func execCLI(path string, args ...string) error {
 
 // --- Editor MCP config (Cursor, Windsurf) ---
 
-const mcpServerKey = "codebase-memory-mcp"
+const mcpServerKey = "code-graph"
+
+// legacyMCPServerKey is the pre-rename server/skill name. Install removes it
+// from client configs so a renamed binary does not leave a stale duplicate.
+const legacyMCPServerKey = "codebase-memory-mcp"
 
 // cursorConfigPath returns the Cursor MCP config path.
 func cursorConfigPath() string {
@@ -564,7 +588,8 @@ func installEditorMCP(binaryPath, configPath, editorName string, cfg installConf
 		servers = make(map[string]any)
 	}
 
-	// Upsert our server entry
+	// Upsert our server entry (and drop the pre-rename key if present)
+	delete(servers, legacyMCPServerKey)
 	servers[mcpServerKey] = map[string]any{
 		"command": binaryPath,
 	}

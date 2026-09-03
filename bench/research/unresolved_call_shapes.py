@@ -50,7 +50,7 @@ import sys
 from collections import Counter, defaultdict
 from typing import Dict, List, Tuple
 
-CACHE_DIR = pathlib.Path.home() / ".cache" / "codebase-memory-mcp"
+CACHE_DIR = pathlib.Path.home() / ".cache" / "code-graph"
 
 # Canonical dispatch-shape patterns per language. Each pattern is a
 # regex compiled with the canonical name (used as the bucket label).

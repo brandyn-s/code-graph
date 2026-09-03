@@ -13,7 +13,7 @@ import (
 	"sync"
 	"unsafe"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/lang"
+	"github.com/brandyn-s/code-graph/internal/lang"
 )
 
 // ResolvedCall represents a high-confidence type-aware call resolution from LSP.

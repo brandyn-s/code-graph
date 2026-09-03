@@ -1,0 +1,47 @@
+name: Bug report
+description: Something indexed, resolved, or answered incorrectly, or the server misbehaved
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: code-graph version
+      description: Output of `code-graph --version`
+      placeholder: code-graph 0.9.0
+    validations:
+      required: true
+  - type: input
+    id: client
+    attributes:
+      label: MCP client and OS
+      placeholder: Claude Code 2.x on macOS 15 (arm64)
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: Include the tool call (name and arguments) and the relevant part of the response.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction
+      description: A public repository and revision that shows the problem is ideal. Otherwise a minimal snippet in the affected language.
+      placeholder: |
+        git clone https://github.com/org/repo && git checkout <sha>
+        index_repository(repo_path="...", skip_report=true)
+        trace_call_path(project="repo", function_name="...", direction="inbound")
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Run with `CODE_GRAPH_LOG_FILE=/tmp/code-graph.log` and paste the relevant lines.
+      render: text

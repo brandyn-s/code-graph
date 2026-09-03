@@ -7,10 +7,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/cbm"
-	"github.com/DeusData/codebase-memory-mcp/internal/discover"
-	"github.com/DeusData/codebase-memory-mcp/internal/lang"
-	"github.com/DeusData/codebase-memory-mcp/internal/store"
+	"github.com/brandyn-s/code-graph/internal/cbm"
+	"github.com/brandyn-s/code-graph/internal/discover"
+	"github.com/brandyn-s/code-graph/internal/lang"
+	"github.com/brandyn-s/code-graph/internal/store"
 )
 
 func setupTestRepo(t *testing.T) (dir string, cleanup func()) {
@@ -652,7 +652,7 @@ func TestProjectNameFromPath(t *testing.T) {
 		// Windows paths (#20) — drive letter normalized to lowercase (#50)
 		{"C:/Users/project", "c-Users-project"},
 		{"D:\\Projects\\myapp", "d-Projects-myapp"},
-		{"C:\\Temp\\codebase-memory-mcp", "c-Temp-codebase-memory-mcp"},
+		{"C:\\Temp\\code-graph", "c-Temp-code-graph"},
 	}
 	for _, tt := range tests {
 		got := ProjectNameFromPath(tt.path)

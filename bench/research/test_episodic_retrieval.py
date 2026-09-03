@@ -76,11 +76,11 @@ def main() -> None:
         "--db",
         type=Path,
         default=None,
-        help="DB path. Defaults to ~/.cache/codebase-memory-mcp/{project}.db",
+        help="DB path. Defaults to ~/.cache/code-graph/{project}.db",
     )
     args = parser.parse_args()
     if args.db is None:
-        args.db = Path.home() / ".cache" / "codebase-memory-mcp" / f"{args.project}.db"
+        args.db = Path.home() / ".cache" / "code-graph" / f"{args.project}.db"
 
     api_key = os.environ.get("VOYAGE_API_KEY")
     if not api_key:

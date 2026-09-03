@@ -1,37 +1,103 @@
 package tools
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/store"
+	"github.com/brandyn-s/code-graph/internal/store"
 )
 
 // --- Pure function tests ---
 
 func TestClassifyDomain(t *testing.T) {
+	patterns := compileDomainPatterns(defaultDomainPatterns)
 	tests := []struct {
 		service string
 		want    string
 	}{
-		{"controlsd", "autonomy"},
-		{"trackerd", "perception"},
-		{"apid", "communications"},
-		{"doomper", "recording"},
-		{"sysmanager", "management"},
-		{"ship-os", "ui"},
-		{"libtracker", "perception"},
-		{"libfoo", "library"}, // lib prefix fallback
-		{"unknown-service", "other"},
+		{"controlsd", "service"},      // *d
+		{"orders-service", "service"}, // *-service
+		{"kubectl", "tooling"},        // *ctl
+		{"terraform", "infrastructure"},
+		{"test-runner", "testing"}, // test*
+		{"web-frontend", "ui"},     // web-* and *-frontend tie on length → alphabetical domain (both ui)
+		{"libtracker", "library"},  // lib*
+		{"libfoo", "library"},
+		{"unknown-thing", "other"},
 		{"", "other"},
+		{"D", "other"}, // suffix "*d" must not match the bare suffix itself
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.service, func(t *testing.T) {
-			got := classifyDomain(tt.service)
+			got := classifyDomainWith(patterns, tt.service)
 			if got != tt.want {
 				t.Errorf("classifyDomain(%q) = %q, want %q", tt.service, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestClassifyDomain_LongestPatternWins(t *testing.T) {
+	patterns := compileDomainPatterns(map[string][]string{
+		"service":  {"*d"},
+		"payments": {"billingd", "billing-*"},
+	})
+	if got := classifyDomainWith(patterns, "billingd"); got != "payments" {
+		t.Fatalf("billingd → %q, want payments (exact/longer pattern beats *d)", got)
+	}
+	if got := classifyDomainWith(patterns, "billing-api"); got != "payments" {
+		t.Fatalf("billing-api → %q, want payments", got)
+	}
+	if got := classifyDomainWith(patterns, "authd"); got != "service" {
+		t.Fatalf("authd → %q, want service", got)
+	}
+}
+
+func TestLoadDomainPatterns_FromEnvFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "service_map.json")
+	if err := os.WriteFile(path, []byte(`{"navigation": ["nav*", "*-gps"], "fleet": ["fleetd"]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	getenv := func(k string) string {
+		if k == ServiceMapEnv {
+			return path
+		}
+		return ""
+	}
+	patterns := loadDomainPatterns(getenv)
+	if got := classifyDomainWith(patterns, "navd"); got != "navigation" {
+		t.Fatalf("navd → %q, want navigation", got)
+	}
+	if got := classifyDomainWith(patterns, "boat-gps"); got != "navigation" {
+		t.Fatalf("boat-gps → %q, want navigation", got)
+	}
+	if got := classifyDomainWith(patterns, "fleetd"); got != "fleet" {
+		t.Fatalf("fleetd → %q, want fleet", got)
+	}
+	// Custom table replaces the default entirely: *d no longer means service.
+	if got := classifyDomainWith(patterns, "controlsd"); got != "other" {
+		t.Fatalf("controlsd → %q, want other under custom table", got)
+	}
+}
+
+func TestLoadDomainPatterns_InvalidFileFallsBackToDefault(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "service_map.json")
+	if err := os.WriteFile(path, []byte(`{not json`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	getenv := func(k string) string {
+		if k == ServiceMapEnv {
+			return path
+		}
+		return ""
+	}
+	patterns := loadDomainPatterns(getenv)
+	if got := classifyDomainWith(patterns, "controlsd"); got != "service" {
+		t.Fatalf("controlsd → %q, want default 'service' after invalid config", got)
 	}
 }
 
@@ -172,9 +238,9 @@ func TestServiceMapDomainGrouping(t *testing.T) {
 			if domain == "" {
 				t.Errorf("service %q got empty domain", svc)
 			}
-			// Our test services aren't in domainPatterns, so they should be "other"
-			if domain != "other" {
-				t.Errorf("test service %q classified as %q, expected 'other'", svc, domain)
+			// Classification must be deterministic across calls.
+			if again := classifyDomain(svc); again != domain {
+				t.Errorf("service %q classified as %q then %q", svc, domain, again)
 			}
 		}
 	})

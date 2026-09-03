@@ -19,17 +19,15 @@ import (
 
 // ReleaseURL is the GitHub API endpoint for latest release. Exported for test injection.
 //
-// Points at the redacted fork, NOT upstream DeusData — `codebase-memory-mcp
-// update` replaces the running binary with whatever this URL serves, and an
-// upstream binary would silently drop every redacted addition (security
-// tools, resolver gates, SCIP ingest). See tools.releaseURL for the
-// matching update-notice endpoint.
+// Points at this fork, NOT upstream DeusData — `code-graph update` replaces
+// the running binary with whatever this URL serves, and an upstream binary
+// would silently drop every fork addition (security tools, resolver gates,
+// SCIP ingest). See tools.releaseURL for the matching update-notice endpoint.
 var ReleaseURL = "https://api.github.com/repos/brandyn-s/code-graph/releases/latest"
 
 const (
-	privateRepository         = "brandyn-s/code-graph"
-	historicalNoProvenanceTag = "v0.7.0-redacted.2"
-	slsaProvenancePredicate   = "https://slsa.dev/provenance/v1"
+	privateRepository       = "brandyn-s/code-graph"
+	slsaProvenancePredicate = "https://slsa.dev/provenance/v1"
 )
 
 var safeReleaseComponent = regexp.MustCompile(
@@ -152,9 +150,9 @@ func (r *Release) FindAsset(name string) *Asset {
 // AssetName returns the expected release asset name for the current platform.
 func AssetName() string {
 	if runtime.GOOS == "windows" {
-		return fmt.Sprintf("codebase-memory-mcp-%s-%s.zip", runtime.GOOS, runtime.GOARCH)
+		return fmt.Sprintf("code-graph-%s-%s.zip", runtime.GOOS, runtime.GOARCH)
 	}
-	return fmt.Sprintf("codebase-memory-mcp-%s-%s.tar.gz", runtime.GOOS, runtime.GOARCH)
+	return fmt.Sprintf("code-graph-%s-%s.tar.gz", runtime.GOOS, runtime.GOARCH)
 }
 
 // CompareVersions compares two semver strings (e.g. "0.2.1" vs "0.2.0").
@@ -191,17 +189,38 @@ func CompareVersions(a, b string) int {
 		return 1
 	}
 	if aHasPre && bHasPre {
-		aredacted, aOK := strings.CutPrefix(aVersion[1], "redacted.")
-		bredacted, bOK := strings.CutPrefix(bVersion[1], "redacted.")
-		if aOK && bOK {
-			aRevision, aErr := strconv.Atoi(aredacted)
-			bRevision, bErr := strconv.Atoi(bredacted)
-			if aErr == nil && bErr == nil {
-				return aRevision - bRevision
+		return comparePrerelease(aVersion[1], bVersion[1])
+	}
+	return 0
+}
+
+// comparePrerelease orders dot-separated pre-release identifiers per semver:
+// numeric identifiers compare numerically, others lexically, and a longer
+// identifier list wins when all shared identifiers are equal. This also orders
+// the legacy internal scheme (vX.Y.Z-redacted.N) by N; any plain vX.Y.Z release
+// already compares newer than every pre-release of the same base.
+func comparePrerelease(a, b string) int {
+	aParts := strings.Split(a, ".")
+	bParts := strings.Split(b, ".")
+	for i := 0; i < len(aParts) && i < len(bParts); i++ {
+		ai, aErr := strconv.Atoi(aParts[i])
+		bi, bErr := strconv.Atoi(bParts[i])
+		switch {
+		case aErr == nil && bErr == nil:
+			if ai != bi {
+				return ai - bi
+			}
+		case aErr == nil:
+			return -1 // numeric identifiers sort before alphanumeric ones
+		case bErr == nil:
+			return 1
+		default:
+			if c := strings.Compare(aParts[i], bParts[i]); c != 0 {
+				return c
 			}
 		}
 	}
-	return 0
+	return len(aParts) - len(bParts)
 }
 
 // AllowedDownloadPrefixes controls which URL prefixes are accepted by DownloadAsset.
@@ -295,7 +314,7 @@ func VerifyReleaseAsset(
 		return fmt.Errorf("invalid release asset basename %q", assetName)
 	}
 
-	tempDir, err := os.MkdirTemp("", "codebase-memory-mcp-update-*")
+	tempDir, err := os.MkdirTemp("", "code-graph-update-*")
 	if err != nil {
 		return fmt.Errorf("create private verification directory: %w", err)
 	}
@@ -327,13 +346,6 @@ func VerifyReleaseAsset(
 			"authenticated release asset membership verification failed: %w",
 			err,
 		)
-	}
-
-	// This immutable historical release predates build provenance. Membership
-	// verification above remains mandatory; only its unavailable SLSA check is
-	// exempted.
-	if releaseTag == historicalNoProvenanceTag {
-		return nil
 	}
 
 	if _, err := runGitHubCLI(

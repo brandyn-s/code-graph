@@ -1,17 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# codebase-memory-mcp setup script (macOS + Linux)
-# INTERNAL: this installer requires an authenticated GitHub CLI session with
-# access to the brandyn-s/code-graph repository.
+# code-graph verified setup script (macOS + Linux)
+# This is the fully verified install path: it uses an authenticated GitHub CLI
+# to check immutable release membership and SLSA build provenance before
+# extracting anything. For a dependency-free install that only needs curl,
+# use ../install.sh instead.
 # Default: download pre-built binary from GitHub Release
 # --from-source: build from source (requires Go + C compiler)
 
 REPO="brandyn-s/code-graph"
-HISTORICAL_NO_PROVENANCE_TAG="v0.7.0-redacted.2"
 INSTALL_DIR="$HOME/.local/bin"
-BINARY_NAME="codebase-memory-mcp"
-SOURCE_DIR="$HOME/.local/share/codebase-memory-mcp"
+BINARY_NAME="code-graph"
+SOURCE_DIR="$HOME/.local/share/code-graph"
 CLEANUP_DIR=""  # set by download_binary for EXIT trap
 
 # --- Colors ---
@@ -48,7 +49,7 @@ for arg in "$@"; do
             echo ""
             echo "  Default:        Download pre-built binary from GitHub Release"
             echo "  --from-source:  Clone and build from source (requires Go 1.23+ and a C compiler)"
-            echo "  Both modes require an authenticated GitHub CLI with private repository access."
+            echo "  Both modes require an authenticated GitHub CLI (used for release-membership and provenance verification)."
             exit 0
             ;;
         *) die "Unknown argument: $arg" ;;
@@ -172,7 +173,7 @@ download_binary() {
     fi
     ok "Latest release: $tag"
 
-    local asset="codebase-memory-mcp-${platform}.tar.gz"
+    local asset="code-graph-${platform}.tar.gz"
 
     echo "${BOLD}Downloading ${asset}...${RESET}"
     CLEANUP_DIR=$(mktemp -d)
@@ -189,16 +190,12 @@ download_binary() {
         die "Downloaded ${asset} is not a verified member of immutable release ${tag}."
     fi
 
-    if [ "$tag" = "$HISTORICAL_NO_PROVENANCE_TAG" ]; then
-        warn "${tag} has no build provenance; immutable release membership verified"
-    else
-        echo "${BOLD}Verifying SLSA build provenance...${RESET}"
-        if ! gh attestation verify "$archive_path" --repo "$REPO" \
-            --predicate-type "https://slsa.dev/provenance/v1"; then
-            die "SLSA build provenance verification failed for ${asset}."
-        fi
-        ok "SLSA build provenance verified"
+    echo "${BOLD}Verifying SLSA build provenance...${RESET}"
+    if ! gh attestation verify "$archive_path" --repo "$REPO" \
+        --predicate-type "https://slsa.dev/provenance/v1"; then
+        die "SLSA build provenance verification failed for ${asset}."
     fi
+    ok "SLSA build provenance verified"
 
     tar -xzf "$archive_path" -C "$tmpdir"
 
@@ -243,7 +240,7 @@ build_from_source() {
         build_flags="-buildvcs=false"
     fi
 
-    (cd "$SOURCE_DIR" && CGO_ENABLED=1 go build $build_flags -o "${INSTALL_DIR}/${BINARY_NAME}" ./cmd/codebase-memory-mcp/)
+    (cd "$SOURCE_DIR" && CGO_ENABLED=1 go build $build_flags -o "${INSTALL_DIR}/${BINARY_NAME}" ./cmd/code-graph/)
 
     ok "Built and installed to ${INSTALL_DIR}/${BINARY_NAME}"
 }
@@ -255,7 +252,7 @@ configure_claude() {
     local binary_path="${INSTALL_DIR}/${BINARY_NAME}"
     local settings_file="$HOME/.claude/settings.json"
 
-    printf "%s" "${BOLD}Configure Claude Code to use codebase-memory-mcp? [y/N] ${RESET}"
+    printf "%s" "${BOLD}Configure Claude Code to use code-graph? [y/N] ${RESET}"
     read -r answer
     if [[ ! "$answer" =~ ^[Yy]$ ]]; then
         echo ""
@@ -263,7 +260,7 @@ configure_claude() {
         echo ""
         echo '  {'
         echo '    "mcpServers": {'
-        echo '      "codebase-memory-mcp": {'
+        echo '      "code-graph": {'
         echo '        "type": "stdio",'
         echo "        \"command\": \"${binary_path}\""
         echo '      }'
@@ -285,10 +282,10 @@ JSONEOF
         if [ -f "$settings_file" ]; then
             local tmp
             tmp=$(mktemp)
-            jq --argjson entry "$mcp_entry" '.mcpServers["codebase-memory-mcp"] = $entry' "$settings_file" > "$tmp"
+            jq --argjson entry "$mcp_entry" '.mcpServers["code-graph"] = $entry' "$settings_file" > "$tmp"
             mv "$tmp" "$settings_file"
         else
-            echo "{}" | jq --argjson entry "$mcp_entry" '.mcpServers["codebase-memory-mcp"] = $entry' > "$settings_file"
+            echo "{}" | jq --argjson entry "$mcp_entry" '.mcpServers["code-graph"] = $entry' > "$settings_file"
         fi
         ok "Updated ${settings_file}"
     elif command -v python3 &>/dev/null; then
@@ -299,7 +296,7 @@ data = {}
 if os.path.exists(path):
     with open(path) as f:
         data = json.load(f)
-data.setdefault('mcpServers', {})['codebase-memory-mcp'] = json.loads('$mcp_entry')
+data.setdefault('mcpServers', {})['code-graph'] = json.loads('$mcp_entry')
 with open(path, 'w') as f:
     json.dump(data, f, indent=2)
 print()
@@ -311,7 +308,7 @@ print()
         info "Add this to ${settings_file} manually:"
         echo ""
         echo '  "mcpServers": {'
-        echo '    "codebase-memory-mcp": {'
+        echo '    "code-graph": {'
         echo '      "type": "stdio",'
         echo "      \"command\": \"${binary_path}\""
         echo '    }'
@@ -334,7 +331,7 @@ check_path() {
 # --- Main ---
 
 echo ""
-echo "${BOLD}codebase-memory-mcp installer${RESET}"
+echo "${BOLD}code-graph installer${RESET}"
 echo ""
 
 if [ "$FROM_SOURCE" = true ]; then
@@ -374,4 +371,4 @@ echo ""
 info "To uninstall:"
 info "  rm ${INSTALL_DIR}/${BINARY_NAME}"
 info "  rm -rf ${SOURCE_DIR}  # if built from source"
-info "  rm -rf ~/.cache/codebase-memory-mcp/  # graph database"
+info "  rm -rf ~/.cache/code-graph/  # graph database"

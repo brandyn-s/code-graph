@@ -90,7 +90,7 @@ avoid another ~3.5h wall. Reasoning:
 - Cost-benefit: another $1.75 + 3.5h wall for a check that's likely to
   confirm the obvious is poor ROI for this session.
 
-Next session can run A.4 with the cached DBs (`~/.cache/codebase-memory-mcp/`
+Next session can run A.4 with the cached DBs (`~/.cache/code-graph/`
 populated by A.3) — wall drops to maybe ~1h. The
 `d2_accuracy_compare.py` script is shipped here, ready to run.
 

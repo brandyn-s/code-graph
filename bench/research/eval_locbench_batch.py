@@ -5,7 +5,7 @@ Loop over N selected Loc-Bench instances and for each:
   1. Read the instance from the parquet (problem_statement, repo, base_commit,
      edit_functions ground truth).
   2. Clone the repo at the recorded base_commit into a working dir.
-  3. Index it with our codebase-memory-mcp binary (VOYAGE_API_KEY enables
+  3. Index it with our code-graph binary (VOYAGE_API_KEY enables
      embedding seeds for the hybrid strategy).
   4. Run the eval harness against the resulting DB with -agent (LLM loop)
      and -seed-strategy=hybrid.
@@ -68,8 +68,8 @@ PARQUET = REPO_ROOT / "bench/research/locbench.parquet"
 # Windows; .exe-less names are the macOS/Linux builds of the same code).
 _BIN_EXT = ".exe" if os.name == "nt" else ""
 EVAL_BIN = REPO_ROOT / f"bench/research/eval_rank_localize/eval{_BIN_EXT}"
-INDEX_BIN = REPO_ROOT / f"bin/codebase-memory-mcp{_BIN_EXT}"
-CACHE_DIR = Path.home() / ".cache" / "codebase-memory-mcp"
+INDEX_BIN = REPO_ROOT / f"bin/code-graph{_BIN_EXT}"
+CACHE_DIR = Path.home() / ".cache" / "code-graph"
 
 # Estimated $/M tokens for Haiku 4.5 (input + output averaged over typical
 # agent runs from PR #82: ~50K in, ~1.4K out → $0.04-0.05 per query).
@@ -577,9 +577,9 @@ def _validate_index_identity(identity: object) -> str:
 
 
 def index_repo(path: Path) -> GraphIndexOutcome:
-    """Invoke codebase-memory-mcp index_repository against {path}.
+    """Invoke code-graph index_repository against {path}.
 
-    Form: codebase-memory-mcp cli index_repository '{"path":"<abs path>"}'
+    Form: code-graph cli index_repository '{"path":"<abs path>"}'
 
     Project name is derived from the path. Embedding seeds require
     VOYAGE_API_KEY at index time."""

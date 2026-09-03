@@ -1,6 +1,6 @@
 # Contributing to code-graph
 
-redacted fork of [DeusData/codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp). Contributions go through PRs to `main`.
+Fork of [DeusData/codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp), renamed `code-graph`. Contributions go through PRs to `main`.
 
 ## Build from Source
 
@@ -9,7 +9,7 @@ redacted fork of [DeusData/codebase-memory-mcp](https://github.com/DeusData/code
 ```bash
 git clone https://github.com/brandyn-s/code-graph.git
 cd code-graph
-CGO_ENABLED=1 go build -o bin/codebase-memory-mcp.exe ./cmd/codebase-memory-mcp/
+make build   # or: CGO_ENABLED=1 go build -o bin/code-graph ./cmd/code-graph/
 ```
 
 macOS: `xcode-select --install` provides clang.
@@ -40,7 +40,7 @@ gofmt -w .
 ## Project Structure
 
 ```
-cmd/codebase-memory-mcp/       Entry point (MCP server + CLI + install/update)
+cmd/code-graph/       Entry point (MCP server + CLI + install/update)
   assets/skills/               4 task-specific skills
 internal/
   store/                       SQLite graph storage (WAL mode, Louvain clustering)
@@ -81,7 +81,7 @@ Most language issues are in `internal/lang/<name>.go` (node type configuration) 
 
 Releases are triggered via `workflow_dispatch` on `release.yml` with a
 monotonically increasing `version` input (for example,
-`v0.7.0-redacted.3`). The workflow accepts only the exact default-branch HEAD,
+`v0.9.1`). The workflow accepts only the exact default-branch HEAD,
 tests and packages all supported platforms, generates build-provenance
 attestations, creates an immutable tag, uploads every asset to a draft, and
 publishes only after those gates pass.

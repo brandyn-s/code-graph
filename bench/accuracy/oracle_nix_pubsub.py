@@ -11,12 +11,12 @@ use tree-sitter-nix — that would be a second independent oracle
 (deferred; adds a dependency and nix grammar parity concerns).
 
 Scope: same as v1 Go extractor
-    - options.redacted.services.<name>                → Service
+    - options.services.<name>                → Service
     - baf.pub_topic mkOption default literal         → Service PUBLISHES_TO Topic
     - baf.sub_topics mkOption default list           → Service SUBSCRIBES_TO Topic
         (base literal topics only; conditional appends captured as a
          separate `conditional_subs` set for AMBIGUOUS-tier comparison)
-    - redacted.services.X.additional_sub_topics       → X SUBSCRIBES_TO Topic
+    - services.X.additional_sub_topics       → X SUBSCRIBES_TO Topic
     - `/bin/pubmsg TOPIC` / `/bin/submsg TOPIC` ...  → imperative (tier: INFERRED)
 """
 
@@ -31,7 +31,7 @@ from pathlib import Path
 # --- regex patterns (Python dialect; largely parallel to Go) ------------
 
 _RE_SERVICE_DECL = re.compile(
-    r"(?m)^\s*options\.redacted\.services\.([a-zA-Z_][a-zA-Z0-9_-]*)\s*=",
+    r"(?m)^\s*options\.services\.([a-zA-Z_][a-zA-Z0-9_-]*)\s*=",
 )
 
 _RE_PUB_TOPIC = re.compile(
@@ -55,7 +55,7 @@ _RE_SUB_TOPICS_FULL = re.compile(
 )
 
 _RE_ADDITIONAL_SUBS = re.compile(
-    r"redacted\.services\.([a-zA-Z_][a-zA-Z0-9_-]*)\.additional_sub_topics\s*=\s*\[([^\]]*)\]",
+    r"services\.([a-zA-Z_][a-zA-Z0-9_-]*)\.additional_sub_topics\s*=\s*\[([^\]]*)\]",
     re.DOTALL,
 )
 
@@ -85,7 +85,7 @@ class NixServiceOracle:
 
 _NIX_KEYWORDS = {
     "if", "then", "else", "let", "in", "with", "true", "false", "null",
-    "builtins", "toString", "concatStringsSep", "pkgs", "redacted",
+    "builtins", "toString", "concatStringsSep", "pkgs",
     "cfg", "baf", "bin",
 }
 

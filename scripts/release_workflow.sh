@@ -153,11 +153,11 @@ create_immutable_tag() {
 
 expected_asset_names() {
     printf '%s\n' \
-        "codebase-memory-mcp-linux-amd64.tar.gz" \
-        "codebase-memory-mcp-linux-arm64.tar.gz" \
-        "codebase-memory-mcp-darwin-amd64.tar.gz" \
-        "codebase-memory-mcp-darwin-arm64.tar.gz" \
-        "codebase-memory-mcp-windows-amd64.zip" \
+        "code-graph-linux-amd64.tar.gz" \
+        "code-graph-linux-arm64.tar.gz" \
+        "code-graph-darwin-amd64.tar.gz" \
+        "code-graph-darwin-arm64.tar.gz" \
+        "code-graph-windows-amd64.zip" \
         "checksums.txt"
 }
 

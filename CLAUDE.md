@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-redacted fork of codebase-memory-mcp. Persistent code knowledge graph MCP server with security extensions.
+Fork of DeusData/codebase-memory-mcp, renamed `code-graph`. Persistent code knowledge graph MCP server with security extensions.
 
 ## Key Commands
 
@@ -11,10 +11,10 @@ make build
 # Without make on Windows: KEEP -extldflags '-static'. Omitting it makes the .exe
 # depend on libwinpthread-1.dll and die STATUS_ENTRYPOINT_NOT_FOUND (0xC0000139)
 # when spawned with a stripped PATH (e.g. Claude Code MCP stdio). See PR #98.
-CGO_ENABLED=1 go build -ldflags "-extldflags '-static'" -o bin/codebase-memory-mcp.exe ./cmd/codebase-memory-mcp/
+CGO_ENABLED=1 go build -ldflags "-extldflags '-static'" -o bin/code-graph.exe ./cmd/code-graph/
 
 # Linux/macOS (no special linker flags needed):
-CGO_ENABLED=1 go build -o bin/codebase-memory-mcp ./cmd/codebase-memory-mcp/
+CGO_ENABLED=1 go build -o bin/code-graph ./cmd/code-graph/
 
 # Test
 go test ./... -count=1
@@ -28,14 +28,14 @@ gofmt -w .
 
 ## Architecture
 
-- **Graph storage**: SQLite WAL mode at `~/.cache/codebase-memory-mcp/`. Louvain community detection for clustering.
+- **Graph storage**: SQLite WAL mode at `~/.cache/code-graph/`. Louvain community detection for clustering.
 - **Parsing**: tree-sitter AST for 27 languages via vendored C grammars (CGO). Go gets enhanced LSP-style type resolution. 38 unused grammars were cut on 2026-06-10 (usage audit: none of the 38 appeared in any redacted repo; the 10 largest grammars were all unused — ~390MB of 770MB vendored source). PowerShell was added in the same change (airbus-cert/tree-sitter-powershell @ d3984418, MIT) — used by 2 redacted repos that previously had no coverage. Restoring a cut language = restore its four files from git history at that commit: `internal/cbm/vendored/grammars/<dir>/`, `internal/cbm/grammar_<name>.c`, `internal/lang/<name>.go`, plus the enum/spec/switch entries in `internal/cbm/cbm.h`, `internal/cbm/lang_specs.c`, `internal/cbm/cbm.go`, and `internal/lang/lang.go`.
 - **Pipeline**: Multi-stage indexing (discovery/identity -> structure -> definitions/imports/calls/usages -> flush -> optional SCIP -> tests/services/security/policy/history/communities/embeddings). Full, no-op, and dependency-aware incremental paths share the same source-identity fence.
 - **Cypher engine**: Custom lexer/parser/planner/executor. Read-only subset with variable-length paths.
 - **Auto-sync**: Background watcher polls mtime+size, triggers incremental reindex. Stored file hashes also detect deletion-only edits; deleted targets invalidate unchanged callers/importers before cascade removal. Adaptive polling intervals.
 - **Security tools**: `query_security_surfaces` (auth/crypto/input patterns), `query_stig_evidence` (control -> code mapping), `trace_data_flow` (CALLS/READS/WRITES/USAGE reachability; not variable-level taint), plus the operator-only offline `import-codeql` CLI for attested CodeQL SARIF paths
 - **Evidence**: `search_graph` and `get_relationship_evidence` issue immutable source/relationship references bound to repository, revision, generation, resolver, confidence, and optional SCIP artifact. `internal/evidence/proof.go` is an internal assurance-lattice contract, not an MCP tool.
-- **Skills**: 4 embedded skills (exploring, tracing, quality, reference) installed via `codebase-memory-mcp install`
+- **Skills**: 4 embedded skills (exploring, tracing, quality, reference) installed via `code-graph install`
 
 ## Testing
 
@@ -56,14 +56,14 @@ go test ./internal/pipeline/ -run TestPipeline -v
 go test ./internal/pipeline/ -run TestIncrementalMatchesCleanAcrossChangeClasses -count=5 -v
 ```
 
-## redacted Additions (beyond upstream)
+## Fork Additions (beyond upstream)
 
 ### Security & Compliance Tools
 | Tool | Source File | Purpose |
 |------|-----------|---------|
 | `query_security_surfaces` | `internal/tools/security.go` | Auth, crypto, input validation pattern discovery; results are graph evidence, not a taint proof |
 | `trace_data_flow` | `internal/tools/dataflow.go` | Interprocedural graph reachability; variable-level taint requests fail closed to a CodeQL handoff |
-| `import-codeql` CLI | `internal/codeqlimport/`, `cmd/codebase-memory-mcp/codeql_import.go` | Offline conversion of operator-attested CodeQL SARIF into immutable analysis evidence; never launches CodeQL or mutates graph state. Contract: `docs/codeql-evidence-import.md` |
+| `import-codeql` CLI | `internal/codeqlimport/`, `cmd/code-graph/codeql_import.go` | Offline conversion of operator-attested CodeQL SARIF into immutable analysis evidence; never launches CodeQL or mutates graph state. Contract: `docs/codeql-evidence-import.md` |
 | `query_stig_evidence` | `internal/tools/stig_evidence.go` | STIG control → code evidence mapping |
 | `index_health` | `internal/tools/health.go` | Graph coverage and quality report. Includes unsupported-extension telemetry (2026-06-11): `cut_language_files` (extensions from the 2026-06-10 grammar cut, reported at any count — the language-adoption canary; hint map in `internal/discover/cut_languages.go`), `unknown_extensions` (top 10 other extensions with ≥ 3 files), `unsupported_extension_files` (total). Tallied in `discover.Discover` via `Options.UnsupportedTally` — counts only files that survived every ignore filter. |
 

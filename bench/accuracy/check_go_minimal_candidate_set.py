@@ -59,7 +59,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 FIXTURE_ROOT = REPO_ROOT / "bench" / "accuracy" / "synthetic" / "go-minimal"
 GROUND_TRUTH = FIXTURE_ROOT / "ground_truth.json"
-BINARY = REPO_ROOT / "bin" / "codebase-memory-mcp.exe"
+BINARY = REPO_ROOT / "bin" / "code-graph.exe"
 
 # CALLS-family edge types we consider as "the resolver emitted a call."
 CALLS_FAMILY = {"CALLS", "CALLS_EXTERNAL", "CALLS_PSEUDO", "INDIRECT_CALLS"}
@@ -97,7 +97,7 @@ def index_fixture() -> None:
 
 def db_path_for(project: str) -> Path:
     home = Path.home()
-    return home / ".cache" / "codebase-memory-mcp" / f"{project}.db"
+    return home / ".cache" / "code-graph" / f"{project}.db"
 
 
 def fetch_calls_with_candidate_set(project: str) -> list[dict]:
@@ -190,7 +190,7 @@ def main() -> int:
     if not BINARY.exists():
         sys.stderr.write(
             f"Binary not built: {BINARY}\n"
-            "Run: CGO_ENABLED=1 go build -o bin/codebase-memory-mcp.exe ./cmd/codebase-memory-mcp/\n"
+            "Run: CGO_ENABLED=1 go build -o bin/code-graph.exe ./cmd/code-graph/\n"
         )
         return 2
 

@@ -32,7 +32,7 @@ QUERIES = [
     "the indexer runs slow on large repos; want parallel pipeline phases",
 ]
 
-DB = Path.home() / ".cache" / "codebase-memory-mcp" / "c-Users-user-Documents-GitHub-code-graph.db"
+DB = Path.home() / ".cache" / "code-graph" / "c-Users-user-Documents-GitHub-code-graph.db"
 # Resolve relative to the repo root (parent-of-parent of this script).
 REPO_ROOT = Path(__file__).resolve().parents[2]
 EVAL = REPO_ROOT / "eval_parallel.exe"

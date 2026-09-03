@@ -29,8 +29,8 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/ranking"
-	"github.com/DeusData/codebase-memory-mcp/internal/store"
+	"github.com/brandyn-s/code-graph/internal/ranking"
+	"github.com/brandyn-s/code-graph/internal/store"
 )
 
 // LocalizedEntity is one entry in the CodeLocalize result.

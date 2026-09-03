@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/store"
+	"github.com/brandyn-s/code-graph/internal/store"
 )
 
 // WHERE with OR on a single-node pattern was pushed into SQL as AND

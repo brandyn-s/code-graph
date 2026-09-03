@@ -14,7 +14,7 @@ package tools
 // fields documented in METADATA_SCHEMA.md.
 
 import (
-	"github.com/DeusData/codebase-memory-mcp/internal/store"
+	"github.com/brandyn-s/code-graph/internal/store"
 )
 
 // MetadataBuilder accumulates metadata fields for a single tool response.

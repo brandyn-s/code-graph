@@ -9,9 +9,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/evidence"
-	"github.com/DeusData/codebase-memory-mcp/internal/indexidentity"
-	"github.com/DeusData/codebase-memory-mcp/internal/store"
+	"github.com/brandyn-s/code-graph/internal/evidence"
+	"github.com/brandyn-s/code-graph/internal/indexidentity"
+	"github.com/brandyn-s/code-graph/internal/store"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 

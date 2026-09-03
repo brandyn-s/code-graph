@@ -156,7 +156,7 @@ def append_row(row: dict) -> None:
 
 BINARY = Path(os.environ.get(
     "CODE_GRAPH_BIN",
-    str(Path.home() / "Documents" / "GitHub" / "code-graph" / "bin" / "codebase-memory-mcp.exe"),
+    str(Path.home() / "Documents" / "GitHub" / "code-graph" / "bin" / "code-graph.exe"),
 ))
 
 

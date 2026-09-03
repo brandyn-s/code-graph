@@ -31,10 +31,10 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/anthropic"
-	"github.com/DeusData/codebase-memory-mcp/internal/localize"
-	"github.com/DeusData/codebase-memory-mcp/internal/ranking"
-	"github.com/DeusData/codebase-memory-mcp/internal/store"
+	"github.com/brandyn-s/code-graph/internal/anthropic"
+	"github.com/brandyn-s/code-graph/internal/localize"
+	"github.com/brandyn-s/code-graph/internal/ranking"
+	"github.com/brandyn-s/code-graph/internal/store"
 )
 
 const (

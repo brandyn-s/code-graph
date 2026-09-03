@@ -7,7 +7,7 @@ actual distribution of resolved/(resolved+unresolved) ratios across
 every Function/Method node in every code-graph project, so the thresholds
 can be tuned to natural breakpoints in the data.
 
-Inputs: code-graph SQLite DBs at `~/.cache/codebase-memory-mcp/*.db`.
+Inputs: code-graph SQLite DBs at `~/.cache/code-graph/*.db`.
 Output: stdout report with per-project distribution, aggregate
 distribution, and proposed empirical thresholds.
 
@@ -21,7 +21,7 @@ import sqlite3
 import statistics
 import sys
 
-CACHE_DIR = pathlib.Path.home() / ".cache" / "codebase-memory-mcp"
+CACHE_DIR = pathlib.Path.home() / ".cache" / "code-graph"
 
 
 def per_function_resolved_ratios(db_path: pathlib.Path) -> list[tuple[float, int, int]]:
@@ -79,7 +79,7 @@ def main():
         sys.stdout.reconfigure(encoding="utf-8")
 
     # --ci-smoke is the CI mode: probe the codebase imports + threshold
-    # logic without requiring real DBs at ~/.cache/codebase-memory-mcp/.
+    # logic without requiring real DBs at ~/.cache/code-graph/.
     # Returns 0 if the script's machinery runs cleanly. The drift-detection
     # itself is meaningful only against real DBs (run locally before
     # accepting drift signals).

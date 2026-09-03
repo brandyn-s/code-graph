@@ -13,7 +13,7 @@ Cost: 5 instances × 2 configs × ~$0.05/run = ~$0.50 at Haiku 4.5 (per
 LOCAGENT_ITERATIONS=2 default).
 
 Selected instances (must have indexed DBs at
-~/.cache/codebase-memory-mcp/c-tmp-locbench-ab-work-iter1-{instance}.db):
+~/.cache/code-graph/c-tmp-locbench-ab-work-iter1-{instance}.db):
   - django/django: skipped (not pre-indexed locally)
   - chosen 5 below from c-tmp-locbench-* cache:
 """
@@ -32,7 +32,7 @@ import pyarrow.parquet as pq
 REPO_ROOT = Path(__file__).resolve().parents[2]
 EVAL_BIN = REPO_ROOT / "bench/research/eval_rank_localize/eval.exe"
 PARQUET = REPO_ROOT / "bench/research/locbench.parquet"
-DB_DIR = Path.home() / ".cache" / "codebase-memory-mcp"
+DB_DIR = Path.home() / ".cache" / "code-graph"
 DB_PREFIX = "c-tmp-locbench-ab-work-iter1-"
 
 DEFAULT_INSTANCES = [

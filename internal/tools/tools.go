@@ -15,12 +15,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/discover"
-	"github.com/DeusData/codebase-memory-mcp/internal/indexidentity"
-	"github.com/DeusData/codebase-memory-mcp/internal/pipeline"
-	"github.com/DeusData/codebase-memory-mcp/internal/selfupdate"
-	"github.com/DeusData/codebase-memory-mcp/internal/store"
-	"github.com/DeusData/codebase-memory-mcp/internal/watcher"
+	"github.com/brandyn-s/code-graph/internal/discover"
+	"github.com/brandyn-s/code-graph/internal/indexidentity"
+	"github.com/brandyn-s/code-graph/internal/pipeline"
+	"github.com/brandyn-s/code-graph/internal/selfupdate"
+	"github.com/brandyn-s/code-graph/internal/store"
+	"github.com/brandyn-s/code-graph/internal/watcher"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -33,11 +33,10 @@ func SetVersion(v string) { Version = v }
 
 // releaseURL is the GitHub API endpoint for latest release. Package-level var for test injection.
 //
-// Points at the redacted fork, NOT upstream DeusData: this build carries the
-// redacted security/tooling additions, and an upstream release tag (0.8.x)
-// compares newer than our 0.7.0-redacted.x scheme — an upstream-pointed check
-// would prompt `codebase-memory-mcp update`, which replaces the binary with
-// an upstream build and silently drops every fork addition.
+// Points at this fork, NOT upstream DeusData: this build carries the fork's
+// security/tooling additions, and an upstream-pointed check would prompt
+// `code-graph update` to replace the binary with an upstream build that
+// silently drops every fork addition.
 var releaseURL = "https://api.github.com/repos/brandyn-s/code-graph/releases/latest"
 
 var fetchRelease = selfupdate.FetchRelease
@@ -89,7 +88,7 @@ func NewServer(r *store.StoreRouter, opts ...ServerOption) *Server {
 
 	srv.mcp = mcp.NewServer(
 		&mcp.Implementation{
-			Name:    "codebase-memory-mcp",
+			Name:    "code-graph",
 			Version: Version,
 		},
 		&mcp.ServerOptions{
@@ -396,7 +395,7 @@ func (s *Server) startAutoIndex() {
 		if !autoIndex {
 			slog.Info("autoindex.skip",
 				"reason", "auto_index_disabled",
-				"hint", "run: codebase-memory-mcp config set auto_index true",
+				"hint", "run: code-graph config set auto_index true",
 			)
 			return
 		}
@@ -613,7 +612,7 @@ func (s *Server) checkForUpdate() {
 	}
 	if compareVersions(latest, Version) > 0 {
 		notice := fmt.Sprintf(
-			"⚡ Update available: v%s → v%s — run: codebase-memory-mcp update",
+			"⚡ Update available: v%s → v%s — run: code-graph update",
 			Version, latest)
 		s.updateNotice.Store(notice)
 		slog.Info("update available", "current", Version, "latest", latest)
@@ -1009,7 +1008,7 @@ func (s *Server) registerCodeLocalizeAgentTool() {
 
 // registerGenerateReportTool adds the generate_report MCP tool — writes
 // ARCHITECTURE_REPORT.md to the repo root for always-on orientation via
-// the PreToolUse hook installed by `codebase-memory-mcp install`.
+// the PreToolUse hook installed by `code-graph install`.
 func (s *Server) registerGenerateReportTool() {
 	s.addTool(&mcp.Tool{
 		Name: "generate_report",

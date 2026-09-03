@@ -203,7 +203,7 @@ func resolverRuleFromLSPStrategy(strategy string) string {
 //     (project-wide unique-name lookup — callee's simple name has
 //     exactly one definition project-wide.)
 //   - "import_map_suffix" / "suffix_match"
-//                            → cross-package-suffix
+//     → cross-package-suffix
 //     (fall-through path: callee's simple name matched against suffix
 //     of a project-wide QN. The dangerous sub-bucket — produced the
 //     PR #165 phantom regression class. Drop-on-no-match target.)

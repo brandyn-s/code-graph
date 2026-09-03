@@ -8,8 +8,8 @@ import (
 	"runtime/debug"
 	"testing"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/discover"
-	"github.com/DeusData/codebase-memory-mcp/internal/store"
+	"github.com/brandyn-s/code-graph/internal/discover"
+	"github.com/brandyn-s/code-graph/internal/store"
 )
 
 // TestMemoryStability indexes a small fixture repo N times and asserts

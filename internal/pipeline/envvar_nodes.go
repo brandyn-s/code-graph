@@ -3,8 +3,8 @@ package pipeline
 import (
 	"log/slog"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/fqn"
-	"github.com/DeusData/codebase-memory-mcp/internal/store"
+	"github.com/brandyn-s/code-graph/internal/fqn"
+	"github.com/brandyn-s/code-graph/internal/store"
 )
 
 // passEnvVarNodes creates EnvVar nodes and READS_ENV edges from the envReaders

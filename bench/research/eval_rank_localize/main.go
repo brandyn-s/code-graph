@@ -17,10 +17,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/locagent"
-	"github.com/DeusData/codebase-memory-mcp/internal/localize"
-	"github.com/DeusData/codebase-memory-mcp/internal/ranking"
-	"github.com/DeusData/codebase-memory-mcp/internal/store"
+	"github.com/brandyn-s/code-graph/internal/locagent"
+	"github.com/brandyn-s/code-graph/internal/localize"
+	"github.com/brandyn-s/code-graph/internal/ranking"
+	"github.com/brandyn-s/code-graph/internal/store"
 )
 
 // jsonOutput is the structured shape emitted under -json. Loc-Bench
@@ -28,22 +28,22 @@ import (
 // matching the human-readable form, which is too coarse to distinguish
 // real model differences from output-formatting differences.
 type jsonOutput struct {
-	DB             string                  `json:"db"`
-	Project        string                  `json:"project"`
-	Query          string                  `json:"query"`
-	SeedStrategy   string                  `json:"seed_strategy"`
-	TopK           int                     `json:"top_k"`
-	Depth          int                     `json:"depth"`
-	AgentEnabled   bool                    `json:"agent_enabled"`
-	NodeCount      int                     `json:"node_count"`
-	EdgeCount      int                     `json:"edge_count"`
-	EmbeddingCount int                     `json:"embedding_count"`
-	RankByQuery    []ranking.RankedNode    `json:"rank_by_query"`
-	RankByQueryErr string                  `json:"rank_by_query_error,omitempty"`
-	CodeLocalize   []localize.LocalizedEntity  `json:"code_localize"`
-	CodeLocalizeErr string                 `json:"code_localize_error,omitempty"`
-	Agent          *locagent.Result        `json:"code_localize_agent,omitempty"`
-	AgentErr       string                  `json:"code_localize_agent_error,omitempty"`
+	DB              string                     `json:"db"`
+	Project         string                     `json:"project"`
+	Query           string                     `json:"query"`
+	SeedStrategy    string                     `json:"seed_strategy"`
+	TopK            int                        `json:"top_k"`
+	Depth           int                        `json:"depth"`
+	AgentEnabled    bool                       `json:"agent_enabled"`
+	NodeCount       int                        `json:"node_count"`
+	EdgeCount       int                        `json:"edge_count"`
+	EmbeddingCount  int                        `json:"embedding_count"`
+	RankByQuery     []ranking.RankedNode       `json:"rank_by_query"`
+	RankByQueryErr  string                     `json:"rank_by_query_error,omitempty"`
+	CodeLocalize    []localize.LocalizedEntity `json:"code_localize"`
+	CodeLocalizeErr string                     `json:"code_localize_error,omitempty"`
+	Agent           *locagent.Result           `json:"code_localize_agent,omitempty"`
+	AgentErr        string                     `json:"code_localize_agent_error,omitempty"`
 }
 
 func main() {

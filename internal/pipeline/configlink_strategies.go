@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/discover"
-	"github.com/DeusData/codebase-memory-mcp/internal/store"
+	"github.com/brandyn-s/code-graph/internal/discover"
+	"github.com/brandyn-s/code-graph/internal/store"
 )
 
 // configExtensions are file extensions considered "config files".
@@ -312,10 +312,10 @@ func (p *Pipeline) matchDependencyImports() []*store.Edge {
 				TargetID: dep.node.ID,
 				Type:     "CONFIGURES",
 				Properties: map[string]any{
-					"strategy":   "dependency_import",
+					"strategy":        "dependency_import",
 					"confidence_tier": store.ConfidenceAmbiguous,
-					"confidence": confidence,
-					"dep_name":   dep.name,
+					"confidence":      confidence,
+					"dep_name":        dep.name,
 				},
 			})
 		}
@@ -410,10 +410,10 @@ func (p *Pipeline) matchConfigFileRefs() []*store.Edge {
 				TargetID: target.ID,
 				Type:     "CONFIGURES",
 				Properties: map[string]any{
-					"strategy":   "file_reference",
+					"strategy":        "file_reference",
 					"confidence_tier": store.ConfidenceAmbiguous,
-					"confidence": confidence,
-					"ref_path":   refPath,
+					"confidence":      confidence,
+					"ref_path":        refPath,
 				},
 			})
 		}
@@ -575,10 +575,10 @@ func (p *Pipeline) matchTerraformEnvVars() []*store.Edge {
 					TargetID: targetNode.ID,
 					Type:     "CONFIGURES",
 					Properties: map[string]any{
-						"strategy":   "terraform_env",
+						"strategy":        "terraform_env",
 						"confidence_tier": store.ConfidenceAmbiguous,
-						"confidence": 0.90,
-						"env_key":    envVar,
+						"confidence":      0.90,
+						"env_key":         envVar,
 					},
 				})
 			}

@@ -147,8 +147,8 @@ func TestIsTestCallerName_Matrix(t *testing.T) {
 		{"BenchmarkParse", true},
 		{"ExampleNew", true},
 		{"FuzzScan", true},
-		{"Testable", false},   // Test + lowercase a
-		{"Tests", false},      // Test + lowercase s
+		{"Testable", false},     // Test + lowercase a
+		{"Tests", false},        // Test + lowercase s
 		{"benchmarkFoo", false}, // lowercase b
 		{"helper", false},
 		{"", false},

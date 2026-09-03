@@ -180,7 +180,7 @@ def resolve_and_filter(
     IMPORTS rules:
       - Keep only paths starting with the module prefix. We detect module
         prefix by looking for imports that contain the project-short name
-        (e.g., "codebase-memory-mcp" in the module path). External imports
+        (e.g., "code-graph" in the module path). External imports
         (std, third-party) are dropped.
 
     For IMPORTS, the oracle initially emits the raw import path from `import

@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/discover"
-	"github.com/DeusData/codebase-memory-mcp/internal/lang"
-	"github.com/DeusData/codebase-memory-mcp/internal/store"
+	"github.com/brandyn-s/code-graph/internal/discover"
+	"github.com/brandyn-s/code-graph/internal/lang"
+	"github.com/brandyn-s/code-graph/internal/store"
 )
 
 func writeLangTestFile(t *testing.T, path, content string) {

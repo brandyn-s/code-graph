@@ -3,14 +3,16 @@
 // targets a closure stored in a Variable, not a Function/Method.
 //
 // Expected behavior BEFORE the filter landed:
-//   code-graph emitted CALLS edges target_label=Variable.
-//   Oracle emits the same (bare calls to variable names).
-//   Match rate: probably decent.
+//
+//	code-graph emitted CALLS edges target_label=Variable.
+//	Oracle emits the same (bare calls to variable names).
+//	Match rate: probably decent.
 //
 // Expected behavior AFTER the filter (current state):
-//   code-graph DROPS these CALLS because target is Variable.
-//   Oracle still emits them.
-//   Result: closure CALLS show up as oracle FNs.
+//
+//	code-graph DROPS these CALLS because target is Variable.
+//	Oracle still emits them.
+//	Result: closure CALLS show up as oracle FNs.
 //
 // Red-team goal: does the filter drop legitimate closure CALLS that a
 // user of the graph would actually want to see?

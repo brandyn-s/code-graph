@@ -164,8 +164,8 @@ func TestBulkWriteMarkerCorruptDBSurfacesError(t *testing.T) {
 // than the cheap header-only check it should do on a clean file.
 func TestBulkWriteMarkerFalsePositiveOverhead(t *testing.T) {
 	const (
-		iterations  = 10
-		maxWallMs   = 500
+		iterations = 10
+		maxWallMs  = 500
 	)
 
 	// Build the corpus once, then run the open/close+marker cycle

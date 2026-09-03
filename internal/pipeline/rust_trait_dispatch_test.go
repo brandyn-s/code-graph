@@ -3,8 +3,8 @@ package pipeline
 import (
 	"testing"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/cbm"
-	"github.com/DeusData/codebase-memory-mcp/internal/lang"
+	"github.com/brandyn-s/code-graph/internal/cbm"
+	"github.com/brandyn-s/code-graph/internal/lang"
 )
 
 // CG-2 (2026-05-06) — internal-class-membership gate on the chain

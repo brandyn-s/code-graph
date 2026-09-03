@@ -63,10 +63,10 @@ var syntheticTraits = map[string]string{
 	"Clone":   "_external.std.clone.Clone",
 	"Default": "_external.std.default.Default",
 	// std::iter
-	"Iterator":           "_external.std.iter.Iterator",
-	"IntoIterator":       "_external.std.iter.IntoIterator",
-	"FromIterator":       "_external.std.iter.FromIterator",
-	"ExactSizeIterator":  "_external.std.iter.ExactSizeIterator",
+	"Iterator":            "_external.std.iter.Iterator",
+	"IntoIterator":        "_external.std.iter.IntoIterator",
+	"FromIterator":        "_external.std.iter.FromIterator",
+	"ExactSizeIterator":   "_external.std.iter.ExactSizeIterator",
 	"DoubleEndedIterator": "_external.std.iter.DoubleEndedIterator",
 	// std::marker
 	"Send":  "_external.std.marker.Send",
@@ -88,9 +88,9 @@ var syntheticTraits = map[string]string{
 	"Serialize":   "_external.serde.Serialize",
 	"Deserialize": "_external.serde.Deserialize",
 	// tokio
-	"AsyncRead":    "_external.tokio.io.AsyncRead",
-	"AsyncWrite":   "_external.tokio.io.AsyncWrite",
-	"AsyncReadExt": "_external.tokio.io.AsyncReadExt",
+	"AsyncRead":     "_external.tokio.io.AsyncRead",
+	"AsyncWrite":    "_external.tokio.io.AsyncWrite",
+	"AsyncReadExt":  "_external.tokio.io.AsyncReadExt",
 	"AsyncWriteExt": "_external.tokio.io.AsyncWriteExt",
 	// futures
 	"Stream":    "_external.futures.Stream",

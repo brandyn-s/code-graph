@@ -19,7 +19,7 @@ Usage:
   cbm-call-audit --project PREFIX --dir REPO --detail > audit.jsonl
   python classify_dropped_cbm_calls.py \\
       --audit audit.jsonl \\
-      --db ~/.cache/codebase-memory-mcp/PREFIX.db \\
+      --db ~/.cache/code-graph/PREFIX.db \\
       --project-prefix PREFIX \\
       --internal-crates assetman,libnet,common,api \\
       --out classification.json

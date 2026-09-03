@@ -76,7 +76,7 @@ jobs:
 
       - name: Drift-detection contract validation
         run: |
-          # CI doesn't have ~/.cache/codebase-memory-mcp/*.db. The real
+          # CI doesn't have ~/.cache/code-graph/*.db. The real
           # drift detection (--check-drift, B3) runs on developer
           # machines or in a cron job with access to indexed projects.
           # This CI step validates the contract: --check-drift must
@@ -95,7 +95,7 @@ jobs:
           echo "OK: --check-drift correctly fails-loud when no DBs present"
           echo "$out" | head -5
           echo ""
-          echo "Run on developer machines (where ~/.cache/codebase-memory-mcp/*.db exists):"
+          echo "Run on developer machines (where ~/.cache/code-graph/*.db exists):"
           echo "  python bench/research/confidence_band_distribution.py --check-drift"
           echo ""
           echo "If drift detected and the cause is a known extractor change,"

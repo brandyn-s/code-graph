@@ -14,11 +14,11 @@ func TestExtractTopLevelCrate(t *testing.T) {
 		{"doomper/src/recorder.rs", "doomper"},
 		{"ship-os/src/components/layout/Navigation.tsx", "ship-os"},
 		{"redacted-platform-terraform/core/modules/environment/main.tf", "redacted-platform-terraform"},
-		{"standalone.rs", "standalone.rs"},             // no slash → return full path
-		{"svc-api/src/handler.rs", "svc-api"},          // standard crate
-		{"", ""},                                       // empty
-		{"a/b", "a"},                                   // minimal path
-		{"windows\\path\\file.go", "windows"},          // backslash normalized
+		{"standalone.rs", "standalone.rs"},    // no slash → return full path
+		{"svc-api/src/handler.rs", "svc-api"}, // standard crate
+		{"", ""},                              // empty
+		{"a/b", "a"},                          // minimal path
+		{"windows\\path\\file.go", "windows"}, // backslash normalized
 	}
 
 	for _, tt := range tests {
@@ -38,10 +38,10 @@ func TestExtractSubpackage(t *testing.T) {
 	}{
 		{"doomper/src/recorder.rs", "doomper/src"},
 		{"doomper/tests/test_recorder.rs", "doomper/tests"},
-		{"standalone.rs", "standalone.rs"},              // single segment
-		{"a/b", "a"},                                    // two segments → first only
-		{"a/b/c/d", "a/b"},                              // standard: first two
-		{"windows\\path\\file.go", "windows/path"},      // backslash normalized
+		{"standalone.rs", "standalone.rs"},         // single segment
+		{"a/b", "a"},                               // two segments → first only
+		{"a/b/c/d", "a/b"},                         // standard: first two
+		{"windows\\path\\file.go", "windows/path"}, // backslash normalized
 	}
 
 	for _, tt := range tests {

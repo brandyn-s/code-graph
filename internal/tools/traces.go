@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"path/filepath"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/traces"
+	"github.com/brandyn-s/code-graph/internal/traces"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 

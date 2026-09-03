@@ -2,31 +2,31 @@
 
 Repo-level benchmark harness that captures measured pre/post metrics for incoming feature PRs (graphify-inspired improvements: confidence tags, orientation report, rationale extraction, graph diff, similarity edges).
 
-**Scope**: this directory is *not* the language coverage benchmark in [BENCHMARK.md](../BENCHMARK.md). That file tests language parity across 63 languages. This directory tests repo-level metrics against 4 pinned redacted fixtures, and is designed to be re-run after each feature PR with [compare.py](compare.py) diffing before/after.
+**Scope**: this directory is *not* the historical language coverage benchmark in [docs/benchmarks.md](../docs/benchmarks.md). This directory tests repo-level metrics against locally pinned fixture repositories (declared in an uncommitted `fixtures.json`, see below), and is designed to be re-run after each feature PR with [compare.py](compare.py) diffing before/after.
 
 ## Quick start
 
 ```bash
 # Rebuild the binary first (required — deployed binary may lag)
-cd ~/Documents/GitHub/code-graph
-CGO_ENABLED=1 go build -o bin/codebase-memory-mcp.exe ./cmd/codebase-memory-mcp/
+cd /path/to/code-graph
+CGO_ENABLED=1 go build -o bin/code-graph.exe ./cmd/code-graph/
 
 # One-time fixture setup: create the main-pinned worktree for the self-hosting fixture
 git worktree add "$HOME/worktrees/code-graph-main" main
-./bin/codebase-memory-mcp.exe cli --raw index_repository \
+./bin/code-graph.exe cli --raw index_repository \
   '{"repo_path":"'$HOME'/worktrees/code-graph-main"}'
 
 # Full baseline across all 4 fixtures
 python bench/harness.py --output bench/baseline_$(date +%F).json \
-  --binary ./bin/codebase-memory-mcp.exe
+  --binary ./bin/code-graph.exe
 
-# Skip re-index (use whatever's cached in ~/.cache/codebase-memory-mcp/)
+# Skip re-index (use whatever's cached in ~/.cache/code-graph/)
 python bench/harness.py --output bench/baseline_$(date +%F).json \
-  --binary ./bin/codebase-memory-mcp.exe --skip-index
+  --binary ./bin/code-graph.exe --skip-index
 
 # Smoke test (Q1+Q2 only on one repo, fast feedback)
 python bench/harness.py --output bench/smoke.json --smoke --repo mcp-servers \
-  --binary ./bin/codebase-memory-mcp.exe --skip-index
+  --binary ./bin/code-graph.exe --skip-index
 
 # Diff two baselines (before vs after a feature PR)
 python bench/compare.py bench/baseline_2026-04-22.json bench/after_pr1.json
@@ -42,14 +42,13 @@ will return empty until a fresh index with embeddings runs.
 ```bash
 # Opt in — only when semantic_search data is needed (still subject to stall risk)
 python bench/harness.py --output bench/baseline.json \
-  --binary ./bin/codebase-memory-mcp.exe --with-embeddings
+  --binary ./bin/code-graph.exe --with-embeddings
 ```
 
 ## Files
 
 | File | Purpose |
 |------|---------|
-| `PLAN.md` | Full design: why this exists, the 20-question suite, stop-ship criteria |
 | `fixtures.json` | Local, not committed: pinned benchmark repos (paths + SHAs). Create it from the schema described below before running the harness |
 | `questions.json` | 20-question standard suite (Q1-Q12 baseline, Q13-Q20 feature probes) |
 | `harness.py` | Runs the suite against a binary, emits JSON |
@@ -91,7 +90,7 @@ python bench/harness.py --output bench/baseline.json \
 
 ### 2. Binary version lag
 
-The harness runs against whatever `--binary` path points to. If you pass `~/bin/codebase-memory-mcp.exe`, it may be stale. **Always build fresh from the current `code-graph` source** before capturing a baseline (see Quick Start above). Stale binary produces false `N/A`s for tools that exist in source (`explain_symbol`, `get_review_context`, etc.) and polluted comparisons.
+The harness runs against whatever `--binary` path points to. If you pass `~/bin/code-graph.exe`, it may be stale. **Always build fresh from the current `code-graph` source** before capturing a baseline (see Quick Start above). Stale binary produces false `N/A`s for tools that exist in source (`explain_symbol`, `get_review_context`, etc.) and polluted comparisons.
 
 ### 3. Git worktree path mangling on Windows Git Bash
 
@@ -101,18 +100,18 @@ The harness runs against whatever `--binary` path points to. If you pass `~/bin/
 
 `fixtures.json` uses `$HOME`-prefixed paths (`$HOME/Documents/GitHub/...`). The harness expands both `~` and `$VAR` via `os.path.expandvars(os.path.expanduser(...))` so the same fixture file works on any machine with the expected directory layout. Don't hard-code absolute paths.
 
-### 5. Stale codebase-memory-mcp processes after a stall kill
+### 5. Stale code-graph processes after a stall kill
 
 If a stalled index is killed via `taskkill /F`, orphan processes can linger. Clean with:
 
 ```bash
-MSYS_NO_PATHCONV=1 taskkill /F /IM codebase-memory-mcp.exe
+MSYS_NO_PATHCONV=1 taskkill /F /IM code-graph.exe
 ```
 
 Then `delete_project` to clear any 0-node stub left in the registry:
 
 ```bash
-./bin/codebase-memory-mcp.exe cli --raw delete_project \
+./bin/code-graph.exe cli --raw delete_project \
   '{"project_name":"c-Users-user-Documents-GitHub-<repo>"}'
 ```
 
@@ -220,7 +219,7 @@ between a baseline corpus (pre-install) and a post-install corpus.
    ```
 2. Install the hook in your live Claude Code environment:
    ```bash
-   codebase-memory-mcp install
+   code-graph install
    # writes ~/.claude/hooks/codebase-memory-orientation.sh and
    # registers a PreToolUse matcher Glob|Grep in ~/.claude/settings.json
    ```

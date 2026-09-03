@@ -34,7 +34,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/store"
+	"github.com/brandyn-s/code-graph/internal/store"
 )
 
 // Default PageRank iteration count. 50 is conservative overkill — most

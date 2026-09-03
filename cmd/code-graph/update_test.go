@@ -16,7 +16,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/selfupdate"
+	"github.com/brandyn-s/code-graph/internal/selfupdate"
 )
 
 func TestExtractBinaryFromTarGz(t *testing.T) {
@@ -26,7 +26,7 @@ func TestExtractBinaryFromTarGz(t *testing.T) {
 
 	content := []byte("fake binary content")
 	hdr := &tar.Header{
-		Name:     "codebase-memory-mcp-linux-amd64",
+		Name:     "code-graph-linux-amd64",
 		Mode:     0o700,
 		Size:     int64(len(content)),
 		Typeflag: tar.TypeReg,
@@ -119,9 +119,9 @@ func TestDownloadAndVerify_FailsWithoutChecksums(t *testing.T) {
 		var buf bytes.Buffer
 		gw := gzip.NewWriter(&buf)
 		tw := tar.NewWriter(gw)
-		content := []byte("#!/bin/sh\necho codebase-memory-mcp test")
+		content := []byte("#!/bin/sh\necho code-graph test")
 		hdr := &tar.Header{
-			Name:     "codebase-memory-mcp",
+			Name:     "code-graph",
 			Mode:     0o755,
 			Size:     int64(len(content)),
 			Typeflag: tar.TypeReg,
@@ -144,7 +144,7 @@ func TestDownloadAndVerify_FailsWithoutChecksums(t *testing.T) {
 		TagName: "v9.9.9",
 		Assets: []selfupdate.Asset{
 			{
-				Name:               "codebase-memory-mcp-linux-amd64.tar.gz",
+				Name:               "code-graph-linux-amd64.tar.gz",
 				BrowserDownloadURL: assetServer.URL + "/binary.tar.gz",
 				Size:               1024,
 			},
@@ -152,7 +152,7 @@ func TestDownloadAndVerify_FailsWithoutChecksums(t *testing.T) {
 	}
 
 	asset := &release.Assets[0]
-	_, err := downloadAndVerify(context.Background(), release, "codebase-memory-mcp-linux-amd64.tar.gz", asset)
+	_, err := downloadAndVerify(context.Background(), release, "code-graph-linux-amd64.tar.gz", asset)
 	if err == nil {
 		t.Fatal("expected error when checksums are unavailable, got nil")
 	}
@@ -165,7 +165,7 @@ func TestDownloadAndVerify_ProvenanceFailureAbortsBeforeExtraction(t *testing.T)
 	archive := []byte("not a valid tar.gz")
 	hash := sha256.Sum256(archive)
 	checksum := hex.EncodeToString(hash[:])
-	const assetName = "codebase-memory-mcp-linux-amd64.tar.gz"
+	const assetName = "code-graph-linux-amd64.tar.gz"
 
 	assetServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -258,7 +258,7 @@ func TestExtractBinaryFromTarGz_RejectsOversizedEntry(t *testing.T) {
 	tw := tar.NewWriter(gw)
 
 	hdr := &tar.Header{
-		Name:     "codebase-memory-mcp",
+		Name:     "code-graph",
 		Mode:     0o755,
 		Size:     300 * 1024 * 1024, // 300 MB - over the limit
 		Typeflag: tar.TypeReg,

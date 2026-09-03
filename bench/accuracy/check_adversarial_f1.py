@@ -38,8 +38,8 @@ import sys
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 CODE_GRAPH_BINARY_CANDIDATES = [
-    REPO_ROOT / "bin" / "codebase-memory-mcp",
-    REPO_ROOT / "bin" / "codebase-memory-mcp.exe",
+    REPO_ROOT / "bin" / "code-graph",
+    REPO_ROOT / "bin" / "code-graph.exe",
 ]
 
 
@@ -49,7 +49,7 @@ def find_binary() -> pathlib.Path:
             return c
     raise SystemExit(
         f"code-graph binary not found in {[str(c) for c in CODE_GRAPH_BINARY_CANDIDATES]}; "
-        "run `go build -o bin/codebase-memory-mcp ./cmd/codebase-memory-mcp/` first."
+        "run `go build -o bin/code-graph ./cmd/code-graph/` first."
     )
 
 

@@ -41,10 +41,10 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 BASELINES_DIR = REPO_ROOT / "bench" / "accuracy" / "baselines"
 DEFAULT_OUTPUT = REPO_ROOT / "bench" / "accuracy" / "CURRENT.md"
 BINARY_CANDIDATES = [
-    REPO_ROOT / "bin" / "codebase-memory-mcp.exe",
-    REPO_ROOT / "bin" / "codebase-memory-mcp",
-    REPO_ROOT / "codebase-memory-mcp.exe",
-    REPO_ROOT / "codebase-memory-mcp",
+    REPO_ROOT / "bin" / "code-graph.exe",
+    REPO_ROOT / "bin" / "code-graph",
+    REPO_ROOT / "code-graph.exe",
+    REPO_ROOT / "code-graph",
 ]
 
 # baselines/YYYY-MM-DD-<fixture-with-dashes>-report.json
@@ -192,7 +192,7 @@ def render_markdown(
     else:
         lines.append(
             "- **Binary**: not found at expected paths "
-            "(`bin/codebase-memory-mcp.exe` or repo root); freshness band "
+            "(`bin/code-graph.exe` or repo root); freshness band "
             "will read UNKNOWN."
         )
     lines.append("- **Preferred metric**: `scope_aligned` (per README); falls back to `exact` if absent.")

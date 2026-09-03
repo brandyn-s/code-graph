@@ -10,7 +10,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/store"
+	"github.com/brandyn-s/code-graph/internal/store"
 )
 
 // Rationale is the label used for nodes emitted by this pass.
@@ -23,7 +23,7 @@ const rationaleLabel = "Rationale"
 const rationaleEdge = "RATIONALE_FOR"
 
 // rationaleMarker is a comment-line marker the pass recognizes. Each
-// language branch below selects the line-prefix syntax (``#`` or ``//``)
+// language branch below selects the line-prefix syntax (“#“ or “//“)
 // and applies a shared keyword alternation so the set of marker KINDS
 // stays consistent across languages.
 type rationaleMarker struct {
@@ -67,23 +67,23 @@ var (
 // syntax (e.g. raw HTML, CSS) are excluded here to avoid false positives.
 var rationaleExtensions = map[string]*regexp.Regexp{
 	// # KIND: ...
-	".py":    hashCommentRe,
-	".pyi":   hashCommentRe,
-	".rb":    hashCommentRe,
-	".sh":    hashCommentRe,
-	".bash":  hashCommentRe,
-	".zsh":   hashCommentRe,
-	".yaml":  hashCommentRe,
-	".yml":   hashCommentRe,
-	".toml":  hashCommentRe,
-	".hcl":   hashCommentRe,
-	".tf":    hashCommentRe,
-	".nix":   hashCommentRe,
-	".ex":    hashCommentRe,
-	".exs":   hashCommentRe,
-	".r":     hashCommentRe,
-	".pl":    hashCommentRe,
-	".R":     hashCommentRe,
+	".py":   hashCommentRe,
+	".pyi":  hashCommentRe,
+	".rb":   hashCommentRe,
+	".sh":   hashCommentRe,
+	".bash": hashCommentRe,
+	".zsh":  hashCommentRe,
+	".yaml": hashCommentRe,
+	".yml":  hashCommentRe,
+	".toml": hashCommentRe,
+	".hcl":  hashCommentRe,
+	".tf":   hashCommentRe,
+	".nix":  hashCommentRe,
+	".ex":   hashCommentRe,
+	".exs":  hashCommentRe,
+	".r":    hashCommentRe,
+	".pl":   hashCommentRe,
+	".R":    hashCommentRe,
 
 	// // KIND: ...
 	".go":    slashCommentRe,

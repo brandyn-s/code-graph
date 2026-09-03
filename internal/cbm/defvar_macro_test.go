@@ -3,7 +3,7 @@ package cbm
 import (
 	"testing"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/lang"
+	"github.com/brandyn-s/code-graph/internal/lang"
 )
 
 // PSM's defvar! macro declares env-var-backed typed constants. Before the
@@ -13,12 +13,12 @@ import (
 // extractor now emits a Variable definition per defvar! site.
 //
 // Five test cases pin the contract:
-//   1. simplest defvar! emits one Variable
-//   2. multiple defvars in the same source emit one each, preserving names
-//   3. a non-defvar! macro_invocation does NOT emit a Variable
-//   4. decorators=["defvar"] is set so callers can filter via CONTAINS
-//   5. start_line points at the macro_invocation line (not the line where
-//      the name token sits within the token_tree)
+//  1. simplest defvar! emits one Variable
+//  2. multiple defvars in the same source emit one each, preserving names
+//  3. a non-defvar! macro_invocation does NOT emit a Variable
+//  4. decorators=["defvar"] is set so callers can filter via CONTAINS
+//  5. start_line points at the macro_invocation line (not the line where
+//     the name token sits within the token_tree)
 func TestDefvarMacro_SimplestEmitsOneVariable(t *testing.T) {
 	source := []byte(`
 defvar!(MY_FLAG: bool = false, or try t => t.parse(); );

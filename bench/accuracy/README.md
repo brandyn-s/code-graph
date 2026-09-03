@@ -68,7 +68,7 @@ bench/accuracy/
 pip install anthropic   # only LLM-ensemble oracle needs this on the system python
 
 # Verify binary is current:
-CGO_ENABLED=1 go build -o bin/codebase-memory-mcp.exe ./cmd/codebase-memory-mcp/
+CGO_ENABLED=1 go build -o bin/code-graph.exe ./cmd/code-graph/
 
 # Run each oracle + compare:
 python bench/accuracy/oracle_pycg.py mcp-servers       # CALLS  (auto-bootstraps bench venv + patches)
@@ -181,7 +181,7 @@ Idempotent — subsequent calls return the cached interpreter path.
 - `AWS_BEARER_TOKEN_BEDROCK` — required for LLM ensemble oracle; refresh via `aws sso login` if 401.
 - `ANTHROPIC_MODEL_OPUS` — defaults to `claude-opus-4-7` (override for testing).
 - `ANTHROPIC_MODEL_SONNET` — defaults to `claude-sonnet-4-6`.
-- Code-graph binary at `bin/codebase-memory-mcp.exe` in this repo.
+- Code-graph binary at `bin/code-graph.exe` in this repo.
 - Fixture repos at paths in `fixtures.json`; must be at pinned SHA (harness exits 2 on drift).
 
 ## Regression workflow

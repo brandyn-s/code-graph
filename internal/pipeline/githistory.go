@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DeusData/codebase-memory-mcp/internal/safegit"
-	"github.com/DeusData/codebase-memory-mcp/internal/store"
+	"github.com/brandyn-s/code-graph/internal/safegit"
+	"github.com/brandyn-s/code-graph/internal/store"
 )
 
 // CommitFiles holds the files changed in a single commit.

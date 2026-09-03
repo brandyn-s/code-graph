@@ -132,7 +132,7 @@ func (c *ConfigStore) Close() error {
 // Known config keys and their defaults.
 const (
 	// ConfigAutoIndex controls whether the server auto-indexes on startup.
-	// Default: false (off). Enable with: codebase-memory-mcp config set auto_index true
+	// Default: false (off). Enable with: code-graph config set auto_index true
 	ConfigAutoIndex = "auto_index"
 
 	// ConfigReportSkipPrefix prefixes per-project sticky skip_report

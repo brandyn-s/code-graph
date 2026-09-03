@@ -85,7 +85,7 @@ be non-negative. Query IDs must be non-empty and unique.
 ## Run
 
 ```bash
-codebase-memory-mcp import-codeql \
+code-graph import-codeql \
   --repository /absolute/path/to/clean/repository \
   --sarif /absolute/path/to/codeql.sarif \
   --receipt /absolute/path/to/query-attestation.json \

@@ -101,7 +101,7 @@ func compileDomainPatterns(table map[string][]string) []domainPattern {
 	return out
 }
 
-func (dp domainPattern) matches(lower string) bool {
+func (dp *domainPattern) matches(lower string) bool {
 	if dp.exact != "" && lower == dp.exact {
 		return true
 	}

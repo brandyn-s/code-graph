@@ -1,0 +1,66 @@
+{
+  "_doc": "Tool surface for the arxiv-benchmark agent. Primary set = 14 tools matching upstream codebase-memory-mcp v0.5.5 (Table 4 in arXiv:2603.27277). Secondary set = our full 36-tool surface. Apples-to-apples comparison uses primary; we run secondary to quantify the bonus-tools effect.",
+  "primary_14_tool_match": {
+    "description": "Apples-to-apples match with upstream's 14 tools (arXiv paper Table 4). Use this set for the comparison number cited externally.",
+    "tools": [
+      "index_repository",
+      "index_status",
+      "list_projects",
+      "delete_project",
+      "search_graph",
+      "trace_call_path",
+      "query_graph",
+      "ingest_traces",
+      "detect_changes",
+      "get_graph_schema",
+      "get_architecture",
+      "get_code_snippet",
+      "search_code",
+      "manage_adr",
+      "degree_filter"
+    ]
+  },
+  "secondary_full_set": {
+    "description": "Our complete tool surface including bonus tools (LocAgent variants, semantic search, security/STIG, service-level tools). Measures lift from the tools we have that upstream doesn't.",
+    "tools": [
+      "index_repository", "index_status", "list_projects", "delete_project",
+      "search_graph", "trace_call_path", "query_graph", "ingest_traces",
+      "detect_changes", "get_graph_schema", "get_architecture", "get_code_snippet",
+      "search_code", "manage_adr",
+      "code_localize", "code_localize_agent", "rank_by_query",
+      "search_code_semantic", "find_rationale", "find_similar_functions",
+      "diff_graph", "diff_services", "explain_service", "explain_symbol",
+      "generate_report", "get_affected_tests", "get_change_coupling",
+      "get_relevant_context", "get_review_context", "index_health",
+      "detect_cycles", "query_security_surfaces", "query_stig_evidence",
+      "service_map", "trace_data_flow", "visualize"
+    ]
+  },
+  "upstream_tool_semantics": {
+    "_doc": "Reference semantics from arXiv paper Table 4 + upstream src/mcp/. Used by Phase B audit.",
+    "index_repository": "Build/update graph",
+    "index_status": "Poll indexing progress",
+    "list_projects": "List indexed repos",
+    "delete_project": "Remove index",
+    "search_graph": "Symbol search by label / name pattern",
+    "trace_call_path": "Call-chain traversal (inbound/outbound)",
+    "query_graph": "Cypher-like graph queries",
+    "ingest_traces": "Import runtime traces",
+    "detect_changes": "Git diff impact",
+    "get_graph_schema": "Schema introspection",
+    "get_architecture": "Architecture summary",
+    "get_code_snippet": "Source retrieval",
+    "search_code": "Full-text search",
+    "manage_adr": "Architecture decisions"
+  },
+  "mapping_notes": {
+    "all_14_present_in_our_fork": true,
+    "verified_via": "~/Documents/GitHub/code-graph/bin/codebase-memory-mcp.exe cli (2026-05-12) — all 14 names appear in our CLI tool list",
+    "semantic_drift_risks": [
+      "trace_call_path: upstream accepts depth param; verify our impl supports same depth range",
+      "query_graph: both implement Cypher subset; verify Cypher feature parity (we support recursive CTE; upstream uses BFS via SQLite CTE per paper)",
+      "search_code: both are FTS5-based; identical conceptually",
+      "manage_adr: both store ADR records; semantics likely identical"
+    ]
+  }
+}

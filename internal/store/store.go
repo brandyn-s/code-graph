@@ -73,10 +73,16 @@ const legacyCacheDirName = "codebase-memory-mcp"
 // legacy directory exists.
 func cacheDir() (string, error) {
 	if override := os.Getenv("CODE_GRAPH_CACHE_DIR"); override != "" {
-		if err := os.MkdirAll(override, 0o750); err != nil {
+		// The operator chooses this directory; clean and absolutize it so the
+		// rest of the store never sees a relative or traversal-shaped path.
+		cleaned, absErr := filepath.Abs(filepath.Clean(override))
+		if absErr != nil {
+			return "", fmt.Errorf("resolve CODE_GRAPH_CACHE_DIR: %w", absErr)
+		}
+		if err := os.MkdirAll(cleaned, 0o750); err != nil {
 			return "", fmt.Errorf("mkdir cache: %w", err)
 		}
-		return override, nil
+		return cleaned, nil
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {

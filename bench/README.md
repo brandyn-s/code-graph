@@ -50,7 +50,7 @@ python bench/harness.py --output bench/baseline.json \
 | File | Purpose |
 |------|---------|
 | `PLAN.md` | Full design: why this exists, the 20-question suite, stop-ship criteria |
-| `fixtures.json` | 4 pinned redacted repos (paths + SHAs) — update when re-pinning |
+| `fixtures.json` | Local, not committed: pinned benchmark repos (paths + SHAs). Create it from the schema described below before running the harness |
 | `questions.json` | 20-question standard suite (Q1-Q12 baseline, Q13-Q20 feature probes) |
 | `harness.py` | Runs the suite against a binary, emits JSON |
 | `compare.py` | Diff two JSON baselines |

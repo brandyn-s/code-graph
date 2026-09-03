@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	redactedRepository = "redacted-org/code-graph"
+	redactedRepository = "brandyn-s/code-graph"
 )
 
 func repositoryRoot(t *testing.T) string {
@@ -239,7 +239,7 @@ func TestUnixInstallerMigratesLegacySourceRemote(t *testing.T) {
 			}
 
 			command := function + `
-REPO="redacted-org/code-graph"
+REPO="brandyn-s/code-graph"
 SOURCE_DIR="$1"
 ensure_private_source_remote
 `
@@ -251,7 +251,7 @@ ensure_private_source_remote
 			if err != nil {
 				t.Fatalf("read migrated origin: %v\n%s", err, remote)
 			}
-			if got, want := strings.TrimSpace(string(remote)), "https://github.com/redacted-org/code-graph.git"; got != want {
+			if got, want := strings.TrimSpace(string(remote)), "https://github.com/brandyn-s/code-graph.git"; got != want {
 				t.Errorf("migrated origin = %q, want %q", got, want)
 			}
 		})

@@ -62,7 +62,7 @@ same shape as v0.1.
 
 ## Repo
 
-`redacted-org/code-graph`. Implementation lands on a separate
+`brandyn-s/code-graph`. Implementation lands on a separate
 `feat/tier2-v0.2-generic-bound` branch after this plan PR merges.
 
 ## Dependencies

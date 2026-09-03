@@ -27,7 +27,7 @@ stage, no new edge type — same property-on-CALLS convention as v0.1.
 SQLite (existing `properties` JSON column), tree-sitter call_node_types
 spec for Python (already populated for the existing patterns).
 
-**Repo:** `redacted-org/code-graph` (branch
+**Repo:** `brandyn-s/code-graph` (branch
 `claude/ecstatic-pasteur-ebWx8` for the design refresh PR;
 implementation lands on a separate `feat/indirect-calls-v0.3` branch).
 

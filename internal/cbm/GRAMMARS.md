@@ -89,9 +89,15 @@ Adding a language: drop `canary.<ext>` in
 - Surface in `index_health` MCP tool (Phase B4): grammar version + parse-error rate
 - Schema metadata: `internal/tools/METADATA_SCHEMA.md` — `provenance.grammar_versions` field
 
+## Provenance and licenses (2026-09-03)
+
+Every vendored grammar now carries its upstream LICENSE file in its
+directory, and `THIRD_PARTY_NOTICES.md` at the repository root records the
+upstream URL, pinned ref, ABI, and license for each one.
+
 ## PowerShell provenance (2026-06-10)
 
-Unlike the legacy grammars, `powershell/` has recorded provenance:
+`powershell/` was the first grammar with recorded provenance:
 vendored from https://github.com/airbus-cert/tree-sitter-powershell at
 commit `d398441825243b00e317e87e1829b9d6a3e54ce0` (MIT license), traded
 in during the 38-grammar cut. The grammar has no named fields; the

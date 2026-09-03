@@ -30,7 +30,7 @@ new edge types.
 vendored), `cargo metadata` CLI shell-out (toolchain dependency is
 acceptable — Rust projects building from source already have cargo).
 
-**Repo:** `redacted-org/code-graph`. Implementation lands on a
+**Repo:** `brandyn-s/code-graph`. Implementation lands on a
 separate `feat/tier2-v0.1-external-chain` branch after this design+plan PR
 merges.
 

@@ -27,7 +27,6 @@ on:
       - 'internal/store/**'
       - 'cmd/codebase-memory-mcp/**'
       - 'bench/research/agent-effectiveness/**'
-      - 'bench/research/arxiv-bench/**'
       - '.github/workflows/agent-effectiveness.yml'
   workflow_dispatch:
     inputs:
@@ -46,7 +45,6 @@ permissions:
 
 jobs:
   agent-effectiveness:
-    if: github.repository_owner_id != '186206138'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:

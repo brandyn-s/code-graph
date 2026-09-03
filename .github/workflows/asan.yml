@@ -25,7 +25,6 @@ permissions:
 
 jobs:
   asan:
-    if: github.repository_owner_id != '186206138'
     runs-on: ubuntu-latest
     steps:
       - name: Harden the runner (Audit all outbound calls)

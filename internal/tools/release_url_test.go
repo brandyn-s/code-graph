@@ -11,7 +11,7 @@ import (
 // run `codebase-memory-mcp update`, replacing the fork binary with an
 // upstream build that lacks every redacted addition.
 func TestReleaseURLPointsAtFork(t *testing.T) {
-	if !strings.Contains(releaseURL, "redacted-org/code-graph") {
+	if !strings.Contains(releaseURL, "brandyn-s/code-graph") {
 		t.Errorf("releaseURL must point at the redacted fork, got %q", releaseURL)
 	}
 	if strings.Contains(releaseURL, "DeusData") {

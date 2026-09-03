@@ -2,7 +2,7 @@
   "schema_version": 1,
   "measurement_date": "2026-08-12",
   "candidate": {
-    "repository": "redacted-org/code-graph",
+    "repository": "brandyn-s/code-graph",
     "source_revision": "9c27eb716e5fe56f3b80cd0cb0b5162b40d1462c",
     "change_scope": "normal-tier TypeScript declared type relationships"
   },

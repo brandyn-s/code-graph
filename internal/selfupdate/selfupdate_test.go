@@ -143,7 +143,7 @@ func TestFetchRelease_PrivateMetadataUsesAuthenticatedGitHubCLI(t *testing.T) {
 	}
 	wantArgs := []string{
 		"api",
-		"repos/redacted-org/code-graph/releases/latest",
+		"repos/brandyn-s/code-graph/releases/latest",
 		"--header",
 		"Accept: application/vnd.github+json",
 	}
@@ -182,7 +182,7 @@ func TestDownloadAsset_PrivateAssetUsesAuthenticatedGitHubCLI(t *testing.T) {
 		gotArgs = append([]string(nil), args...)
 		return []byte("private release bytes"), nil
 	})
-	rawURL := "https://github.com/redacted-org/code-graph/releases/" +
+	rawURL := "https://github.com/brandyn-s/code-graph/releases/" +
 		"download/v1.2.3/codebase-memory-mcp-linux-amd64.tar.gz"
 
 	data, err := DownloadAsset(context.Background(), rawURL)
@@ -198,7 +198,7 @@ func TestDownloadAsset_PrivateAssetUsesAuthenticatedGitHubCLI(t *testing.T) {
 		"download",
 		"v1.2.3",
 		"--repo",
-		"redacted-org/code-graph",
+		"brandyn-s/code-graph",
 		"--pattern",
 		"codebase-memory-mcp-linux-amd64.tar.gz",
 		"--output",
@@ -222,7 +222,7 @@ func TestDownloadAsset_PrivateAssetFailureHasNoAnonymousFallback(t *testing.T) {
 		},
 	)}
 	t.Cleanup(func() { http.DefaultClient = originalClient })
-	rawURL := "https://github.com/redacted-org/code-graph/releases/" +
+	rawURL := "https://github.com/brandyn-s/code-graph/releases/" +
 		"download/v1.2.3/checksums.txt"
 
 	_, err := DownloadAsset(context.Background(), rawURL)
@@ -299,14 +299,14 @@ func TestVerifyReleaseAsset_VerifiesMembershipBeforeSLSA(t *testing.T) {
 			"v1.2.3",
 			verificationPath,
 			"--repo",
-			"redacted-org/code-graph",
+			"brandyn-s/code-graph",
 		},
 		{
 			"attestation",
 			"verify",
 			verificationPath,
 			"--repo",
-			"redacted-org/code-graph",
+			"brandyn-s/code-graph",
 			"--predicate-type",
 			"https://slsa.dev/provenance/v1",
 		},

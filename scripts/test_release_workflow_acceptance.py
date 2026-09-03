@@ -18,7 +18,7 @@ VERSION = "v0.8.0-redacted.1"
 LATEST_VERSION = "v0.7.0-redacted.2"
 GITHUB_SHA = "a" * 40
 OTHER_SHA = "b" * 40
-GITHUB_REPOSITORY = "redacted-org/code-graph"
+GITHUB_REPOSITORY = "brandyn-s/code-graph"
 
 EXPECTED_ASSETS = (
     "codebase-memory-mcp-linux-amd64.tar.gz",

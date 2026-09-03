@@ -39,7 +39,7 @@ func runUpdate(args []string) int {
 	if runtime.GOOS == "windows" {
 		fmt.Println("Self-update is not supported on Windows.")
 		fmt.Println("Download the latest release manually from:")
-		fmt.Println("  https://github.com/redacted-org/code-graph/releases/latest")
+		fmt.Println("  https://github.com/brandyn-s/code-graph/releases/latest")
 		return 1
 	}
 

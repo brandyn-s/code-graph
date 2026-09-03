@@ -3,11 +3,11 @@ set -euo pipefail
 
 # codebase-memory-mcp setup script (macOS + Linux)
 # INTERNAL: this installer requires an authenticated GitHub CLI session with
-# access to the private redacted-org/code-graph repository.
+# access to the brandyn-s/code-graph repository.
 # Default: download pre-built binary from GitHub Release
 # --from-source: build from source (requires Go + C compiler)
 
-REPO="redacted-org/code-graph"
+REPO="brandyn-s/code-graph"
 HISTORICAL_NO_PROVENANCE_TAG="v0.7.0-redacted.2"
 INSTALL_DIR="$HOME/.local/bin"
 BINARY_NAME="codebase-memory-mcp"

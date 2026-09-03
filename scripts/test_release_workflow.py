@@ -172,15 +172,15 @@ class ReleaseWorkflowContractTests(unittest.TestCase):
 
     def test_documents_release_attestation_verification(self) -> None:
         self.assertIn(
-            "https://github.com/redacted-org/code-graph/releases",
+            "https://github.com/brandyn-s/code-graph/releases",
             self.readme,
         )
         self.assertIn(
-            "gh attestation verify PATH -R redacted-org/code-graph",
+            "gh attestation verify PATH -R brandyn-s/code-graph",
             self.readme,
         )
         self.assertIn(
-            "gh release verify-asset TAG PATH -R redacted-org/code-graph",
+            "gh release verify-asset TAG PATH -R brandyn-s/code-graph",
             self.readme,
         )
         self.assertIn(

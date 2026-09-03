@@ -2,7 +2,7 @@
   "schema_version": 1,
   "measurement_date": "2026-08-12",
   "candidate": {
-    "repository": "redacted-org/code-graph",
+    "repository": "brandyn-s/code-graph",
     "source_revision": "candidate",
     "change_scope": "TypeScript SCIP CALLS ingestion"
   },

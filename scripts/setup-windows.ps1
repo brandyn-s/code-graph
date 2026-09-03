@@ -1,6 +1,6 @@
 # codebase-memory-mcp setup script (Windows)
 # INTERNAL: requires an authenticated GitHub CLI session with access to the
-# private redacted-org/code-graph repository.
+# brandyn-s/code-graph repository.
 # Default: download pre-built native Windows binary
 # -FromSource: build from source inside WSL (requires Go + gcc in WSL)
 
@@ -11,7 +11,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$Repo = "redacted-org/code-graph"
+$Repo = "brandyn-s/code-graph"
 $HistoricalNoProvenanceTag = "v0.7.0-redacted.2"
 $BinaryName = "codebase-memory-mcp"
 $InstallDir = Join-Path $env:LOCALAPPDATA "codebase-memory-mcp"

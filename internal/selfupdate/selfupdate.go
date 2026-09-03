@@ -24,10 +24,10 @@ import (
 // upstream binary would silently drop every redacted addition (security
 // tools, resolver gates, SCIP ingest). See tools.releaseURL for the
 // matching update-notice endpoint.
-var ReleaseURL = "https://api.github.com/repos/redacted-org/code-graph/releases/latest"
+var ReleaseURL = "https://api.github.com/repos/brandyn-s/code-graph/releases/latest"
 
 const (
-	privateRepository         = "redacted-org/code-graph"
+	privateRepository         = "brandyn-s/code-graph"
 	historicalNoProvenanceTag = "v0.7.0-redacted.2"
 	slsaProvenancePredicate   = "https://slsa.dev/provenance/v1"
 )
@@ -69,7 +69,7 @@ func FetchLatestRelease(ctx context.Context) (*Release, error) {
 	return FetchRelease(ctx, ReleaseURL)
 }
 
-// FetchRelease fetches release metadata, authenticating private redacted access
+// FetchRelease fetches release metadata, authenticating access
 // through GitHub CLI while retaining HTTP injection for generic/public URLs.
 func FetchRelease(ctx context.Context, rawURL string) (*Release, error) {
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
@@ -389,7 +389,7 @@ func privateReleaseAsset(rawURL string) (tag, assetName string, err error) {
 	escapedParts := strings.Split(strings.Trim(parsed.EscapedPath(), "/"), "/")
 	if !strings.EqualFold(parsed.Hostname(), "github.com") ||
 		len(escapedParts) != 6 ||
-		escapedParts[0] != "redacted-org" ||
+		escapedParts[0] != "brandyn-s" ||
 		escapedParts[1] != "code-graph" ||
 		escapedParts[2] != "releases" ||
 		escapedParts[3] != "download" {

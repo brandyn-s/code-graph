@@ -38,7 +38,7 @@ func SetVersion(v string) { Version = v }
 // compares newer than our 0.7.0-redacted.x scheme — an upstream-pointed check
 // would prompt `codebase-memory-mcp update`, which replaces the binary with
 // an upstream build and silently drops every fork addition.
-var releaseURL = "https://api.github.com/repos/redacted-org/code-graph/releases/latest"
+var releaseURL = "https://api.github.com/repos/brandyn-s/code-graph/releases/latest"
 
 var fetchRelease = selfupdate.FetchRelease
 

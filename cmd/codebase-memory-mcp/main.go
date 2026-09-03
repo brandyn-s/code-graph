@@ -390,7 +390,7 @@ Configuration:
 Data storage:
   ~/.cache/codebase-memory-mcp/   SQLite databases (WAL mode, persists across restarts)
 
-For more information: https://github.com/redacted-org/code-graph
+For more information: https://github.com/brandyn-s/code-graph
 `)
 }
 

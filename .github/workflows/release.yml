@@ -23,7 +23,6 @@ permissions:
 
 jobs:
   preflight:
-    if: github.repository_owner_id != '186206138'
     runs-on: ubuntu-latest
     steps:
       - name: Harden the runner (Audit all outbound calls)
@@ -50,7 +49,6 @@ jobs:
         run: bash scripts/release_workflow.sh validate
 
   lint:
-    if: github.repository_owner_id != '186206138'
     needs: [preflight]
     runs-on: ubuntu-latest
     steps:
@@ -79,7 +77,6 @@ jobs:
           args: --timeout=10m
 
   build-unix:
-    if: github.repository_owner_id != '186206138'
     needs: [lint]
     strategy:
       matrix:
@@ -138,7 +135,6 @@ jobs:
           retention-days: 1
 
   build-windows:
-    if: github.repository_owner_id != '186206138'
     needs: [lint]
     runs-on: windows-latest
     steps:
@@ -193,7 +189,6 @@ jobs:
           retention-days: 1
 
   attest:
-    if: github.repository_owner_id != '186206138'
     needs: [build-unix, build-windows]
     runs-on: ubuntu-latest
     permissions:
@@ -219,7 +214,6 @@ jobs:
           subject-checksums: checksums.txt
 
   release:
-    if: github.repository_owner_id != '186206138'
     needs: [attest]
     runs-on: ubuntu-latest
     permissions:

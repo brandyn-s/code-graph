@@ -401,7 +401,7 @@ jobs:
           GH_TOKEN: ${{ secrets.CODE_INTEL_COMPONENT_TOKEN }}
         run: |
           gh release download v0.2.1 \
-            --repo redacted-org/code-search \
+            --repo brandyn-s/code-search \
             --pattern "$CODE_SEARCH_WHEEL" \
             --dir "$RUNNER_TEMP" \
             --clobber

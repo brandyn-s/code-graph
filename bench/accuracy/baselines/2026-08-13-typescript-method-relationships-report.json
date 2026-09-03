@@ -3,7 +3,7 @@
   "measurement_date": "2026-08-13",
   "status": "measured_improvement_with_bounded_remaining_gaps",
   "candidate": {
-    "repository": "redacted-org/code-graph",
+    "repository": "brandyn-s/code-graph",
     "baseline_source_revision": "1185a16ae85ba38b33c02fc55294a901c6d3c897",
     "candidate_source_revision": "86b3219ad98b55306c9b49ec91bcbf68e0ccf4fd",
     "change_scope": "normal-tier TypeScript and TSX direct declared method overrides and implementations",

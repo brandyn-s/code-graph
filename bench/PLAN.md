@@ -21,7 +21,7 @@ Three artifacts:
 | mcp-infra | 8173017 | Python + Terraform/HCL | Infrastructure-heavy; tests HCL + config linking |
 | code-graph | c9b1195 | Go (self-hosting) | Meta-test: tool indexes itself |
 
-SHAs pinned in `bench/fixtures.json`. Re-pin by updating that file when baseline is re-captured.
+SHAs pinned in `bench/fixtures.json` (a local, uncommitted file). Re-pin by updating that file when baseline is re-captured.
 
 ## 20-question standard set
 

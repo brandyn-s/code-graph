@@ -7,7 +7,7 @@ redacted fork of [DeusData/codebase-memory-mcp](https://github.com/DeusData/code
 **Prerequisites**: Go 1.26+, a C compiler (gcc or clang - needed for tree-sitter CGO bindings), Git.
 
 ```bash
-git clone https://github.com/redacted-org/code-graph.git
+git clone https://github.com/brandyn-s/code-graph.git
 cd code-graph
 CGO_ENABLED=1 go build -o bin/codebase-memory-mcp.exe ./cmd/codebase-memory-mcp/
 ```

@@ -10,7 +10,7 @@ import (
 // whatever this URL serves — an upstream (DeusData) URL would silently
 // swap in a build without any redacted additions.
 func TestReleaseURLPointsAtFork(t *testing.T) {
-	if !strings.Contains(ReleaseURL, "redacted-org/code-graph") {
+	if !strings.Contains(ReleaseURL, "brandyn-s/code-graph") {
 		t.Errorf("ReleaseURL must point at the redacted fork, got %q", ReleaseURL)
 	}
 	if strings.Contains(ReleaseURL, "DeusData") {

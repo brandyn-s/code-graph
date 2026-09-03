@@ -6,7 +6,7 @@ Persistent code knowledge graph and evidence backend for MCP clients.
 what implements or overrides it, what may be affected by a change, and what
 source or analyzer evidence supports the relationship. Conceptual discovery is
 usually better served by
-[code-search](https://github.com/redacted-org/code-search).
+[code-search](https://github.com/brandyn-s/code-search).
 
 Originally forked from
 [DeusData/codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp),
@@ -16,7 +16,7 @@ evidence, and bounded cross-project operations.
 
 > **Current state (reviewed 2026-08-13):** implementation baseline
 > `4d7d103` (PR #457) is merged on `main`. The latest published release is
-> [`v0.8.0-redacted.11`](https://github.com/redacted-org/code-graph/releases/tag/v0.8.0-redacted.11)
+> [`v0.8.0-redacted.11`](https://github.com/brandyn-s/code-graph/releases/tag/v0.8.0-redacted.11)
 > at `45250f8`. PR #457's attested CodeQL importer, assurance-lattice types,
 > deterministic PageRank ties, and incremental deletion/re-export equivalence
 > fixes are merged source capabilities but are **not in `.11`**. This statement
@@ -223,10 +223,10 @@ checked for GitHub build provenance before installation.
 ### Install a Release
 
 Choose the archive for your platform from the
-[`v0.8.0-redacted.11` release](https://github.com/redacted-org/code-graph/releases/tag/v0.8.0-redacted.11):
+[`v0.8.0-redacted.11` release](https://github.com/brandyn-s/code-graph/releases/tag/v0.8.0-redacted.11):
 
 ```bash
-REPO="redacted-org/code-graph"
+REPO="brandyn-s/code-graph"
 TAG="v0.8.0-redacted.11"
 ASSET="codebase-memory-mcp-darwin-arm64.tar.gz"  # choose your platform
 

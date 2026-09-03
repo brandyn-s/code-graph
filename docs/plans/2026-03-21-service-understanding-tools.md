@@ -938,6 +938,6 @@ git commit -m "feat: add explain_service, service_map, and diff_services tools
 Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>"
 
 git push -u origin feat/service-understanding-tools
-gh pr create --title "feat: add service understanding tools" --repo redacted-org/code-graph
-gh pr merge --auto --squash --delete-branch --repo redacted-org/code-graph
+gh pr create --title "feat: add service understanding tools" --repo brandyn-s/code-graph
+gh pr merge --auto --squash --delete-branch --repo brandyn-s/code-graph
 ```

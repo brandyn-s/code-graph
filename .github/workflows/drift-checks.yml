@@ -32,7 +32,6 @@ permissions:
 
 jobs:
   grammar-drift:
-    if: github.repository_owner_id != '186206138'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -55,7 +54,6 @@ jobs:
         # the language(s) that regressed and the procedure to rebaseline.
 
   confidence-band-drift:
-    if: github.repository_owner_id != '186206138'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: []

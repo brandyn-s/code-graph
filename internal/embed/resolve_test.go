@@ -70,10 +70,12 @@ func TestDescribe(t *testing.T) {
 	if got := r.Describe(); got != "openai (nomic-embed-text @ localhost:11434)" {
 		t.Errorf("Describe = %q", got)
 	}
-	if got := (Resolution{Provider: ProviderVoyage, Model: "voyage-code-3"}).Describe(); got != "voyage (voyage-code-3)" {
+	voyage := Resolution{Provider: ProviderVoyage, Model: "voyage-code-3"}
+	if got := voyage.Describe(); got != "voyage (voyage-code-3)" {
 		t.Errorf("Describe = %q", got)
 	}
-	if got := (Resolution{}).Describe(); got != "off" {
+	off := Resolution{}
+	if got := off.Describe(); got != "off" {
 		t.Errorf("Describe = %q", got)
 	}
 }

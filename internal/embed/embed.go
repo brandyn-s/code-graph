@@ -116,7 +116,7 @@ type Resolution struct {
 
 // Host returns the endpoint host for logs and doctor output ("" for voyage
 // or off).
-func (r Resolution) Host() string {
+func (r *Resolution) Host() string {
 	if r.BaseURL == "" {
 		return ""
 	}
@@ -129,7 +129,7 @@ func (r Resolution) Host() string {
 
 // Describe returns a one-line human summary such as "voyage (voyage-code-3)"
 // or "openai (nomic-embed-text @ localhost:11434)".
-func (r Resolution) Describe() string {
+func (r *Resolution) Describe() string {
 	switch r.Provider {
 	case ProviderVoyage:
 		return fmt.Sprintf("%s (%s)", r.Provider, r.Model)
@@ -241,19 +241,20 @@ func ResolveProvider(getenv func(string) string) Resolution {
 // a ready client, or Disabled when none is configured or the configuration
 // is contradictory (the reason is available through ResolveProvider).
 func Default() Embedder {
-	return FromResolution(ResolveProvider(os.Getenv))
+	res := ResolveProvider(os.Getenv)
+	return FromResolution(&res)
 }
 
 // FromResolution builds the client described by r. Credentials are read from
 // the environment at construction time; r only says which provider to use.
-func FromResolution(r Resolution) Embedder {
+func FromResolution(r *Resolution) Embedder {
 	switch r.Provider {
 	case ProviderVoyage:
 		if v := NewVoyage(); v != nil {
 			return v
 		}
 	case ProviderOpenAI:
-		if c := NewOpenAI(r); c != nil {
+		if c := NewOpenAI(*r); c != nil {
 			return c
 		}
 	}

@@ -108,7 +108,10 @@ func TestOpenAI_RequestShapeAndOrder(t *testing.T) {
 	if got := f.lastAuth.Load(); got != "Bearer sk-test" {
 		t.Errorf("Authorization = %q", got)
 	}
-	body := f.lastBody.Load().(openAIEmbedRequest)
+	body, ok := f.lastBody.Load().(openAIEmbedRequest)
+	if !ok {
+		t.Fatalf("request body is %T, want openAIEmbedRequest", f.lastBody.Load())
+	}
 	if body.Model != "test-embed" || len(body.Input) != 3 {
 		t.Errorf("body = %+v", body)
 	}

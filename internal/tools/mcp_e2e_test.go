@@ -63,8 +63,19 @@ func TestMCPClientEndToEnd(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = session.Close() })
 
-	// tools/list must agree with the registered definitions the schema
-	// snapshot is generated from.
+	t.Run("tools_list", func(t *testing.T) { checkToolsList(ctx, t, session, srv) })
+
+	project := indexFixture(ctx, t, session, repo)
+	entryQN, leafQN := lookupEntryAndLeaf(ctx, t, session, project)
+	t.Run("relationship_evidence", func(t *testing.T) { checkRelationshipEvidence(ctx, t, session, project, entryQN, leafQN) })
+	t.Run("stale_source_refusal", func(t *testing.T) { checkStaleRefusal(ctx, t, session, repo, project, entryQN) })
+}
+
+// checkToolsList asserts tools/list agrees with the registered definitions the
+// schema snapshot is generated from and that the core toolset names only
+// registered tools.
+func checkToolsList(ctx context.Context, t *testing.T, session *mcp.ClientSession, srv *Server) {
+	t.Helper()
 	listed, err := session.ListTools(ctx, nil)
 	if err != nil {
 		t.Fatalf("tools/list: %v", err)
@@ -92,7 +103,12 @@ func TestMCPClientEndToEnd(t *testing.T) {
 		}
 	}
 
-	// Indexing round trip.
+}
+
+// indexFixture runs index_repository against the fixture and returns the
+// project name.
+func indexFixture(ctx context.Context, t *testing.T, session *mcp.ClientSession, repo string) string {
+	t.Helper()
 	indexed := callToolJSON(ctx, t, session, "index_repository", map[string]any{
 		"repo_path":   repo,
 		"skip_report": true,
@@ -105,7 +121,13 @@ func TestMCPClientEndToEnd(t *testing.T) {
 		t.Fatalf("index_repository degraded: %v", indexed)
 	}
 
-	// Relationship query through the public surface.
+	return project
+}
+
+// lookupEntryAndLeaf resolves the qualified names of the fixture's entry and
+// leaf functions through search_graph.
+func lookupEntryAndLeaf(ctx context.Context, t *testing.T, session *mcp.ClientSession, project string) (entryQN, leafQN string) {
+	t.Helper()
 	callers := callToolJSON(ctx, t, session, "search_graph", map[string]any{
 		"project":        project,
 		"label":          "Function",
@@ -113,15 +135,21 @@ func TestMCPClientEndToEnd(t *testing.T) {
 		"include_source": true,
 	})
 	entry := firstSearchResult(t, callers)
-	entryQN := requireStringValue(t, entry["qualified_name"], "entry qualified_name")
+	entryQN = requireStringValue(t, entry["qualified_name"], "entry qualified_name")
 	leafResult := firstSearchResult(t, callToolJSON(ctx, t, session, "search_graph", map[string]any{
 		"project":      project,
 		"label":        "Function",
 		"name_pattern": "leaf",
 	}))
-	leafQN := requireStringValue(t, leafResult["qualified_name"], "leaf qualified_name")
+	leafQN = requireStringValue(t, leafResult["qualified_name"], "leaf qualified_name")
 
-	// Evidence for the entry -> leaf call.
+	return entryQN, leafQN
+}
+
+// checkRelationshipEvidence asserts the entry -> leaf CALLS edge carries
+// resolver, tier, band, and a generation-bound relationship_ref.
+func checkRelationshipEvidence(ctx context.Context, t *testing.T, session *mcp.ClientSession, project, entryQN, leafQN string) {
+	t.Helper()
 	evidence := callToolJSON(ctx, t, session, "get_relationship_evidence", map[string]any{
 		"project":                project,
 		"qualified_name":         entryQN,
@@ -155,7 +183,12 @@ func TestMCPClientEndToEnd(t *testing.T) {
 		t.Errorf("relation_type = %q, want calls", relType)
 	}
 
-	// Mutate the checkout without reindexing: evidence must fail closed.
+}
+
+// checkStaleRefusal edits the checkout without reindexing and asserts evidence
+// fails closed.
+func checkStaleRefusal(ctx context.Context, t *testing.T, session *mcp.ClientSession, repo, project, entryQN string) {
+	t.Helper()
 	mainGo := filepath.Join(repo, "main.go")
 	original, err := os.ReadFile(mainGo)
 	if err != nil {

@@ -107,13 +107,13 @@ func runDoctor(args []string, stdout, stderr io.Writer) int {
 		}
 		return 0
 	}
-	printDoctorReport(stdout, report)
+	printDoctorReport(stdout, &report)
 	return 0
 }
 
 // endpointProbe reports reachability of the active embedding provider's
 // endpoint. It is injected so tests never touch the network.
-type endpointProbe func(ctx context.Context, res embed.Resolution) string
+type endpointProbe func(ctx context.Context, res *embed.Resolution) string
 
 // collectDoctorReport gathers every diagnostic without mutating state: project
 // databases are opened read-only and never stamped.
@@ -138,7 +138,7 @@ func collectDoctorReport(ctx context.Context, getenv func(string) string, probe 
 	case probe == nil:
 		r.Embeddings.Reachability = "not_checked"
 	default:
-		r.Embeddings.Reachability = probe(ctx, res)
+		r.Embeddings.Reachability = probe(ctx, &res)
 	}
 	if res.Provider == embed.ProviderVoyage {
 		r.Embeddings.VoyageReachability = r.Embeddings.Reachability
@@ -234,13 +234,12 @@ func readProjectMetaReadOnly(ctx context.Context, dbPath string) (version int, r
 	return 0, "", err
 }
 
-func queryProjectMeta(ctx context.Context, dsn string) (int, string, error) {
+func queryProjectMeta(ctx context.Context, dsn string) (version int, rootPath string, err error) {
 	db, err := sql.Open("sqlite3", dsn)
 	if err != nil {
 		return 0, "", err
 	}
 	defer db.Close()
-	var version int
 	if err := db.QueryRowContext(ctx, "PRAGMA user_version").Scan(&version); err != nil {
 		return 0, "", err
 	}
@@ -254,14 +253,14 @@ func queryProjectMeta(ctx context.Context, dsn string) (int, string, error) {
 // active provider: HEAD on the Voyage embeddings URL, or GET {base}/models on
 // an OpenAI-compatible endpoint. No credential is sent; any HTTP response
 // counts as reachable and only transport failures are reported.
-func doctorProbeEndpoint(ctx context.Context, res embed.Resolution) string {
+func doctorProbeEndpoint(ctx context.Context, res *embed.Resolution) string {
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 	method, target := http.MethodHead, embed.VoyageEmbedURL
 	if res.Provider == embed.ProviderOpenAI {
 		method, target = http.MethodGet, res.BaseURL+"/models"
 	}
-	req, err := http.NewRequestWithContext(ctx, method, target, nil)
+	req, err := http.NewRequestWithContext(ctx, method, target, http.NoBody)
 	if err != nil {
 		return "error: " + err.Error()
 	}
@@ -273,7 +272,7 @@ func doctorProbeEndpoint(ctx context.Context, res embed.Resolution) string {
 	return fmt.Sprintf("reachable (HTTP %d)", resp.StatusCode)
 }
 
-func printDoctorReport(w io.Writer, r doctorReport) {
+func printDoctorReport(w io.Writer, r *doctorReport) {
 	fmt.Fprintf(w, "code-graph %s (%s)\n", r.Version, r.Platform)
 	fmt.Fprintf(w, "toolset: %s\n", r.Toolset)
 	fmt.Fprintf(w, "embeddings: %s; provider: %s; reachability: %s\n", r.Embeddings.Status, r.Embeddings.Provider, r.Embeddings.Reachability)

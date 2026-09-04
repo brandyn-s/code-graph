@@ -76,6 +76,14 @@ linters:
       # (unsafe.Pointer / unsafe.Slice over C arrays) — unavoidable and
       # informational for tree-sitter interop. The real memory-safety check for
       # this C-interop is the ASan CI job (asan.yml); keep the rest of gosec on.
+      # pass_definitions.go and pass_imports_resolve.go hold the AST-walking
+      # resolution loops that were moved verbatim out of pipeline.go in the
+      # 2026-09 split. They are branchy by nature (one arm per language
+      # construct) and are covered by the accuracy-regression gates; exempt only
+      # the cognitive-complexity linter for these two files.
+      - path: internal/pipeline/pass_(definitions|imports_resolve)\.go
+        linters:
+          - gocognit
       - path: internal/cbm
         text: "G103"
         linters:

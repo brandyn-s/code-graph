@@ -283,10 +283,12 @@ func (p *Pipeline) passImports() {
 					if cratePath, ok := p.rustCrateMap[crateKey]; ok {
 						// Prefer lib.rs / main.rs first — most imports target
 						// the crate root which lives in one of these.
-						candidates = append(candidates, cratePath+".lib"+restOfPath)
-						candidates = append(candidates, cratePath+".main"+restOfPath)
 						// Then the non-file variants.
-						candidates = append(candidates, cratePath+restOfPath)
+						candidates = append(candidates,
+							cratePath+".lib"+restOfPath,
+							cratePath+".main"+restOfPath,
+							cratePath+restOfPath,
+						)
 						if restOfPath != "" {
 							// Strip trailing segment too.
 							if idx := strings.LastIndex(cratePath+restOfPath, "."); idx > 0 {

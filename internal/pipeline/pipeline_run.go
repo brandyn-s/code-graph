@@ -466,6 +466,23 @@ func (p *Pipeline) logEdgeCounts() {
 	}
 }
 
+// resolvableEdgeTypes lists every AST-derived edge type that passCalls* and
+// passUsages* re-create, so incremental runs can drop them for the files
+// about to be re-resolved.
+var resolvableEdgeTypes = [...]string{
+	"CALLS", "USAGE", "USES_TYPE", "THROWS", "RAISES", "READS", "WRITES", "CONFIGURES",
+}
+
+// deleteResolvableEdges removes the AST-derived outgoing edges of files that
+// are about to be re-resolved.
+func (p *Pipeline) deleteResolvableEdges(files []discover.FileInfo) {
+	for _, f := range files {
+		for _, edgeType := range resolvableEdgeTypes {
+			_ = p.Store.DeleteEdgesBySourceFile(p.ProjectName, f.RelPath, edgeType)
+		}
+	}
+}
+
 // runIncrementalPasses re-indexes only changed files + their dependents.
 func (p *Pipeline) runIncrementalPasses(
 	allFiles []discover.FileInfo,
@@ -546,16 +563,7 @@ func (p *Pipeline) runIncrementalPasses(
 	}
 
 	// Delete edges for files being re-resolved (all AST-derived edge types)
-	for _, f := range filesToResolve {
-		_ = p.Store.DeleteEdgesBySourceFile(p.ProjectName, f.RelPath, "CALLS")
-		_ = p.Store.DeleteEdgesBySourceFile(p.ProjectName, f.RelPath, "USAGE")
-		_ = p.Store.DeleteEdgesBySourceFile(p.ProjectName, f.RelPath, "USES_TYPE")
-		_ = p.Store.DeleteEdgesBySourceFile(p.ProjectName, f.RelPath, "THROWS")
-		_ = p.Store.DeleteEdgesBySourceFile(p.ProjectName, f.RelPath, "RAISES")
-		_ = p.Store.DeleteEdgesBySourceFile(p.ProjectName, f.RelPath, "READS")
-		_ = p.Store.DeleteEdgesBySourceFile(p.ProjectName, f.RelPath, "WRITES")
-		_ = p.Store.DeleteEdgesBySourceFile(p.ProjectName, f.RelPath, "CONFIGURES")
-	}
+	p.deleteResolvableEdges(filesToResolve)
 
 	// Re-resolve calls + usages for changed + dependent files
 	p.buildReturnTypeMap()

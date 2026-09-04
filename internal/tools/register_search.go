@@ -10,6 +10,12 @@ import (
 )
 
 func (s *Server) registerSearchTools() {
+	s.registerSemanticSearchTool()
+	s.registerSearchGraphTool()
+	s.registerSearchCodeTool()
+}
+
+func (s *Server) registerSemanticSearchTool() {
 	s.addTool(&mcp.Tool{
 		Name: "search_code_semantic",
 		Annotations: &mcp.ToolAnnotations{
@@ -46,7 +52,9 @@ func (s *Server) registerSearchTools() {
 			"required": ["query"]
 		}`),
 	}, s.handleSearchCodeSemantic)
+}
 
+func (s *Server) registerSearchGraphTool() {
 	s.addTool(&mcp.Tool{
 		Name: "search_graph",
 		Annotations: &mcp.ToolAnnotations{
@@ -142,7 +150,9 @@ func (s *Server) registerSearchTools() {
 			}
 		}`),
 	}, s.handleSearchGraph)
+}
 
+func (s *Server) registerSearchCodeTool() {
 	s.addTool(&mcp.Tool{
 		Name: "search_code",
 		Annotations: &mcp.ToolAnnotations{

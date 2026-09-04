@@ -39,7 +39,7 @@ func TestDoctorReport_JSONShapeAndReadOnly(t *testing.T) {
 	getenv := doctorEnv(t, cache, nil)
 
 	probeCalled := false
-	report := collectDoctorReport(context.Background(), getenv, func(context.Context, embed.Resolution) string {
+	report := collectDoctorReport(context.Background(), getenv, func(context.Context, *embed.Resolution) string {
 		probeCalled = true
 		return "reachable"
 	})
@@ -60,7 +60,10 @@ func TestDoctorReport_JSONShapeAndReadOnly(t *testing.T) {
 			t.Errorf("report missing %q", key)
 		}
 	}
-	emb := decoded["embeddings"].(map[string]any)
+	emb, ok := decoded["embeddings"].(map[string]any)
+	if !ok {
+		t.Fatalf("embeddings is %T, want object", decoded["embeddings"])
+	}
 	for _, key := range []string{"enabled", "status", "provider", "reachability", "voyage_reachability"} {
 		if _, ok := emb[key]; !ok {
 			t.Errorf("embeddings missing %q", key)
@@ -99,8 +102,8 @@ func TestDoctorReport_JSONShapeAndReadOnly(t *testing.T) {
 func TestDoctorReport_RedactsSecretsAndProbesWhenKeyPresent(t *testing.T) {
 	getenv := doctorEnv(t, t.TempDir(), map[string]string{"VOYAGE_API_KEY": "sk-test-not-real", "CODE_GRAPH_TOOLSET": "full"})
 	var probed embed.Resolution
-	report := collectDoctorReport(context.Background(), getenv, func(_ context.Context, res embed.Resolution) string {
-		probed = res
+	report := collectDoctorReport(context.Background(), getenv, func(_ context.Context, res *embed.Resolution) string {
+		probed = *res
 		return "reachable (HTTP 405)"
 	})
 	if probed.Provider != embed.ProviderVoyage {
@@ -121,7 +124,7 @@ func TestDoctorReport_RedactsSecretsAndProbesWhenKeyPresent(t *testing.T) {
 		}
 	}
 	var out bytes.Buffer
-	printDoctorReport(&out, report)
+	printDoctorReport(&out, &report)
 	if strings.Contains(out.String(), "sk-test-not-real") {
 		t.Error("text report leaked the API key")
 	}
@@ -137,8 +140,8 @@ func TestDoctorReport_OpenAICompatibleProvider(t *testing.T) {
 		"CODE_GRAPH_EMBED_API_KEY":  "local-secret",
 	})
 	var probed embed.Resolution
-	report := collectDoctorReport(context.Background(), getenv, func(_ context.Context, res embed.Resolution) string {
-		probed = res
+	report := collectDoctorReport(context.Background(), getenv, func(_ context.Context, res *embed.Resolution) string {
+		probed = *res
 		return "reachable (HTTP 200)"
 	})
 	if probed.Provider != embed.ProviderOpenAI || probed.BaseURL != "http://localhost:11434/v1" {

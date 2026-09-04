@@ -203,8 +203,9 @@ func (f *k8sFacts) service(spec map[string]any) {
 		svcType = "ClusterIP"
 	}
 	f.props["service_type"] = svcType
-	var ports []string
-	for _, p := range listField(spec, "ports") {
+	svcPorts := listField(spec, "ports")
+	ports := make([]string, 0, len(svcPorts))
+	for _, p := range svcPorts {
 		port := fmt.Sprint(anyField(p, "port"))
 		if np := anyField(p, "nodePort"); np != nil {
 			port += ":nodePort=" + fmt.Sprint(np)
@@ -266,8 +267,9 @@ func (f *k8sFacts) gatewayRoute(kind string, spec map[string]any) {
 	}
 	setNonEmpty(f.props, "ingress_paths", paths)
 	if kind == "Gateway" {
-		var listeners []string
-		for _, l := range listField(spec, "listeners") {
+		specListeners := listField(spec, "listeners")
+		listeners := make([]string, 0, len(specListeners))
+		for _, l := range specListeners {
 			listeners = append(listeners, fmt.Sprintf("%s:%v", stringField(l, "protocol"), anyField(l, "port")))
 		}
 		setNonEmpty(f.props, "listeners", listeners)
@@ -283,7 +285,7 @@ func (f *k8sFacts) networkPolicy(spec map[string]any) {
 
 func (f *k8sFacts) rbacRole(rules []map[string]any) {
 	f.signal(RoleAuthBoundary, "rbac_role")
-	var summary []string
+	summary := make([]string, 0, len(rules))
 	for _, rule := range rules {
 		verbs := stringList(rule["verbs"])
 		resources := stringList(rule["resources"])
@@ -314,7 +316,7 @@ func (f *k8sFacts) rbacBinding(roleRef map[string]any, subjects []map[string]any
 			f.signal(RolePrivilegeEscalation, "admin_role_binding")
 		}
 	}
-	var subs []string
+	subs := make([]string, 0, len(subjects))
 	for _, s := range subjects {
 		entry := stringField(s, "kind") + ":" + stringField(s, "name")
 		if ns := stringField(s, "namespace"); ns != "" {
@@ -362,7 +364,50 @@ func findPodSpec(spec map[string]any) map[string]any {
 	return nil
 }
 
+// podAccumulator gathers per-container facts before they are summarised on
+// the node properties.
+type podAccumulator struct {
+	images, names, ports, hostPorts, caps, secretRefs, configMapRefs, hostPaths []string
+}
+
 func (f *k8sFacts) podSpec(pod map[string]any) {
+	f.podHostFlags(pod)
+	setNonEmptyStr(f.props, "service_account", stringField(pod, "serviceAccountName"))
+	if v, ok := pod["automountServiceAccountToken"].(bool); ok {
+		f.props["automount_service_account_token"] = v
+	}
+	podRunsAsRoot := runsAsRoot(mapField(pod, "securityContext"))
+
+	acc := &podAccumulator{}
+	for _, key := range []string{"initContainers", "containers", "ephemeralContainers"} {
+		for _, c := range listField(pod, key) {
+			f.podContainer(c, podRunsAsRoot, acc)
+		}
+	}
+	f.podVolumes(pod, acc)
+
+	if len(acc.hostPorts) > 0 {
+		f.signal(RoleInputEntryPoint, "host_port")
+	}
+	if len(acc.hostPaths) > 0 {
+		f.signal(RolePrivilegeEscalation, "host_path_volume")
+	}
+	acc.secretRefs = dedupe(acc.secretRefs)
+	if len(acc.secretRefs) > 0 {
+		f.signal(RoleSensitiveSink, "secret_reference")
+	}
+	setNonEmpty(f.props, "containers", acc.names)
+	setNonEmpty(f.props, "images", acc.images)
+	setNonEmpty(f.props, "container_ports", acc.ports)
+	setNonEmpty(f.props, "host_ports", acc.hostPorts)
+	setNonEmpty(f.props, "capabilities_add", acc.caps)
+	setNonEmpty(f.props, "secret_refs", acc.secretRefs)
+	setNonEmpty(f.props, "configmap_refs", dedupe(acc.configMapRefs))
+	setNonEmpty(f.props, "host_paths", acc.hostPaths)
+}
+
+// podHostFlags records the pod-level host namespace flags.
+func (f *k8sFacts) podHostFlags(pod map[string]any) {
 	if boolField(pod, "hostNetwork") {
 		f.props["host_network"] = true
 		f.signal(RoleInputEntryPoint, "host_network")
@@ -375,98 +420,86 @@ func (f *k8sFacts) podSpec(pod map[string]any) {
 		f.props["host_ipc"] = true
 		f.signal(RolePrivilegeEscalation, "host_ipc")
 	}
-	setNonEmptyStr(f.props, "service_account", stringField(pod, "serviceAccountName"))
-	if v, ok := pod["automountServiceAccountToken"].(bool); ok {
-		f.props["automount_service_account_token"] = v
-	}
-	podCtx := mapField(pod, "securityContext")
-	podRunsAsRoot := runsAsRoot(podCtx)
+}
 
-	var images, names, ports, hostPorts, caps, secretRefs, configMapRefs, hostPaths []string
-	for _, key := range []string{"initContainers", "containers", "ephemeralContainers"} {
-		for _, c := range listField(pod, key) {
-			names = append(names, stringField(c, "name"))
-			if img := stringField(c, "image"); img != "" {
-				images = append(images, img)
+// podContainer records one container's image, ports, security context, and
+// secret/configmap references.
+func (f *k8sFacts) podContainer(c map[string]any, podRunsAsRoot bool, acc *podAccumulator) {
+	acc.names = append(acc.names, stringField(c, "name"))
+	if img := stringField(c, "image"); img != "" {
+		acc.images = append(acc.images, img)
+	}
+	for _, p := range listField(c, "ports") {
+		if cp := anyField(p, "containerPort"); cp != nil {
+			port := fmt.Sprint(cp)
+			if proto := stringField(p, "protocol"); proto != "" && proto != "TCP" {
+				port += "/" + proto
 			}
-			for _, p := range listField(c, "ports") {
-				if cp := anyField(p, "containerPort"); cp != nil {
-					port := fmt.Sprint(cp)
-					if proto := stringField(p, "protocol"); proto != "" && proto != "TCP" {
-						port += "/" + proto
-					}
-					ports = append(ports, port)
-				}
-				if hp := anyField(p, "hostPort"); hp != nil {
-					hostPorts = append(hostPorts, fmt.Sprint(hp))
-				}
-			}
-			ctx := mapField(c, "securityContext")
-			if boolField(ctx, "privileged") {
-				f.props["privileged"] = true
-				f.signal(RolePrivilegeEscalation, "privileged_container")
-			}
-			if boolField(ctx, "allowPrivilegeEscalation") {
-				f.props["allow_privilege_escalation"] = true
-				f.signal(RolePrivilegeEscalation, "allow_privilege_escalation")
-			}
-			if runsAsRoot(ctx) || (podRunsAsRoot && ctx["runAsUser"] == nil && ctx["runAsNonRoot"] == nil) {
-				f.props["runs_as_root"] = true
-				f.signal(RolePrivilegeEscalation, "runs_as_root")
-			}
-			for _, capName := range stringList(anyField(mapField(ctx, "capabilities"), "add")) {
-				caps = append(caps, capName)
-				if dangerousCapabilities[strings.TrimPrefix(strings.ToUpper(capName), "CAP_")] {
-					f.signal(RolePrivilegeEscalation, "dangerous_capability")
-				}
-			}
-			for _, e := range listField(c, "env") {
-				if ref := mapField(mapField(e, "valueFrom"), "secretKeyRef"); ref != nil {
-					secretRefs = append(secretRefs, stringField(ref, "name"))
-				}
-				if ref := mapField(mapField(e, "valueFrom"), "configMapKeyRef"); ref != nil {
-					configMapRefs = append(configMapRefs, stringField(ref, "name"))
-				}
-			}
-			for _, e := range listField(c, "envFrom") {
-				if ref := mapField(e, "secretRef"); ref != nil {
-					secretRefs = append(secretRefs, stringField(ref, "name"))
-				}
-				if ref := mapField(e, "configMapRef"); ref != nil {
-					configMapRefs = append(configMapRefs, stringField(ref, "name"))
-				}
-			}
+			acc.ports = append(acc.ports, port)
+		}
+		if hp := anyField(p, "hostPort"); hp != nil {
+			acc.hostPorts = append(acc.hostPorts, fmt.Sprint(hp))
 		}
 	}
+	f.containerSecurity(mapField(c, "securityContext"), podRunsAsRoot, acc)
+	f.containerEnvRefs(c, acc)
+}
+
+// containerSecurity records privilege-related settings of one container.
+func (f *k8sFacts) containerSecurity(ctx map[string]any, podRunsAsRoot bool, acc *podAccumulator) {
+	if boolField(ctx, "privileged") {
+		f.props["privileged"] = true
+		f.signal(RolePrivilegeEscalation, "privileged_container")
+	}
+	if boolField(ctx, "allowPrivilegeEscalation") {
+		f.props["allow_privilege_escalation"] = true
+		f.signal(RolePrivilegeEscalation, "allow_privilege_escalation")
+	}
+	if runsAsRoot(ctx) || (podRunsAsRoot && ctx["runAsUser"] == nil && ctx["runAsNonRoot"] == nil) {
+		f.props["runs_as_root"] = true
+		f.signal(RolePrivilegeEscalation, "runs_as_root")
+	}
+	for _, capName := range stringList(anyField(mapField(ctx, "capabilities"), "add")) {
+		acc.caps = append(acc.caps, capName)
+		if dangerousCapabilities[strings.TrimPrefix(strings.ToUpper(capName), "CAP_")] {
+			f.signal(RolePrivilegeEscalation, "dangerous_capability")
+		}
+	}
+}
+
+// containerEnvRefs records secret and configmap references from env and envFrom.
+func (f *k8sFacts) containerEnvRefs(c map[string]any, acc *podAccumulator) {
+	for _, e := range listField(c, "env") {
+		if ref := mapField(mapField(e, "valueFrom"), "secretKeyRef"); ref != nil {
+			acc.secretRefs = append(acc.secretRefs, stringField(ref, "name"))
+		}
+		if ref := mapField(mapField(e, "valueFrom"), "configMapKeyRef"); ref != nil {
+			acc.configMapRefs = append(acc.configMapRefs, stringField(ref, "name"))
+		}
+	}
+	for _, e := range listField(c, "envFrom") {
+		if ref := mapField(e, "secretRef"); ref != nil {
+			acc.secretRefs = append(acc.secretRefs, stringField(ref, "name"))
+		}
+		if ref := mapField(e, "configMapRef"); ref != nil {
+			acc.configMapRefs = append(acc.configMapRefs, stringField(ref, "name"))
+		}
+	}
+}
+
+// podVolumes records secret, configmap, and hostPath volumes.
+func (f *k8sFacts) podVolumes(pod map[string]any, acc *podAccumulator) {
 	for _, v := range listField(pod, "volumes") {
 		if sec := mapField(v, "secret"); sec != nil {
-			secretRefs = append(secretRefs, stringField(sec, "secretName"))
+			acc.secretRefs = append(acc.secretRefs, stringField(sec, "secretName"))
 		}
 		if cm := mapField(v, "configMap"); cm != nil {
-			configMapRefs = append(configMapRefs, stringField(cm, "name"))
+			acc.configMapRefs = append(acc.configMapRefs, stringField(cm, "name"))
 		}
 		if hp := mapField(v, "hostPath"); hp != nil {
-			hostPaths = append(hostPaths, stringField(hp, "path"))
+			acc.hostPaths = append(acc.hostPaths, stringField(hp, "path"))
 		}
 	}
-	if len(hostPorts) > 0 {
-		f.signal(RoleInputEntryPoint, "host_port")
-	}
-	if len(hostPaths) > 0 {
-		f.signal(RolePrivilegeEscalation, "host_path_volume")
-	}
-	secretRefs = dedupe(secretRefs)
-	if len(secretRefs) > 0 {
-		f.signal(RoleSensitiveSink, "secret_reference")
-	}
-	setNonEmpty(f.props, "containers", names)
-	setNonEmpty(f.props, "images", images)
-	setNonEmpty(f.props, "container_ports", ports)
-	setNonEmpty(f.props, "host_ports", hostPorts)
-	setNonEmpty(f.props, "capabilities_add", caps)
-	setNonEmpty(f.props, "secret_refs", secretRefs)
-	setNonEmpty(f.props, "configmap_refs", dedupe(configMapRefs))
-	setNonEmpty(f.props, "host_paths", hostPaths)
 }
 
 // runsAsRoot reports an explicit root configuration in a securityContext:

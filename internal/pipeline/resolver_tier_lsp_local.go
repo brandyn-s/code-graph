@@ -62,6 +62,16 @@ func lspLocalTierEnabled() bool {
 	return strings.EqualFold(strings.TrimSpace(config.Get(config.ResolverTier)), "lsp_local")
 }
 
+// fixtureDef is a pytest fixture whose result type the tier tries to infer.
+type fixtureDef struct {
+	def       *cbm.Definition
+	relPath   string
+	moduleQN  string
+	importMap map[string]string
+	typeMap   TypeMap
+	lines     []string
+}
+
 // buildLSPLocalTier scans every cached extraction once, before passCalls.
 // Returns nil when the tier is not enabled.
 func (p *Pipeline) buildLSPLocalTier() *lspLocalTier {
@@ -76,16 +86,7 @@ func (p *Pipeline) buildLSPLocalTier() *lspLocalTier {
 		paramTypes:         map[string]map[string]string{},
 		bindings:           map[string]map[string]bool{},
 	}
-	type fixtureDef struct {
-		def       cbm.Definition
-		relPath   string
-		moduleQN  string
-		importMap map[string]string
-		typeMap   TypeMap
-		lines     []string
-	}
 	var fixtures []fixtureDef
-
 	for relPath, ext := range p.extractionCache {
 		if ext == nil || ext.Result == nil {
 			continue
@@ -93,105 +94,9 @@ func (p *Pipeline) buildLSPLocalTier() *lspLocalTier {
 		if ext.Language != lang.Python && ext.Language != lang.Rust {
 			continue
 		}
-		moduleQN := fqn.ModuleQN(p.ProjectName, relPath)
-		importMap := p.importMaps[moduleQN]
-		var lines []string
-		var perFunc PerFuncTypeMap
-		for _, def := range ext.Result.Definitions {
-			switch def.Label {
-			case "Class", "Struct":
-				for _, base := range def.BaseClasses {
-					for _, name := range splitBaseClasses(base) {
-						if qn := resolveAsClass(name, p.registry, moduleQN, importMap); qn != "" && qn != def.QualifiedName {
-							t.classBases[def.QualifiedName] = append(t.classBases[def.QualifiedName], qn)
-						}
-					}
-				}
-			case "Function", "Method":
-				if lines == nil {
-					lines = readSourceLines(p.RepoPath, relPath)
-				}
-				sig := headerSignature(def, lines, ext.Language)
-				params, ret := parseSignature(sig, ext.Language)
-				for name, typ := range params {
-					if qn := resolveAsClass(typ, p.registry, moduleQN, importMap); qn != "" {
-						if t.paramTypes[def.QualifiedName] == nil {
-							t.paramTypes[def.QualifiedName] = map[string]string{}
-						}
-						t.paramTypes[def.QualifiedName][name] = qn
-					}
-				}
-				if ret != "" {
-					if qn := resolveAsClass(ret, p.registry, moduleQN, importMap); qn != "" {
-						t.returnTypes[def.QualifiedName] = qn
-						if _, known := p.returnTypes[def.QualifiedName]; !known {
-							if p.returnTypes == nil {
-								p.returnTypes = make(ReturnTypeMap)
-							}
-							p.returnTypes[def.QualifiedName] = qn
-						}
-					}
-				}
-				if ext.Language == lang.Python && isPytestFixture(def) {
-					if perFunc == nil {
-						perFunc = inferTypesCBM(ext.Result.TypeAssigns, p.registry, moduleQN, importMap)
-					}
-					fixtures = append(fixtures, fixtureDef{def, relPath, moduleQN, importMap, perFunc[def.QualifiedName], lines})
-				}
-			}
-		}
+		fixtures = append(fixtures, p.collectTierFacts(t, relPath, ext)...)
 	}
-
-	// Fixture types: annotation first, then the returned/yielded expression.
-	// Fixtures depend on other fixtures (`client(app)` returns
-	// `app.test_client()`), so iterate to a fixpoint (bounded).
-	resolvedFixture := map[string]string{} // fixture QN -> class QN
-	for round := 0; round < 4; round++ {
-		progressed := false
-		for _, fx := range fixtures {
-			if resolvedFixture[fx.def.QualifiedName] != "" {
-				continue
-			}
-			qn := t.returnTypes[fx.def.QualifiedName]
-			if qn == "" {
-				qn = p.returnTypes[fx.def.QualifiedName]
-			}
-			if qn == "" {
-				tm := TypeMap{}
-				for k, v := range fx.typeMap {
-					tm[k] = v
-				}
-				for name, cls := range t.paramTypes[fx.def.QualifiedName] {
-					tm[name] = cls
-				}
-				for _, name := range untypedParams(headerSignature(fx.def, fx.lines, lang.Python), lang.Python) {
-					if cls := t.fixtureType(fx.relPath, name); cls != "" {
-						tm[name] = cls
-					}
-				}
-				if expr := fixtureResultExpr(fx.def, fx.lines); expr != "" {
-					qn = t.exprType(p, expr, tm, fx.moduleQN, fx.importMap)
-				}
-			}
-			if qn == "" {
-				continue
-			}
-			resolvedFixture[fx.def.QualifiedName] = qn
-			progressed = true
-			if t.fixtureTypesByFile[fx.relPath] == nil {
-				t.fixtureTypesByFile[fx.relPath] = map[string]string{}
-			}
-			t.fixtureTypesByFile[fx.relPath][fx.def.Name] = qn
-			if existing, seen := t.fixtureTypes[fx.def.Name]; !seen {
-				t.fixtureTypes[fx.def.Name] = qn
-			} else if existing != qn {
-				t.fixtureTypes[fx.def.Name] = "" // conflicting definitions: ambiguous project-wide
-			}
-		}
-		if !progressed {
-			break
-		}
-	}
+	p.resolveFixtureTypes(t, fixtures)
 
 	slog.Info("resolver.lsp_local.built",
 		"typed_params", len(t.paramTypes),
@@ -201,13 +106,150 @@ func (p *Pipeline) buildLSPLocalTier() *lspLocalTier {
 	return t
 }
 
+// collectTierFacts records class bases, typed parameters, and return types
+// for one file and returns the pytest fixtures it defines.
+func (p *Pipeline) collectTierFacts(t *lspLocalTier, relPath string, ext *cachedExtraction) []fixtureDef {
+	moduleQN := fqn.ModuleQN(p.ProjectName, relPath)
+	importMap := p.importMaps[moduleQN]
+	var lines []string
+	var perFunc PerFuncTypeMap
+	var fixtures []fixtureDef
+	defs := ext.Result.Definitions
+	for i := range defs {
+		def := &defs[i]
+		switch def.Label {
+		case "Class", "Struct":
+			t.recordClassBases(def, p.registry, moduleQN, importMap)
+		case "Function", "Method":
+			if lines == nil {
+				lines = readSourceLines(p.RepoPath, relPath)
+			}
+			p.recordSignatureTypes(t, def, lines, ext.Language, moduleQN, importMap)
+			if ext.Language == lang.Python && isPytestFixture(def) {
+				if perFunc == nil {
+					perFunc = inferTypesCBM(ext.Result.TypeAssigns, p.registry, moduleQN, importMap)
+				}
+				fixtures = append(fixtures, fixtureDef{def, relPath, moduleQN, importMap, perFunc[def.QualifiedName], lines})
+			}
+		}
+	}
+	return fixtures
+}
+
+// recordClassBases resolves a class's base classes to registry QNs.
+func (t *lspLocalTier) recordClassBases(def *cbm.Definition, registry *FunctionRegistry, moduleQN string, importMap map[string]string) {
+	for _, base := range def.BaseClasses {
+		for _, name := range splitBaseClasses(base) {
+			if qn := resolveAsClass(name, registry, moduleQN, importMap); qn != "" && qn != def.QualifiedName {
+				t.classBases[def.QualifiedName] = append(t.classBases[def.QualifiedName], qn)
+			}
+		}
+	}
+}
+
+// recordSignatureTypes records annotated parameter and return types of a
+// function or method.
+func (p *Pipeline) recordSignatureTypes(t *lspLocalTier, def *cbm.Definition, lines []string, language lang.Language, moduleQN string, importMap map[string]string) {
+	sig := headerSignature(def, lines, language)
+	params, ret := parseSignature(sig, language)
+	for name, typ := range params {
+		if qn := resolveAsClass(typ, p.registry, moduleQN, importMap); qn != "" {
+			if t.paramTypes[def.QualifiedName] == nil {
+				t.paramTypes[def.QualifiedName] = map[string]string{}
+			}
+			t.paramTypes[def.QualifiedName][name] = qn
+		}
+	}
+	if ret == "" {
+		return
+	}
+	if qn := resolveAsClass(ret, p.registry, moduleQN, importMap); qn != "" {
+		t.returnTypes[def.QualifiedName] = qn
+		if _, known := p.returnTypes[def.QualifiedName]; !known {
+			if p.returnTypes == nil {
+				p.returnTypes = make(ReturnTypeMap)
+			}
+			p.returnTypes[def.QualifiedName] = qn
+		}
+	}
+}
+
+// resolveFixtureTypes infers each fixture's result class: annotation first,
+// then the returned/yielded expression. Fixtures depend on other fixtures
+// (`client(app)` returns `app.test_client()`), so iterate to a fixpoint
+// (bounded).
+func (p *Pipeline) resolveFixtureTypes(t *lspLocalTier, fixtures []fixtureDef) {
+	resolvedFixture := map[string]string{} // fixture QN -> class QN
+	for round := 0; round < 4; round++ {
+		progressed := false
+		for i := range fixtures {
+			fx := &fixtures[i]
+			if resolvedFixture[fx.def.QualifiedName] != "" {
+				continue
+			}
+			qn := p.fixtureResultType(t, fx)
+			if qn == "" {
+				continue
+			}
+			resolvedFixture[fx.def.QualifiedName] = qn
+			progressed = true
+			t.recordFixtureType(fx, qn)
+		}
+		if !progressed {
+			break
+		}
+	}
+}
+
+// fixtureResultType returns the class QN a fixture yields, or "".
+func (p *Pipeline) fixtureResultType(t *lspLocalTier, fx *fixtureDef) string {
+	if qn := t.returnTypes[fx.def.QualifiedName]; qn != "" {
+		return qn
+	}
+	if qn := p.returnTypes[fx.def.QualifiedName]; qn != "" {
+		return qn
+	}
+	tm := TypeMap{}
+	for k, v := range fx.typeMap {
+		tm[k] = v
+	}
+	for name, cls := range t.paramTypes[fx.def.QualifiedName] {
+		tm[name] = cls
+	}
+	for _, name := range untypedParams(headerSignature(fx.def, fx.lines, lang.Python), lang.Python) {
+		if cls := t.fixtureType(fx.relPath, name); cls != "" {
+			tm[name] = cls
+		}
+	}
+	if expr := fixtureResultExpr(fx.def, fx.lines); expr != "" {
+		return t.exprType(p, expr, tm, fx.moduleQN, fx.importMap)
+	}
+	return ""
+}
+
+// recordFixtureType stores a resolved fixture type per file and, when
+// unambiguous, project-wide.
+func (t *lspLocalTier) recordFixtureType(fx *fixtureDef, qn string) {
+	if t.fixtureTypesByFile[fx.relPath] == nil {
+		t.fixtureTypesByFile[fx.relPath] = map[string]string{}
+	}
+	t.fixtureTypesByFile[fx.relPath][fx.def.Name] = qn
+	if existing, seen := t.fixtureTypes[fx.def.Name]; !seen {
+		t.fixtureTypes[fx.def.Name] = qn
+	} else if existing != qn {
+		t.fixtureTypes[fx.def.Name] = "" // conflicting definitions: ambiguous project-wide
+	}
+}
+
 // augment binds typed and fixture parameters into the per-function TypeMaps
 // of one file before its calls are resolved.
 func (t *lspLocalTier) augment(ext *cachedExtraction, perFunc PerFuncTypeMap) {
 	if t == nil || ext == nil || ext.Result == nil {
 		return
 	}
-	for _, def := range ext.Result.Definitions {
+	defs := ext.Result.Definitions
+	for i := range defs {
+		def := &defs[i]
 		if def.Label != "Function" && def.Label != "Method" {
 			continue
 		}
@@ -414,7 +456,7 @@ func readSourceLines(repoPath, relPath string) []string {
 // headerSignature returns the definition header text from the `def`/`fn`
 // keyword through the body-opening `:`/`{`, joined across lines. Falls back
 // to the extractor's Signature when source lines are unavailable.
-func headerSignature(def cbm.Definition, lines []string, language lang.Language) string {
+func headerSignature(def *cbm.Definition, lines []string, language lang.Language) string {
 	if lines == nil || def.StartLine <= 0 || def.StartLine > len(lines) {
 		return def.Signature
 	}
@@ -450,8 +492,8 @@ func headerSignature(def cbm.Definition, lines []string, language lang.Language)
 
 // parseSignature returns typed parameters (name -> cleaned type name) and the
 // cleaned return type of a Python def or Rust fn header.
-func parseSignature(sig string, language lang.Language) (map[string]string, string) {
-	params := map[string]string{}
+func parseSignature(sig string, language lang.Language) (params map[string]string, ret string) {
+	params = map[string]string{}
 	open := strings.IndexByte(sig, '(')
 	if open < 0 {
 		return params, ""
@@ -460,7 +502,6 @@ func parseSignature(sig string, language lang.Language) (map[string]string, stri
 	if closeIdx < 0 {
 		return params, ""
 	}
-	ret := ""
 	if arrow := strings.Index(sig[closeIdx:], "->"); arrow >= 0 {
 		rest := sig[closeIdx+arrow+2:]
 		end := len(rest)
@@ -555,95 +596,135 @@ var wrapperTypes = map[string]bool{
 func cleanTypeName(raw string, language lang.Language, isReturn bool) string {
 	s := strings.TrimSpace(raw)
 	for depth := 0; depth < 6 && s != ""; depth++ {
-		s = strings.TrimSpace(s)
-		s = strings.Trim(s, "\"'")
-		s = strings.TrimSpace(s)
-		// Rust references, lifetimes, mutability, dyn/impl.
+		s = strings.TrimSpace(strings.Trim(strings.TrimSpace(s), "\"'"))
+		var ok bool
 		if language == lang.Rust {
-			s = strings.TrimPrefix(s, "&")
-			if strings.HasPrefix(s, "'") {
-				if i := strings.IndexByte(s, ' '); i >= 0 {
-					s = s[i+1:]
-				} else {
-					return ""
-				}
+			if s, ok = stripRustQualifiers(s); !ok {
+				return ""
 			}
-			s = strings.TrimPrefix(strings.TrimPrefix(s, "mut "), "dyn ")
-			s = strings.TrimPrefix(s, "impl ")
-			s = strings.TrimSpace(s)
 		}
-		// Python `X | None` unions and typing prefixes.
 		if language == lang.Python {
-			s = strings.TrimPrefix(strings.TrimPrefix(s, "typing."), "t.")
-			if strings.Contains(s, "|") {
-				var kept []string
-				for _, part := range splitTopLevel(s, '|') {
-					part = strings.TrimSpace(part)
-					if part != "None" && part != "" {
-						kept = append(kept, part)
-					}
-				}
-				if len(kept) != 1 {
-					return ""
-				}
-				s = kept[0]
+			var done bool
+			s, done, ok = stripPythonUnion(s)
+			if !ok {
+				return ""
+			}
+			if done {
 				continue
 			}
 		}
-		// Generic subscript / angle brackets.
-		openIdx := strings.IndexAny(s, "[<")
-		if openIdx < 0 {
+		next, again, ok := unwrapGeneric(s, isReturn)
+		if !ok {
+			return ""
+		}
+		if !again {
+			s = next
 			break
 		}
-		head := strings.TrimSpace(s[:openIdx])
-		inner := s[openIdx+1:]
-		if i := strings.LastIndexAny(inner, "]>"); i >= 0 {
-			inner = inner[:i]
+		s = next
+	}
+	return finalTypeName(s, language)
+}
+
+// stripRustQualifiers removes references, lifetimes, mutability, and
+// dyn/impl from a Rust type. ok is false when a lifetime is all that remains.
+func stripRustQualifiers(s string) (out string, ok bool) {
+	s = strings.TrimPrefix(s, "&")
+	if strings.HasPrefix(s, "'") {
+		i := strings.IndexByte(s, ' ')
+		if i < 0 {
+			return "", false
 		}
-		headShort := head
-		if i := strings.LastIndex(headShort, "::"); i >= 0 {
-			headShort = headShort[i+2:]
+		s = s[i+1:]
+	}
+	s = strings.TrimPrefix(strings.TrimPrefix(s, "mut "), "dyn ")
+	s = strings.TrimPrefix(s, "impl ")
+	return strings.TrimSpace(s), true
+}
+
+// stripPythonUnion drops typing prefixes and reduces `X | None` to X.
+// done reports that a union was collapsed and the loop should re-examine the
+// result; ok is false when the union names more than one class.
+func stripPythonUnion(s string) (out string, done, ok bool) {
+	s = strings.TrimPrefix(strings.TrimPrefix(s, "typing."), "t.")
+	if !strings.Contains(s, "|") {
+		return s, false, true
+	}
+	kept := nonNoneParts(splitTopLevel(s, '|'))
+	if len(kept) != 1 {
+		return "", false, false
+	}
+	return kept[0], true, true
+}
+
+// unwrapGeneric handles one level of `Head[Inner]` / `Head<Inner>`. again
+// reports that the loop should continue on the returned string; ok is false
+// when the annotation cannot name a single class.
+func unwrapGeneric(s string, isReturn bool) (out string, again, ok bool) {
+	openIdx := strings.IndexAny(s, "[<")
+	if openIdx < 0 {
+		return s, false, true
+	}
+	head := strings.TrimSpace(s[:openIdx])
+	inner := s[openIdx+1:]
+	if i := strings.LastIndexAny(inner, "]>"); i >= 0 {
+		inner = inner[:i]
+	}
+	headShort := shortTypeHead(head)
+	switch {
+	case wrapperTypes[headShort]:
+		return strings.TrimSpace(splitTopLevel(inner, ',')[0]), true, true
+	case headShort == "Union":
+		kept := nonNoneParts(splitTopLevel(inner, ','))
+		if len(kept) != 1 {
+			return "", false, false
 		}
-		if i := strings.LastIndexByte(headShort, '.'); i >= 0 {
-			headShort = headShort[i+1:]
-		}
-		switch {
-		case wrapperTypes[headShort]:
-			s = strings.TrimSpace(splitTopLevel(inner, ',')[0])
-			continue
-		case headShort == "Union":
-			var kept []string
-			for _, part := range splitTopLevel(inner, ',') {
-				part = strings.TrimSpace(part)
-				if part != "None" && part != "" {
-					kept = append(kept, part)
-				}
-			}
-			if len(kept) != 1 {
-				return ""
-			}
-			s = kept[0]
-			continue
-		case headShort == "Result" && isReturn:
-			s = strings.TrimSpace(splitTopLevel(inner, ',')[0])
-			continue
-		case containerTypes[headShort]:
-			return ""
-		default:
-			// A generic user type `Foo<T>` / `Foo[T]` dispatches on Foo.
-			s = head
+		return kept[0], true, true
+	case headShort == "Result" && isReturn:
+		return strings.TrimSpace(splitTopLevel(inner, ',')[0]), true, true
+	case containerTypes[headShort]:
+		return "", false, false
+	default:
+		// A generic user type `Foo<T>` / `Foo[T]` dispatches on Foo.
+		return head, true, true
+	}
+}
+
+// shortTypeHead strips module/path qualifiers from a generic head.
+func shortTypeHead(head string) string {
+	if i := strings.LastIndex(head, "::"); i >= 0 {
+		head = head[i+2:]
+	}
+	if i := strings.LastIndexByte(head, '.'); i >= 0 {
+		head = head[i+1:]
+	}
+	return head
+}
+
+// nonNoneParts trims parts and drops empty and None members.
+func nonNoneParts(parts []string) []string {
+	kept := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part != "None" && part != "" {
+			kept = append(kept, part)
 		}
 	}
+	return kept
+}
+
+// finalTypeName validates the reduced name and strips Rust path prefixes the
+// resolver cannot map.
+func finalTypeName(s string, language lang.Language) string {
 	s = strings.TrimSpace(s)
-	if s == "" || s == "None" || s == "Self" || s == "self" || s == "Any" || s == "object" || s == "()" || s == "!" {
+	switch s {
+	case "", "None", "Self", "self", "Any", "object", "()", "!":
 		return ""
 	}
 	if strings.ContainsAny(s, " ()[]{}<>|,*") {
 		return ""
 	}
 	if language == lang.Rust {
-		// `crate::a::b::Foo` -> resolver understands `::` paths; strip the
-		// `crate::`/`self::`/`super::` prefixes it cannot map.
 		for _, prefix := range []string{"crate::", "self::", "super::"} {
 			s = strings.TrimPrefix(s, prefix)
 		}
@@ -668,7 +749,7 @@ func splitBaseClasses(raw string) []string {
 	return out
 }
 
-func isPytestFixture(def cbm.Definition) bool {
+func isPytestFixture(def *cbm.Definition) bool {
 	for _, d := range def.Decorators {
 		if strings.Contains(d, "fixture") {
 			return true
@@ -687,7 +768,7 @@ func isPytestFile(path string) bool {
 
 // fixtureResultExpr returns the expression of the first `return X` or
 // `yield X` statement in the fixture body.
-func fixtureResultExpr(def cbm.Definition, lines []string) string {
+func fixtureResultExpr(def *cbm.Definition, lines []string) string {
 	if def.StartLine <= 0 || def.EndLine > len(lines) {
 		return ""
 	}

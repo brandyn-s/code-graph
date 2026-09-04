@@ -30,7 +30,7 @@ func TestIndexingSurvivesACrashingFileAndReportsIt(t *testing.T) {
 	t.Setenv("CODE_GRAPH_CACHE_DIR", cacheDir)
 	ResetIsolationForTests()
 	SetIsolationCommandFactory(func() *exec.Cmd {
-		cmd := exec.Command(exe)
+		cmd := exec.CommandContext(t.Context(), exe)
 		cmd.Env = append(os.Environ(), "GO_ISOLATE_WORKER=1", isolate.EnvTestCrashOn+"=crashme")
 		cmd.Stderr = os.Stderr
 		return cmd

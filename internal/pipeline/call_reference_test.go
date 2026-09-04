@@ -43,17 +43,17 @@ func TestValueSiteReferencesSplitIntoCallReferenceAndUsage(t *testing.T) {
 		t.Fatalf("run: %v", err)
 	}
 
-	nodeQN := func(name string) (int64, string) {
+	nodeID := func(name string) int64 {
 		nodes, err := st.FindNodesByName(p.ProjectName, name)
 		if err != nil || len(nodes) == 0 {
 			t.Fatalf("node %q not found: %v", name, err)
 		}
-		return nodes[0].ID, nodes[0].QualifiedName
+		return nodes[0].ID
 	}
-	handlerID, _ := nodeQN("handler")
-	configureID, _ := nodeQN("configure")
-	limitID, _ := nodeQN("LIMIT")
-	budgetID, _ := nodeQN("budget")
+	handlerID := nodeID("handler")
+	configureID := nodeID("configure")
+	limitID := nodeID("LIMIT")
+	budgetID := nodeID("budget")
 
 	refs, err := st.FindEdgesByType(p.ProjectName, store.EdgeCallReference)
 	if err != nil {

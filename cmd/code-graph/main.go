@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/brandyn-s/code-graph/internal/cbm/isolate"
 	"io"
 	"log"
 	"log/slog"
@@ -15,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/brandyn-s/code-graph/internal/cbm"
+	"github.com/brandyn-s/code-graph/internal/cbm/isolate"
 	"github.com/brandyn-s/code-graph/internal/config"
 	"github.com/brandyn-s/code-graph/internal/store"
 	"github.com/brandyn-s/code-graph/internal/tools"

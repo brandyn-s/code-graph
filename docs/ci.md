@@ -73,6 +73,12 @@ GOTOOLCHAIN=go1.26.1 golangci-lint run --timeout=10m \
   --new-from-rev=32fc4dd857497addff22115d6858dde2289e8e04
 ```
 
+Run it from the repository's physical path. golangci-lint's `--new-from-rev`
+filter matches issue paths against `git diff` output, and when the working
+directory is reached through a symlink (macOS `/tmp` is one) every finding is
+silently dropped and the run prints `0 issues` for code CI will reject. Use
+`cd "$(pwd -P)"` first; the same applies to a checkout under `/tmp`.
+
 Install golangci-lint 2.10.1 from its release page (or `brew install golangci-lint`
 and check `golangci-lint version`). `GOTOOLCHAIN` makes the `go` command
 download and use exactly 1.26.1 for that invocation.

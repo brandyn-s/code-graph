@@ -891,7 +891,7 @@ func handlerReference(arg string) string {
 	}
 	for i := 0; i < len(arg); i++ {
 		c := arg[i]
-		if !(c == '_' || c == '.' || c == '$' || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')) {
+		if c != '_' && c != '.' && c != '$' && (c < 'a' || c > 'z') && (c < 'A' || c > 'Z') && (c < '0' || c > '9') {
 			return ""
 		}
 	}

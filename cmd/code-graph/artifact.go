@@ -129,9 +129,8 @@ func describeIdentity(h *artifact.Header) string {
 // splitOperand removes the first positional argument from args and returns
 // it with the remaining flag arguments. valueFlags names flags that consume
 // the following argument, so their values are not mistaken for the operand.
-func splitOperand(args []string, valueFlags map[string]bool) (string, []string) {
-	operand := ""
-	rest := make([]string, 0, len(args))
+func splitOperand(args []string, valueFlags map[string]bool) (operand string, rest []string) {
+	rest = make([]string, 0, len(args))
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		if strings.HasPrefix(a, "-") {

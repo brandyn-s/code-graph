@@ -91,10 +91,10 @@ func TestSplitBaseClassesAndFixtureResultExpr(t *testing.T) {
 		"    app = Flask('x')",
 		"    return app",
 	}
-	if got := fixtureResultExpr(cbm.Definition{StartLine: 2, EndLine: 4}, lines); got != "app.test_client()" {
+	if got := fixtureResultExpr(&cbm.Definition{StartLine: 2, EndLine: 4}, lines); got != "app.test_client()" {
 		t.Errorf("with/yield fixture expr = %q", got)
 	}
-	if got := fixtureResultExpr(cbm.Definition{StartLine: 7, EndLine: 9}, lines); got != "app" {
+	if got := fixtureResultExpr(&cbm.Definition{StartLine: 7, EndLine: 9}, lines); got != "app" {
 		t.Errorf("return fixture expr = %q", got)
 	}
 }
@@ -103,92 +103,7 @@ func TestSplitBaseClassesAndFixtureResultExpr(t *testing.T) {
 // method stay unresolved; with CODE_GRAPH_RESOLVER_TIER=lsp_local they
 // resolve and the edges carry resolver_tier=lsp_local.
 func TestLSPLocalTierResolvesFixtureAnnotatedAndInheritedReceivers(t *testing.T) {
-	src := map[string]string{
-		"pkg/__init__.py": "",
-		"pkg/decoy.py": `class Decoy:
-    def register_blueprint(self, bp):
-        return bp
-
-    def open(self, path):
-        return path
-
-    def record(self, event):
-        return event
-
-    def add_url_rule(self, rule):
-        return rule
-
-    def route(self, rule):
-        return rule
-
-    def test_client(self):
-        return self
-`,
-		"pkg/base.py": `class Scaffold:
-    def add_url_rule(self, rule):
-        return rule
-
-    def route(self, rule):
-        return self.add_url_rule(rule)
-
-
-class Recorder:
-    def record(self, event):
-        return event
-`,
-		"pkg/app.py": `from .base import Scaffold, Recorder
-
-
-class Flask(Scaffold):
-    def __init__(self, name):
-        self.name = name
-
-    def test_client(self) -> "FlaskClient":
-        return FlaskClient(self)
-
-    def register_blueprint(self, bp: "Blueprint"):
-        return bp.register(self)
-
-
-class FlaskClient(Recorder):
-    def __init__(self, app):
-        self.app = app
-
-    def open(self, path):
-        return self.record(path)
-
-
-class Blueprint:
-    def register(self, app: Flask):
-        return app.add_url_rule("/bp")
-`,
-		"tests/conftest.py": `import pytest
-from pkg.app import Flask
-
-
-@pytest.fixture
-def app():
-    app = Flask("test")
-    return app
-
-
-@pytest.fixture
-def client(app):
-    return app.test_client()
-`,
-		"tests/test_app.py": `from pkg.app import Blueprint
-
-
-def test_register(app, client):
-    app.register_blueprint(Blueprint())
-    client.open("/")
-    client.record("x")
-
-
-def helper(app):
-    app.route("/plain")
-`,
-	}
+	src := lspLocalFixtureSources
 	run := func(t *testing.T, tier string) map[string]map[string]any {
 		t.Helper()
 		t.Setenv("CODE_GRAPH_EXTRACT_ISOLATION", "off")
@@ -245,7 +160,19 @@ def helper(app):
 		"pkg.base.Scaffold.route -> pkg.base.Scaffold.add_url_rule",        // self-method, resolved by the registry tier already
 	}
 
-	before := run(t, "")
+	t.Run("registry tier alone leaves the receivers speculative", func(t *testing.T) {
+		assertTierOff(t, run(t, ""), want)
+	})
+	t.Run("lsp_local resolves and tags the receivers", func(t *testing.T) {
+		assertTierOn(t, run(t, "lsp_local"), want)
+	})
+}
+
+// assertTierOff checks the baseline: without receiver typing the fixture and
+// inherited-method edges must not be confidently resolved, and no edge may
+// carry the tier tag.
+func assertTierOff(t *testing.T, before map[string]map[string]any, want []string) {
+	t.Helper()
 	for _, key := range want[:4] {
 		if props, ok := before[key]; ok && props["confidence_band"] != "speculative-janusian" {
 			t.Errorf("registry tier confidently resolved %s without receiver typing (the fixture would not measure the tier): %v", key, props)
@@ -257,8 +184,13 @@ def helper(app):
 	if _, ok := before[want[4]]; !ok {
 		t.Errorf("registry tier lost the self-method edge %s", want[4])
 	}
+}
 
-	after := run(t, "lsp_local")
+// assertTierOn checks that every wanted edge resolves with the tier, carries
+// the tag (except the self-method edge the registry already owns), and that
+// no decoy edge is attributed to the tier.
+func assertTierOn(t *testing.T, after map[string]map[string]any, want []string) {
+	t.Helper()
 	for _, key := range want {
 		props, ok := after[key]
 		if !ok {
@@ -299,4 +231,94 @@ func trimProject(qn, project string) string {
 		return qn[len(project)+1:]
 	}
 	return qn
+}
+
+// lspLocalFixtureSources is the small Python project the end-to-end tier test
+// indexes: a decoy class, a base class, an app with annotated methods, and
+// pytest fixtures wiring them together.
+var lspLocalFixtureSources = map[string]string{
+	"pkg/__init__.py": "",
+	"pkg/decoy.py": `class Decoy:
+    def register_blueprint(self, bp):
+        return bp
+
+    def open(self, path):
+        return path
+
+    def record(self, event):
+        return event
+
+    def add_url_rule(self, rule):
+        return rule
+
+    def route(self, rule):
+        return rule
+
+    def test_client(self):
+        return self
+`,
+	"pkg/base.py": `class Scaffold:
+    def add_url_rule(self, rule):
+        return rule
+
+    def route(self, rule):
+        return self.add_url_rule(rule)
+
+
+class Recorder:
+    def record(self, event):
+        return event
+`,
+	"pkg/app.py": `from .base import Scaffold, Recorder
+
+
+class Flask(Scaffold):
+    def __init__(self, name):
+        self.name = name
+
+    def test_client(self) -> "FlaskClient":
+        return FlaskClient(self)
+
+    def register_blueprint(self, bp: "Blueprint"):
+        return bp.register(self)
+
+
+class FlaskClient(Recorder):
+    def __init__(self, app):
+        self.app = app
+
+    def open(self, path):
+        return self.record(path)
+
+
+class Blueprint:
+    def register(self, app: Flask):
+        return app.add_url_rule("/bp")
+`,
+	"tests/conftest.py": `import pytest
+from pkg.app import Flask
+
+
+@pytest.fixture
+def app():
+    app = Flask("test")
+    return app
+
+
+@pytest.fixture
+def client(app):
+    return app.test_client()
+`,
+	"tests/test_app.py": `from pkg.app import Blueprint
+
+
+def test_register(app, client):
+    app.register_blueprint(Blueprint())
+    client.open("/")
+    client.record("x")
+
+
+def helper(app):
+    app.route("/plain")
+`,
 }

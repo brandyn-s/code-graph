@@ -13,7 +13,7 @@ func (s *Store) SnapshotTo(path string) error {
 	if strings.ContainsAny(path, "'") {
 		return fmt.Errorf("snapshot path must not contain quotes: %q", path)
 	}
-	if _, err := s.db.Exec(fmt.Sprintf("VACUUM INTO '%s'", path)); err != nil {
+	if _, err := s.db.ExecContext(context.Background(), fmt.Sprintf("VACUUM INTO '%s'", path)); err != nil {
 		return fmt.Errorf("snapshot database: %w", err)
 	}
 	return nil
@@ -31,46 +31,66 @@ func (s *Store) CountFileHashes(project string) (int, error) {
 // tablesWithProjectColumn lists every table that carries a `project` column,
 // so a project rename reaches tables added after this code was written.
 func (s *Store) tablesWithProjectColumn() ([]string, error) {
-	rows, err := s.q.Query(`SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`)
+	tables, err := s.listUserTables()
 	if err != nil {
-		return nil, fmt.Errorf("list tables: %w", err)
+		return nil, err
 	}
-	var tables []string
-	for rows.Next() {
-		var name string
-		if err := rows.Scan(&name); err != nil {
-			_ = rows.Close()
-			return nil, err
-		}
-		tables = append(tables, name)
-	}
-	_ = rows.Close()
 	var out []string
 	for _, table := range tables {
-		cols, err := s.q.Query(fmt.Sprintf(`PRAGMA table_info(%q)`, table))
+		has, err := s.tableHasProjectColumn(table)
 		if err != nil {
-			return nil, fmt.Errorf("table info %s: %w", table, err)
+			return nil, err
 		}
-		hasProject := false
-		for cols.Next() {
-			var cid int
-			var name, ctype string
-			var notnull, pk int
-			var dflt any
-			if err := cols.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
-				_ = cols.Close()
-				return nil, err
-			}
-			if name == "project" {
-				hasProject = true
-			}
-		}
-		_ = cols.Close()
-		if hasProject {
+		if has {
 			out = append(out, table)
 		}
 	}
 	return out, nil
+}
+
+func (s *Store) listUserTables() ([]string, error) {
+	rows, err := s.q.Query(`SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`)
+	if err != nil {
+		return nil, fmt.Errorf("list tables: %w", err)
+	}
+	defer rows.Close()
+	var tables []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		tables = append(tables, name)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list tables: %w", err)
+	}
+	return tables, nil
+}
+
+func (s *Store) tableHasProjectColumn(table string) (bool, error) {
+	cols, err := s.q.Query(fmt.Sprintf(`PRAGMA table_info(%q)`, table))
+	if err != nil {
+		return false, fmt.Errorf("table info %s: %w", table, err)
+	}
+	defer cols.Close()
+	hasProject := false
+	for cols.Next() {
+		var cid int
+		var name, ctype string
+		var notnull, pk int
+		var dflt any
+		if err := cols.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
+			return false, err
+		}
+		if name == "project" {
+			hasProject = true
+		}
+	}
+	if err := cols.Err(); err != nil {
+		return false, fmt.Errorf("table info %s: %w", table, err)
+	}
+	return hasProject, nil
 }
 
 // RewriteProject renames a project in place: the projects row, every table

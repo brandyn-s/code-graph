@@ -30,7 +30,7 @@ func testFactory(t *testing.T, extraEnv ...string) CommandFactory {
 		t.Fatal(err)
 	}
 	return func() *exec.Cmd {
-		cmd := exec.Command(exe)
+		cmd := exec.CommandContext(t.Context(), exe)
 		cmd.Env = append(os.Environ(), "GO_ISOLATE_WORKER=1")
 		cmd.Env = append(cmd.Env, extraEnv...)
 		return cmd

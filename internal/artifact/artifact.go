@@ -10,6 +10,7 @@
 package artifact
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/binary"
@@ -56,8 +57,14 @@ type Header struct {
 	PayloadBytes     int64                   `json:"payload_bytes"`
 }
 
-// Export writes the project's database from st to outPath.
+// Export writes the project's database from st to outPath. outPath is an
+// operator-chosen location; it is cleaned and made absolute here so every
+// later file operation sees a canonical path.
 func Export(ctx context.Context, st *store.Store, project, outPath, codeGraphVersion string) (*Header, error) {
+	outPath, err := cleanPath(outPath)
+	if err != nil {
+		return nil, fmt.Errorf("export: %w", err)
+	}
 	proj, err := st.GetProject(project)
 	if err != nil {
 		return nil, fmt.Errorf("export: read project: %w", err)
@@ -113,7 +120,7 @@ func writeArtifact(outPath string, h *Header, payloadPath string) error {
 		return fmt.Errorf("export: encode header: %w", err)
 	}
 	tmp := outPath + ".partial"
-	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
+	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600) //nolint:gosec // operator-chosen path, cleaned at the CLI boundary
 	if err != nil {
 		return fmt.Errorf("export: create %s: %w", tmp, err)
 	}
@@ -166,6 +173,10 @@ func writeArtifact(outPath string, h *Header, payloadPath string) error {
 // ReadHeader parses the header of an artifact without decompressing it.
 // It returns the header and the offset at which the zstd frame starts.
 func ReadHeader(path string) (*Header, int64, error) {
+	path, err := cleanPath(path)
+	if err != nil {
+		return nil, 0, err
+	}
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, 0, err
@@ -179,7 +190,7 @@ func readHeader(r io.Reader) (*Header, int64, error) {
 	if _, err := io.ReadFull(r, buf); err != nil {
 		return nil, 0, fmt.Errorf("read artifact magic: %w", err)
 	}
-	if string(buf) != string(magic) {
+	if !bytes.Equal(buf, magic) {
 		return nil, 0, errors.New("not a code-graph artifact (bad magic)")
 	}
 	var lenBuf [4]byte
@@ -238,14 +249,21 @@ type Report struct {
 // and AllowStale is false.
 var ErrStale = errors.New("artifact does not match the local checkout")
 
+// staleness is the outcome of comparing an artifact with the local checkout.
+type staleness struct {
+	stale  bool
+	reason string
+	local  *indexidentity.Envelope
+}
+
 // Import installs the artifact as the local project database for RepoPath.
 func Import(ctx context.Context, path string, opts ImportOptions) (*Report, error) {
 	if opts.ProjectName == nil {
 		return nil, errors.New("import: ProjectName is required")
 	}
-	capture := opts.Capture
-	if capture == nil {
-		capture = indexidentity.Capture
+	path, err := cleanPath(path)
+	if err != nil {
+		return nil, fmt.Errorf("import: %w", err)
 	}
 	f, err := os.Open(path)
 	if err != nil {
@@ -260,77 +278,135 @@ func Import(ctx context.Context, path string, opts ImportOptions) (*Report, erro
 		return nil, fmt.Errorf("import: artifact schema_version %d, this binary expects %d; re-export with a matching code-graph", h.SchemaVersion, indexidentity.SchemaVersion)
 	}
 
-	repo := opts.RepoPath
-	if repo == "" {
-		repo = h.RootPath
-	}
-	repo, err = filepath.Abs(repo)
+	repo, err := resolveRepo(opts.RepoPath, h.RootPath)
 	if err != nil {
 		return nil, err
-	}
-	if info, err := os.Stat(repo); err != nil || !info.IsDir() {
-		return nil, fmt.Errorf("import: repository path %s is not a directory (pass --repo)", repo)
 	}
 	newProject := opts.ProjectName(repo)
 
-	// Staleness against the local checkout.
-	stale, staleReason := false, ""
-	var local *indexidentity.Envelope
-	switch {
-	case h.Identity == nil:
-		stale, staleReason = true, "artifact carries no checkout identity ("+h.IdentityStatus+": "+h.IdentityReason+")"
-	default:
-		local, err = capture(repo)
-		if err != nil {
-			stale, staleReason = true, "local checkout identity unavailable: "+err.Error()
-		} else if local.RepositoryID != h.Identity.RepositoryID {
-			return nil, fmt.Errorf("import: artifact was built from a different repository (repository_id %s, local %s)", short(h.Identity.RepositoryID), short(local.RepositoryID))
-		} else {
-			var reasons []string
-			if local.SourceRevision != h.Identity.SourceRevision {
-				reasons = append(reasons, fmt.Sprintf("revision %s in artifact, %s locally", short(h.Identity.SourceRevision), short(local.SourceRevision)))
-			}
-			if h.Identity.DirtyFingerprint != "clean" {
-				reasons = append(reasons, "artifact was indexed from a dirty tree")
-			}
-			if local.DirtyFingerprint != "clean" {
-				reasons = append(reasons, "local tree has uncommitted changes")
-			}
-			if len(reasons) > 0 {
-				stale, staleReason = true, strings.Join(reasons, "; ")
-			}
-		}
+	st8, err := assessStaleness(h, repo, opts.Capture)
+	if err != nil {
+		return nil, err
 	}
-	if stale && !opts.AllowStale {
-		return nil, fmt.Errorf("%w: %s (use --allow-stale to import anyway)", ErrStale, staleReason)
+	if st8.stale && !opts.AllowStale {
+		return nil, fmt.Errorf("%w: %s (use --allow-stale to import anyway)", ErrStale, st8.reason)
 	}
 
-	cacheDir := opts.CacheDir
+	cacheDir, finalPath, err := resolveDestination(opts.CacheDir, newProject, opts.Force)
+	if err != nil {
+		return nil, err
+	}
+
+	tmpPath, err := stagePayload(f, h, cacheDir)
+	if err != nil {
+		return nil, err
+	}
+	defer os.Remove(tmpPath)
+
+	if err := prepareStagedDatabase(ctx, tmpPath, h, newProject, repo, st8); err != nil {
+		return nil, err
+	}
+	if err := installDatabase(tmpPath, finalPath); err != nil {
+		return nil, fmt.Errorf("import: install database: %w", err)
+	}
+	return &Report{
+		Header:      h,
+		Project:     newProject,
+		RepoPath:    repo,
+		DBPath:      finalPath,
+		Stale:       st8.stale,
+		StaleReason: st8.reason,
+		Renamed:     newProject != h.Project,
+	}, nil
+}
+
+// resolveRepo picks the checkout the artifact will serve and checks that it
+// is a directory.
+func resolveRepo(requested, recorded string) (string, error) {
+	repo := requested
+	if repo == "" {
+		repo = recorded
+	}
+	repo, err := cleanPath(repo)
+	if err != nil {
+		return "", err
+	}
+	if info, err := os.Stat(repo); err != nil || !info.IsDir() { //nolint:gosec // operator-chosen path, cleaned at the CLI boundary
+		return "", fmt.Errorf("import: repository path %s is not a directory (pass --repo)", repo)
+	}
+	return repo, nil
+}
+
+// assessStaleness compares the artifact's recorded identity with the local
+// checkout. A repository mismatch is an error; everything else is a
+// staleness verdict the caller may override with AllowStale.
+func assessStaleness(h *Header, repo string, capture func(string) (*indexidentity.Envelope, error)) (staleness, error) {
+	if capture == nil {
+		capture = indexidentity.Capture
+	}
+	if h.Identity == nil {
+		return staleness{stale: true, reason: "artifact carries no checkout identity (" + h.IdentityStatus + ": " + h.IdentityReason + ")"}, nil
+	}
+	local, err := capture(repo)
+	if err != nil {
+		return staleness{stale: true, reason: "local checkout identity unavailable: " + err.Error()}, nil //nolint:nilerr // a capture failure is a staleness verdict, not an import error
+	}
+	if local.RepositoryID != h.Identity.RepositoryID {
+		return staleness{}, fmt.Errorf("import: artifact was built from a different repository (repository_id %s, local %s)", short(h.Identity.RepositoryID), short(local.RepositoryID))
+	}
+	var reasons []string
+	if local.SourceRevision != h.Identity.SourceRevision {
+		reasons = append(reasons, fmt.Sprintf("revision %s in artifact, %s locally", short(h.Identity.SourceRevision), short(local.SourceRevision)))
+	}
+	if h.Identity.DirtyFingerprint != "clean" {
+		reasons = append(reasons, "artifact was indexed from a dirty tree")
+	}
+	if local.DirtyFingerprint != "clean" {
+		reasons = append(reasons, "local tree has uncommitted changes")
+	}
+	return staleness{stale: len(reasons) > 0, reason: strings.Join(reasons, "; "), local: local}, nil
+}
+
+// resolveDestination returns the cache directory and the final database path,
+// refusing to overwrite an existing database unless force is set.
+func resolveDestination(cacheDir, project string, force bool) (dir, finalPath string, err error) {
 	if cacheDir == "" {
 		cacheDir, err = store.CacheDir()
 		if err != nil {
-			return nil, err
+			return "", "", err
 		}
 	}
-	if err := os.MkdirAll(cacheDir, 0o750); err != nil {
-		return nil, err
+	cacheDir, err = cleanPath(cacheDir)
+	if err != nil {
+		return "", "", err
 	}
-	finalPath := filepath.Join(cacheDir, newProject+".db")
-	if _, err := os.Stat(finalPath); err == nil && !opts.Force {
-		return nil, fmt.Errorf("import: %s already exists (use --force to replace the local index)", finalPath)
+	if err := os.MkdirAll(cacheDir, 0o750); err != nil { //nolint:gosec // operator-chosen cache directory, cleaned above
+		return "", "", err
 	}
+	finalPath = filepath.Join(cacheDir, project+".db")
+	if _, err := os.Stat(finalPath); err == nil && !force { //nolint:gosec // operator-chosen path, cleaned at the CLI boundary
+		return "", "", fmt.Errorf("import: %s already exists (use --force to replace the local index)", finalPath)
+	}
+	return cacheDir, finalPath, nil
+}
 
-	// Decompress next to the destination so the final rename is atomic.
+// stagePayload decompresses the zstd frame that follows the header into a
+// temporary file next to the destination (same volume, so installing it is a
+// rename) and verifies its size and checksum against the header.
+func stagePayload(r io.Reader, h *Header, cacheDir string) (string, error) {
 	tmp, err := os.CreateTemp(cacheDir, ".cgraph-import-*.db")
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	tmpPath := tmp.Name()
-	defer os.Remove(tmpPath)
-	dec, err := zstd.NewReader(f)
-	if err != nil {
+	fail := func(err error) (string, error) {
 		_ = tmp.Close()
-		return nil, fmt.Errorf("import: zstd: %w", err)
+		_ = os.Remove(tmpPath)
+		return "", err
+	}
+	dec, err := zstd.NewReader(r)
+	if err != nil {
+		return fail(fmt.Errorf("import: zstd: %w", err))
 	}
 	hasher := sha256.New()
 	n, err := io.Copy(io.MultiWriter(tmp, hasher), dec)
@@ -339,51 +415,115 @@ func Import(ctx context.Context, path string, opts ImportOptions) (*Report, erro
 		err = cerr
 	}
 	if err != nil {
-		return nil, fmt.Errorf("import: decompress: %w", err)
+		_ = os.Remove(tmpPath) //nolint:gosec // operator-chosen path, cleaned at the CLI boundary
+		return "", fmt.Errorf("import: decompress: %w", err)
 	}
 	if n != h.PayloadBytes || hex.EncodeToString(hasher.Sum(nil)) != h.PayloadSHA256 {
-		return nil, fmt.Errorf("import: payload checksum mismatch (%d bytes, want %d): artifact is corrupt", n, h.PayloadBytes)
+		_ = os.Remove(tmpPath) //nolint:gosec // operator-chosen path, cleaned at the CLI boundary
+		return "", fmt.Errorf("import: payload checksum mismatch (%d bytes, want %d): artifact is corrupt", n, h.PayloadBytes)
 	}
+	return tmpPath, nil
+}
 
+// prepareStagedDatabase renames the project inside the staged database for
+// the local checkout and records the identity verdict. The store is closed
+// before returning so no handle to the staged file survives into
+// installDatabase; on Windows an open handle would make the rename fail.
+func prepareStagedDatabase(ctx context.Context, tmpPath string, h *Header, newProject, repo string, st8 staleness) error {
 	st, err := store.OpenPath(tmpPath)
 	if err != nil {
-		return nil, fmt.Errorf("import: open payload: %w", err)
+		return fmt.Errorf("import: open payload: %w", err)
 	}
-	renamed := newProject != h.Project
 	if err := st.RewriteProject(ctx, h.Project, newProject, repo); err != nil {
 		_ = st.Close()
-		return nil, fmt.Errorf("import: %w", err)
+		return fmt.Errorf("import: %w", err)
 	}
 	switch {
-	case stale:
-		reason := "imported artifact does not match this checkout: " + staleReason + "; re-run index_repository for a coherent index"
+	case st8.stale:
+		reason := "imported artifact does not match this checkout: " + st8.reason + "; re-run index_repository for a coherent index"
 		if err := st.SetIndexIdentityState(newProject, indexidentity.StatusStaleSource, reason); err != nil {
 			_ = st.Close()
-			return nil, err
+			return err
 		}
-	case local != nil:
+	case st8.local != nil:
 		env := *h.Identity
-		env.CheckoutID = local.CheckoutID
+		env.CheckoutID = st8.local.CheckoutID
 		env.CapturedAt = time.Now().UTC().Format(time.RFC3339)
 		if err := st.SetIndexIdentity(newProject, &env); err != nil {
 			_ = st.Close()
-			return nil, err
+			return err
 		}
 	}
-	if err := st.Close(); err != nil {
-		return nil, err
-	}
-	for _, suffix := range []string{"-wal", "-shm"} {
-		_ = os.Remove(tmpPath + suffix)
-		_ = os.Remove(finalPath + suffix)
-	}
-	if err := os.Rename(tmpPath, finalPath); err != nil {
-		return nil, fmt.Errorf("import: install database: %w", err)
-	}
-	return &Report{Header: h, Project: newProject, RepoPath: repo, DBPath: finalPath, Stale: stale, StaleReason: staleReason, Renamed: renamed}, nil
+	return st.Close()
 }
 
-func hashFile(path string) (string, int64, error) {
+// installDatabase moves the staged database into place.
+//
+// Handle lifecycle: by the time this runs every connection to tmpPath has
+// been closed (prepareStagedDatabase closes its store before returning), and
+// the destination is not opened by this process. Stale WAL/SHM siblings of
+// both files are removed first so SQLite does not pair the new image with an
+// old journal. The rename is retried briefly because Windows refuses to move
+// a file while another process (typically an antivirus scanner that just saw
+// a new file appear) still holds it, and if renaming keeps failing the image
+// is copied over the destination and fsynced instead, which only needs write
+// sharing on the destination.
+func installDatabase(tmpPath, finalPath string) error {
+	for _, suffix := range []string{"-wal", "-shm"} {
+		_ = os.Remove(tmpPath + suffix)   //nolint:gosec // operator-chosen path, cleaned at the CLI boundary
+		_ = os.Remove(finalPath + suffix) //nolint:gosec // operator-chosen path, cleaned at the CLI boundary
+	}
+	var err error
+	for attempt := 0; attempt < 6; attempt++ {
+		if err = os.Rename(tmpPath, finalPath); err == nil { //nolint:gosec // operator-chosen path, cleaned at the CLI boundary
+			return nil
+		}
+		time.Sleep(time.Duration(25*(attempt+1)) * time.Millisecond)
+	}
+	if cerr := copyFile(tmpPath, finalPath); cerr != nil {
+		return fmt.Errorf("%w (copy fallback also failed: %v)", err, cerr)
+	}
+	_ = os.Remove(tmpPath) //nolint:gosec // operator-chosen path, cleaned at the CLI boundary
+	return nil
+}
+
+// copyFile writes src over dst (truncating) and fsyncs the result.
+func copyFile(src, dst string) error {
+	in, err := os.Open(src) //nolint:gosec // operator-chosen path, cleaned at the CLI boundary
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600) //nolint:gosec // destination inside the cleaned cache directory
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		_ = out.Close()
+		return err
+	}
+	if err := out.Sync(); err != nil {
+		_ = out.Close()
+		return err
+	}
+	return out.Close()
+}
+
+// cleanPath canonicalises an operator-supplied path once, at the boundary,
+// so the rest of the package never handles relative or traversal-shaped
+// input (the same discipline internal/store applies to CODE_GRAPH_CACHE_DIR).
+func cleanPath(p string) (string, error) {
+	if p == "" {
+		return "", errors.New("empty path")
+	}
+	abs, err := filepath.Abs(filepath.Clean(p))
+	if err != nil {
+		return "", fmt.Errorf("resolve path %q: %w", p, err)
+	}
+	return abs, nil
+}
+
+func hashFile(path string) (sum string, size int64, err error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return "", 0, err

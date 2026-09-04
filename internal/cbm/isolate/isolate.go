@@ -130,7 +130,7 @@ func DefaultCommandFactory() (CommandFactory, error) {
 		return nil, fmt.Errorf("locate executable: %w", err)
 	}
 	return func() *exec.Cmd {
-		cmd := exec.Command(exe, "cbm-extract-worker")
+		cmd := exec.CommandContext(context.Background(), exe, "cbm-extract-worker") // worker lifetime is managed by the pool, not by a caller context
 		cmd.Stderr = os.Stderr
 		return cmd
 	}, nil

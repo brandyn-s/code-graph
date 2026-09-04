@@ -38,7 +38,7 @@ class MatchedDepthWorkflowContractTests(unittest.TestCase):
 
     def test_manual_workflow_is_retrieval_only_vs_graph(self) -> None:
         self.assertTrue(WORKFLOW.is_file())
-        self.assertIn("name: matched-depth-retrieval-only-vs-graph", self.workflow)
+        self.assertIn('name: "research: matched-depth-retrieval-only-vs-graph"', self.workflow)
         self.assertIn("\non:\n  workflow_dispatch:\n", self.workflow)
         self.assertNotIn("\n  pull_request:", self.workflow)
         self.assertNotIn("\n  push:", self.workflow)
@@ -49,8 +49,8 @@ class MatchedDepthWorkflowContractTests(unittest.TestCase):
         self.assertIn("max_total_usd", prepare)
         self.assertIn("ANTHROPIC_API_KEY", prepare)
         self.assertIn("VOYAGE_API_KEY", prepare)
-        self.assertIn("CODE_INTEL_COMPONENT_TOKEN", prepare)
-        self.assertIn('"missing_component_credential"', prepare)
+        self.assertNotIn("CODE_INTEL_COMPONENT_TOKEN", prepare)
+        self.assertIn('"missing_credentials"', prepare)
         self.assertIn('"hard_provider_cost_bound_unavailable"', prepare)
         self.assertIn('"status": "not_evaluated"', prepare)
         self.assertIn('"total_cost_usd": 0.0', prepare)
@@ -190,15 +190,15 @@ class MatchedDepthWorkflowContractTests(unittest.TestCase):
         )
         self.assertNotIn(
             "VOYAGE_API_KEY",
-            step_block(retrieval, "Download exact private code-search wheel"),
+            step_block(retrieval, "Download exact pinned code-search wheel"),
         )
 
-    def test_component_token_is_scoped_to_private_asset_download(self) -> None:
+    def test_asset_download_uses_only_the_workflow_token(self) -> None:
         retrieval = job_block(self.workflow, "retrieval")
         job_header = retrieval.split("\n    steps:", 1)[0]
         download = step_block(
             retrieval,
-            "Download exact private code-search wheel",
+            "Download exact pinned code-search wheel",
         )
         install = step_block(
             retrieval,
@@ -207,7 +207,7 @@ class MatchedDepthWorkflowContractTests(unittest.TestCase):
 
         self.assertNotIn("CODE_INTEL_COMPONENT_TOKEN", job_header)
         self.assertIn(
-            "GH_TOKEN: ${{ secrets.CODE_INTEL_COMPONENT_TOKEN }}",
+            "GH_TOKEN: ${{ github.token }}",
             download,
         )
         self.assertIn("gh release download", download)

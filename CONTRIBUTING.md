@@ -64,6 +64,8 @@ common additions: an MCP tool, a language, an edge type, and an embedding
 provider. Each names the template file to copy and the test that must change.
 [docs/upstream.md](docs/upstream.md) explains what is shared with the
 upstream project and how to port a fix from it.
+[docs/ci.md](docs/ci.md) lists every workflow, its trigger, and which secrets
+it needs; only the `research:` workflows call paid providers.
 
 ## Adding or Fixing Language Support
 

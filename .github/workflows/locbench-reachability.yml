@@ -1,4 +1,4 @@
-name: locbench-reachability
+name: "research: locbench-reachability"
 
 # Manually dispatched. Partitions the Loc-Bench corpus into github-reachable /
 # Software-Heritage-recoverable / unreachable, PINS the recoverable subset to a

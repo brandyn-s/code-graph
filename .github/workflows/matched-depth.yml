@@ -1,4 +1,4 @@
-name: matched-depth-retrieval-only-vs-graph
+name: "research: matched-depth-retrieval-only-vs-graph"
 
 on:
   workflow_dispatch:
@@ -60,7 +60,6 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           VOYAGE_API_KEY: ${{ secrets.VOYAGE_API_KEY }}
-          CODE_INTEL_COMPONENT_TOKEN: ${{ secrets.CODE_INTEL_COMPONENT_TOKEN }}
           MAX_TOTAL_USD: ${{ inputs.max_total_usd }}
           GRAPH_MAX_USD: ${{ inputs.graph_max_usd }}
           RETRIEVAL_MAX_USD: ${{ inputs.retrieval_max_usd }}
@@ -78,12 +77,7 @@ jobs:
               for name in ("ANTHROPIC_API_KEY", "VOYAGE_API_KEY")
               if not os.environ.get(name)
           ]
-          component_credential_missing = not os.environ.get(
-              "CODE_INTEL_COMPONENT_TOKEN"
-          )
           missing = list(model_credentials_missing)
-          if component_credential_missing:
-              missing.append("CODE_INTEL_COMPONENT_TOKEN")
           errors = []
           budgets = {}
           for name in ("MAX_TOTAL_USD", "GRAPH_MAX_USD", "RETRIEVAL_MAX_USD"):
@@ -127,17 +121,13 @@ jobs:
                   "schema_version": 1,
                   "status": "not_evaluated",
                   "reason_code": (
-                      "missing_component_credential"
-                      if component_credential_missing
+                      "missing_credentials"
+                      if model_credentials_missing
                       else (
-                          "missing_credentials"
-                          if model_credentials_missing
-                          else (
-                              "invalid_cost_authority"
-                              if len(errors) != 1
-                              or not errors[0].startswith("paid providers")
-                              else "hard_provider_cost_bound_unavailable"
-                          )
+                          "invalid_cost_authority"
+                          if len(errors) != 1
+                          or not errors[0].startswith("paid providers")
+                          else "hard_provider_cost_bound_unavailable"
                       )
                   ),
                   "missing_credentials": missing,
@@ -398,9 +388,9 @@ jobs:
           run-id: ${{ inputs.resume_run_id }}
           github-token: ${{ github.token }}
 
-      - name: Download exact private code-search wheel
+      - name: Download exact pinned code-search wheel
         env:
-          GH_TOKEN: ${{ secrets.CODE_INTEL_COMPONENT_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           gh release download v0.2.1 \
             --repo brandyn-s/code-search \

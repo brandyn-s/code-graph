@@ -1,4 +1,4 @@
-name: agent-effectiveness
+name: "research: agent-effectiveness"
 
 # Regression gate for the agent-as-end-user layer. Catches the 6 failure-mode
 # categories that the per-extractor accuracy-regression.yml does NOT see:
@@ -20,13 +20,6 @@ name: agent-effectiveness
 #
 
 on:
-  pull_request:
-    paths:
-      - 'internal/tools/**'
-      - 'internal/store/**'
-      - 'cmd/code-graph/**'
-      - 'bench/research/agent-effectiveness/**'
-      - '.github/workflows/agent-effectiveness.yml'
   workflow_dispatch:
     inputs:
       filter_category:
@@ -40,7 +33,6 @@ on:
 
 permissions:
   contents: read
-  pull-requests: write  # for posting the PR comment
 
 jobs:
   agent-effectiveness:
@@ -58,6 +50,18 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      - name: Require ANTHROPIC_API_KEY
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          missing=""
+          [ -z "$ANTHROPIC_API_KEY" ] && missing="$missing ANTHROPIC_API_KEY"
+          if [ -n "$missing" ]; then
+            echo "::error::This research workflow needs the$missing secret(s); configure them on the repository or skip this workflow. Zero-cost checks already run in Core CI."
+            exit 1
+          fi
+
 
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -97,15 +101,6 @@ jobs:
         run: |
           "$CODE_GRAPH_BIN" cli index_repository "{\"path\":\"$HOME/fixture/ripgrep\"}"
 
-      - name: Verify ANTHROPIC_API_KEY available
-        run: |
-          if [ -z "$ANTHROPIC_API_KEY" ]; then
-            echo "ANTHROPIC_API_KEY secret not configured for this repo. Skipping LLM categories."
-            echo "ANTHROPIC_SKIP=1" >> "$GITHUB_ENV"
-          else
-            echo "ANTHROPIC_API_KEY: SET (length: ${#ANTHROPIC_API_KEY})"
-          fi
-
       - name: Fresh start — clear stale results.jsonl
         run: |
           # run_battery.py appends to results.jsonl and the file is
@@ -137,7 +132,6 @@ jobs:
           python run_battery.py --filter-category 6 --filter-target ripgrep
 
       - name: Run category 1 (banner; ~$2 on ripgrep)
-        if: env.ANTHROPIC_SKIP != '1'
         env:
           CODE_GRAPH_BIN: ${{ github.workspace }}/bin/code-graph
         run: |
@@ -146,7 +140,6 @@ jobs:
           python run_battery.py --filter-category 1 --filter-target ripgrep --budget-usd ${{ github.event.inputs.budget_usd || '3' }}
 
       - name: Run additional categories on manual dispatch
-        if: github.event_name == 'workflow_dispatch' && env.ANTHROPIC_SKIP != '1'
         env:
           CODE_GRAPH_BIN: ${{ github.workspace }}/bin/code-graph
         run: |
@@ -164,41 +157,3 @@ jobs:
           name: agent-effectiveness-results
           path: bench/research/agent-effectiveness/results.jsonl
           if-no-files-found: warn
-
-      - name: Post summary to PR
-        if: github.event_name == 'pull_request' && always()
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: |
-          cd bench/research/agent-effectiveness
-          if [ ! -f results.jsonl ]; then
-            echo "No results.jsonl produced; skipping PR comment."
-            exit 0
-          fi
-          {
-            echo "## agent-effectiveness battery"
-            echo ""
-            echo "Per-category pass rate on \`ripgrep\` CI fixture:"
-            echo ""
-            python -c "
-          import json
-          from collections import defaultdict
-          rows = [json.loads(l) for l in open('results.jsonl') if l.strip()]
-          totals = defaultdict(int); sigs = defaultdict(int)
-          for r in rows:
-              c = r.get('category')
-              if c is None: continue
-              totals[c] += 1
-              if r.get('signal_caught') or r.get('category_signal_caught'):
-                  sigs[c] += 1
-          print('| Category | Questions | Pass | Signals |')
-          print('|---|---|---|---|')
-          for c in sorted(totals):
-              t = totals[c]; s = sigs[c]
-              print(f'| {c} | {t} | {t-s} | {s} |')
-          " || echo "summary computation failed"
-            echo ""
-            echo "_Detailed JSONL artifact uploaded as \`agent-effectiveness-results\`._"
-          } > comment.md
-          gh pr comment "$PR_NUMBER" --body-file comment.md

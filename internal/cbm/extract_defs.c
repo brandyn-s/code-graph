@@ -950,10 +950,20 @@ static TSNode find_class_body(TSNode class_node, CBMLanguage lang) {
         TSNode body = ts_node_child_by_field_name(class_node, *f, (uint32_t)strlen(*f));
         if (!ts_node_is_null(body)) return body;
     }
-    // Go: type_spec -> type field (interface_type or struct_type)
+    // Go: type_spec -> type field (interface_type or struct_type). A struct
+    // keeps its field_declaration nodes one level below: struct_type's only
+    // named child is a field_declaration_list. Interfaces hold method specs
+    // directly, which is why interface members extracted while every struct
+    // field was silently skipped (upstream 47116b8e). Normalize here.
     if (lang == CBM_LANG_GO) {
         TSNode type_inner = ts_node_child_by_field_name(class_node, "type", 4);
-        if (!ts_node_is_null(type_inner)) return type_inner;
+        if (!ts_node_is_null(type_inner)) {
+            if (strcmp(ts_node_type(type_inner), "struct_type") == 0) {
+                TSNode list = cbm_find_child_by_kind(type_inner, "field_declaration_list");
+                if (!ts_node_is_null(list)) return list;
+            }
+            return type_inner;
+        }
     }
     // Fallback: search children for known body node types
     static const char* body_types[] = {
@@ -1262,6 +1272,19 @@ static void extract_var_names(CBMExtractCtx* ctx, TSNode node, const CBMLangSpec
             break;
         }
         case CBM_LANG_GO: {
+            // struct field_declaration -> field_identifier+ (A, B int declares two
+            // fields; embedded fields have no field_identifier and are skipped).
+            // push_var_def drops the blank identifier `_` (padding, upstream cb7cb444).
+            if (strcmp(ts_node_type(node), "field_declaration") == 0) {
+                uint32_t fn = ts_node_named_child_count(node);
+                for (uint32_t i = 0; i < fn; i++) {
+                    TSNode fchild = ts_node_named_child(node, i);
+                    if (strcmp(ts_node_type(fchild), "field_identifier") == 0) {
+                        push_var_def(ctx, cbm_node_text(a, fchild, ctx->source), node);
+                    }
+                }
+                break;
+            }
             // var_declaration -> var_spec* -> name
             // const_declaration -> const_spec* -> name
             uint32_t n = ts_node_named_child_count(node);

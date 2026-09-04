@@ -435,6 +435,14 @@ func (p *Pipeline) resolveFileCallsCBM(relPath string, ext *cachedExtraction) ([
 		if callerQN == "" {
 			callerQN = moduleQN
 		}
+		// A bare call whose callee is a parameter of an enclosing function
+		// (`def run_with(cb): cb()`) cannot be the module-level symbol of the
+		// same name; binding it by short name would fabricate the edge
+		// (upstream 95689b5c). Count it as unresolved instead.
+		if call.CalleeIsLocallyBound {
+			unresolvedByCaller[callerQN]++
+			continue
+		}
 		typeMap := perFuncTypeMap[call.EnclosingFuncQN]
 		if typeMap == nil {
 			typeMap = perFuncTypeMap[""]

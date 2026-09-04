@@ -89,6 +89,11 @@ typedef struct {
     // edge with properties.dispatch_kind so trace_call_path can
     // distinguish direct from indirect resolutions.
     const char* dispatch_kind;
+    // Bare call foo() whose callee identifier is bound as a parameter of an
+    // enclosing function or lambda, so it cannot be the module-level foo.
+    // Python only today (upstream 95689b5c). The Go-side resolver refuses to
+    // bind such calls to project symbols by short name.
+    bool callee_is_locally_bound;
 } CBMCall;
 
 typedef struct {

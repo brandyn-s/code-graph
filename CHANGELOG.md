@@ -17,6 +17,15 @@ All notable changes to this project are documented here. The format follows
   (`skipped_files`, `skipped_count`) and `code-graph doctor`.
 
 ### Fixed (0.9.1, ported from upstream codebase-memory-mcp)
+- Go struct fields are extracted as definitions (they live under
+  `struct_type -> field_declaration_list`; upstream 47116b8e) and the blank
+  identifier `_` is skipped (upstream cb7cb444).
+- Python bare calls whose callee is a parameter of an enclosing function or
+  lambda are flagged `callee_is_locally_bound` and never resolved to a
+  same-named module-level symbol (upstream 95689b5c, 0b0d143c, 97517a46).
+  New negative fixture `bench/accuracy/synthetic/python-param-shadow-negative`.
+  Upstream 572725e6 (trailing blanks at EOF in parse coverage) does not apply:
+  this fork computes no parse-coverage metric.
 - Extractor memory safety: `walk_defs` is iterative with a growable heap frame
   stack (upstream 174e56b4, #668), every other recursive AST walker and the Go
   LSP resolver are bounded by `CBM_MAX_WALK_DEPTH` (default 512) and flag the

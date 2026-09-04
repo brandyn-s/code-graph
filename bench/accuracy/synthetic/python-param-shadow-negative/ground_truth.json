@@ -1,0 +1,30 @@
+{
+  "description": "Negative fixture (Python): bare calls whose callee is a parameter of an enclosing function or an outer closure scope must not resolve to the same-named module-level function. `run_with(cb)` calls its parameter `cb`, and `outer(run)`'s nested `inner` (QN `app.inner`) calls the closed-over parameter `run`; module-level `cb` exists precisely so a short-name resolver would fabricate the edge. Positive controls: `main` calls `run_with`, `outer`, and `helper`. (Nested definitions flatten to `<module>.<name>`; the closure control `inner -> run` is forbidden, not expected.)",
+  "kind": "negative",
+  "expected_internal_calls": [
+    {
+      "from_qn": "python-param-shadow-negative.app.main",
+      "to_qn": "python-param-shadow-negative.app.run_with"
+    },
+    {
+      "from_qn": "python-param-shadow-negative.app.main",
+      "to_qn": "python-param-shadow-negative.app.outer"
+    },
+    {
+      "from_qn": "python-param-shadow-negative.app.main",
+      "to_qn": "python-param-shadow-negative.app.helper"
+    }
+  ],
+  "forbidden_emitted_calls": [
+    {
+      "from_qn": "python-param-shadow-negative.app.run_with",
+      "to_qn_pattern": ".*\\.cb$",
+      "reason": "`cb` is run_with's parameter; the module-level `cb` is a different symbol. Any CALLS edge from run_with to *.cb is a phantom."
+    },
+    {
+      "from_qn": "python-param-shadow-negative.app.inner",
+      "to_qn_pattern": ".*\\.run$",
+      "reason": "`run` is a parameter of the enclosing `outer`; a closure over a parameter is still parameter-bound."
+    }
+  ]
+}

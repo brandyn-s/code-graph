@@ -141,6 +141,56 @@ static char* extract_callee_name(CBMArena* a, TSNode node, const char* source, C
 }
 
 // Walk AST for call nodes
+
+// --- Python bare-call parameter shadowing (upstream 95689b5c) ---
+// Name bound by one Python parameter node, or NULL when the shape binds none:
+// a bare identifier, the `name` field of default/typed parameters, or the
+// identifier under a `*args` / `**kwargs` splat.
+static const char* python_parameter_name(CBMExtractCtx* ctx, TSNode param) {
+    if (ts_node_is_null(param)) return NULL;
+    if (strcmp(ts_node_type(param), "identifier") == 0) {
+        return cbm_node_text(ctx->arena, param, ctx->source);
+    }
+    TSNode name = ts_node_child_by_field_name(param, "name", 4);
+    if (!ts_node_is_null(name) && strcmp(ts_node_type(name), "identifier") == 0) {
+        return cbm_node_text(ctx->arena, name, ctx->source);
+    }
+    TSNode first = ts_node_named_child(param, 0);
+    if (!ts_node_is_null(first) && strcmp(ts_node_type(first), "identifier") == 0) {
+        return cbm_node_text(ctx->arena, first, ctx->source);
+    }
+    return NULL;
+}
+
+// True when the callee of a BARE Python call `foo()` is bound as a parameter of
+// an enclosing function or lambda. A parameter shadows any module-level `foo`
+// for the whole body, so resolving such a call by short name fabricates the
+// edge by construction (`def run_with(cb): cb()` must not bind module `cb`).
+// Enclosing scopes are walked to the root so closures over an outer parameter
+// count. Local assignments are deliberately not covered (flow-sensitive).
+static bool python_callee_is_bound_parameter(CBMExtractCtx* ctx, TSNode call_node) {
+    TSNode func_node = ts_node_child_by_field_name(call_node, "function", 8);
+    if (ts_node_is_null(func_node) || strcmp(ts_node_type(func_node), "identifier") != 0) {
+        return false;
+    }
+    const char* callee_name = cbm_node_text(ctx->arena, func_node, ctx->source);
+    if (!callee_name || !callee_name[0]) return false;
+    int hops = 0;
+    for (TSNode scope = ts_node_parent(call_node); !ts_node_is_null(scope) && hops < 512;
+         scope = ts_node_parent(scope), hops++) {
+        const char* kind = ts_node_type(scope);
+        if (strcmp(kind, "function_definition") != 0 && strcmp(kind, "lambda") != 0) continue;
+        TSNode params = ts_node_child_by_field_name(scope, "parameters", 10);
+        if (ts_node_is_null(params)) continue;
+        uint32_t n = ts_node_named_child_count(params);
+        for (uint32_t i = 0; i < n; i++) {
+            const char* pname = python_parameter_name(ctx, ts_node_named_child(params, i));
+            if (pname && strcmp(pname, callee_name) == 0) return true;
+        }
+    }
+    return false;
+}
+
 static void walk_calls_body(CBMExtractCtx* ctx, TSNode node, const CBMLangSpec* spec);
 static void walk_calls(CBMExtractCtx* ctx, TSNode node, const CBMLangSpec* spec) {
     if (!cbm_walk_enter(ctx)) return;
@@ -157,9 +207,13 @@ static void walk_calls_body(CBMExtractCtx* ctx, TSNode node, const CBMLangSpec* 
             // Skip keywords
             if (!cbm_is_keyword(callee, ctx->language)) {
                 CBMCall call;
+                call.callee_is_locally_bound = false;
                 call.callee_name = callee;
                 call.enclosing_func_qn = cbm_enclosing_func_qn_cached(ctx, node);
                 call.dispatch_kind = NULL;
+                if (ctx->language == CBM_LANG_PYTHON) {
+                    call.callee_is_locally_bound = python_callee_is_bound_parameter(ctx, node);
+                }
                 cbm_calls_push(&ctx->result->calls, ctx->arena, call);
 
                 // Python: Depends(func) — emit the argument as a call target too
@@ -175,6 +229,7 @@ static void walk_calls_body(CBMExtractCtx* ctx, TSNode node, const CBMLangSpec* 
                                 char* dep_name = cbm_node_text(ctx->arena, first_arg, ctx->source);
                                 if (dep_name && dep_name[0] && !cbm_is_keyword(dep_name, ctx->language)) {
                                     CBMCall dep_call;
+                                    dep_call.callee_is_locally_bound = false;
                                     dep_call.callee_name = dep_name;
                                     dep_call.enclosing_func_qn = call.enclosing_func_qn;
                                     dep_call.dispatch_kind = "depends";
@@ -215,6 +270,7 @@ static void walk_calls_body(CBMExtractCtx* ctx, TSNode node, const CBMLangSpec* 
                                     char* sub_name = cbm_node_text(ctx->arena, first_arg, ctx->source);
                                     if (sub_name && sub_name[0] && !cbm_is_keyword(sub_name, ctx->language)) {
                                         CBMCall sub_call;
+                                        sub_call.callee_is_locally_bound = false;
                                         sub_call.callee_name = sub_name;
                                         sub_call.enclosing_func_qn = call.enclosing_func_qn;
                                         sub_call.dispatch_kind = "executor_submit";
@@ -253,6 +309,7 @@ static void walk_calls_body(CBMExtractCtx* ctx, TSNode node, const CBMLangSpec* 
                                     char* hook_name = cbm_node_text(ctx->arena, first_arg, ctx->source);
                                     if (hook_name && hook_name[0] && !cbm_is_keyword(hook_name, ctx->language)) {
                                         CBMCall hook_call;
+                                        hook_call.callee_is_locally_bound = false;
                                         hook_call.callee_name = hook_name;
                                         hook_call.enclosing_func_qn = call.enclosing_func_qn;
                                         hook_call.dispatch_kind = hook_label;
@@ -292,6 +349,7 @@ static void walk_calls_body(CBMExtractCtx* ctx, TSNode node, const CBMLangSpec* 
                                             if (method_name && method_name[0] &&
                                                 !cbm_is_keyword(method_name, ctx->language)) {
                                                 CBMCall ga_call;
+                                                ga_call.callee_is_locally_bound = false;
                                                 ga_call.callee_name = method_name;
                                                 ga_call.enclosing_func_qn =
                                                     cbm_enclosing_func_qn_cached(ctx, node);
@@ -345,9 +403,13 @@ static void extract_jsx_refs_body(CBMExtractCtx* ctx, TSNode node) {
     if (name[0] < 'A' || name[0] > 'Z') return;
 
     CBMCall call;
+    call.callee_is_locally_bound = false;
     call.callee_name = name;
     call.enclosing_func_qn = cbm_enclosing_func_qn_cached(ctx, node);
     call.dispatch_kind = NULL;
+    if (ctx->language == CBM_LANG_PYTHON) {
+        call.callee_is_locally_bound = python_callee_is_bound_parameter(ctx, node);
+    }
     cbm_calls_push(&ctx->result->calls, ctx->arena, call);
 }
 
@@ -369,9 +431,13 @@ void handle_calls(CBMExtractCtx* ctx, TSNode node, const CBMLangSpec* spec, Walk
         char* callee = extract_callee_name(ctx->arena, node, ctx->source, ctx->language);
         if (callee && callee[0] && !cbm_is_keyword(callee, ctx->language)) {
             CBMCall call;
+            call.callee_is_locally_bound = false;
             call.callee_name = callee;
             call.enclosing_func_qn = state->enclosing_func_qn;
             call.dispatch_kind = NULL;
+            if (ctx->language == CBM_LANG_PYTHON) {
+                call.callee_is_locally_bound = python_callee_is_bound_parameter(ctx, node);
+            }
             cbm_calls_push(&ctx->result->calls, ctx->arena, call);
 
             // Python: Depends(func) — emit the argument as a call target too
@@ -386,6 +452,7 @@ void handle_calls(CBMExtractCtx* ctx, TSNode node, const CBMLangSpec* spec, Walk
                             char* dep_name = cbm_node_text(ctx->arena, first_arg, ctx->source);
                             if (dep_name && dep_name[0] && !cbm_is_keyword(dep_name, ctx->language)) {
                                 CBMCall dep_call;
+                                dep_call.callee_is_locally_bound = false;
                                 dep_call.callee_name = dep_name;
                                 dep_call.enclosing_func_qn = state->enclosing_func_qn;
                                 dep_call.dispatch_kind = "depends";
@@ -415,6 +482,7 @@ void handle_calls(CBMExtractCtx* ctx, TSNode node, const CBMLangSpec* spec, Walk
                                 char* sub_name = cbm_node_text(ctx->arena, first_arg, ctx->source);
                                 if (sub_name && sub_name[0] && !cbm_is_keyword(sub_name, ctx->language)) {
                                     CBMCall sub_call;
+                                    sub_call.callee_is_locally_bound = false;
                                     sub_call.callee_name = sub_name;
                                     sub_call.enclosing_func_qn = state->enclosing_func_qn;
                                     sub_call.dispatch_kind = "executor_submit";
@@ -444,6 +512,7 @@ void handle_calls(CBMExtractCtx* ctx, TSNode node, const CBMLangSpec* spec, Walk
                                 char* hook_name = cbm_node_text(ctx->arena, first_arg, ctx->source);
                                 if (hook_name && hook_name[0] && !cbm_is_keyword(hook_name, ctx->language)) {
                                     CBMCall hook_call;
+                                    hook_call.callee_is_locally_bound = false;
                                     hook_call.callee_name = hook_name;
                                     hook_call.enclosing_func_qn = state->enclosing_func_qn;
                                     hook_call.dispatch_kind = hook_label;
@@ -497,6 +566,7 @@ void handle_calls(CBMExtractCtx* ctx, TSNode node, const CBMLangSpec* spec, Walk
                                             if (method_name && method_name[0] &&
                                                 !cbm_is_keyword(method_name, ctx->language)) {
                                                 CBMCall ga_call;
+                                                ga_call.callee_is_locally_bound = false;
                                                 ga_call.callee_name = method_name;
                                                 ga_call.enclosing_func_qn = state->enclosing_func_qn;
                                                 ga_call.dispatch_kind = "getattr";
@@ -523,9 +593,13 @@ void handle_calls(CBMExtractCtx* ctx, TSNode node, const CBMLangSpec* spec, Walk
                 char* name = cbm_node_text(ctx->arena, name_node, ctx->source);
                 if (name && name[0] >= 'A' && name[0] <= 'Z') {
                     CBMCall call;
+                    call.callee_is_locally_bound = false;
                     call.callee_name = name;
                     call.enclosing_func_qn = state->enclosing_func_qn;
                     call.dispatch_kind = NULL;
+                    if (ctx->language == CBM_LANG_PYTHON) {
+                        call.callee_is_locally_bound = python_callee_is_bound_parameter(ctx, node);
+                    }
                     cbm_calls_push(&ctx->result->calls, ctx->arena, call);
                 }
             }

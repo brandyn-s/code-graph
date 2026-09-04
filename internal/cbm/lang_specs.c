@@ -41,7 +41,9 @@ static const char* go_module_types[] = {"source_file",NULL};
 static const char* go_call_types[] = {"call_expression",NULL};
 static const char* go_import_types[] = {"import_declaration",NULL};
 static const char* go_branch_types[] = {"if_statement","for_statement","switch_expression","select_statement","case_clause","default_clause",NULL};
-static const char* go_var_types[] = {"var_declaration","const_declaration",NULL};
+// field_declaration only occurs inside struct bodies (never at module level);
+// listing it lets class-variable extraction emit Go struct fields (upstream 47116b8e).
+static const char* go_var_types[] = {"var_declaration","const_declaration","field_declaration",NULL};
 static const char* go_assign_types[] = {"assignment_statement","short_var_declaration",NULL};
 
 // ==================== PYTHON ====================

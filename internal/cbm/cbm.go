@@ -98,6 +98,9 @@ type Call struct {
 	CalleeName      string
 	EnclosingFuncQN string
 	DispatchKind    string
+	// CalleeIsLocallyBound: a bare call whose callee is a parameter of an
+	// enclosing function; the resolver must not bind it to a project symbol.
+	CalleeIsLocallyBound bool
 }
 
 // Import represents a local name -> module path mapping.
@@ -292,9 +295,10 @@ func convertResult(r *C.CBMFileResult) *FileResult {
 		calls := unsafe.Slice(r.calls.items, r.calls.count)
 		for i, c := range calls {
 			fr.Calls[i] = Call{
-				CalleeName:      C.GoString(c.callee_name),
-				EnclosingFuncQN: C.GoString(c.enclosing_func_qn),
-				DispatchKind:    C.GoString(c.dispatch_kind),
+				CalleeName:           C.GoString(c.callee_name),
+				EnclosingFuncQN:      C.GoString(c.enclosing_func_qn),
+				DispatchKind:         C.GoString(c.dispatch_kind),
+				CalleeIsLocallyBound: bool(c.callee_is_locally_bound),
 			}
 		}
 	}

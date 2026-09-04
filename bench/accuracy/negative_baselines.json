@@ -1,10 +1,13 @@
 {
+  "python-param-shadow-negative": {
+    "phantom_count": 0
+  },
   "rust-actix-data-negative": {
     "phantom_count": 0
   },
   "rust-diesel-negative": {
-    "phantom_count": 2,
-    "note": "Multi-line turbofish chain phantoms (entry → AssetRepo.get_result/load via cross-package-heuristic). The receiver-type whitespace-trim fix eliminates them but costs -5pp on assetman F1 even with Trait/Impl Tier 2 modeling. Net negative until the Tier 2 cost is understood and resolved."
+    "note": "Multi-line turbofish chain phantoms (entry \u2192 AssetRepo.get_result/load via cross-package-heuristic). The receiver-type whitespace-trim fix eliminates them but costs -5pp on assetman F1 even with Trait/Impl Tier 2 modeling. Net negative until the Tier 2 cost is understood and resolved.",
+    "phantom_count": 2
   },
   "rust-futures-ready-negative": {
     "phantom_count": 0

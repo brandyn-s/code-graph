@@ -193,7 +193,7 @@ The earlier "we exceed 92.7%" claim in this doc was apples-to-oranges (n=16 Loc-
 | `CODE_GRAPH_FULL_REINDEX_EVERY` | `50` | Force a full reindex after this many incremental runs; `0` disables the sentinel. |
 | `CODE_GRAPH_HEAP_LIMIT_MB` | unset (off) | Abort indexing when Go heap-in-use exceeds this many MB; a guard for very large repositories. |
 | `CODE_GRAPH_INCREMENTAL_CAP` | built-in default | Cap on how far the dependent set expands during incremental indexing; raise with care on large repos. |
-| `CODE_GRAPH_TOOLSET` | `core` | Which tools the MCP server advertises: `core` (24 tools used by the plugin, benchmark arms, and the battery) or `full` (all 40). The CLI always has every tool. Membership lives in `internal/tools/toolset.go`. |
+| `CODE_GRAPH_TOOLSET` | `core` | Which tools the MCP server advertises: `core` (26 tools used by the plugin skills, operator-pilot allowlists, benchmark arms, and the battery) or `full` (all 40). The CLI always has every tool. Membership lives in `internal/tools/toolset.go`. |
 | `CODE_GRAPH_MATCH_TRACE` | unset (off) | Set to `1` to log HTTP route matches that scored above zero but below threshold (tuning aid). |
 | `VOYAGE_EMBED_MODEL` | built-in default | Voyage embedding model id used for node embeddings. |
 | `ANTHROPIC_MODEL` | built-in default | Anthropic model id used by the localization agent and rationale tools. |

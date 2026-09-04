@@ -25,6 +25,8 @@ const (
 // consumers and must stay a superset of each:
 //   - codebase-search-plugin skills (skills/*/SKILL.md, references/*.md)
 //   - codebase-search-plugin bench/compare ARM_CONTRACTS allowlists
+//   - codebase-search-plugin operator-pilot allowlists (code_intel_contract_guard.py
+//     GRAPH_TOOLS, bench/e2e/pilot/run.py READ_ONLY_GRAPH_TOOLS)
 //   - bench/research/agent-effectiveness category-6 battery
 //
 // plus index_health as the status essential. Adding a tool here requires
@@ -44,12 +46,14 @@ var coreToolNames = map[string]bool{
 	"query_graph":      true,
 	"get_graph_schema": true,
 	"get_code_snippet": true,
+	"explain_symbol":   true,
 	"degree_filter":    true,
 	// Relationships, evidence, impact.
 	"trace_call_path":           true,
 	"trace_data_flow":           true,
 	"get_relationship_evidence": true,
 	"detect_changes":            true,
+	"get_review_context":        true,
 	"get_architecture":          true,
 	// Localization.
 	"code_localize":            true,

@@ -39,7 +39,7 @@ func newFakeEmbedServer(t *testing.T) *fakeEmbedServer {
 			return
 		}
 		f.lastBody.Store(req)
-		if int32(n) <= atomic.LoadInt32(&f.failFirst) {
+		if n <= atomic.LoadInt32(&f.failFirst) {
 			w.WriteHeader(f.failCode)
 			_, _ = w.Write([]byte(`{"error":{"message":"slow down"}}`))
 			return
@@ -79,7 +79,7 @@ func newTestOpenAI(t *testing.T, f *fakeEmbedServer, env map[string]string) *Ope
 	if r.Provider != ProviderOpenAI {
 		t.Fatalf("resolution = %+v, want openai", r)
 	}
-	c := NewOpenAI(r)
+	c := NewOpenAI(&r)
 	if c == nil {
 		t.Fatal("NewOpenAI returned nil")
 	}

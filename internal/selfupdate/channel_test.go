@@ -9,7 +9,7 @@ import (
 
 func TestNormalizeChannel(t *testing.T) {
 	for raw, want := range map[string]string{
-		"": ChannelStable, "stable": ChannelStable, "rc": ChannelRC, " RC ": ChannelRC,
+		"": ChannelStable, "stable": ChannelStable, "rc": ChannelRC, " RC ": ChannelRC, //nolint:gocritic // " RC " is an intentional whitespace fixture for trimming
 		"beta": ChannelStable, "nightly": ChannelStable,
 	} {
 		if got := NormalizeChannel(raw); got != want {

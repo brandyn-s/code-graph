@@ -38,7 +38,7 @@ func seedFromFixtures(f *testing.F, languages []lang.Language) {
 	for _, root := range roots {
 		_ = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 			if err != nil || info.IsDir() || info.Size() > 64*1024 {
-				return nil
+				return nil //nolint:nilerr // fuzz seeding skips unreadable entries by design
 			}
 			l, ok := lang.LanguageForFilename(filepath.Base(path))
 			if !ok {
@@ -53,7 +53,7 @@ func seedFromFixtures(f *testing.F, languages []lang.Language) {
 			}
 			data, readErr := os.ReadFile(path)
 			if readErr != nil {
-				return nil
+				return nil //nolint:nilerr // fuzz seeding skips unreadable entries by design
 			}
 			f.Add(uint8(i), data)
 			added++

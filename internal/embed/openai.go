@@ -68,7 +68,7 @@ var _ Embedder = (*OpenAI)(nil)
 
 // NewOpenAI builds a client from a Resolution whose Provider is openai.
 // Returns nil for any other provider or when the model is empty.
-func NewOpenAI(r Resolution) *OpenAI {
+func NewOpenAI(r *Resolution) *OpenAI {
 	if r.Provider != ProviderOpenAI || r.Model == "" || r.BaseURL == "" {
 		return nil
 	}
@@ -135,7 +135,7 @@ func (c *OpenAI) EmbedBatch(ctx context.Context, texts []string, _ string) ([][]
 }
 
 // EmbedSingle embeds one text.
-func (c *OpenAI) EmbedSingle(ctx context.Context, text string, _ string) ([]float32, error) {
+func (c *OpenAI) EmbedSingle(ctx context.Context, text, _ string) ([]float32, error) {
 	vecs, err := c.embedOnce(ctx, []string{text})
 	if err != nil {
 		return nil, err

@@ -44,7 +44,7 @@ import (
 //
 // Returns the resolved target QN, or the original targetQN if no leading
 // dot was present (no rewrite needed).
-func resolvePythonRelativeImport(targetQN, moduleQN, localName string) string {
+func resolvePythonRelativeImport(targetQN, moduleQN, _ string) string {
 	rawDots := 0
 	for rawDots < len(targetQN) && targetQN[rawDots] == '.' {
 		rawDots++

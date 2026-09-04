@@ -254,7 +254,7 @@ func FromResolution(r *Resolution) Embedder {
 			return v
 		}
 	case ProviderOpenAI:
-		if c := NewOpenAI(*r); c != nil {
+		if c := NewOpenAI(r); c != nil {
 			return c
 		}
 	}

@@ -230,7 +230,8 @@ func (s *Server) handleVisualize(_ context.Context, req *mcp.CallToolRequest) (*
 		if filepath.IsAbs(outputPath) {
 			rel, relErr := filepath.Rel(proj.RootPath, outputPath)
 			if relErr != nil {
-				return errResult(fmt.Sprintf("output_path %q cannot be made relative to project root: %v", outputPath, relErr)), nil
+				// filepath.Rel fails across Windows drives; that is an escape too.
+				return errResult(fmt.Sprintf("output_path rejected: path %q escapes project root %q", outputPath, proj.RootPath)), nil
 			}
 			outputPath = rel
 		}

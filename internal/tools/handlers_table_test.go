@@ -215,11 +215,11 @@ func truncate(s string, n int) string {
 }
 
 // adrContent builds an ADR document with every section manage_adr requires.
-func adrContent(context string) string {
+func adrContent(body string) string {
 	var b strings.Builder
 	b.WriteString("# Architecture Decision Record\n\n")
 	for _, section := range []string{"PURPOSE", "STACK", "ARCHITECTURE", "PATTERNS", "TRADEOFFS", "PHILOSOPHY"} {
-		b.WriteString("## " + section + "\n\n" + context + "\n\n")
+		b.WriteString("## " + section + "\n\n" + body + "\n\n")
 	}
 	return b.String()
 }

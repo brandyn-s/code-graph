@@ -115,7 +115,7 @@ func (vc *Voyage) EmbedBatch(ctx context.Context, texts []string, inputType stri
 }
 
 // EmbedSingle embeds a single text and returns the vector.
-func (vc *Voyage) EmbedSingle(ctx context.Context, text string, inputType string) ([]float32, error) {
+func (vc *Voyage) EmbedSingle(ctx context.Context, text, inputType string) ([]float32, error) {
 	vecs, err := vc.embedSingleBatch(ctx, []string{text}, inputType)
 	if err != nil {
 		return nil, err

@@ -233,7 +233,8 @@ func detectShellRC() string {
 // legacySkillDirNames lists skill directories written by earlier releases
 // that `install` replaces and `uninstall` removes.
 func legacySkillDirNames() []string {
-	names := []string{legacyMCPServerKey}
+	names := make([]string, 0, 5)
+	names = append(names, legacyMCPServerKey)
 	for _, suffix := range []string{"exploring", "tracing", "quality", "reference"} {
 		names = append(names, "codebase-memory-"+suffix)
 	}

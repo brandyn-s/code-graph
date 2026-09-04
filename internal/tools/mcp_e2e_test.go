@@ -308,7 +308,7 @@ func gitBackedFixtureCopy(t *testing.T, fixture string) string {
 		{"-c", "user.name=e2e", "-c", "user.email=e2e@example.invalid", "add", "."},
 		{"-c", "user.name=e2e", "-c", "user.email=e2e@example.invalid", "commit", "-q", "-m", "fixture"},
 	} {
-		cmd := exec.Command("git", args...)
+		cmd := exec.CommandContext(t.Context(), "git", args...)
 		cmd.Dir = dst
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("git %v: %v\n%s", args, err, out)

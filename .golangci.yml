@@ -80,10 +80,11 @@ linters:
       # resolution loops that were moved verbatim out of pipeline.go in the
       # 2026-09 split. They are branchy by nature (one arm per language
       # construct) and are covered by the accuracy-regression gates; exempt only
-      # the cognitive-complexity linter for these two files.
+      # the cognitive- and nesting-complexity linters for these two files.
       - path: internal/pipeline/pass_(definitions|imports_resolve)\.go
         linters:
           - gocognit
+          - nestif
       - path: internal/cbm
         text: "G103"
         linters:

@@ -126,7 +126,11 @@ func seedFromGoMinimal(t *testing.T, c *editCorpus) {
 // callableNames returns every function defined in the root package, sorted so
 // random selection is deterministic across runs.
 func (c *editCorpus) callableNames() []string {
-	var names []string
+	total := 0
+	for _, fns := range c.files {
+		total += len(fns)
+	}
+	names := make([]string, 0, total)
 	for _, fns := range c.files {
 		names = append(names, fns...)
 	}

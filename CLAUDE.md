@@ -61,7 +61,7 @@ go test ./internal/pipeline/ -run TestIncrementalMatchesCleanAcrossChangeClasses
 ### Security & Compliance Tools
 | Tool | Source File | Purpose |
 |------|-----------|---------|
-| `query_security_surfaces` | `internal/tools/security.go` | Auth, crypto, input validation pattern discovery; results are graph evidence, not a taint proof |
+| `query_security_surfaces` | `internal/tools/security.go` | Auth, crypto, input validation pattern discovery plus Kubernetes manifest surfaces (`internal/pipeline/infrascan_k8s.go`); results are graph evidence, not a taint proof |
 | `trace_data_flow` | `internal/tools/dataflow.go` | Interprocedural graph reachability; variable-level taint requests fail closed to a CodeQL handoff |
 | `import-codeql` CLI | `internal/codeqlimport/`, `cmd/code-graph/codeql_import.go` | Offline conversion of operator-attested CodeQL SARIF into immutable analysis evidence; never launches CodeQL or mutates graph state. Contract: `docs/codeql-evidence-import.md` |
 | `query_stig_evidence` | `internal/tools/stig_evidence.go` | STIG control → code evidence mapping |

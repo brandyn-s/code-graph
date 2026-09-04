@@ -18,6 +18,7 @@ import (
 type infraFile struct {
 	relPath    string
 	infraType  string
+	name       string // node name override (e.g. Kubernetes "Kind/name"); defaults to the file name
 	properties map[string]any
 }
 
@@ -91,6 +92,8 @@ func parseInfraFile(absPath, relPath, name string) []infraFile {
 		return parseShellScript(absPath, relPath)
 	case isFlakeLock(lower):
 		return parseFlakeLock(absPath, relPath)
+	case isKubernetesYAML(lower):
+		return parseKubernetesFile(absPath, relPath)
 	default:
 		return nil
 	}
@@ -132,10 +135,14 @@ func (p *Pipeline) upsertInfraNodes(inf infraFile) {
 
 	// InfraFile node — structured metadata queryable via query_graph
 	infraQN := p.infraQN(inf.relPath, inf.properties)
+	nodeName := inf.name
+	if nodeName == "" {
+		nodeName = filepath.Base(inf.relPath)
+	}
 	_, _ = p.Store.UpsertNode(&store.Node{
 		Project:       p.ProjectName,
 		Label:         "InfraFile",
-		Name:          filepath.Base(inf.relPath),
+		Name:          nodeName,
 		QualifiedName: infraQN,
 		FilePath:      inf.relPath,
 		Properties:    inf.properties,
@@ -144,6 +151,7 @@ func (p *Pipeline) upsertInfraNodes(inf infraFile) {
 
 // infraQN builds the qualified name for an InfraFile node.
 // For compose services: project.path.docker-compose::service-name
+// For Kubernetes documents: project.path.deployment::Kind/name
 // For others: project.path.__infra__
 func (p *Pipeline) infraQN(relPath string, props map[string]any) string {
 	base := fqn.Compute(p.ProjectName, relPath, "")
@@ -155,6 +163,19 @@ func (p *Pipeline) infraQN(relPath string, props map[string]any) string {
 	// Nix inputs get a per-input QN suffix
 	if name, ok := props["input_name"].(string); ok && props["infra_type"] == "nix-input" {
 		return base + "::" + name
+	}
+	// Kubernetes documents get Kind[/namespace]/name so multi-document
+	// manifests yield one node per resource
+	if props["infra_type"] == "k8s-resource" {
+		kind, _ := props["kind"].(string)
+		name, _ := props["name"].(string)
+		if ns, ok := props["namespace"].(string); ok && ns != "" {
+			return base + "::" + kind + "/" + ns + "/" + name
+		}
+		return base + "::" + kind + "/" + name
+	}
+	if props["infra_type"] == "k8s-kustomization" {
+		return base + "::Kustomization"
 	}
 	return base + ".__infra__"
 }

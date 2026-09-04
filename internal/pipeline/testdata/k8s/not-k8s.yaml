@@ -1,0 +1,9 @@
+name: ci
+on:
+  push:
+    branches: [main]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "kind: of a workflow, apiVersion mentioned in prose"

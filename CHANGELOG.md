@@ -7,6 +7,17 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added (0.9.1, ported from upstream codebase-memory-mcp)
+- Kubernetes manifest extraction (upstream `extract_k8s`, reworked for this
+  fork's InfraFile pass): every YAML document with `apiVersion`, `kind` and
+  `metadata.name` becomes an `InfraFile` node `Kind/name` with `infra_type`
+  `k8s-resource` (Kustomization files become `k8s-kustomization`), carrying
+  images, ports, host namespaces, security contexts, secret/configmap
+  references, Service type and ports, Ingress hosts/paths, RBAC rules and
+  bindings, and Secret key names (never values). Privileged or exposed
+  resources are tagged with `security_role`/`security_subtype`/
+  `security_signals`, so `query_security_surfaces` reports privileged pods,
+  LoadBalancer Services, Ingresses, RBAC and Secrets next to code surfaces.
+  Unrendered Helm templates are skipped. See docs/infrastructure.md.
 - Sanitizer lanes: `make test-tsan` runs the C extraction path under
   ThreadSanitizer and `.github/workflows/tsan.yml` runs it nightly;
   `.github/workflows/soak.yml` builds an AddressSanitizer binary

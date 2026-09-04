@@ -1,0 +1,77 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: node-agent
+  namespace: monitoring
+spec:
+  replicas: 1
+  template:
+    spec:
+      hostNetwork: true
+      hostPID: true
+      serviceAccountName: node-agent
+      securityContext:
+        runAsUser: 0
+      volumes:
+        - name: docker-sock
+          hostPath:
+            path: /var/run/docker.sock
+        - name: tls
+          secret:
+            secretName: agent-tls
+      initContainers:
+        - name: init
+          image: busybox:1.36
+      containers:
+        - name: agent
+          image: registry.example.com/agent:1.4.2
+          ports:
+            - containerPort: 9100
+              hostPort: 9100
+            - containerPort: 9101
+              protocol: UDP
+          securityContext:
+            privileged: true
+            allowPrivilegeEscalation: true
+            capabilities:
+              add: ["SYS_ADMIN", "NET_BIND_SERVICE"]
+          env:
+            - name: TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: agent-token
+                  key: token
+          envFrom:
+            - configMapRef:
+                name: agent-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: agent-lb
+  namespace: monitoring
+spec:
+  type: LoadBalancer
+  ports:
+    - port: 443
+      targetPort: 9100
+    - port: 30080
+      nodePort: 30080
+      protocol: TCP
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: nightly
+spec:
+  schedule: "0 3 * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: job
+              image: alpine:3.19
+              securityContext:
+                runAsNonRoot: true
+                allowPrivilegeEscalation: false

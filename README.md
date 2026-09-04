@@ -149,7 +149,7 @@ code-graph cli --raw list_projects | jq .
 | `detect_changes`, `get_affected_tests`, `get_review_context`, `get_relevant_context` | Git diff to affected symbols, tests, and a token-bounded review summary |
 | `rank_by_query`, `code_localize`, `code_localize_agent`, `find_similar_functions`, `degree_filter` | Ranking and localization: PageRank seeds, deterministic or LLM-driven localization, dead code and hubs |
 | `get_architecture`, `explain_service`, `service_map`, `diff_services`, `detect_cycles`, `get_change_coupling`, `diff_graph` | Architecture: packages, services and their dependencies, cycles, co-change, graph deltas between revisions |
-| `query_security_surfaces`, `query_stig_evidence`, `find_rationale` | Auth/input/crypto sinks, control-to-code evidence, WHY/SAFETY/TODO annotations |
+| `query_security_surfaces`, `query_stig_evidence`, `find_rationale` | Auth/input/crypto sinks, control-to-code evidence, WHY/SAFETY/TODO annotations; Kubernetes manifests (privileged pods, LoadBalancer Services, Ingresses, RBAC, Secrets) are surfaced too, see [docs/infrastructure.md](docs/infrastructure.md) |
 | `localize_across_projects`, `ingest_traces`, `generate_report`, `manage_adr`, `visualize` | Cross-project discovery, OpenTelemetry ingestion, reports, ADRs, HTML graph views |
 
 By default the server advertises the **core** set of 26 tools (listed

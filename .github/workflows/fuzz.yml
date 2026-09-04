@@ -1,0 +1,73 @@
+name: fuzz
+
+# Nightly native Go fuzzing of the C extractors under AddressSanitizer. The
+# same targets run for a few seconds as a seed-corpus regression in Core CI;
+# this lane gives them real time. Crashers are uploaded as artifacts and the
+# minimised input should be committed under internal/cbm/testdata/fuzz/.
+
+on:
+  schedule:
+    # Daily at 03:17 UTC.
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+    inputs:
+      fuzztime:
+        description: 'Per-target fuzz duration (Go duration, e.g. 10m)'
+        required: false
+        default: '10m'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fuzz-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fuzz:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - { pkg: ./internal/cbm/, name: FuzzExtractFile }
+          - { pkg: ./internal/cypher/, name: FuzzParse }
+          - { pkg: ./internal/cypher/, name: FuzzExecute }
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.26"
+          cache: true
+
+      - name: Fuzz ${{ matrix.target.name }} under AddressSanitizer
+        env:
+          CGO_ENABLED: "1"
+          CGO_CFLAGS: "-fsanitize=address -fno-omit-frame-pointer"
+          CGO_LDFLAGS: "-fsanitize=address"
+          ASAN_OPTIONS: "detect_leaks=0:halt_on_error=1"
+          FUZZTIME: ${{ github.event.inputs.fuzztime || '10m' }}
+        run: |
+          go test -run='^$' -fuzz='^${{ matrix.target.name }}$' -fuzztime="$FUZZTIME" \
+            -timeout=55m ${{ matrix.target.pkg }}
+
+      - name: Upload crashers
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: fuzz-crashers-${{ matrix.target.name }}
+          path: |
+            ${{ matrix.target.pkg }}testdata/fuzz/
+          if-no-files-found: ignore
+          retention-days: 30

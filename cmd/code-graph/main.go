@@ -114,6 +114,8 @@ func main() {
 			os.Exit(runUpdate(remaining[1:]))
 		case "config":
 			os.Exit(runConfig(remaining[1:]))
+		case "doctor":
+			os.Exit(runDoctor(remaining[1:], os.Stdout, os.Stderr))
 		case "import-codeql":
 			os.Exit(runCodeQLImport(remaining[1:], os.Stdout, os.Stderr))
 		case "cli":
@@ -232,6 +234,7 @@ func printHelpUsage() {
   code-graph uninstall               Remove MCP registrations and skills
   code-graph update                  Self-update to the latest release
   code-graph config <command>        Manage server configuration
+  code-graph doctor [--json]         Print config, cache, index, and platform diagnostics
   code-graph import-codeql <flags>   Import attested CodeQL SARIF evidence
   code-graph --version               Print version and exit
   code-graph --help                  Show this help

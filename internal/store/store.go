@@ -103,6 +103,10 @@ func cacheDir() (string, error) {
 	return dir, nil
 }
 
+// CacheDir resolves the default cache directory (CODE_GRAPH_CACHE_DIR, then
+// ~/.cache/code-graph, then the legacy location), creating it if needed.
+func CacheDir() (string, error) { return cacheDir() }
+
 // Open opens or creates a SQLite database for the given project in the default cache dir.
 func Open(project string) (*Store, error) {
 	dir, err := cacheDir()

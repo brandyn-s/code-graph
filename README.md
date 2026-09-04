@@ -179,7 +179,11 @@ limits) are documented in [CLAUDE.md](CLAUDE.md#resolver-and-runtime-env-vars).
 | `ANTHROPIC_API_KEY` | unset | Only used by `code_localize_agent`. |
 
 Persistent settings such as the memory limit are managed with
-`code-graph config`. Per-project options such as the precision tier and
+`code-graph config`. When something looks wrong, run `code-graph doctor` (or
+`code-graph doctor --json`) and paste the output into your issue: it prints the
+resolved configuration with secrets redacted, the cache directory and every
+project database with its size and format version, the embeddings mode, and
+the compiled grammar list. Per-project options such as the precision tier and
 `skip_report` are passed to `index_repository` and remembered.
 
 ## Going deeper

@@ -31,6 +31,10 @@ All notable changes to this project are documented here. The format follows
   of 40; `full` restores the whole surface. The CLI and schema snapshot keep
   every tool; the snapshot now also records `CORE_TOOLS`.
 
+- `code-graph doctor [--json]`: resolved config (secrets redacted), cache
+  directory and per-project database sizes and format versions, embeddings
+  mode and Voyage reachability, compiled and excluded grammars, toolset.
+
 ### Changed (maintainability pass)
 - README opens with a real `get_relationship_evidence` result and the
   stale-index refusal, plus a comparison against grep and the upstream.

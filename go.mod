@@ -5,6 +5,7 @@ go 1.26
 require (
 	github.com/boyter/gocodewalker v1.5.1
 	github.com/fsnotify/fsnotify v1.10.1
+	github.com/klauspost/compress v1.20.0
 	github.com/mattn/go-sqlite3 v1.14.50
 	github.com/modelcontextprotocol/go-sdk v1.7.0
 	github.com/scip-code/scip/bindings/go/scip v0.9.0

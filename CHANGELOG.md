@@ -7,6 +7,15 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added (0.9.1, ported from upstream codebase-memory-mcp)
+- Team-shared graph artifacts: `code-graph export-artifact` writes a
+  project's graph database as a zstd-compressed `.cgraph.zst` file with a
+  JSON header (index identity, counts, payload SHA-256), and `code-graph
+  import-artifact FILE [--repo PATH] [--allow-stale] [--force]` installs it as
+  the local index, renaming the project (and every embedded qualified name)
+  to the local checkout path and checking the artifact's repository,
+  revision and dirty fingerprint against the local checkout. Mismatches are
+  refused unless `--allow-stale`, in which case the index is marked
+  `stale_source`. See docs/team-artifacts.md.
 - Opt-in hybrid resolver tier `CODE_GRAPH_RESOLVER_TIER=lsp_local` for
   Python and Rust (this fork's measured subset of upstream's hybrid LSP
   modules, not a port of `py_lsp.c`/`rust_lsp.c`): parameter type

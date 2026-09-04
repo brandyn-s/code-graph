@@ -157,6 +157,8 @@ below); set `CODE_GRAPH_TOOLSET=full` to advertise all 40. Fewer
 advertised tools means less schema in every request and better tool selection
 by agents. Every tool stays available to `code-graph cli` regardless.
 
+Sharing an index: `code-graph export-artifact` / `import-artifact` move an indexed graph between machines with an identity check ([docs/team-artifacts.md](docs/team-artifacts.md)).
+
 Core: `index_repository`, `index_status`, `index_health`, `list_projects`, `delete_project`, `compare_project_indexes`, `search_graph`, `search_code`, `query_graph`, `get_graph_schema`, `get_code_snippet`, `explain_symbol`, `degree_filter`, `trace_call_path`, `trace_data_flow`, `get_relationship_evidence`, `detect_changes`, `get_review_context`, `get_architecture`, `code_localize`, `localize_across_projects`, `query_security_surfaces`, `query_stig_evidence`, `generate_report`, `ingest_traces`, `manage_adr`.
 
 Export the exact registered schema with `go run ./cmd/export-tool-schemas`

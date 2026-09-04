@@ -119,6 +119,10 @@ func main() {
 			os.Exit(runDoctor(remaining[1:], os.Stdout, os.Stderr))
 		case "import-codeql":
 			os.Exit(runCodeQLImport(remaining[1:], os.Stdout, os.Stderr))
+		case "export-artifact":
+			os.Exit(runExportArtifact(remaining[1:], os.Stdout, os.Stderr))
+		case "import-artifact":
+			os.Exit(runImportArtifact(remaining[1:], os.Stdout, os.Stderr))
 		case "cbm-extract-worker":
 			// Hidden: extraction supervisor worker (see internal/cbm/isolate).
 			if err := isolate.RunWorker(os.Stdin, os.Stdout); err != nil {
@@ -244,6 +248,8 @@ func printHelpUsage() {
   code-graph config <command>        Manage server configuration
   code-graph doctor [--json]         Print config, cache, index, and platform diagnostics
   code-graph import-codeql <flags>   Import attested CodeQL SARIF evidence
+  code-graph export-artifact [flags] Export a project's graph as a shareable .cgraph.zst artifact
+  code-graph import-artifact FILE    Import a teammate's artifact (checks index identity; --allow-stale)
   code-graph --version               Print version and exit
   code-graph --help                  Show this help
 

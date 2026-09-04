@@ -30,6 +30,7 @@ single edge.
 | `HTTP_CALLS` | Function | Route handler | A cross-service HTTP call matched to the handler that serves the route. |
 | `ASYNC_CALLS` | Function | Function | A call across an async boundary (task spawn, message dispatch). |
 | `HANDLES` | Route | Function | A route node is served by a handler function. |
+| `CALL_REFERENCE` | Function or Module | Function or Method | A callable referenced at a value site (assignment, collection literal, argument) that resolves to exactly one target; not an invocation. The proven-single-target counterpart of `USAGE`. |
 
 ## Types and inheritance
 
@@ -40,7 +41,7 @@ single edge.
 | `INHERITS` | Class | Class | Class inheritance. |
 | `OVERRIDE` | Method | Method | A method overrides a parent or interface method. |
 | `USES_TYPE` | Function or Field | Type | A signature or field references a type. |
-| `USAGE` | Function | Variable, Constant, or Type | A general symbol reference that is not a call. |
+| `USAGE` | Function or Module | Variable, Constant, Type, or Function | An identifier used at a value site where no unique callable target is proven (a non-callable symbol, or an ambiguous or fuzzy resolution). The unproven counterpart of `CALL_REFERENCE`. |
 | `DECORATES` | Decorator | Function or Class | A decorator or attribute applied to a definition. |
 
 ## Data flow and errors

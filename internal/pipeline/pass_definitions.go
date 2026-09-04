@@ -236,7 +236,7 @@ func (p *Pipeline) buildReturnTypeMap() {
 type resolvedEdge struct {
 	CallerQN   string
 	TargetQN   string
-	Type       string // "CALLS" or "USAGE"
+	Type       string // CALLS, CALL_REFERENCE, USAGE, ... (see store.EdgeTypes)
 	Properties map[string]any
 }
 

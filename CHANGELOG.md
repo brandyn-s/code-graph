@@ -7,6 +7,12 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added (0.9.1, ported from upstream codebase-memory-mcp)
+- `CALL_REFERENCE` edge type, aligned with upstream: a callable referenced at
+  a value site that resolves to exactly one Function or Method (import,
+  same-module, or unique-name rule, single candidate). `USAGE` is now the
+  unproven counterpart (non-callable targets, ambiguous or fuzzy resolutions).
+  Both carry `resolver_rule`, `confidence`, `confidence_band`, and
+  `candidate_count` so `get_relationship_evidence` shows provenance for them.
 - Extraction supervisor: tree-sitter extraction runs in supervised worker
   processes (`code-graph cbm-extract-worker`, spawned from the running binary).
   A file that crashes or hangs the native extractor is skipped and reported

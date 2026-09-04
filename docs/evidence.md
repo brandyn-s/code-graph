@@ -46,3 +46,21 @@ That evaluator is an internal Go contract and test surface, not a registered
 MCP tool. The user-facing product surfaces are the evidence-producing tools
 and the offline importer above. A client or host may assemble and evaluate
 proof bundles without changing the stable IDs.
+
+## CALL_REFERENCE versus USAGE
+
+Value-site references (a function assigned to a variable, placed in a
+collection, or otherwise named without being invoked) carry their confidence
+in the edge type itself, matching upstream codebase-memory-mcp:
+
+| Edge | Meaning | When it is emitted |
+|---|---|---|
+| `CALL_REFERENCE` | A callable is referenced and resolves to exactly one target | Target is a Function or Method and the resolver used an import, same-module, or unique-name rule with a single candidate |
+| `USAGE` | An identifier is used but no unique callable target is proven | Target is a Variable, Constant, or Type, or the resolution was ambiguous or fuzzy |
+
+Both edges record `resolver_rule` (prefixed `usage_`), `confidence`,
+`confidence_band`, and `candidate_count`, so `get_relationship_evidence`
+reports the same provenance fields it does for `CALLS`. Framework dispatch
+sites (`Depends(fn)`, `executor.submit(fn)`, Flask hooks) remain `CALLS` edges
+with a `dispatch_kind`: they are invocations performed by the framework, not
+plain references.

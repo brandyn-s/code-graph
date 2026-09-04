@@ -48,8 +48,18 @@ func Register() {
 		t.Fatal(err)
 	}
 
-	// Look for USAGE edges
-	edges, err := s.FindEdgesByType(p.ProjectName, "USAGE")
+	// A callback passed by name is a callable reference with one proven
+	// target, so it is a CALL_REFERENCE (upstream semantics); plain symbol
+	// references stay USAGE. Collect both.
+	edges, err := s.FindEdgesByType(p.ProjectName, "CALL_REFERENCE")
+	if err != nil {
+		t.Fatal(err)
+	}
+	usageEdges, err := s.FindEdgesByType(p.ProjectName, "USAGE")
+	if err != nil {
+		t.Fatal(err)
+	}
+	edges = append(edges, usageEdges...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +76,7 @@ func Register() {
 		}
 	}
 	if !found {
-		t.Error("expected USAGE edge from Register to Process (callback reference)")
+		t.Error("expected CALL_REFERENCE edge from Register to Process (callback reference)")
 		for _, e := range edges {
 			src, _ := s.FindNodeByID(e.SourceID)
 			tgt, _ := s.FindNodeByID(e.TargetID)

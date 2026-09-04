@@ -19,6 +19,7 @@ const (
 
 	// Calls family.
 	EdgeCalls         = "CALLS"
+	EdgeCallReference = "CALL_REFERENCE"
 	EdgeCallsExternal = "CALLS_EXTERNAL"
 	EdgeCallsPseudo   = "CALLS_PSEUDO"
 	EdgeIndirectCalls = "INDIRECT_CALLS"
@@ -93,13 +94,14 @@ var EdgeTypes = func() []EdgeTypeInfo {
 		{EdgeHTTPCalls, "calls", "Function", "Route handler", "A cross-service HTTP call matched to the handler that serves the route."},
 		{EdgeAsyncCalls, "calls", "Function", "Function", "A call across an async boundary (task spawn, message dispatch)."},
 		{EdgeHandles, "calls", "Route", "Function", "A route node is served by a handler function."},
+		{EdgeCallReference, "calls", "Function or Module", "Function or Method", "A callable referenced at a value site (assignment, collection literal, argument) that resolves to exactly one target; not an invocation. Aligned with upstream codebase-memory-mcp: CALL_REFERENCE is the proven-single-target counterpart of USAGE."},
 
 		{EdgeImports, "types", "Module or File", "Module", "An import statement, normalized for relative imports."},
 		{EdgeImplements, "types", "Type", "Interface or Trait", "A type implements an interface or trait."},
 		{EdgeInherits, "types", "Class", "Class", "Class inheritance."},
 		{EdgeOverride, "types", "Method", "Method", "A method overrides a parent or interface method."},
 		{EdgeUsesType, "types", "Function or Field", "Type", "A signature or field references a type."},
-		{EdgeUsage, "types", "Function", "Variable, Constant, or Type", "A general symbol reference that is not a call."},
+		{EdgeUsage, "types", "Function or Module", "Variable, Constant, Type, or Function", "An identifier used at a value site where no unique callable target is proven (a non-callable symbol, or an ambiguous or fuzzy resolution). The unproven counterpart of CALL_REFERENCE."},
 		{EdgeDecorates, "types", "Decorator", "Function or Class", "A decorator or attribute applied to a definition."},
 
 		{EdgeReads, "dataflow", "Function", "Variable or Field", "A read of a variable or field."},

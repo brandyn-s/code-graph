@@ -852,14 +852,40 @@ func (p *Pipeline) resolveFileUsagesCBM(relPath string, ext *cachedExtraction) [
 		}
 		seen[key] = true
 
-		edges = append(edges, resolvedEdge{
-			CallerQN: callerQN,
-			TargetQN: result.QualifiedName,
-			Type:     store.EdgeUsage,
-		})
+		edges = append(edges, usageEdge(callerQN, result, p.registry.LabelOf(result.QualifiedName)))
 	}
 
 	return edges
+}
+
+// usageEdge classifies a resolved value-site reference the way upstream
+// codebase-memory-mcp does: CALL_REFERENCE when the identifier names a
+// callable and the resolution is a single proven target (exact import,
+// same-module, or unique-name rule with one candidate), USAGE otherwise
+// (non-callable symbol, or an ambiguous / fuzzy resolution). The edge type is
+// therefore a confidence statement, and the resolver provenance rides along in
+// properties so get_relationship_evidence can show it.
+func usageEdge(callerQN string, result ResolutionResult, targetLabel string) resolvedEdge {
+	proven := false
+	switch result.Strategy {
+	case "import_map", "import_map_suffix", "same_module", "unique_name":
+		proven = result.CandidateCount <= 1 && result.DiscriminationApplied == ""
+	}
+	edgeType := store.EdgeUsage
+	if proven && (targetLabel == "Function" || targetLabel == "Method") {
+		edgeType = store.EdgeCallReference
+	}
+	return resolvedEdge{
+		CallerQN: callerQN,
+		TargetQN: result.QualifiedName,
+		Type:     edgeType,
+		Properties: map[string]any{
+			"resolver_rule":   "usage_" + result.Strategy,
+			"confidence":      result.Confidence,
+			"confidence_band": confidenceBand(result.Confidence),
+			"candidate_count": result.CandidateCount,
+		},
+	}
 }
 
 // resolveFileThrowsCBM resolves throw/raise targets using pre-extracted CBM data.

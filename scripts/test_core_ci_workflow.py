@@ -119,12 +119,26 @@ class CoreCIWorkflowContractTests(unittest.TestCase):
     def test_merge_gate_fails_closed_over_both_required_jobs(self) -> None:
         merge_gate = job_block(self.workflow, "merge-gate")
 
-        self.assertIn("needs: [core, agent-contract]", merge_gate)
+        self.assertIn("needs: [core, agent-contract, test-platforms]", merge_gate)
         self.assertIn("if: always()", merge_gate)
         self.assertIn("${{ needs.core.result }}", merge_gate)
         self.assertIn("${{ needs.agent-contract.result }}", merge_gate)
+        self.assertIn("${{ needs.test-platforms.result }}", merge_gate)
         self.assertIn('if [ "$CORE_RESULT" != "success" ] ||', merge_gate)
         self.assertIn("exit 1", merge_gate)
+
+    def test_unit_suite_runs_on_every_release_platform_family(self) -> None:
+        platforms = job_block(self.workflow, "test-platforms")
+        self.assertIn("- os: macos-14", platforms)
+        self.assertIn("- os: windows-latest", platforms)
+        self.assertIn("runs-on: ${{ matrix.os }}", platforms)
+        self.assertIn("msys2/setup-msys2", platforms)
+        self.assertIn("go test ./...", platforms)
+        # Only the matrix-declared experimental flag may soften a lane; no
+        # step-level continue-on-error and no "|| true".
+        self.assertIn("continue-on-error: ${{ matrix.experimental }}", platforms)
+        self.assertEqual(platforms.count("continue-on-error:"), 1)
+        self.assertNotIn("|| true", platforms)
 
     def test_path_filtered_category_6_step_does_not_swallow_failures(self) -> None:
         workflow = AGENT_EFFECTIVENESS_WORKFLOW.read_text(encoding="utf-8")

@@ -117,8 +117,60 @@ jobs:
             --strict-contract \
             --no-skip
 
+  test-platforms:
+    # The release matrix ships darwin and windows binaries; the cgo grammars
+    # and path handling are where platforms diverge, so the unit suite runs
+    # on both in addition to the Linux core job.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            experimental: false
+          # TODO(windows): promote to experimental: false once the suite has
+          # passed on windows-latest; failures here are reported but do not
+          # block the merge gate until then.
+          - os: windows-latest
+            experimental: true
+    runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.experimental }}
+    timeout-minutes: 40
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.26"
+          cache: true
+
+      - name: Setup MSYS2 toolchain (Windows)
+        if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@66cd2cce69caa17b53920067426061ca1de3a884 # v2
+        with:
+          msystem: UCRT64
+          path-type: inherit
+          install: mingw-w64-ucrt-x86_64-gcc
+
+      - name: Test (Windows)
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        run: CGO_ENABLED=1 CC=gcc go test ./...
+
+      - name: Test (macOS)
+        if: runner.os == 'macOS'
+        run: go test ./...
+
   merge-gate:
-    needs: [core, agent-contract]
+    needs: [core, agent-contract, test-platforms]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -131,10 +183,12 @@ jobs:
         env:
           CORE_RESULT: ${{ needs.core.result }}
           AGENT_CONTRACT_RESULT: ${{ needs.agent-contract.result }}
+          PLATFORMS_RESULT: ${{ needs.test-platforms.result }}
         run: |
           if [ "$CORE_RESULT" != "success" ] ||
-             [ "$AGENT_CONTRACT_RESULT" != "success" ]; then
-            echo "Required job failure: core=$CORE_RESULT agent-contract=$AGENT_CONTRACT_RESULT"
+             [ "$AGENT_CONTRACT_RESULT" != "success" ] ||
+             [ "$PLATFORMS_RESULT" != "success" ]; then
+            echo "Required job failure: core=$CORE_RESULT agent-contract=$AGENT_CONTRACT_RESULT test-platforms=$PLATFORMS_RESULT"
             exit 1
           fi
           echo "All deterministic required jobs succeeded."

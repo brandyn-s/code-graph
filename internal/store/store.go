@@ -170,13 +170,23 @@ func OpenPath(dbPath string) (*Store, error) {
 	cacheKB := cacheMB * 1024
 	_, _ = db.ExecContext(ctx, fmt.Sprintf("PRAGMA cache_size = -%d", cacheKB))
 
+	stampVersion, err := checkFormatVersion(ctx, db, dbPath)
+	if err != nil {
+		db.Close()
+		return nil, err
+	}
+
 	s := &Store{db: db, dbPath: dbPath}
 	s.q = s.db
 	if err := s.initSchema(); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("init schema: %w", err)
 	}
-	slog.Debug("store.open", "path", dbPath, "cache_mb", cacheMB)
+	if err := stampFormatVersion(ctx, db, stampVersion); err != nil {
+		db.Close()
+		return nil, err
+	}
+	slog.Debug("store.open", "path", dbPath, "cache_mb", cacheMB, "format", stampVersion)
 	return s, nil
 }
 
@@ -349,6 +359,10 @@ func OpenMemory() (*Store, error) {
 	if err := s.initSchema(); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("init schema: %w", err)
+	}
+	if err := stampFormatVersion(context.Background(), db, FormatVersion); err != nil {
+		db.Close()
+		return nil, err
 	}
 	return s, nil
 }

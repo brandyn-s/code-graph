@@ -6,6 +6,27 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (pre-public hardening)
+- `SECURITY.md`: private vulnerability reporting, 90-day disclosure target,
+  and a threat model (what is read, where indexes live, what leaves the
+  machine, stdio-only transport).
+- Research workflows (`agent-effectiveness`, `locbench-*`, `matched-depth`)
+  are `workflow_dispatch`-only, prefixed `research:`, fail fast without their
+  secrets, and no longer post PR comments. `docs/ci.md` lists every workflow.
+- End-to-end MCP client test (`internal/tools/mcp_e2e_test.go`): initialize,
+  tools/list against the registry, indexing round trip, evidence query, and
+  the stale-source refusal through the go-sdk client.
+- Core CI runs the unit suite on macOS (required) and Windows (advisory
+  until green) in addition to Linux.
+- `FuzzExtractFile` seeds every compiled grammar from the synthetic fixtures;
+  `fuzz.yml` runs it and the Cypher fuzzers nightly under AddressSanitizer.
+- Randomized incremental-vs-clean equivalence property test over the
+  go-minimal fixture (ten seeds, twelve edits each).
+- Index format versioning: databases carry `user_version`; newer formats are
+  refused with an upgrade hint, unsupported older formats with a rebuild hint,
+  pre-versioning databases are adopted as format 1. Fixture under
+  `internal/store/testdata/format-v1/`; policy in `docs/index-format.md`.
+
 ### Changed (maintainability pass)
 - README opens with a real `get_relationship_evidence` result and the
   stale-index refusal, plus a comparison against grep and the upstream.

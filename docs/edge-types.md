@@ -29,7 +29,7 @@ single edge.
 | `INDIRECT_CALLS` | Function | Function | A call reached through a function value, callback, or dispatch table. |
 | `HTTP_CALLS` | Function | Route handler | A cross-service HTTP call matched to the handler that serves the route. |
 | `ASYNC_CALLS` | Function | Function | A call across an async boundary (task spawn, message dispatch). |
-| `HANDLES` | Route | Function | A route node is served by a handler function. |
+| `HANDLES` | Route | Function | A route node is served by a handler function. The handler is the last argument of the route call (Express, Fastify, gin, chi, Laravel); middleware or inline functions between the path and the handler are skipped. Spring mapping paths may be given positionally or as a `path =`/`value =` attribute anywhere in the annotation. |
 | `CALL_REFERENCE` | Function or Module | Function or Method | A callable referenced at a value site (assignment, collection literal, argument) that resolves to exactly one target; not an invocation. The proven-single-target counterpart of `USAGE`. |
 
 ## Types and inheritance

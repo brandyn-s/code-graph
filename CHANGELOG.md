@@ -26,6 +26,14 @@ All notable changes to this project are documented here. The format follows
   (`skipped_files`, `skipped_count`) and `code-graph doctor`.
 
 ### Fixed (0.9.1, ported from upstream codebase-memory-mcp)
+- HTTP route linking takes the handler from the LAST call argument for
+  Express-style and gin/chi routes, splitting the argument list by balanced
+  parentheses so middleware calls (`authRequired()`) and inline arrow-function
+  middlewares no longer hide the handler (upstream 592894a4). Spring
+  `@RequestMapping`/`@GetMapping` paths are read from a `path =` / `value =`
+  attribute anywhere in the annotation, not only as the first argument
+  (upstream c36b4fbc). Upstream fd73c347 (Blazor `@page` routes) does not
+  apply: this fork has no C#/Razor route extractor.
 - Go struct fields are extracted as definitions (they live under
   `struct_type -> field_declaration_list`; upstream 47116b8e) and the blank
   identifier `_` is skipped (upstream cb7cb444).

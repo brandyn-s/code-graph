@@ -72,9 +72,9 @@ func TestRouteExtractionNegativeCases(t *testing.T) {
 			}
 
 			// Spring route patterns
-			matches = springMappingRe.FindAllStringSubmatch(tt.source, -1)
+			matches = springMappingHeadRe.FindAllStringSubmatch(tt.source, -1)
 			if len(matches) > 0 {
-				t.Errorf("springMappingRe matched non-route source: %v", matches)
+				t.Errorf("springMappingHeadRe matched non-route source: %v", matches)
 			}
 
 			// Laravel route patterns

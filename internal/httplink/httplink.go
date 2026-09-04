@@ -82,21 +82,16 @@ var (
 	// Go gin group: .Group("/prefix")
 	goGroupRe = regexp.MustCompile(`(\w+)\s*(?::=|=)\s*\w+\.Group\(\s*["']([^"']+)["']`)
 
-	// Go gin/chi route handler reference: captures the last argument (handler, not middleware)
-	// .POST("/path", h.CreateOrder) or .Get("/path", handler)
-	goRouteHandlerRe = regexp.MustCompile(`\.(GET|POST|PUT|DELETE|PATCH|Get|Post|Put|Delete|Patch)\s*\(\s*"[^"]*"\s*(?:,\s*[\w.]+)*,\s*([\w.]+)\s*\)`)
-
 	// Go chi: r.Route("/prefix", func(r chi.Router) { ... })
 	goChiRouteRe = regexp.MustCompile(`\.Route\(\s*"([^"]+)"\s*,\s*func`)
 
 	// Express.js routes: captures (receiver).(method)("path") — filtered by allowlist
 	expressRouteRe = regexp.MustCompile(`(\w+)\.(get|post|put|delete|patch)\(\s*["'` + "`" + `]([^"'` + "`" + `]+)["'` + "`" + `]`)
 
-	// Express.js handler reference: captures (receiver).(method)("path", ..., handler)
-	expressHandlerRe = regexp.MustCompile(`(\w+)\.(get|post|put|delete|patch)\(\s*["'` + "`" + `][^"'` + "`" + `]+["'` + "`" + `]\s*(?:,\s*[\w.]+)*,\s*([\w.]+)\s*\)`)
-
 	// Java Spring annotations: @GetMapping("/path"), @PostMapping, @RequestMapping
-	springMappingRe = regexp.MustCompile(`@(Get|Post|Put|Delete|Patch|Request)Mapping\(\s*(?:value\s*=\s*)?["']([^"']+)["']`)
+	springMappingHeadRe = regexp.MustCompile(`@(Get|Post|Put|Delete|Patch|Request)Mapping\(`)
+	springMappingAttrRe = regexp.MustCompile(`\b(?:path|value)\s*=\s*["']([^"']+)["']`)
+	springLeadingPathRe = regexp.MustCompile(`^\(\s*["']([^"']+)["']`)
 
 	// Rust Actix annotations: #[get("/path")], #[post("/path")]
 	actixRouteRe = regexp.MustCompile(`#\[(get|post|put|delete|patch)\(\s*"([^"]+)"`)
@@ -786,11 +781,9 @@ func extractGoRoutes(f *store.Node, source string) []RouteHandler {
 			path = resolveGroupPrefix(line, rm[1], path, groupPrefixes)
 		}
 
-		// Capture handler reference (last argument) for CALLS edge creation
-		var handlerRef string
-		if hm := goRouteHandlerRe.FindStringSubmatch(line); hm != nil {
-			handlerRef = hm[2]
-		}
+		// Capture handler reference (last argument) for CALLS edge creation.
+		// Middleware such as authRequired() may precede it (upstream 592894a4).
+		handlerRef := handlerReference(lastCallArgument(line, callArgsOpen(line, strings.Index(line, rm[0]))))
 
 		routes = append(routes, RouteHandler{
 			Path:          path,
@@ -841,6 +834,83 @@ func resolveGroupPrefix(line, method, path string, groupPrefixes map[string]stri
 // `Router()` instantiation) is enforced ONLY at the module-level call site
 // because per-function source is just the function body and won't contain
 // the module-level express() instantiation.
+
+// lastCallArgument returns the last top-level argument of the call whose
+// opening parenthesis is at line[open], trimmed, or "" when the call is not
+// closed on this line. Nested parentheses, brackets, braces, and quoted
+// strings are skipped, so middleware calls (`requireAuth()`) and inline arrow
+// functions between the path and the handler do not confuse the split.
+// Upstream codebase-memory-mcp 592894a4: Express, Fastify, gin and Laravel all
+// put the handler LAST.
+func lastCallArgument(line string, open int) string {
+	if open < 0 || open >= len(line) || line[open] != '(' {
+		return ""
+	}
+	depth := 0
+	var quote byte
+	argStart := open + 1
+	last := ""
+	for i := open; i < len(line); i++ {
+		c := line[i]
+		if quote != 0 {
+			if c == '\\' {
+				i++
+				continue
+			}
+			if c == quote {
+				quote = 0
+			}
+			continue
+		}
+		switch c {
+		case '"', '\'', '`':
+			quote = c
+		case '(', '[', '{':
+			depth++
+		case ')', ']', '}':
+			depth--
+			if depth == 0 {
+				last = strings.TrimSpace(line[argStart:i])
+				return last
+			}
+		case ',':
+			if depth == 1 {
+				argStart = i + 1
+			}
+		}
+	}
+	return ""
+}
+
+// handlerReference accepts an argument as a handler reference only when it is
+// a plain identifier or member path (`listUsers`, `items.update`,
+// `h.CreateOrder`). Inline functions and calls yield "".
+func handlerReference(arg string) string {
+	if arg == "" {
+		return ""
+	}
+	for i := 0; i < len(arg); i++ {
+		c := arg[i]
+		if !(c == '_' || c == '.' || c == '$' || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')) {
+			return ""
+		}
+	}
+	return arg
+}
+
+// callArgsOpen returns the index of the '(' that opens the route call matched
+// at line[matchStart:], i.e. the first '(' after the method name.
+func callArgsOpen(line string, matchStart int) int {
+	if matchStart < 0 {
+		return -1
+	}
+	i := strings.IndexByte(line[matchStart:], '(')
+	if i < 0 {
+		return -1
+	}
+	return matchStart + i
+}
+
 func extractExpressRoutes(f *store.Node, source string) []RouteHandler {
 	routes := make([]RouteHandler, 0, 4)
 	// Path-segment skip: known client-side conventions. Applies universally
@@ -872,11 +942,9 @@ func extractExpressRoutes(f *store.Node, source string) []RouteHandler {
 			}
 		}
 
-		var handlerRef string
-		hm := expressHandlerRe.FindStringSubmatch(line)
-		if hm != nil {
-			handlerRef = hm[3] // group 3 after adding receiver capture
-		}
+		// Handler is the LAST argument; middleware and inline functions may
+		// sit between the path and the handler (upstream 592894a4).
+		handlerRef := handlerReference(lastCallArgument(line, callArgsOpen(line, strings.Index(line, rm[0]))))
 
 		routes = append(routes, RouteHandler{
 			Path:          rm[3],
@@ -887,6 +955,23 @@ func extractExpressRoutes(f *store.Node, source string) []RouteHandler {
 		})
 	}
 	return routes
+}
+
+// springMappingPath reads the route path from a Spring mapping's argument
+// list starting at its '(': a positional first string, or a `path =` /
+// `value =` attribute wherever it sits among the other attributes.
+func springMappingPath(args string) string {
+	if m := springLeadingPathRe.FindStringSubmatch(args); m != nil {
+		return m[1]
+	}
+	end := len(args)
+	if i := strings.IndexByte(args, ')'); i >= 0 {
+		end = i
+	}
+	if m := springMappingAttrRe.FindStringSubmatch(args[:end]); m != nil {
+		return m[1]
+	}
+	return ""
 }
 
 // extractJavaRoutes extracts routes from Java Spring annotations in decorators.
@@ -905,15 +990,20 @@ func extractJavaRoutes(f *store.Node) []RouteHandler {
 		if !ok {
 			continue
 		}
-		// Standard Spring HTTP mappings
-		matches := springMappingRe.FindAllStringSubmatch(decStr, -1)
-		for _, m := range matches {
-			method := strings.ToUpper(m[1])
+		// Standard Spring HTTP mappings. Annotation attributes are unordered,
+		// so `path`/`value` may follow method, produces, consumes
+		// (upstream c36b4fbc); read the path from anywhere in the arguments.
+		for _, m := range springMappingHeadRe.FindAllStringSubmatchIndex(decStr, -1) {
+			method := strings.ToUpper(decStr[m[2]:m[3]])
 			if method == "REQUEST" {
 				method = "" // RequestMapping doesn't specify method
 			}
+			path := springMappingPath(decStr[m[1]-1:])
+			if path == "" {
+				continue
+			}
 			routes = append(routes, RouteHandler{
-				Path:          m[2],
+				Path:          path,
 				Method:        method,
 				FunctionName:  f.Name,
 				QualifiedName: f.QualifiedName,

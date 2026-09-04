@@ -97,6 +97,7 @@ var (
 	ResolverDropLooseCrossPkg   = Key{Name: "RESOLVER_DROP_LOOSE_CROSS_PACKAGE", Default: "emit", Doc: "Drop loose cross-package resolutions instead of emitting them"}
 	ResolverRequireImports      = Key{Name: "RESOLVER_REQUIRE_IMPORTS_FOR_LOOSE_CROSS_PACKAGE", Default: "language-specific", Doc: "Require an import binding before emitting loose cross-package edges"}
 	ResolverEnumVariantParent   = Key{Name: "RESOLVER_EMIT_ENUM_VARIANT_AS_PARENT", Default: "off", Doc: "Resolve unknown enum variants to the enum node"}
+	ResolverTier                = Key{Name: "CODE_GRAPH_RESOLVER_TIER", Default: "registry", Doc: "registry (default) or lsp_local: also type annotated/fixture parameters and inherited methods for Python and Rust"}
 )
 
 // Localization agent.
@@ -122,7 +123,7 @@ func All() []Key {
 		ServiceMap, NixServiceOptionPfx, NixPkgsPrefix, Toolset, UpdateChannel,
 		SimilarityEdges, SimilarityThresh, SimilarityTopK, SimilaritySkipHops, SeedMinCosine,
 		MaxFileBytes, SCIPIndexPath, SCIPAutoDiscover, GrammarBaselinesPath,
-		ResolverTier2Debug, ResolverStaticDispatchDebug, ResolverDropFuzzyJanusian,
+		ResolverTier2Debug, ResolverStaticDispatchDebug, ResolverDropFuzzyJanusian, ResolverTier,
 		ResolverDropLooseCrossPkg, ResolverRequireImports, ResolverEnumVariantParent,
 		LocAgentIterations, LocAgentParallel, LocAgentPromptVariant, LocAgentMaxTurns,
 		LocAgentRewrite, LocAgentBFSDepth, LocAgentEpisodic, LocAgentEpisodicProj, LocAgentEpisodicTopK,

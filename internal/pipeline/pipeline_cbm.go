@@ -417,6 +417,10 @@ func (p *Pipeline) resolveFileCallsCBM(relPath string, ext *cachedExtraction) ([
 	// (knowledge-base PR #491 / #492 terminal-doc next-plan target).
 	augmentRustClosureTypeMap(filepath.Join(p.RepoPath, relPath), ext.Result.Definitions, perFuncTypeMap)
 
+	// Opt-in hybrid tier: bind annotated and pytest-fixture parameters
+	// (CODE_GRAPH_RESOLVER_TIER=lsp_local; resolver_tier_lsp_local.go).
+	p.lspLocal.augment(ext, perFuncTypeMap)
+
 	// LSP-resolved calls take priority (high confidence, type-aware).
 	edges, lspCallerMethods := collectLSPResolvedEdges(ext.Result.ResolvedCalls, p.registry)
 
@@ -455,6 +459,9 @@ func (p *Pipeline) resolveFileCallsCBM(relPath string, ext *cachedExtraction) ([
 			edges = append(edges, edge)
 		} else {
 			unresolvedByCaller[callerQN]++
+			if tier2DebugEnabled {
+				p.logUnresolvedCall(call, callerQN, ext.Language)
+			}
 		}
 	}
 
@@ -688,6 +695,13 @@ func (p *Pipeline) resolveCallEdge(
 	if result.QualifiedName == "" && result.Strategy == tier2ExternalDropStrategy {
 		return resolvedEdge{}, false
 	}
+	if result.QualifiedName == "" && p.lspLocal != nil {
+		// Hybrid tier: the receiver's type is known but the method lives on
+		// a base class.
+		if inherited, ok := p.lspLocal.resolveInherited(calleeName, callerQN, typeMap, p.registry); ok {
+			result = inherited
+		}
+	}
 	if result.QualifiedName == "" {
 		// Phase 3a/b: route the fuzzy fallback through FuzzyResolveCtx
 		// so Tier 2 (receiver-type) and Tier 3 (import-binding)
@@ -713,18 +727,22 @@ func (p *Pipeline) resolveCallEdge(
 			if pseudoRule {
 				rule = ResolverRuleModalPseudo
 			}
+			fuzzyProps := map[string]any{
+				"confidence":             fuzzyResult.Confidence,
+				"confidence_band":        confidenceBand(fuzzyResult.Confidence),
+				"resolution_strategy":    fuzzyResult.Strategy,
+				"caller_node_kind":       callerKind,
+				"resolver_rule":          rule,
+				CandidateSetPropertyName: candidateSetSizeFromResolution(fuzzyResult),
+			}
+			if fuzzyCtx.ReceiverType != "" && p.lspLocal.usedBinding(callerQN, calleeName) {
+				fuzzyProps["resolver_tier"] = "lsp_local"
+			}
 			return resolvedEdge{
-				CallerQN: callerQN,
-				TargetQN: p.preferImplOverTrait(fuzzyResult.QualifiedName),
-				Type:     edgeType,
-				Properties: map[string]any{
-					"confidence":             fuzzyResult.Confidence,
-					"confidence_band":        confidenceBand(fuzzyResult.Confidence),
-					"resolution_strategy":    fuzzyResult.Strategy,
-					"caller_node_kind":       callerKind,
-					"resolver_rule":          rule,
-					CandidateSetPropertyName: candidateSetSizeFromResolution(fuzzyResult),
-				},
+				CallerQN:   callerQN,
+				TargetQN:   p.preferImplOverTrait(fuzzyResult.QualifiedName),
+				Type:       edgeType,
+				Properties: fuzzyProps,
 			}, true
 		}
 		return resolvedEdge{}, false
@@ -813,6 +831,9 @@ func (p *Pipeline) resolveCallEdge(
 	}
 	if janusianAmbiguous {
 		props["janusian_ambiguous"] = true
+	}
+	if result.Strategy == "lsp_local_inherited" || p.lspLocal.usedBinding(callerQN, calleeName) {
+		props["resolver_tier"] = "lsp_local"
 	}
 	return resolvedEdge{
 		CallerQN:   callerQN,
@@ -1072,4 +1093,29 @@ func isCheckedException(excName string) bool {
 		return true
 	}
 	return false
+}
+
+// logUnresolvedCall emits one diagnostic record per call site the resolver
+// dropped (RESOLVER_TIER2_DEBUG=1). in_registry says whether a project symbol
+// with the callee's short name exists at all: false means the target is
+// external (stdlib, third-party) and no local tier can recover it; true means
+// a candidate existed but could not be discriminated, the population a
+// type-aware tier should shrink. bench/accuracy/unresolved_calls.py --debug
+// aggregates these records.
+func (p *Pipeline) logUnresolvedCall(call cbm.Call, callerQN string, language lang.Language) {
+	short := call.CalleeName
+	if i := strings.LastIndexAny(short, ".:"); i >= 0 {
+		short = short[i+1:]
+	}
+	inRegistry := false
+	if p.registry != nil {
+		inRegistry = len(p.registry.FindByName(short)) > 0
+	}
+	slog.Info("resolver.unresolved",
+		"caller", callerQN,
+		"callee", call.CalleeName,
+		"dispatch", call.DispatchKind,
+		"lang", string(language),
+		"in_registry", inRegistry,
+		"locally_bound", call.CalleeIsLocallyBound)
 }

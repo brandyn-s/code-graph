@@ -101,6 +101,9 @@ type Pipeline struct {
 	importBindings map[string]map[string]string
 	// returnTypes maps function QN -> return type QN for return-type-based type inference
 	returnTypes ReturnTypeMap
+	// lspLocal is the opt-in hybrid tier (CODE_GRAPH_RESOLVER_TIER=lsp_local);
+	// nil when disabled. See resolver_tier_lsp_local.go.
+	lspLocal *lspLocalTier
 	// fieldTypes maps "<structQN>.<fieldName>" -> field type's class QN.
 	// Populated globally from struct/enum field declarations in every file
 	// before passCalls runs, then consulted by resolveCallWithTypes to walk

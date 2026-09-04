@@ -7,6 +7,19 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added (0.9.1, ported from upstream codebase-memory-mcp)
+- Opt-in hybrid resolver tier `CODE_GRAPH_RESOLVER_TIER=lsp_local` for
+  Python and Rust (this fork's measured subset of upstream's hybrid LSP
+  modules, not a port of `py_lsp.c`/`rust_lsp.c`): parameter type
+  annotations, pytest fixture parameters (typed from the fixture's return
+  annotation or `return`/`yield` expression, scoped file > conftest >
+  project), return annotations, and inherited-method lookup on base classes.
+  Edges the tier enabled carry `resolver_tier: lsp_local`. Measured on flask:
+  unresolved call sites 1810 -> 1674, CALLS edges 983 -> 1081, adversarial F1
+  0.588 -> 0.585 (one extra false positive); requests and ripgrep unchanged
+  within noise. `bench/accuracy/unresolved_calls.py` measures unresolved
+  calls per language (`--debug` classifies external vs in-registry drops via
+  the new `resolver.unresolved` diagnostic under `RESOLVER_TIER2_DEBUG=1`).
+  See docs/resolver-tiers.md, including what remains from upstream.
 - Kubernetes manifest extraction (upstream `extract_k8s`, reworked for this
   fork's InfraFile pass): every YAML document with `apiVersion`, `kind` and
   `metadata.name` becomes an `InfraFile` node `Kind/name` with `infra_type`

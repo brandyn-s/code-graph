@@ -252,7 +252,10 @@ func (p *Pipeline) runFullPasses(files []discover.FileInfo) error {
 	if p.goLSPIdx != nil {
 		p.goLSPIdx.integrateThirdPartyDeps(p.RepoPath, p.importMaps)
 	}
+	p.lspLocal = p.buildLSPLocalTier()
 	p.passCalls()
+	p.lspLocal.logStats()
+	p.lspLocal = nil
 	slog.Info("pass.timing", "pass", "calls", "elapsed", time.Since(t))
 	p.reportProgress("calls", 60, "call targets resolved")
 	// Release heavy fields no longer needed after call resolution.
@@ -574,7 +577,10 @@ func (p *Pipeline) runIncrementalPasses(
 	if p.goLSPIdx != nil {
 		p.goLSPIdx.integrateThirdPartyDeps(p.RepoPath, p.importMaps)
 	}
+	p.lspLocal = p.buildLSPLocalTier()
 	p.passCallsForFiles(filesToResolve)
+	p.lspLocal.logStats()
+	p.lspLocal = nil
 	p.releaseExtractionFields(fieldsPostCalls)
 	p.goLSPIdx = nil
 	p.passUsagesForFiles(filesToResolve)

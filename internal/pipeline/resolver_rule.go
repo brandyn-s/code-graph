@@ -228,6 +228,10 @@ func resolverRuleFromRegistryStrategy(strategy string) string {
 	switch strategy {
 	case "type_dispatch":
 		return ResolverRuleInterfaceDispatch
+	case "lsp_local_inherited":
+		// Hybrid lsp_local tier: receiver type known, method found on a base
+		// class. Receiver-qualified like the Go LSP type dispatch.
+		return ResolverRuleReceiverQualified
 	case "same_module":
 		return ResolverRuleSamePackageShadow
 	case "import_map":

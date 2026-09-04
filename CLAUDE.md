@@ -211,6 +211,7 @@ The earlier "we exceed 92.7%" claim in this doc was apples-to-oranges (n=16 Loc-
 | `CODE_GRAPH_SIMILARITY_TOPK` | built-in default | Nearest neighbours considered per node when building similarity edges. |
 | `CODE_GRAPH_SIMILARITY_SKIP_HOPS` | built-in default | Skip node pairs already connected within this many structural hops. |
 | `CBM_GRAMMAR_BASELINES_PATH` | embedded baseline | Override the grammar-version baseline JSON that `index_health` compares against; used by the drift-check workflow. |
+| `CODE_GRAPH_RESOLVER_TIER` | `registry` | `lsp_local` enables the opt-in hybrid tier (`internal/pipeline/resolver_tier_lsp_local.go`): typed/fixture parameters and return annotations as receiver types plus inherited-method lookup for Python and Rust; edges tagged `resolver_tier=lsp_local`. Measure with `bench/accuracy/unresolved_calls.py`. |
 | `RESOLVER_TIER2_DEBUG` | unset (off) | Set to `1` to log one line per tier-2 receiver-type resolution decision. |
 | `RESOLVER_STATIC_DISPATCH_DEBUG` | unset (off) | Set to `1` to log static-dispatch resolution decisions for Rust. |
 | `LOCAGENT_EPISODIC_MEMORY` | unset (off) | Set to `1` to retrieve prior issue localizations from the episodic-memory project before the agent loop runs. |

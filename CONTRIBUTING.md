@@ -37,6 +37,18 @@ golangci-lint run ./...
 gofmt -w .
 ```
 
+CI lints only code newer than the reviewed baseline, with golangci-lint 2.10.1
+on Go 1.26. To reproduce that exact result locally (a newer Go toolchain can
+change typecheck output):
+
+```bash
+GOTOOLCHAIN=go1.26.1 golangci-lint run --timeout=10m \
+  --new-from-rev=32fc4dd857497addff22115d6858dde2289e8e04
+```
+
+See docs/ci.md for the sanitizer lanes (`make test-asan`, `make test-tsan`,
+`make soak`).
+
 ## Project Structure
 
 ```

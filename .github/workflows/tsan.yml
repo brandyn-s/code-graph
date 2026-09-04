@@ -1,0 +1,49 @@
+name: tsan
+
+# ThreadSanitizer gate for the C extraction path. Extraction runs on a Go
+# worker pool, so several goroutines call into the vendored tree-sitter
+# runtime and the hand-written extractors at once; TSan catches data races in
+# that C code (shared tables, lazily initialised statics, allocator state)
+# which neither AddressSanitizer nor the Go race detector can see. Nightly and
+# on demand rather than per PR: a TSan build of the grammar tables is slow.
+# Local equivalent: make test-tsan (see docs/ci.md).
+
+on:
+  schedule:
+    # Daily at 04:17 UTC, after the fuzz lane.
+    - cron: '17 4 * * *'
+  pull_request:
+    paths:
+      - ".github/workflows/tsan.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tsan-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tsan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.26"
+          cache: true
+
+      - name: Test C extraction path under ThreadSanitizer
+        run: make test-tsan

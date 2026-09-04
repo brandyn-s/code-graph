@@ -93,7 +93,7 @@ jobs:
           python3 bench/research/agent-effectiveness/test_run_battery_strict.py
 
       - name: Verify required workflow structure
-        run: python3 -m unittest scripts.test_core_ci_workflow
+        run: python3 -m unittest scripts.test_core_ci_workflow scripts.test_sanitizer_workflows
 
       - name: Build contract-test binary
         run: CGO_ENABLED=1 go build -o /tmp/code-graph ./cmd/code-graph/

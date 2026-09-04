@@ -7,6 +7,15 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added (0.9.1, ported from upstream codebase-memory-mcp)
+- Sanitizer lanes: `make test-tsan` runs the C extraction path under
+  ThreadSanitizer and `.github/workflows/tsan.yml` runs it nightly;
+  `.github/workflows/soak.yml` builds an AddressSanitizer binary
+  (`make build-asan`) and indexes the largest synthetic fixture 50 times via
+  `scripts/soak-index.sh`, failing on crashes, sanitizer reports, or database
+  growth (`make soak` locally). `make test-asan` mirrors `asan.yml`.
+  `scripts/test_sanitizer_workflows.py` pins the workflow structure; docs/ci.md
+  documents the lanes and how to reproduce CI's lint result locally
+  (GOTOOLCHAIN=go1.26.1, golangci-lint 2.10.1, `--new-from-rev`).
 - Seven small grammars vendored from upstream's pinned manifest and included
   in the default build: Lua, Vue, Svelte, GraphQL, go.mod, Erlang, Clojure
   (`scripts/vendor-grammar-from-manifest.sh` reproduces the vendoring).

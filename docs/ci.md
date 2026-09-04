@@ -11,6 +11,8 @@ secret is missing.
 | Core CI | `core-ci.yml` | pull_request, push to `main` | none | Lint against the reviewed baseline, `go test` on Linux and macOS (required) and Windows (required)|
 | accuracy-regression | `accuracy-regression.yml` | pull_request and push touching extraction or `bench/accuracy` | none | Oracle comparisons on synthetic fixtures, phantom-edge negative fixtures, Cypher semantics, adversarial F1 floors |
 | ASan | `asan.yml` | pull_request, push to `main` | none | C extractors under AddressSanitizer |
+| tsan | `tsan.yml` | nightly schedule, pull_request touching the workflow file, workflow_dispatch | none | C extractors and pipeline under ThreadSanitizer (`make test-tsan`) |
+| soak | `soak.yml` | nightly schedule, workflow_dispatch (iterations, fixture) | none | Index the largest synthetic fixture 50 times with an ASan build (`make soak`); fails on crash, sanitizer report, or database growth over 3x |
 | fuzz | `fuzz.yml` | nightly schedule, workflow_dispatch | none | Native Go fuzzing of the C extractor entry points; crashers uploaded as artifacts |
 | drift-checks | `drift-checks.yml` | weekly schedule, pull_request touching grammars or canaries, workflow_dispatch | none | Grammar drift canaries and confidence-band distribution drift |
 | Release | `release.yml` | workflow_dispatch | none (uses the workflow token and OIDC for attestations) | Cross-compiled binaries, checksums, build provenance, immutable GitHub release |
@@ -31,3 +33,46 @@ secret is missing.
   `scripts/test_matched_depth_workflow.py` pin these properties.
 - Configure secrets under Settings → Secrets and variables → Actions. Without
   them, the research workflows exit early and the rest of CI is unaffected.
+
+## Sanitizer lanes
+
+`asan.yml` runs on pull requests that touch the C interop code; `tsan.yml` and
+`soak.yml` run nightly because sanitizer builds of the grammar tables are slow.
+All three have Makefile equivalents that need clang or gcc with the sanitizer
+runtimes installed:
+
+```bash
+make test-asan   # internal/cbm + internal/pipeline under AddressSanitizer
+make test-tsan   # the same packages under ThreadSanitizer
+make soak        # ASan binary, 50 forced re-indexes of bench/accuracy/synthetic/post-battery
+SOAK_ITERATIONS=5 SOAK_FIXTURE=bench/accuracy/synthetic/go-minimal make soak
+```
+
+`scripts/soak-index.sh` keeps per-iteration stdout/stderr under `SOAK_LOG_DIR`
+(uploaded as the `soak-logs` artifact when the nightly run fails) and exits
+non-zero on a crash, any `ERROR: ...Sanitizer` / `panic:` / `fatal error:`
+line, or a database that ends more than `SOAK_MAX_DB_GROWTH` (default 3) times
+its size after the first iteration. `scripts/test_sanitizer_workflows.py` pins
+the structure of these lanes.
+
+ThreadSanitizer with cgo is supported by the Go runtime on Linux only; on macOS
+the TSan runtime kills the process during Go scheduler start-up
+(`ThreadSanitizer:DEADLYSIGNAL` ... `fatal error: stoplockedm`), so run
+`make test-tsan` on Linux or in a Linux container. ASan works on both.
+
+## Reproducing CI lint locally
+
+Core CI and the release lint action run golangci-lint 2.10.1 on Go 1.26 with
+`--new-from-rev` pointed at the reviewed baseline, so only findings introduced
+after that commit fail the build. A newer local Go toolchain can change the
+typecheck results, and `make lint` (which lints everything, not just new code)
+reports pre-baseline findings CI ignores. To see exactly what CI sees:
+
+```bash
+GOTOOLCHAIN=go1.26.1 golangci-lint run --timeout=10m \
+  --new-from-rev=32fc4dd857497addff22115d6858dde2289e8e04
+```
+
+Install golangci-lint 2.10.1 from its release page (or `brew install golangci-lint`
+and check `golangci-lint version`). `GOTOOLCHAIN` makes the `go` command
+download and use exactly 1.26.1 for that invocation.

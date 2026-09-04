@@ -1,0 +1,72 @@
+name: soak
+
+# Nightly soak of the indexer: build code-graph under AddressSanitizer and
+# index the largest synthetic fixture 50 times in a row with a fresh cache
+# directory. Catches what a single test run cannot: use-after-free on the
+# second pass over a warm arena, leaks that only show as growth, and crashes
+# in the forced re-index path. scripts/soak-index.sh fails on a non-zero
+# exit, on any sanitizer/runtime report, and when the database grows more
+# than 3x across the run. Local equivalent: make soak (see docs/ci.md).
+
+on:
+  schedule:
+    # Daily at 05:17 UTC, after the tsan lane.
+    - cron: '17 5 * * *'
+  workflow_dispatch:
+    inputs:
+      iterations:
+        description: 'Number of consecutive forced re-indexes'
+        required: false
+        default: '50'
+      fixture:
+        description: 'Repository to index (path in this checkout)'
+        required: false
+        default: 'bench/accuracy/synthetic/post-battery'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: soak-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  soak:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.26"
+          cache: true
+
+      - name: Build code-graph under AddressSanitizer
+        run: make build-asan
+
+      - name: Soak index
+        env:
+          SOAK_LOG_DIR: ${{ runner.temp }}/soak-logs
+          ASAN_OPTIONS: "detect_leaks=0:halt_on_error=1"
+          ITERATIONS: ${{ github.event.inputs.iterations || '50' }}
+          FIXTURE: ${{ github.event.inputs.fixture || 'bench/accuracy/synthetic/post-battery' }}
+        run: bash scripts/soak-index.sh "$ITERATIONS" "$FIXTURE"
+
+      - name: Upload iteration logs
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: soak-logs
+          path: ${{ runner.temp }}/soak-logs/
+          if-no-files-found: ignore
+          retention-days: 30

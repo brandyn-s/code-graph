@@ -1,4 +1,4 @@
-.PHONY: build release test lint clean install check bench-memory bench-negative bench-negative-baseline bench-post-battery bench-rust-reqwest bench-react-fetch bench-handler-resolution
+.PHONY: build build-asan release test test-asan test-tsan soak lint clean install check bench-memory bench-negative bench-negative-baseline bench-post-battery bench-rust-reqwest bench-react-fetch bench-handler-resolution
 
 BINARY=code-graph
 MODULE=github.com/brandyn-s/code-graph
@@ -47,6 +47,33 @@ release:
 
 test:
 	go test ./... -v
+
+# Sanitizer lanes for the C extraction path (internal/cbm and the pipeline
+# that drives it). ASan catches memory errors; TSan catches data races between
+# the Go worker pool and the C extractors. Both need clang or gcc with the
+# sanitizer runtimes installed. TSan+cgo is Linux-only (the Go runtime aborts
+# under TSan on macOS); ASan works on Linux and macOS. CI: asan.yml, tsan.yml.
+SANITIZER_PKGS = ./internal/cbm/... ./internal/pipeline/...
+
+test-asan:  ## Run the C extraction path under AddressSanitizer
+	CGO_CFLAGS="-fsanitize=address -fno-omit-frame-pointer" CGO_LDFLAGS="-fsanitize=address" \
+		ASAN_OPTIONS="detect_leaks=0:halt_on_error=1" \
+		go test -count=1 -timeout=15m $(SANITIZER_PKGS)
+
+test-tsan:  ## Run the C extraction path under ThreadSanitizer
+	CGO_CFLAGS="-fsanitize=thread -fno-omit-frame-pointer" CGO_LDFLAGS="-fsanitize=thread" \
+		TSAN_OPTIONS="halt_on_error=1" \
+		go test -count=1 -timeout=20m $(SANITIZER_PKGS)
+
+build-asan:  ## Build bin/code-graph under AddressSanitizer (used by make soak)
+	CGO_ENABLED=1 CGO_CFLAGS="-fsanitize=address -fno-omit-frame-pointer" CGO_LDFLAGS="-fsanitize=address" \
+		go build $(BUILD_LDFLAGS) -o bin/$(BINARY)$(BINARY_EXT) ./cmd/code-graph/
+
+SOAK_ITERATIONS ?= 50
+SOAK_FIXTURE ?= bench/accuracy/synthetic/post-battery
+
+soak: build-asan  ## Index SOAK_FIXTURE SOAK_ITERATIONS times with the ASan binary (nightly soak.yml)
+	bash scripts/soak-index.sh $(SOAK_ITERATIONS) $(SOAK_FIXTURE)
 
 check: lint test  ## Run lint + tests
 

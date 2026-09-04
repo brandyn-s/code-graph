@@ -202,7 +202,8 @@ golangci-lint run ./...
 See [CONTRIBUTING.md](CONTRIBUTING.md) for structure, tests, and the release
 process, [docs/extending.md](docs/extending.md) for adding a tool, language,
 edge type, or embedding provider, [docs/upstream.md](docs/upstream.md) for the
-relationship to the upstream project, and [CHANGELOG.md](CHANGELOG.md) for
+relationship to the upstream project, [SECURITY.md](SECURITY.md) for the threat
+model and how to report a vulnerability, and [CHANGELOG.md](CHANGELOG.md) for
 what changed.
 
 ## License

@@ -57,6 +57,14 @@ internal/
   selfupdate/                  GitHub release checking
 ```
 
+## Extending
+
+[docs/extending.md](docs/extending.md) has step-by-step recipes for the four
+common additions: an MCP tool, a language, an edge type, and an embedding
+provider. Each names the template file to copy and the test that must change.
+[docs/upstream.md](docs/upstream.md) explains what is shared with the
+upstream project and how to port a fix from it.
+
 ## Adding or Fixing Language Support
 
 Most language issues are in `internal/lang/<name>.go` (node type configuration) or `internal/pipeline/` (extraction logic).

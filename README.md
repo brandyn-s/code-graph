@@ -200,7 +200,10 @@ golangci-lint run ./...
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for structure, tests, and the release
-process, and [CHANGELOG.md](CHANGELOG.md) for what changed.
+process, [docs/extending.md](docs/extending.md) for adding a tool, language,
+edge type, or embedding provider, [docs/upstream.md](docs/upstream.md) for the
+relationship to the upstream project, and [CHANGELOG.md](CHANGELOG.md) for
+what changed.
 
 ## License
 

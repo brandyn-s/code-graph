@@ -27,6 +27,10 @@ All notable changes to this project are documented here. The format follows
   pre-versioning databases are adopted as format 1. Fixture under
   `internal/store/testdata/format-v1/`; policy in `docs/index-format.md`.
 
+- `CODE_GRAPH_TOOLSET` (default `core`) advertises 24 tools over MCP instead
+  of 40; `full` restores the whole surface. The CLI and schema snapshot keep
+  every tool; the snapshot now also records `CORE_TOOLS`.
+
 ### Changed (maintainability pass)
 - README opens with a real `get_relationship_evidence` result and the
   stale-index refusal, plus a comparison against grep and the upstream.

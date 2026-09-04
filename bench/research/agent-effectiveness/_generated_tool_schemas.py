@@ -1003,3 +1003,32 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
             'type': 'object'},
     },
 }
+
+
+# Tools advertised under CODE_GRAPH_TOOLSET=core (the default).
+CORE_TOOLS: frozenset[str] = frozenset({
+    "code_localize",
+    "compare_project_indexes",
+    "degree_filter",
+    "delete_project",
+    "detect_changes",
+    "generate_report",
+    "get_architecture",
+    "get_code_snippet",
+    "get_graph_schema",
+    "get_relationship_evidence",
+    "index_health",
+    "index_repository",
+    "index_status",
+    "ingest_traces",
+    "list_projects",
+    "localize_across_projects",
+    "manage_adr",
+    "query_graph",
+    "query_security_surfaces",
+    "query_stig_evidence",
+    "search_code",
+    "search_graph",
+    "trace_call_path",
+    "trace_data_flow",
+})

@@ -89,3 +89,7 @@ Template: `internal/embed/voyage.go`.
    configured provider means `embed.Disabled`, never a crash.
 4. Tests: an `httptest` server exercising success, 429 retry, and
    cancellation, mirroring `internal/pipeline/pass_embeddings_test.go`.
+
+## Toolsets
+
+> New tools are advertised only under `CODE_GRAPH_TOOLSET=full` unless you add them to `coreToolNames` in `internal/tools/toolset.go`. Either way, re-run `generate_schemas.py`; the snapshot records both the full schema set and `CORE_TOOLS`.

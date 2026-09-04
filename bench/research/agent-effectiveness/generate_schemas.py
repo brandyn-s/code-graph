@@ -25,6 +25,7 @@ except (AttributeError, OSError):
 REPO = Path(__file__).parent.parent.parent.parent
 OUT = REPO / "bench" / "research" / "agent-effectiveness" / "_generated_tool_schemas.py"
 EXPORT_COMMAND = ("go", "run", "./cmd/export-tool-schemas")
+CORE_COMMAND = ("go", "run", "./cmd/export-tool-schemas", "--core")
 
 HEADER = '''"""Auto-generated tool schemas. DO NOT EDIT BY HAND.
 
@@ -109,7 +110,24 @@ def extract_handlers() -> dict[str, dict]:
     return out
 
 
-def render(schemas: dict[str, dict]) -> str:
+def extract_core_toolset(all_tools: set[str]) -> list[str]:
+    """Load the sorted core toolset from the Go runtime and validate it."""
+    result = subprocess.run(
+        CORE_COMMAND, cwd=REPO, check=False, capture_output=True, text=True, encoding="utf-8",
+    )
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip() or "no diagnostic output"
+        raise RuntimeError(f"core toolset exporter failed (exit {result.returncode}): {detail}")
+    names = json.loads(result.stdout)
+    if not isinstance(names, list) or not all(isinstance(n, str) for n in names):
+        raise RuntimeError("core toolset exporter did not return a JSON array of names")
+    unknown = sorted(set(names) - all_tools)
+    if unknown:
+        raise RuntimeError(f"core toolset names not registered: {unknown}")
+    return sorted(names)
+
+
+def render(schemas: dict[str, dict], core: list[str]) -> str:
     """Render the schemas as a Python dict literal in stable order.
 
     Uses pprint.pformat for the schema body so JSON booleans/null become
@@ -133,6 +151,11 @@ def render(schemas: dict[str, dict]) -> str:
         body += f"        \"input_schema\":\n{indented},\n"
         body += "    },\n"
     body += "}\n"
+    body += "\n\n# Tools advertised under CODE_GRAPH_TOOLSET=core (the default).\n"
+    body += "CORE_TOOLS: frozenset[str] = frozenset({\n"
+    for tool in core:
+        body += f'    "{tool}",\n'
+    body += "})\n"
     return HEADER + body
 
 
@@ -148,9 +171,14 @@ def main() -> int:
     except RuntimeError as exc:
         print(f"[FAIL] {exc}", file=sys.stderr)
         return 1
-    print(f"Exported {len(schemas)} registered tool schemas from the Go runtime")
+    try:
+        core = extract_core_toolset(set(schemas))
+    except (RuntimeError, json.JSONDecodeError) as exc:
+        print(f"[FAIL] {exc}", file=sys.stderr)
+        return 1
+    print(f"Exported {len(schemas)} registered tool schemas ({len(core)} core) from the Go runtime")
 
-    rendered = render(schemas)
+    rendered = render(schemas, core)
     out_path = Path(args.out)
 
     if args.check_only:

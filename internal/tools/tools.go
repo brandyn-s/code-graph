@@ -52,6 +52,8 @@ type Server struct {
 	indexMu         sync.Mutex
 	handlers        map[string]mcp.ToolHandler
 	toolDefinitions map[string]*mcp.Tool
+	// toolset decides which registered tools are advertised over MCP.
+	toolset string
 
 	// Test seam for deterministic start/end checkout coherence checks.
 	captureIndexIdentity func(string) (*indexidentity.Envelope, error)
@@ -70,6 +72,33 @@ type Server struct {
 type ServerOption func(*Server)
 
 // WithConfig attaches a ConfigStore for reading runtime settings.
+// WithToolset overrides CODE_GRAPH_TOOLSET for this server instance.
+func WithToolset(toolset string) ServerOption {
+	return func(s *Server) {
+		if toolset == ToolsetFull {
+			s.toolset = ToolsetFull
+		} else {
+			s.toolset = ToolsetCore
+		}
+	}
+}
+
+// Toolset reports which toolset this server advertises.
+func (s *Server) Toolset() string { return s.toolset }
+
+// AdvertisedToolNames returns the sorted tool names this server advertises
+// over MCP under its toolset.
+func (s *Server) AdvertisedToolNames() []string {
+	names := make([]string, 0, len(s.toolDefinitions))
+	for name := range s.toolDefinitions {
+		if toolsetIncludes(s.toolset, name) {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	return names
+}
+
 func WithConfig(c *store.ConfigStore) ServerOption {
 	return func(s *Server) { s.config = c }
 }
@@ -81,6 +110,7 @@ func NewServer(r *store.StoreRouter, opts ...ServerOption) *Server {
 		queryCache:      store.NewQueryCache(200, 5*time.Minute),
 		handlers:        make(map[string]mcp.ToolHandler),
 		toolDefinitions: make(map[string]*mcp.Tool),
+		toolset:         ActiveToolset(),
 	}
 	for _, opt := range opts {
 		opt(srv)
@@ -633,7 +663,7 @@ func (s *Server) addTool(tool *mcp.Tool, handler mcp.ToolHandler) {
 	if definitionExists || handlerExists {
 		panic(fmt.Sprintf("duplicate MCP tool registration %q", tool.Name))
 	}
-	if s.mcp != nil {
+	if s.mcp != nil && toolsetIncludes(s.toolset, tool.Name) {
 		s.mcp.AddTool(tool, handler)
 	}
 	if s.handlers != nil {

@@ -73,13 +73,23 @@ func TestMCPClientEndToEnd(t *testing.T) {
 	for _, tool := range listed.Tools {
 		listedNames[tool.Name] = true
 	}
-	for _, name := range registeredToolNames(t) {
+	advertised := srv.AdvertisedToolNames()
+	for _, name := range advertised {
 		if !listedNames[name] {
-			t.Errorf("tools/list is missing registered tool %q", name)
+			t.Errorf("tools/list is missing advertised tool %q", name)
 		}
 	}
-	if len(listedNames) != len(registeredToolNames(t)) {
-		t.Fatalf("tools/list returned %d tools, registry has %d", len(listedNames), len(registeredToolNames(t)))
+	if len(listedNames) != len(advertised) {
+		t.Fatalf("tools/list returned %d tools, server advertises %d under toolset %q", len(listedNames), len(advertised), srv.Toolset())
+	}
+	registry := map[string]bool{}
+	for _, name := range registeredToolNames(t) {
+		registry[name] = true
+	}
+	for _, name := range CoreToolNames() {
+		if !registry[name] {
+			t.Errorf("core toolset names unregistered tool %q", name)
+		}
 	}
 
 	// Indexing round trip.

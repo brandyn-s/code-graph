@@ -114,7 +114,7 @@ Export the exact registered schema with `go run ./cmd/export-tool-schemas`.
 
 All settings are environment variables read at startup. Advanced tuning
 variables (`LOCAGENT_*`, `RESOLVER_*`, `CBM_*`, embeddings timeouts, heap
-limits) are documented in [CLAUDE.md](CLAUDE.md#environment-variables).
+limits) are documented in [CLAUDE.md](CLAUDE.md#resolver-and-runtime-env-vars).
 
 | Variable | Default | Effect |
 |---|---|---|

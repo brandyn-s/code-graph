@@ -230,6 +230,16 @@ func detectShellRC() string {
 	}
 }
 
+// legacySkillDirNames lists skill directories written by earlier releases
+// that `install` replaces and `uninstall` removes.
+func legacySkillDirNames() []string {
+	names := []string{legacyMCPServerKey}
+	for _, suffix := range []string{"exploring", "tracing", "quality", "reference"} {
+		names = append(names, "codebase-memory-"+suffix)
+	}
+	return names
+}
+
 // installSkills writes the 4 skill files to ~/.claude/skills/ and removes old monolithic skill.
 func installSkills(cfg installConfig) {
 	home, err := os.UserHomeDir()
@@ -240,15 +250,20 @@ func installSkills(cfg installConfig) {
 
 	fmt.Println("[Skills]")
 
-	// Remove old monolithic skill if it exists
-	oldSkillDir := filepath.Join(home, ".claude", "skills", legacyMCPServerKey)
-	if info, err := os.Stat(oldSkillDir); err == nil && info.IsDir() {
+	// Remove skills installed under earlier names: the upstream monolithic
+	// skill and the four pre-rename `codebase-memory-*` skills.
+	for _, legacy := range legacySkillDirNames() {
+		oldSkillDir := filepath.Join(home, ".claude", "skills", legacy)
+		info, err := os.Stat(oldSkillDir)
+		if err != nil || !info.IsDir() {
+			continue
+		}
 		if cfg.dryRun {
 			fmt.Printf("  [dry-run] Would remove old skill: %s\n", oldSkillDir)
-		} else {
-			if err := os.RemoveAll(oldSkillDir); err == nil {
-				fmt.Printf("  ✓ Removed old monolithic skill: %s\n", oldSkillDir)
-			}
+			continue
+		}
+		if err := os.RemoveAll(oldSkillDir); err == nil {
+			fmt.Printf("  ✓ Removed old skill: %s\n", oldSkillDir)
 		}
 	}
 
@@ -396,7 +411,12 @@ func removeClaudeSkills(cfg installConfig) {
 	}
 
 	fmt.Println("[Skills]")
+	names := make([]string, 0, len(skillFiles)+5)
 	for name := range skillFiles {
+		names = append(names, name)
+	}
+	names = append(names, legacySkillDirNames()...)
+	for _, name := range names {
 		skillDir := filepath.Join(home, ".claude", "skills", name)
 		if _, err := os.Stat(skillDir); os.IsNotExist(err) {
 			continue

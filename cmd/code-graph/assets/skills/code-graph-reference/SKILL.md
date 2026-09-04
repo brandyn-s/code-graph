@@ -1,5 +1,5 @@
 ---
-name: codebase-memory-reference
+name: code-graph-reference
 description: >
   This skill should be used when the user asks about "code-graph tools",
   "graph query syntax", "Cypher query examples", "edge types",

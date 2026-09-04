@@ -190,7 +190,7 @@ def query_code_graph_edges(project: str, edge_type: str, caller_shards: list[str
     """Pull edges of `edge_type` from code-graph, sharded by caller prefix.
 
     code-graph's `query_graph` caps unfiltered responses at ~200 rows
-    (documented in codebase-memory-reference). WHERE clauses push down to
+    (documented in code-graph-reference). WHERE clauses push down to
     SQL and bypass the cap. We shard by `a.qualified_name CONTAINS '<shard>'`
     so each per-shard query returns its full SQL result set, then union.
 

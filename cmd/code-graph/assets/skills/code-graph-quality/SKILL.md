@@ -1,5 +1,5 @@
 ---
-name: codebase-memory-quality
+name: code-graph-quality
 description: >
   This skill should be used when the user asks about "dead code",
   "find dead code", "detect dead code", "show dead code", "dead code analysis",

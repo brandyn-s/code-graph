@@ -45,10 +45,10 @@ func TestInstallSkillCreation(t *testing.T) {
 	}
 
 	expectedSkills := []string{
-		"codebase-memory-exploring",
-		"codebase-memory-tracing",
-		"codebase-memory-quality",
-		"codebase-memory-reference",
+		"code-graph-exploring",
+		"code-graph-tracing",
+		"code-graph-quality",
+		"code-graph-reference",
 	}
 
 	for _, name := range expectedSkills {
@@ -295,10 +295,10 @@ func TestSkillFilesContent(t *testing.T) {
 	}
 
 	expectations := map[string][]string{
-		"codebase-memory-exploring": {"explore the codebase", "search_graph", "get_graph_schema"},
-		"codebase-memory-tracing":   {"who calls this function", "trace_call_path", "direction", "risk_labels", "detect_changes"},
-		"codebase-memory-quality":   {"find dead code", "max_degree=0", "exclude_entry_points"},
-		"codebase-memory-reference": {"edge types", "query_graph", "Cypher", "detect_changes", "14 total"},
+		"code-graph-exploring": {"explore the codebase", "search_graph", "get_graph_schema"},
+		"code-graph-tracing":   {"who calls this function", "trace_call_path", "direction", "risk_labels", "detect_changes"},
+		"code-graph-quality":   {"find dead code", "max_degree=0", "exclude_entry_points"},
+		"code-graph-reference": {"edge types", "query_graph", "Cypher", "detect_changes", "14 total"},
 	}
 
 	for name, expectedPhrases := range expectations {

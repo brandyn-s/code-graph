@@ -6,6 +6,17 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed (review pass)
+- Embedded Claude Code skills renamed from `codebase-memory-*` to
+  `code-graph-*`; `install` removes the old skill directories and
+  `uninstall` cleans both names.
+- Test fixtures and comments no longer reference internal repositories or
+  addresses; private planning links removed from workflows and design notes.
+- `docs/ARCHITECTURE.md` state of record updated for the public primary;
+  setup scripts no longer describe the project as private.
+- Runtime tuning environment variables documented in `CLAUDE.md`.
+- Dependabot now covers Go modules.
+
 ### Changed
 - **Renamed the binary and module to `code-graph`.** The command directory is
   `cmd/code-graph`, the Go module path is `github.com/brandyn-s/code-graph`,

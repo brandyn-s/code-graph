@@ -147,6 +147,12 @@ func runCargoMetadata(rootDir string) (*CargoMetadataResult, error) {
 // external-drop gate simply doesn't fire (graceful degradation to
 // pre-v0.1 behavior).
 func (p *Pipeline) populateCargoMetadata() {
+	if _, statErr := os.Stat(filepath.Join(p.RepoPath, "Cargo.toml")); statErr != nil {
+		// Not a Rust workspace: nothing to classify, and a warning here would
+		// be noise for every Go, Python, or TypeScript repository.
+		slog.Debug("pipeline.cargo_metadata.skip", "reason", "no Cargo.toml")
+		return
+	}
 	start := time.Now()
 	res, err := runCargoMetadata(p.RepoPath)
 	elapsed := time.Since(start)

@@ -1,5 +1,5 @@
 ---
-name: codebase-memory-tracing
+name: code-graph-tracing
 description: >
   This skill should be used when the user asks "who calls this function",
   "what does X call", "trace the call chain", "find callers of",

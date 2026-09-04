@@ -178,7 +178,7 @@ The earlier "we exceed 92.7%" claim in this doc was apples-to-oranges (n=16 Loc-
 - Security tagging pass (labels nodes as auth/crypto/input/hardware_io)
 - LRU query cache for `search_graph` and `query_graph`
 
-### Resolver env vars
+### Resolver and runtime env vars
 
 | Env var | Default | Purpose |
 |---------|---------|---------|

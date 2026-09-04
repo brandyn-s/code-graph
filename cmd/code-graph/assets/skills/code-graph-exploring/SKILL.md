@@ -1,5 +1,5 @@
 ---
-name: codebase-memory-exploring
+name: code-graph-exploring
 description: >
   This skill should be used when the user asks to "explore the codebase",
   "understand the architecture", "what functions exist", "show me the structure",

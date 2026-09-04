@@ -54,6 +54,48 @@ release membership and `gh attestation verify PATH -R brandyn-s/code-graph`
 checks the SLSA build provenance. Every public release from `v0.9.0` on ships
 both.
 
+## Why this and not grep or the upstream
+
+Every relationship comes back with how it was resolved, how sure the resolver
+is, and which exact checkout it was observed in. This is a real
+`get_relationship_evidence` result from the repository's own Go fixture,
+trimmed to the fields that matter:
+
+```json
+{
+  "relation_type": "calls",
+  "source_symbol_ref": {"qualified_name": "demo.main.entry", "relative_path": "main.go", "start_line": 9, "end_line": 12},
+  "target_symbol_ref": {"qualified_name": "demo.main.leaf", "relative_path": "main.go", "start_line": 14, "end_line": 16},
+  "resolution_source": "lsp_direct",
+  "confidence_tier": "extracted",
+  "confidence_band": "high",
+  "numeric_confidence": 0.95,
+  "source_revision": "7173d7d839b4cd62e886c51b121e39131b2b0adf",
+  "index_generation": "03c21a84d85b3d041b49e6f345eef90e795e7b3afb6b76315a3654900895c3f3",
+  "runtime_observed": false,
+  "relationship_ref": {"id": "rel:v1:577634562c66c9c5f6cc6fb45dbbfdc9910080a857d1ea2477cde646e875f180"}
+}
+```
+
+Edit one line of `main.go` and ask again, and the same tool refuses instead of
+answering from a graph that no longer matches the tree:
+
+```json
+{
+  "identity_status": "stale_source",
+  "identity_reason": "source_changed_since_index: dirty_fingerprint(indexed=\"clean\", current=\"84d9ed7c…\"); re-run index_repository",
+  "_metadata": {"evidence_refs": {"emitted": false, "reason": "stale_source:source_changed_since_index"}},
+  "relationships": [],
+  "total": 0
+}
+```
+
+| Situation | code-graph | grep / ripgrep | codebase-memory-mcp (upstream) |
+|---|---|---|---|
+| Heuristic edge (tree-sitter resolved a call by name) | Edge with `resolution_source`, `confidence_tier: extracted`, band, and a stable `relationship_ref` you can cite | Text matches; you decide which are calls | Edge, no resolver or confidence attached |
+| Compiler-index edge (SCIP tier enabled for Go/TypeScript) | Same edge upgraded to compiler-resolved, with the artifact digest that proves it | Not available | Not available |
+| Working tree changed after indexing | Evidence tools fail closed with `stale_source` and the fingerprint diff | Always searches the current text, never the indexed one | Answers from the stale graph |
+
 ## Connect a client
 
 ```bash

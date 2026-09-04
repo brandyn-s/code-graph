@@ -81,12 +81,26 @@ validate_release_state() {
         die "Checkout HEAD $actual_sha does not match event SHA $GITHUB_SHA"
     fi
 
-    if ! latest_version=$(gh release view \
+    # The first release of a repository has nothing to order against; gh
+    # reports "release not found" on stderr and exits 0 or 1 depending on
+    # version. Treat that one case as "compare against v0.0.0" so the
+    # candidate must still be canonical and positive.
+    latest_stderr=$(mktemp)
+    if latest_version=$(gh release view \
         --repo "$GITHUB_REPOSITORY" \
         --json tagName \
-        --jq .tagName); then
+        --jq .tagName 2>"$latest_stderr") && [ -n "$latest_version" ]; then
+        :
+    elif grep -qi "release not found" "$latest_stderr" \
+        || [ "$(gh release list --repo "$GITHUB_REPOSITORY" --limit 1 | wc -l | tr -d ' ')" = "0" ]; then
+        echo "No published release yet; validating $VERSION as the first release"
+        latest_version="v0.0.0"
+    else
+        cat "$latest_stderr" >&2
+        rm -f "$latest_stderr"
         die "Unable to determine the latest published release"
     fi
+    rm -f "$latest_stderr"
     python3 "$SCRIPT_DIR/release_version.py" "$VERSION" "$latest_version"
 
     if ! tag_sha=$(exact_tag_sha); then

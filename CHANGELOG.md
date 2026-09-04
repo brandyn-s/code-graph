@@ -6,6 +6,16 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (0.9.1, ported from upstream codebase-memory-mcp)
+- Extraction supervisor: tree-sitter extraction runs in supervised worker
+  processes (`code-graph cbm-extract-worker`, spawned from the running binary).
+  A file that crashes or hangs the native extractor is skipped and reported
+  instead of killing the indexer or the MCP server (upstream 9b9638e1,
+  fb334f78, e242ce1e). `CODE_GRAPH_EXTRACT_ISOLATION` (`auto`|`on`|`off`) and
+  `CODE_GRAPH_EXTRACT_FILE_TIMEOUT_S` (default 30) control it; skips are
+  written to a `<project>.skips.json` sidecar and surfaced by `index_health`
+  (`skipped_files`, `skipped_count`) and `code-graph doctor`.
+
 ### Fixed (0.9.1, ported from upstream codebase-memory-mcp)
 - Extractor memory safety: `walk_defs` is iterative with a growable heap frame
   stack (upstream 174e56b4, #668), every other recursive AST walker and the Go

@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/brandyn-s/code-graph/internal/config"
 	"github.com/brandyn-s/code-graph/internal/discover"
@@ -44,6 +45,10 @@ type IndexDelta struct {
 
 // Pipeline orchestrates the 3-pass indexing of a repository.
 type Pipeline struct {
+	// Extraction supervisor skips collected during this run (see extract_isolation.go).
+	skipMu  sync.Mutex
+	skipped []store.SkippedFile
+
 	ctx         context.Context
 	Store       *store.Store
 	RepoPath    string

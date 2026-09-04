@@ -12,7 +12,6 @@ import (
 	"sort"
 	"strconv"
 
-	"github.com/brandyn-s/code-graph/internal/cbm"
 	"github.com/brandyn-s/code-graph/internal/config"
 	"github.com/brandyn-s/code-graph/internal/discover"
 	"github.com/brandyn-s/code-graph/internal/fqn"
@@ -263,8 +262,9 @@ func (p *Pipeline) passCallsForFiles(files []discover.FileInfo) {
 				continue
 			}
 			source = stripBOM(source)
-			cbmResult, err := cbm.ExtractFile(source, f.Language, p.ProjectName, f.RelPath)
+			cbmResult, err := extractFile(p.ctx, source, f.Language, p.ProjectName, f.RelPath)
 			if err != nil {
+				p.recordSkip(f.RelPath, err)
 				continue
 			}
 			if cbmResult.DepthCapped {

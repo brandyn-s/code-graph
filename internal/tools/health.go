@@ -8,6 +8,7 @@ import (
 
 	"github.com/brandyn-s/code-graph/internal/discover"
 	"github.com/brandyn-s/code-graph/internal/pipeline"
+	"github.com/brandyn-s/code-graph/internal/store"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -143,6 +144,14 @@ func (s *Server) handleIndexHealth(ctx context.Context, req *mcp.CallToolRequest
 	// why there is none.
 	grammarVersions, grammarVersionsAge, grammarVersionsSource, _ := loadGrammarVersionsAgeSource()
 
+	skipped, skipErr := store.ReadSkips(effectiveProject)
+	if skipErr != nil {
+		skipped = nil
+	}
+	if skipped == nil {
+		skipped = []store.SkippedFile{}
+	}
+
 	responseData := map[string]any{
 		"project":            effectiveProject,
 		"files_on_disk":      len(diskFiles),
@@ -155,6 +164,8 @@ func (s *Server) handleIndexHealth(ctx context.Context, req *mcp.CallToolRequest
 		"enrichment_current": pipeline.EnrichmentVersion,
 		"enrichment_stale":   enrichmentStale,
 		"indexed_at":         proj.IndexedAt,
+		"skipped_files":      skipped,
+		"skipped_count":      len(skipped),
 	}
 	responseData["grammar_versions_source"] = grammarVersionsSource
 	if len(grammarVersions) > 0 {

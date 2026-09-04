@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/brandyn-s/code-graph/internal/cbm/isolate"
 	"io"
 	"log"
 	"log/slog"
@@ -118,6 +119,13 @@ func main() {
 			os.Exit(runDoctor(remaining[1:], os.Stdout, os.Stderr))
 		case "import-codeql":
 			os.Exit(runCodeQLImport(remaining[1:], os.Stdout, os.Stderr))
+		case "cbm-extract-worker":
+			// Hidden: extraction supervisor worker (see internal/cbm/isolate).
+			if err := isolate.RunWorker(os.Stdin, os.Stdout); err != nil {
+				fmt.Fprintln(os.Stderr, "cbm-extract-worker:", err)
+				os.Exit(1)
+			}
+			os.Exit(0)
 		case "cli":
 			if len(remaining) >= 2 {
 				os.Exit(runCLI(remaining[1:]))

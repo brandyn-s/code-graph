@@ -70,6 +70,7 @@ type doctorProject struct {
 	DBPath        string  `json:"db_path"`
 	SizeMB        float64 `json:"size_mb"`
 	FormatVersion int     `json:"format_version"`
+	SkippedFiles  int     `json:"skipped_files"`
 	Error         string  `json:"error,omitempty"`
 }
 
@@ -199,6 +200,10 @@ func collectDoctorReport(ctx context.Context, getenv func(string) string, probe 
 		}
 		version, root, readErr := readProjectMetaReadOnly(ctx, dbPath)
 		dp.FormatVersion, dp.RootPath = version, root
+		if skips, skipErr := store.ReadSkips(name); skipErr == nil && len(skips) > 0 {
+			dp.SkippedFiles = len(skips)
+			r.Warnings = append(r.Warnings, fmt.Sprintf("%s: %d file(s) skipped by the extraction supervisor; see index_health skipped_files", name, len(skips)))
+		}
 		if readErr != nil {
 			dp.Error = readErr.Error()
 		} else if version > store.FormatVersion {

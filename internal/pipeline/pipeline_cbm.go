@@ -44,7 +44,7 @@ func cbmParseFileFromSource(projectName string, f discover.FileInfo, source []by
 	// Strip UTF-8 BOM if present (common in C#/Windows-generated files)
 	source = stripBOM(source)
 
-	cbmResult, err := cbm.ExtractFile(source, f.Language, projectName, f.RelPath)
+	cbmResult, err := extractFile(nil, source, f.Language, projectName, f.RelPath)
 	if err != nil {
 		slog.Warn("cbm.extract.err", "path", f.RelPath, "lang", f.Language, "err", err)
 		result.Err = err

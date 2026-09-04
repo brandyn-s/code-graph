@@ -114,7 +114,9 @@ func (p *Pipeline) passDefinitions(files []discover.FileInfo) {
 			continue
 		}
 		if r.Err != nil {
-			slog.Warn("pass2.file.err", "path", r.File.RelPath, "err", r.Err)
+			if !p.recordSkip(r.File.RelPath, r.Err) {
+				slog.Warn("pass2.file.err", "path", r.File.RelPath, "err", r.Err)
+			}
 			continue
 		}
 		// Populate extraction cache for use by later passes

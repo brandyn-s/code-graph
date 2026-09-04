@@ -56,21 +56,23 @@ var (
 
 // Runtime and storage.
 var (
-	SkipEmbeddings       = Key{Name: "CODE_GRAPH_SKIP_EMBEDDINGS", Default: "auto", Doc: "1 forces embedding passes off, 0 forces them on; auto follows the resolved embedding provider"}
-	EmbeddingsTimeoutSec = Key{Name: "CODE_GRAPH_EMBEDDINGS_TIMEOUT_SEC", Default: "built-in", Doc: "Overall timeout for the embeddings pass"}
-	CacheDir             = Key{Name: "CODE_GRAPH_CACHE_DIR", Default: "~/.cache/code-graph", Doc: "Directory holding per-project SQLite databases"}
-	LogFile              = Key{Name: "CODE_GRAPH_LOG_FILE", Default: "unset", Doc: "Tee structured logs to this file"}
-	LogFileOnly          = Key{Name: "CODE_GRAPH_LOG_FILE_ONLY", Default: "unset", Doc: "Redirect structured logs to this file instead of stderr"}
-	HeapLimitMB          = Key{Name: "CODE_GRAPH_HEAP_LIMIT_MB", Default: "off", Doc: "Abort indexing when Go heap-in-use exceeds this many MB"}
-	FullReindexEvery     = Key{Name: "CODE_GRAPH_FULL_REINDEX_EVERY", Default: "50", Doc: "Force a full reindex after this many incremental runs; 0 disables"}
-	IncrementalCap       = Key{Name: "CODE_GRAPH_INCREMENTAL_CAP", Default: "10000", Doc: "Cap on dependent-set expansion during incremental indexing"}
-	AutoRecovery         = Key{Name: "CODE_GRAPH_AUTO_RECOVERY", Default: "unset", Doc: "Set to enable automatic recovery of corrupted project databases"}
-	MatchTrace           = Key{Name: "CODE_GRAPH_MATCH_TRACE", Default: "off", Doc: "Log HTTP route matches that scored below threshold"}
-	ServiceMap           = Key{Name: "CODE_GRAPH_SERVICE_MAP", Default: "~/.config/code-graph/service_map.json", Doc: "JSON domain-to-pattern table used by service_map and diff_services"}
-	NixServiceOptionPfx  = Key{Name: "CODE_GRAPH_NIX_SERVICE_OPTION_PREFIX", Default: "services", Doc: "Option-set prefix for Nix service extraction"}
-	UpdateChannel        = Key{Name: "CODE_GRAPH_UPDATE_CHANNEL", Default: "stable", Doc: "stable follows GitHub's latest non-prerelease; rc also considers vX.Y.Z-rc.N prereleases"}
-	Toolset              = Key{Name: "CODE_GRAPH_TOOLSET", Default: "core", Doc: "Which tools the MCP server advertises: core (the plugin, benchmark, and everyday set) or full (every registered tool)"}
-	NixPkgsPrefix        = Key{Name: "CODE_GRAPH_NIX_PKGS_PREFIX", Default: "pkgs", Doc: "Package-set prefix for Nix RUNS_BINARY detection"}
+	ExtractIsolation      = Key{Name: "CODE_GRAPH_EXTRACT_ISOLATION", Default: "auto", Doc: "auto|on|off: run tree-sitter extraction in supervised worker processes so a crashing or hanging file is skipped and reported instead of killing the indexer"}
+	ExtractFileTimeoutSec = Key{Name: "CODE_GRAPH_EXTRACT_FILE_TIMEOUT_S", Default: "30", Doc: "Per-file quiet timeout for supervised extraction; a file exceeding it is skipped as a timeout"}
+	SkipEmbeddings        = Key{Name: "CODE_GRAPH_SKIP_EMBEDDINGS", Default: "auto", Doc: "1 forces embedding passes off, 0 forces them on; auto follows the resolved embedding provider"}
+	EmbeddingsTimeoutSec  = Key{Name: "CODE_GRAPH_EMBEDDINGS_TIMEOUT_SEC", Default: "built-in", Doc: "Overall timeout for the embeddings pass"}
+	CacheDir              = Key{Name: "CODE_GRAPH_CACHE_DIR", Default: "~/.cache/code-graph", Doc: "Directory holding per-project SQLite databases"}
+	LogFile               = Key{Name: "CODE_GRAPH_LOG_FILE", Default: "unset", Doc: "Tee structured logs to this file"}
+	LogFileOnly           = Key{Name: "CODE_GRAPH_LOG_FILE_ONLY", Default: "unset", Doc: "Redirect structured logs to this file instead of stderr"}
+	HeapLimitMB           = Key{Name: "CODE_GRAPH_HEAP_LIMIT_MB", Default: "off", Doc: "Abort indexing when Go heap-in-use exceeds this many MB"}
+	FullReindexEvery      = Key{Name: "CODE_GRAPH_FULL_REINDEX_EVERY", Default: "50", Doc: "Force a full reindex after this many incremental runs; 0 disables"}
+	IncrementalCap        = Key{Name: "CODE_GRAPH_INCREMENTAL_CAP", Default: "10000", Doc: "Cap on dependent-set expansion during incremental indexing"}
+	AutoRecovery          = Key{Name: "CODE_GRAPH_AUTO_RECOVERY", Default: "unset", Doc: "Set to enable automatic recovery of corrupted project databases"}
+	MatchTrace            = Key{Name: "CODE_GRAPH_MATCH_TRACE", Default: "off", Doc: "Log HTTP route matches that scored below threshold"}
+	ServiceMap            = Key{Name: "CODE_GRAPH_SERVICE_MAP", Default: "~/.config/code-graph/service_map.json", Doc: "JSON domain-to-pattern table used by service_map and diff_services"}
+	NixServiceOptionPfx   = Key{Name: "CODE_GRAPH_NIX_SERVICE_OPTION_PREFIX", Default: "services", Doc: "Option-set prefix for Nix service extraction"}
+	UpdateChannel         = Key{Name: "CODE_GRAPH_UPDATE_CHANNEL", Default: "stable", Doc: "stable follows GitHub's latest non-prerelease; rc also considers vX.Y.Z-rc.N prereleases"}
+	Toolset               = Key{Name: "CODE_GRAPH_TOOLSET", Default: "core", Doc: "Which tools the MCP server advertises: core (the plugin, benchmark, and everyday set) or full (every registered tool)"}
+	NixPkgsPrefix         = Key{Name: "CODE_GRAPH_NIX_PKGS_PREFIX", Default: "pkgs", Doc: "Package-set prefix for Nix RUNS_BINARY detection"}
 )
 
 // Semantic similarity edges (embedding-backed, opt-in).
@@ -115,7 +117,7 @@ func All() []Key {
 	keys := []Key{
 		VoyageAPIKey, VoyageModel, AnthropicAPIKey, AnthropicModel,
 		EmbedProvider, EmbedBaseURL, EmbedAPIKey, OpenAIAPIKey, EmbedModel, EmbedDimension, EmbedAuthHeader,
-		SkipEmbeddings, EmbeddingsTimeoutSec, CacheDir, LogFile, LogFileOnly,
+		ExtractIsolation, ExtractFileTimeoutSec, SkipEmbeddings, EmbeddingsTimeoutSec, CacheDir, LogFile, LogFileOnly,
 		HeapLimitMB, FullReindexEvery, IncrementalCap, AutoRecovery, MatchTrace,
 		ServiceMap, NixServiceOptionPfx, NixPkgsPrefix, Toolset, UpdateChannel,
 		SimilarityEdges, SimilarityThresh, SimilarityTopK, SimilaritySkipHops, SeedMinCosine,

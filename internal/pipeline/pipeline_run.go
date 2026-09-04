@@ -78,6 +78,7 @@ func (p *Pipeline) Run() error {
 	}
 	p.LastNodeCount = nc
 	p.LastEdgeCount = ec
+	p.writeSkipsSidecar()
 	logHeapStats("post_index")
 	slog.Info("pipeline.done", "nodes", nc, "edges", ec, "total_elapsed", time.Since(runStart))
 	return nil

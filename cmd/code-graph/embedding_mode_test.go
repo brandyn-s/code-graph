@@ -12,13 +12,16 @@ func TestEmbeddingMode(t *testing.T) {
 		wantEnabled bool
 		wantSubstr  string
 	}{
-		{"no key, no override → disabled", map[string]string{}, false, "embeddings disabled (set VOYAGE_API_KEY"},
-		{"key present → voyage", map[string]string{"VOYAGE_API_KEY": "k"}, true, "embeddings: voyage"},
+		{"no provider, no override → disabled", map[string]string{}, false, "embeddings disabled (set VOYAGE_API_KEY, or CODE_GRAPH_EMBED_BASE_URL"},
+		{"voyage key → voyage", map[string]string{"VOYAGE_API_KEY": "k"}, true, "embeddings: voyage (voyage-code-3)"},
+		{"openai base url + model → openai", map[string]string{"CODE_GRAPH_EMBED_BASE_URL": "http://localhost:11434/v1", "CODE_GRAPH_EMBED_MODEL": "nomic-embed-text"}, true, "embeddings: openai (nomic-embed-text @ localhost:11434)"},
+		{"openai selected without model → disabled with reason", map[string]string{"CODE_GRAPH_EMBED_PROVIDER": "openai"}, false, "CODE_GRAPH_EMBED_MODEL is unset"},
 		{"explicit skip wins over key", map[string]string{"VOYAGE_API_KEY": "k", "CODE_GRAPH_SKIP_EMBEDDINGS": "1"}, false, "CODE_GRAPH_SKIP_EMBEDDINGS set"},
 		{"explicit skip=true", map[string]string{"CODE_GRAPH_SKIP_EMBEDDINGS": "true"}, false, "CODE_GRAPH_SKIP_EMBEDDINGS set"},
-		{"explicit enable without key", map[string]string{"CODE_GRAPH_SKIP_EMBEDDINGS": "0"}, true, "VOYAGE_API_KEY is unset"},
+		{"explicit enable without provider", map[string]string{"CODE_GRAPH_SKIP_EMBEDDINGS": "0"}, true, "embeddings requested but no embedding provider configured"},
 		{"explicit enable with key", map[string]string{"CODE_GRAPH_SKIP_EMBEDDINGS": "false", "VOYAGE_API_KEY": "k"}, true, "embeddings: voyage"},
 		{"blank key counts as unset", map[string]string{"VOYAGE_API_KEY": "  "}, false, "embeddings disabled"},
+		{"provider off wins over key", map[string]string{"CODE_GRAPH_EMBED_PROVIDER": "off", "VOYAGE_API_KEY": "k"}, false, "embeddings disabled (CODE_GRAPH_EMBED_PROVIDER=off)"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -197,6 +197,13 @@ The earlier "we exceed 92.7%" claim in this doc was apples-to-oranges (n=16 Loc-
 | `CODE_GRAPH_TOOLSET` | `core` | Which tools the MCP server advertises: `core` (26 tools used by the plugin skills, operator-pilot allowlists, benchmark arms, and the battery) or `full` (all 40). The CLI always has every tool. Membership lives in `internal/tools/toolset.go`. |
 | `CODE_GRAPH_MATCH_TRACE` | unset (off) | Set to `1` to log HTTP route matches that scored above zero but below threshold (tuning aid). |
 | `VOYAGE_EMBED_MODEL` | built-in default | Voyage embedding model id used for node embeddings. |
+| `CODE_GRAPH_EMBED_PROVIDER` | `auto` | Embedding provider selection: `auto` picks `voyage` when `VOYAGE_API_KEY` is set, else `openai` when `CODE_GRAPH_EMBED_BASE_URL` is set, else `off`; explicit `voyage`, `openai`, or `off` override. See `docs/embeddings.md`. |
+| `CODE_GRAPH_EMBED_BASE_URL` | `https://api.openai.com/v1` (openai) | Base URL of an OpenAI-compatible embeddings API (OpenAI, Azure OpenAI, Gemini's OpenAI surface, Ollama, vLLM, LM Studio, OpenRouter, gateways). Setting it auto-selects the `openai` provider. |
+| `CODE_GRAPH_EMBED_API_KEY` | falls back to `OPENAI_API_KEY` | Credential for the OpenAI-compatible provider. Optional for self-hosted endpoints; when absent no auth header is sent. |
+| `OPENAI_API_KEY` | unset | Fallback credential for the `openai` embedding provider. Never selects a provider by itself. |
+| `CODE_GRAPH_EMBED_MODEL` | unset | Model id sent to the OpenAI-compatible provider; required when that provider is active. Recorded in embedding rows as provenance. |
+| `CODE_GRAPH_EMBED_DIMENSION` | unset | Expected vector width from the OpenAI-compatible provider; a mismatch fails the batch with a clear error. Unset accepts what the API returns but still rejects mixed widths in one batch. |
+| `CODE_GRAPH_EMBED_AUTH_HEADER` | `bearer` | `bearer` sends `Authorization: Bearer <key>`; `api-key` sends Azure OpenAI's `api-key: <key>` header. |
 | `ANTHROPIC_MODEL` | built-in default | Anthropic model id used by the localization agent and rationale tools. |
 | `CODE_GRAPH_AUTO_RECOVERY` | unset (off) | Set to any non-empty value to let the store rebuild a project database automatically when SQLite reports corruption at open time; otherwise the failure is surfaced and the operator decides. |
 | `ENABLE_SIMILARITY_EDGES` | unset (off) | `1`/`true`/`yes`/`on` adds `SEMANTICALLY_SIMILAR_TO` edges after the embeddings pass (needs `VOYAGE_API_KEY`). |

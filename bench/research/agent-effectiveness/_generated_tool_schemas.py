@@ -239,7 +239,7 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
             'type': 'object'},
     },
     "find_similar_functions": {
-        "description": "Return the top-K functions/methods most cosine-similar to a given function's Voyage embedding. Useful for finding refactor candidates (two functions solving the same problem without a shared call path) and duplicated patterns. Requires embeddings to be populated — run index_repository with VOYAGE_API_KEY set first.",
+        "description": "Return the top-K functions/methods most cosine-similar to a given function's embedding. Useful for finding refactor candidates (two functions solving the same problem without a shared call path) and duplicated patterns. Requires embeddings to be populated — run index_repository with an embedding provider configured (VOYAGE_API_KEY or CODE_GRAPH_EMBED_BASE_URL) first.",
         "input_schema":
         {   'properties': {   'limit': {   'description': 'Max number of matches to return (1-50, default '
                                                           '10)',
@@ -735,7 +735,7 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
             'type': 'object'},
     },
     "search_code_semantic": {
-        "description": "Semantic code search using Voyage AI embeddings. Find code by natural language description — 'authentication middleware', 'GPS parsing logic', 'battery monitoring'. Unlike search_code (grep) and search_graph (structural), this understands meaning. Requires VOYAGE_API_KEY and a prior index_repository run. Returns functions, classes, structs ranked by semantic similarity. Use file_pattern and label filters to narrow scope.",
+        "description": "Semantic code search using the configured embedding provider (Voyage or any OpenAI-compatible endpoint). Find code by natural language description — 'authentication middleware', 'GPS parsing logic', 'battery monitoring'. Unlike search_code (grep) and search_graph (structural), this understands meaning. Requires an embedding provider (VOYAGE_API_KEY or CODE_GRAPH_EMBED_BASE_URL) and a prior index_repository run. Returns functions, classes, structs ranked by semantic similarity. Use file_pattern and label filters to narrow scope.",
         "input_schema":
         {   'properties': {   'file_pattern': {   'description': 'Glob pattern to filter files (e.g. '
                                                                  "'*.rs', 'src/**')",

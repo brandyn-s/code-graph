@@ -56,15 +56,15 @@ func (s *Server) handleSearchCodeSemantic(ctx context.Context, req *mcp.CallTool
 	if err != nil || count == 0 {
 		return errResult(fmt.Sprintf(
 			"No embeddings available for project %q. "+
-				"Ensure VOYAGE_API_KEY is set and reindex with: index_repository(force=true). "+
-				"Embeddings are generated automatically during indexing when the API key is present.",
+				"Configure an embedding provider (VOYAGE_API_KEY, or CODE_GRAPH_EMBED_BASE_URL and CODE_GRAPH_EMBED_MODEL) and reindex with: index_repository(force=true). "+
+				"Embeddings are generated automatically during indexing when a provider is configured.",
 			project)), nil
 	}
 
-	// Embed the query via Voyage API
+	// Embed the query with the configured provider.
 	vc := pipeline.NewVoyageClient()
 	if vc == nil {
-		return errResult("VOYAGE_API_KEY not set. Cannot perform semantic search."), nil
+		return errResult("No embedding provider configured (set VOYAGE_API_KEY, or CODE_GRAPH_EMBED_BASE_URL and CODE_GRAPH_EMBED_MODEL). Cannot perform semantic search."), nil
 	}
 
 	queryVec, err := vc.EmbedSingle(ctx, query, "query")

@@ -81,7 +81,7 @@ func (s *Server) handleFindSimilarFunctions(_ context.Context, req *mcp.CallTool
 	}
 	if count == 0 {
 		return errResult(fmt.Sprintf(
-			"No embeddings available for project %q. Reindex with VOYAGE_API_KEY set and CODE_GRAPH_SKIP_EMBEDDINGS unset: index_repository(repo_path=..., force=true).",
+			"No embeddings available for project %q. Configure an embedding provider (VOYAGE_API_KEY, or CODE_GRAPH_EMBED_BASE_URL and CODE_GRAPH_EMBED_MODEL), leave CODE_GRAPH_SKIP_EMBEDDINGS unset, and reindex: index_repository(repo_path=..., force=true).",
 			project)), nil
 	}
 

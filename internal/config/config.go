@@ -36,8 +36,19 @@ type Key struct {
 
 // Cloud providers.
 var (
-	VoyageAPIKey = Key{Name: "VOYAGE_API_KEY", Default: "unset", Doc: "Enables Voyage embeddings; without it code-graph runs offline", Secret: true}
+	VoyageAPIKey = Key{Name: "VOYAGE_API_KEY", Default: "unset", Doc: "Enables the Voyage embedding provider (auto-selected when set)", Secret: true}
 	VoyageModel  = Key{Name: "VOYAGE_EMBED_MODEL", Default: "built-in", Doc: "Voyage embedding model id"}
+
+	// OpenAI-compatible embedding provider: OpenAI itself, Azure OpenAI,
+	// Gemini's OpenAI surface, Ollama, vLLM, LM Studio, OpenRouter, or any
+	// gateway that serves POST {base}/embeddings.
+	EmbedProvider   = Key{Name: "CODE_GRAPH_EMBED_PROVIDER", Default: "auto", Doc: "Embedding provider: auto (voyage when VOYAGE_API_KEY is set, else openai when CODE_GRAPH_EMBED_BASE_URL is set, else off), voyage, openai, or off"}
+	EmbedBaseURL    = Key{Name: "CODE_GRAPH_EMBED_BASE_URL", Default: "https://api.openai.com/v1 for openai", Doc: "Base URL of an OpenAI-compatible embeddings API; setting it auto-selects the openai provider"}
+	EmbedAPIKey     = Key{Name: "CODE_GRAPH_EMBED_API_KEY", Default: "OPENAI_API_KEY", Doc: "Credential for the OpenAI-compatible provider; optional for self-hosted endpoints", Secret: true}
+	OpenAIAPIKey    = Key{Name: "OPENAI_API_KEY", Default: "unset", Doc: "Fallback credential for the openai embedding provider when CODE_GRAPH_EMBED_API_KEY is unset", Secret: true}
+	EmbedModel      = Key{Name: "CODE_GRAPH_EMBED_MODEL", Default: "unset", Doc: "Embedding model id sent to the OpenAI-compatible provider (required for openai)"}
+	EmbedDimension  = Key{Name: "CODE_GRAPH_EMBED_DIMENSION", Default: "unset", Doc: "Expected vector width from the OpenAI-compatible provider; every returned vector must match"}
+	EmbedAuthHeader = Key{Name: "CODE_GRAPH_EMBED_AUTH_HEADER", Default: "bearer", Doc: "How the credential is sent: bearer (Authorization: Bearer) or api-key (Azure OpenAI's api-key header)"}
 
 	AnthropicAPIKey = Key{Name: "ANTHROPIC_API_KEY", Default: "unset", Doc: "Used only by code_localize_agent and rationale tools", Secret: true}
 	AnthropicModel  = Key{Name: "ANTHROPIC_MODEL", Default: "built-in", Doc: "Anthropic model id for the localization agent"}
@@ -45,7 +56,7 @@ var (
 
 // Runtime and storage.
 var (
-	SkipEmbeddings       = Key{Name: "CODE_GRAPH_SKIP_EMBEDDINGS", Default: "auto", Doc: "1 forces embedding passes off, 0 forces them on; auto follows VOYAGE_API_KEY"}
+	SkipEmbeddings       = Key{Name: "CODE_GRAPH_SKIP_EMBEDDINGS", Default: "auto", Doc: "1 forces embedding passes off, 0 forces them on; auto follows the resolved embedding provider"}
 	EmbeddingsTimeoutSec = Key{Name: "CODE_GRAPH_EMBEDDINGS_TIMEOUT_SEC", Default: "built-in", Doc: "Overall timeout for the embeddings pass"}
 	CacheDir             = Key{Name: "CODE_GRAPH_CACHE_DIR", Default: "~/.cache/code-graph", Doc: "Directory holding per-project SQLite databases"}
 	LogFile              = Key{Name: "CODE_GRAPH_LOG_FILE", Default: "unset", Doc: "Tee structured logs to this file"}
@@ -103,6 +114,7 @@ var (
 func All() []Key {
 	keys := []Key{
 		VoyageAPIKey, VoyageModel, AnthropicAPIKey, AnthropicModel,
+		EmbedProvider, EmbedBaseURL, EmbedAPIKey, OpenAIAPIKey, EmbedModel, EmbedDimension, EmbedAuthHeader,
 		SkipEmbeddings, EmbeddingsTimeoutSec, CacheDir, LogFile, LogFileOnly,
 		HeapLimitMB, FullReindexEvery, IncrementalCap, AutoRecovery, MatchTrace,
 		ServiceMap, NixServiceOptionPfx, NixPkgsPrefix, Toolset, UpdateChannel,

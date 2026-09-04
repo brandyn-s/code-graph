@@ -75,7 +75,7 @@ func retrieveEpisodicMemory(ctx context.Context, issue string) ([]EpisodicHit, e
 
 	vc := pipeline.NewVoyageClient()
 	if vc == nil {
-		slog.Warn("locagent.episodic.skip", "reason", "VOYAGE_API_KEY not set")
+		slog.Warn("locagent.episodic.skip", "reason", "no embedding provider configured")
 		return nil, nil
 	}
 

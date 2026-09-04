@@ -88,7 +88,7 @@ func (s *Server) registerFindSimilarFunctionsTool() {
 			OpenWorldHint:   boolPtr(false),
 			DestructiveHint: boolPtr(false),
 		},
-		Description: "Return the top-K functions/methods most cosine-similar to a given function's Voyage embedding. Useful for finding refactor candidates (two functions solving the same problem without a shared call path) and duplicated patterns. Requires embeddings to be populated — run index_repository with VOYAGE_API_KEY set first.",
+		Description: "Return the top-K functions/methods most cosine-similar to a given function's embedding. Useful for finding refactor candidates (two functions solving the same problem without a shared call path) and duplicated patterns. Requires embeddings to be populated — run index_repository with an embedding provider configured (VOYAGE_API_KEY or CODE_GRAPH_EMBED_BASE_URL) first.",
 		InputSchema: json.RawMessage(`{
 			"type": "object",
 			"properties": {

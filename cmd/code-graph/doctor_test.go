@@ -9,14 +9,16 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/brandyn-s/code-graph/internal/embed"
 	"github.com/brandyn-s/code-graph/internal/store"
 )
 
 func doctorEnv(t *testing.T, cacheDir string, extra map[string]string) func(string) string {
 	t.Helper()
 	t.Setenv("CODE_GRAPH_CACHE_DIR", cacheDir)
-	t.Setenv("VOYAGE_API_KEY", "")
-	t.Setenv("CODE_GRAPH_TOOLSET", "")
+	for _, k := range []string{"VOYAGE_API_KEY", "CODE_GRAPH_TOOLSET", "CODE_GRAPH_EMBED_PROVIDER", "CODE_GRAPH_EMBED_BASE_URL", "CODE_GRAPH_EMBED_MODEL", "CODE_GRAPH_EMBED_API_KEY", "OPENAI_API_KEY", "CODE_GRAPH_SKIP_EMBEDDINGS"} {
+		t.Setenv(k, "")
+	}
 	for k, v := range extra {
 		t.Setenv(k, v)
 	}
@@ -37,12 +39,12 @@ func TestDoctorReport_JSONShapeAndReadOnly(t *testing.T) {
 	getenv := doctorEnv(t, cache, nil)
 
 	probeCalled := false
-	report := collectDoctorReport(context.Background(), getenv, func(context.Context) string {
+	report := collectDoctorReport(context.Background(), getenv, func(context.Context, embed.Resolution) string {
 		probeCalled = true
 		return "reachable"
 	})
 	if probeCalled {
-		t.Fatal("voyage probe ran without VOYAGE_API_KEY")
+		t.Fatal("endpoint probe ran without a configured provider")
 	}
 
 	raw, err := json.Marshal(report)
@@ -58,11 +60,17 @@ func TestDoctorReport_JSONShapeAndReadOnly(t *testing.T) {
 			t.Errorf("report missing %q", key)
 		}
 	}
+	emb := decoded["embeddings"].(map[string]any)
+	for _, key := range []string{"enabled", "status", "provider", "reachability", "voyage_reachability"} {
+		if _, ok := emb[key]; !ok {
+			t.Errorf("embeddings missing %q", key)
+		}
+	}
 	if report.Toolset != "core" {
 		t.Errorf("toolset = %q, want core", report.Toolset)
 	}
-	if report.Embeddings.Enabled || !strings.Contains(report.Embeddings.Reachability, "not_checked") {
-		t.Errorf("embeddings = %+v, want disabled and unchecked", report.Embeddings)
+	if report.Embeddings.Enabled || report.Embeddings.Provider != "off" || !strings.Contains(report.Embeddings.Reachability, "not_checked") {
+		t.Errorf("embeddings = %+v, want off and unchecked", report.Embeddings)
 	}
 	if report.IndexFormat.Current != store.FormatVersion {
 		t.Errorf("index format = %d", report.IndexFormat.Current)
@@ -90,9 +98,19 @@ func TestDoctorReport_JSONShapeAndReadOnly(t *testing.T) {
 
 func TestDoctorReport_RedactsSecretsAndProbesWhenKeyPresent(t *testing.T) {
 	getenv := doctorEnv(t, t.TempDir(), map[string]string{"VOYAGE_API_KEY": "sk-test-not-real", "CODE_GRAPH_TOOLSET": "full"})
-	report := collectDoctorReport(context.Background(), getenv, func(context.Context) string { return "reachable (HTTP 405)" })
-	if report.Embeddings.Reachability != "reachable (HTTP 405)" {
-		t.Errorf("reachability = %q", report.Embeddings.Reachability)
+	var probed embed.Resolution
+	report := collectDoctorReport(context.Background(), getenv, func(_ context.Context, res embed.Resolution) string {
+		probed = res
+		return "reachable (HTTP 405)"
+	})
+	if probed.Provider != embed.ProviderVoyage {
+		t.Errorf("probe received %+v, want voyage", probed)
+	}
+	if report.Embeddings.Provider != "voyage" || report.Embeddings.Model == "" {
+		t.Errorf("embeddings = %+v", report.Embeddings)
+	}
+	if report.Embeddings.Reachability != "reachable (HTTP 405)" || report.Embeddings.VoyageReachability != "reachable (HTTP 405)" {
+		t.Errorf("reachability = %q / voyage %q", report.Embeddings.Reachability, report.Embeddings.VoyageReachability)
 	}
 	if report.Toolset != "full" {
 		t.Errorf("toolset = %q", report.Toolset)
@@ -107,8 +125,52 @@ func TestDoctorReport_RedactsSecretsAndProbesWhenKeyPresent(t *testing.T) {
 	if strings.Contains(out.String(), "sk-test-not-real") {
 		t.Error("text report leaked the API key")
 	}
-	if !strings.Contains(out.String(), "toolset: full") {
-		t.Errorf("text report missing toolset line:\n%s", out.String())
+	if !strings.Contains(out.String(), "toolset: full") || !strings.Contains(out.String(), "provider: voyage") {
+		t.Errorf("text report missing toolset/provider lines:\n%s", out.String())
+	}
+}
+
+func TestDoctorReport_OpenAICompatibleProvider(t *testing.T) {
+	getenv := doctorEnv(t, t.TempDir(), map[string]string{
+		"CODE_GRAPH_EMBED_BASE_URL": "http://localhost:11434/v1",
+		"CODE_GRAPH_EMBED_MODEL":    "nomic-embed-text",
+		"CODE_GRAPH_EMBED_API_KEY":  "local-secret",
+	})
+	var probed embed.Resolution
+	report := collectDoctorReport(context.Background(), getenv, func(_ context.Context, res embed.Resolution) string {
+		probed = res
+		return "reachable (HTTP 200)"
+	})
+	if probed.Provider != embed.ProviderOpenAI || probed.BaseURL != "http://localhost:11434/v1" {
+		t.Errorf("probe received %+v", probed)
+	}
+	e := report.Embeddings
+	if !e.Enabled || e.Provider != "openai" || e.Model != "nomic-embed-text" || e.Endpoint != "localhost:11434" {
+		t.Errorf("embeddings = %+v", e)
+	}
+	if e.Reachability != "reachable (HTTP 200)" || e.VoyageReachability != "not_applicable" {
+		t.Errorf("reachability = %q / voyage %q", e.Reachability, e.VoyageReachability)
+	}
+	raw, _ := json.Marshal(report)
+	if strings.Contains(string(raw), "local-secret") {
+		t.Error("JSON report leaked CODE_GRAPH_EMBED_API_KEY")
+	}
+}
+
+func TestDoctorReport_MisconfiguredProviderIsAWarning(t *testing.T) {
+	getenv := doctorEnv(t, t.TempDir(), map[string]string{"CODE_GRAPH_EMBED_PROVIDER": "openai"})
+	report := collectDoctorReport(context.Background(), getenv, nil)
+	if report.Embeddings.Provider != "off" {
+		t.Errorf("provider = %q, want off", report.Embeddings.Provider)
+	}
+	found := false
+	for _, w := range report.Warnings {
+		if strings.Contains(w, "CODE_GRAPH_EMBED_MODEL is unset") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("warnings = %v, want the misconfiguration explained", report.Warnings)
 	}
 }
 

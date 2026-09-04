@@ -141,7 +141,7 @@ code-graph cli --raw list_projects | jq .
 |---|---|
 | `index_repository`, `index_status`, `index_health` | Build the graph (full or incremental) and inspect identity, freshness, precision tier, coverage |
 | `list_projects`, `delete_project`, `compare_project_indexes` | Manage per-project indexes and diff two of them |
-| `search_graph`, `search_code`, `search_code_semantic` | Find nodes by name/label/path, grep source text, or search semantically (needs `VOYAGE_API_KEY`) |
+| `search_graph`, `search_code`, `search_code_semantic` | Find nodes by name/label/path, grep source text, or search semantically (needs an embedding provider, see Configuration) |
 | `query_graph` | Run a read-only Cypher subset against the graph |
 | `get_code_snippet`, `explain_symbol`, `get_graph_schema` | Read a symbol's source and its callers/callees; inspect node and edge types |
 | `trace_call_path`, `trace_data_flow` | Inbound/outbound call BFS with confidence filters; CALLS/READS/WRITES reachability or a CodeQL handoff |
@@ -170,8 +170,10 @@ limits) are documented in [CLAUDE.md](CLAUDE.md#resolver-and-runtime-env-vars).
 
 | Variable | Default | Effect |
 |---|---|---|
-| `VOYAGE_API_KEY` | unset | Enables Voyage embeddings for `search_code_semantic`, `find_similar_functions`, and embedding-seeded ranking. Without it code-graph runs fully offline and logs `embeddings disabled` once. |
-| `CODE_GRAPH_SKIP_EMBEDDINGS` | auto | `1` forces embeddings off even with a key; `0` forces the passes on. |
+| `VOYAGE_API_KEY` | unset | Selects the Voyage embedding provider for `search_code_semantic`, `find_similar_functions`, and embedding-seeded ranking. Without any provider code-graph runs fully offline and logs `embeddings disabled` once. |
+| `CODE_GRAPH_EMBED_BASE_URL`, `CODE_GRAPH_EMBED_MODEL` | unset | Use any OpenAI-compatible embeddings endpoint instead: OpenAI, Azure OpenAI, Gemini, Ollama, vLLM, LM Studio, OpenRouter. Key via `CODE_GRAPH_EMBED_API_KEY` (or `OPENAI_API_KEY`), optional for local servers. Details and per-vendor settings in [docs/embeddings.md](docs/embeddings.md). |
+| `CODE_GRAPH_EMBED_PROVIDER` | `auto` | Force `voyage`, `openai`, or `off`; `auto` prefers Voyage when its key is set, then an OpenAI-compatible base URL. |
+| `CODE_GRAPH_SKIP_EMBEDDINGS` | auto | `1` forces embeddings off even with a provider configured; `0` forces the passes on. |
 | `CODE_GRAPH_CACHE_DIR` | `~/.cache/code-graph` | Where per-project SQLite databases live. Existing `~/.cache/codebase-memory-mcp` directories from earlier releases are used automatically when the new path does not exist. |
 | `CODE_GRAPH_SERVICE_MAP` | `~/.config/code-graph/service_map.json` if present | JSON `{"domain": ["pattern", ...]}` table that `service_map` and `diff_services` use to group services into domains. See [docs/service-map.md](docs/service-map.md). |
 | `CODE_GRAPH_NIX_SERVICE_OPTION_PREFIX` | `services` | Option-set prefix for Nix service extraction (`options.<prefix>.<name>`). Set e.g. `acme.services` for namespaced modules. |

@@ -29,9 +29,18 @@ type doctorReport struct {
 	Toolset  string `json:"toolset"`
 
 	Embeddings struct {
-		Enabled      bool   `json:"enabled"`
-		Status       string `json:"status"`
-		Reachability string `json:"voyage_reachability"`
+		Enabled bool   `json:"enabled"`
+		Status  string `json:"status"`
+		// Provider is voyage, openai, or off; Model and Endpoint describe the
+		// active provider (Endpoint is the host only, never the key).
+		Provider string `json:"provider"`
+		Model    string `json:"model,omitempty"`
+		Endpoint string `json:"endpoint,omitempty"`
+		// Reachability probes the active provider's endpoint. The legacy
+		// voyage_reachability field is kept for existing consumers and carries
+		// the same value when the provider is voyage.
+		Reachability       string `json:"reachability"`
+		VoyageReachability string `json:"voyage_reachability"`
 	} `json:"embeddings"`
 
 	Cache struct {
@@ -88,7 +97,7 @@ func runDoctor(args []string, stdout, stderr io.Writer) int {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	report := collectDoctorReport(ctx, os.Getenv, doctorProbeVoyage)
+	report := collectDoctorReport(ctx, os.Getenv, doctorProbeEndpoint)
 	if asJSON {
 		enc := json.NewEncoder(stdout)
 		enc.SetIndent("", "  ")
@@ -102,13 +111,13 @@ func runDoctor(args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
-// voyageProbe reports reachability of the embeddings endpoint. It is injected
-// so tests never touch the network.
-type voyageProbe func(ctx context.Context) string
+// endpointProbe reports reachability of the active embedding provider's
+// endpoint. It is injected so tests never touch the network.
+type endpointProbe func(ctx context.Context, res embed.Resolution) string
 
 // collectDoctorReport gathers every diagnostic without mutating state: project
 // databases are opened read-only and never stamped.
-func collectDoctorReport(ctx context.Context, getenv func(string) string, probe voyageProbe) doctorReport {
+func collectDoctorReport(ctx context.Context, getenv func(string) string, probe endpointProbe) doctorReport {
 	var r doctorReport
 	r.Version = version
 	r.Platform = runtime.GOOS + "/" + runtime.GOARCH
@@ -117,15 +126,27 @@ func collectDoctorReport(ctx context.Context, getenv func(string) string, probe 
 	r.IndexFormat.MinSupported = store.MinSupportedFormatVersion
 
 	enabled, status := embeddingMode(getenv)
+	res := embed.ResolveProvider(getenv)
 	r.Embeddings.Enabled = enabled
 	r.Embeddings.Status = strings.TrimPrefix(status, "code-graph: ")
+	r.Embeddings.Provider = res.Provider
+	r.Embeddings.Model = res.Model
+	r.Embeddings.Endpoint = res.Host()
 	switch {
-	case strings.TrimSpace(getenv(config.VoyageAPIKey.Name)) == "":
-		r.Embeddings.Reachability = "not_checked (no VOYAGE_API_KEY)"
+	case res.Provider == embed.ProviderOff:
+		r.Embeddings.Reachability = "not_checked (no embedding provider configured)"
 	case probe == nil:
 		r.Embeddings.Reachability = "not_checked"
 	default:
-		r.Embeddings.Reachability = probe(ctx)
+		r.Embeddings.Reachability = probe(ctx, res)
+	}
+	if res.Provider == embed.ProviderVoyage {
+		r.Embeddings.VoyageReachability = r.Embeddings.Reachability
+	} else {
+		r.Embeddings.VoyageReachability = "not_applicable"
+	}
+	if res.Err != nil {
+		r.Warnings = append(r.Warnings, "embeddings: "+res.Reason)
 	}
 
 	for _, k := range config.All() {
@@ -229,12 +250,18 @@ func queryProjectMeta(ctx context.Context, dsn string) (int, string, error) {
 	return version, root.String, nil
 }
 
-// doctorProbeVoyage issues one HEAD request with a short timeout. Any HTTP
-// response counts as reachable; only transport failures are reported.
-func doctorProbeVoyage(ctx context.Context) string {
+// doctorProbeEndpoint issues one request with a short timeout against the
+// active provider: HEAD on the Voyage embeddings URL, or GET {base}/models on
+// an OpenAI-compatible endpoint. No credential is sent; any HTTP response
+// counts as reachable and only transport failures are reported.
+func doctorProbeEndpoint(ctx context.Context, res embed.Resolution) string {
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodHead, embed.VoyageEmbedURL, nil)
+	method, target := http.MethodHead, embed.VoyageEmbedURL
+	if res.Provider == embed.ProviderOpenAI {
+		method, target = http.MethodGet, res.BaseURL+"/models"
+	}
+	req, err := http.NewRequestWithContext(ctx, method, target, nil)
 	if err != nil {
 		return "error: " + err.Error()
 	}
@@ -249,7 +276,7 @@ func doctorProbeVoyage(ctx context.Context) string {
 func printDoctorReport(w io.Writer, r doctorReport) {
 	fmt.Fprintf(w, "code-graph %s (%s)\n", r.Version, r.Platform)
 	fmt.Fprintf(w, "toolset: %s\n", r.Toolset)
-	fmt.Fprintf(w, "embeddings: %s; voyage: %s\n", r.Embeddings.Status, r.Embeddings.Reachability)
+	fmt.Fprintf(w, "embeddings: %s; provider: %s; reachability: %s\n", r.Embeddings.Status, r.Embeddings.Provider, r.Embeddings.Reachability)
 	fmt.Fprintf(w, "index format: %d (supports %d..%d)\n", r.IndexFormat.Current, r.IndexFormat.MinSupported, r.IndexFormat.Current)
 	fmt.Fprintf(w, "\ncache: %s (%d projects, %.1f MB)\n", r.Cache.Dir, len(r.Cache.Projects), r.Cache.TotalMB)
 	for _, p := range r.Cache.Projects {

@@ -84,12 +84,12 @@ func MatchSeedNodesByEmbedding(ctx context.Context, st *store.Store, project, qu
 		return nil, fmt.Errorf("embedding count: %w", err)
 	}
 	if count == 0 {
-		return nil, fmt.Errorf("project %q has no embeddings; reindex with VOYAGE_API_KEY set", project)
+		return nil, fmt.Errorf("project %q has no embeddings; reindex with an embedding provider configured (VOYAGE_API_KEY or CODE_GRAPH_EMBED_BASE_URL)", project)
 	}
 
 	vc := pipeline.NewVoyageClient()
 	if vc == nil {
-		return nil, fmt.Errorf("VOYAGE_API_KEY not set; cannot embed query")
+		return nil, fmt.Errorf("no embedding provider configured; cannot embed query")
 	}
 
 	// Voyage embedding of the query. inputType="query" is the documented

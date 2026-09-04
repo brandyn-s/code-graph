@@ -63,7 +63,7 @@ func (p *Pipeline) passSimilarityEdges() {
 		return
 	}
 	if len(embeddedIDs) == 0 {
-		slog.Info("pass.similarity.skip", "reason", "no embeddings; run with VOYAGE_API_KEY to populate first")
+		slog.Info("pass.similarity.skip", "reason", "no embeddings; index with an embedding provider configured to populate first")
 		return
 	}
 

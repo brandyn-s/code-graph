@@ -85,7 +85,7 @@ func (p *Pipeline) runEmbeddingsPass(missingOnly bool) {
 
 	vc := embed.Default()
 	if embed.IsDisabled(vc) {
-		slog.Info("pass.embeddings.skip", "reason", "VOYAGE_API_KEY not set")
+		slog.Info("pass.embeddings.skip", "reason", "no embedding provider configured", "hint", embed.NoProviderHint)
 		return
 	}
 

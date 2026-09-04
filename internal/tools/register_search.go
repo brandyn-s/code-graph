@@ -18,7 +18,7 @@ func (s *Server) registerSearchTools() {
 			OpenWorldHint:   boolPtr(false),
 			DestructiveHint: boolPtr(false),
 		},
-		Description: "Semantic code search using Voyage AI embeddings. Find code by natural language description — 'authentication middleware', 'GPS parsing logic', 'battery monitoring'. Unlike search_code (grep) and search_graph (structural), this understands meaning. Requires VOYAGE_API_KEY and a prior index_repository run. Returns functions, classes, structs ranked by semantic similarity. Use file_pattern and label filters to narrow scope.",
+		Description: "Semantic code search using the configured embedding provider (Voyage or any OpenAI-compatible endpoint). Find code by natural language description — 'authentication middleware', 'GPS parsing logic', 'battery monitoring'. Unlike search_code (grep) and search_graph (structural), this understands meaning. Requires an embedding provider (VOYAGE_API_KEY or CODE_GRAPH_EMBED_BASE_URL) and a prior index_repository run. Returns functions, classes, structs ranked by semantic similarity. Use file_pattern and label filters to narrow scope.",
 		InputSchema: json.RawMessage(`{
 			"type": "object",
 			"properties": {

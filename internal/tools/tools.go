@@ -264,7 +264,7 @@ func (s *Server) onRootsChanged(ctx context.Context, req *mcp.RootsListChangedRe
 func (s *Server) detectSessionRoot(ctx context.Context, session *mcp.ServerSession) string {
 	// 1. Try MCP roots protocol
 	if sessionSupportsRoots(session) {
-		result, err := session.ListRoots(ctx, nil)
+		result, err := session.ListRoots(ctx, nil) //nolint:staticcheck // MCP roots are deprecated (SEP-2577) but remain functional through the deprecation window; clients still send them
 		if err == nil && len(result.Roots) > 0 {
 			uri := result.Roots[0].URI
 			if path, ok := parseFileURI(uri); ok {
@@ -299,14 +299,32 @@ func (s *Server) detectSessionRoot(ctx context.Context, session *mcp.ServerSessi
 	return ""
 }
 
+// rootsListingForbiddenFrom is the first MCP protocol version at which the
+// specification forbids server-initiated requests such as roots/list
+// (SEP-2322 / SEP-2575); the Go SDK rejects them with an error at or above it.
+// Protocol versions are ISO dates, so string comparison orders them.
+const rootsListingForbiddenFrom = "2026-07-28"
+
 func sessionSupportsRoots(session *mcp.ServerSession) bool {
 	if session == nil {
 		return false
 	}
-	params := session.InitializeParams()
-	return params != nil &&
-		params.Capabilities != nil &&
-		params.Capabilities.RootsV2 != nil
+	return rootsListingAllowed(session.InitializeParams())
+}
+
+// rootsListingAllowed reports whether the negotiated session lets the server
+// ask the client for its roots: the client declared the (deprecated) roots
+// capability and the protocol version still permits server-initiated
+// requests. Newer sessions fall through to the working-directory and
+// single-project fallbacks in detectSessionRoot.
+func rootsListingAllowed(params *mcp.InitializeParams) bool {
+	if params == nil || params.Capabilities == nil {
+		return false
+	}
+	if params.ProtocolVersion >= rootsListingForbiddenFrom {
+		return false
+	}
+	return params.Capabilities.RootsV2 != nil //nolint:staticcheck // MCP roots are deprecated (SEP-2577) but remain functional through the deprecation window; clients still send them
 }
 
 // parseFileURI extracts a filesystem path from a file:// URI.

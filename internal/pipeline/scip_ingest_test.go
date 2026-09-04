@@ -443,3 +443,64 @@ func TestSCIPIngestSkipsDriftedFiles(t *testing.T) {
 		t.Error("heuristic edge deleted despite drifted document")
 	}
 }
+
+// Newer SCIP indexers emit the typed range oneofs instead of the deprecated
+// `range`/`enclosing_range` int arrays. Ingest must read both encodings the
+// same way, so the typed rewrite of the legacy fixture has to produce the
+// identical graph.
+func TestSCIPIngestReadsTypedRangesLikeLegacyRanges(t *testing.T) {
+	p, s, ids, indexPath := buildSCIPTestWorld(t)
+
+	raw, err := os.ReadFile(indexPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var idx scip.Index
+	if err := proto.Unmarshal(raw, &idx); err != nil {
+		t.Fatal(err)
+	}
+	converted := 0
+	for _, document := range idx.Documents {
+		for _, occurrence := range document.Occurrences {
+			legacy := occurrence.Range //nolint:staticcheck // the test rewrites the legacy field into its typed form
+			if len(legacy) == 0 {
+				continue
+			}
+			occurrence.TypedRange = scip.NewRangeUnchecked(legacy).AsTypedRange()
+			occurrence.Range = nil                                           //nolint:staticcheck // cleared so only the typed encoding remains
+			if enclosing := occurrence.EnclosingRange; len(enclosing) != 0 { //nolint:staticcheck // same rewrite for enclosing ranges
+				occurrence.TypedEnclosingRange = scip.NewRangeUnchecked(enclosing).AsTypedEnclosingRange()
+				occurrence.EnclosingRange = nil //nolint:staticcheck // cleared so only the typed encoding remains
+			}
+			converted++
+		}
+	}
+	if converted != 4 {
+		t.Fatalf("converted %d occurrences, want 4", converted)
+	}
+	typed, err := proto.Marshal(&idx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(indexPath, typed, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := p.runSCIPIngest(indexPath); err != nil {
+		t.Fatalf("ingest: %v", err)
+	}
+	status := p.SCIPStatus
+	if status.State != "applied" || status.HeuristicEdgesReplaced != 1 || status.SCIPCallsInserted != 1 {
+		t.Fatalf("typed-range ingest status = %+v, want applied with 1 replaced and 1 inserted", status)
+	}
+	edges := callEdges(t, s, p.ProjectName)
+	if _, ok := edges[[2]int64{ids["Caller"], ids["Callee"]}]; !ok {
+		t.Fatalf("derived Caller->Callee edge missing from typed-range index; edges=%v", edges)
+	}
+	if _, ok := edges[[2]int64{ids["Callee"], ids["Caller"]}]; ok {
+		t.Error("heuristic edge between SCIP-covered files survived typed-range ingest")
+	}
+	if len(edges) != 2 {
+		t.Errorf("got %d CALLS edges, want 2 (%v)", len(edges), edges)
+	}
+}

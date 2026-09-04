@@ -90,7 +90,7 @@ func TestDetectSessionRootOnlyListsRootsWhenClientDeclaresCapability(t *testing.
 	tests := []struct {
 		name          string
 		capabilities  *mcp.ClientCapabilities
-		root          *mcp.Root
+		root          *mcp.Root //nolint:staticcheck // MCP roots are deprecated (SEP-2577) but remain functional through the deprecation window; clients still send them
 		wantListCalls int32
 		wantRoot      string
 	}{
@@ -100,22 +100,28 @@ func TestDetectSessionRootOnlyListsRootsWhenClientDeclaresCapability(t *testing.
 			wantListCalls: 0,
 			wantRoot:      cwd,
 		},
+		// The in-memory SDK client negotiates the latest protocol version
+		// (2026-07-28 or newer), at which the specification forbids
+		// server-initiated roots/list (SEP-2322 / SEP-2575). The server must
+		// therefore not attempt the call even when the capability is declared,
+		// and falls back to the working directory. The protocol-version gate
+		// itself is covered by TestRootsListingAllowedByProtocolVersion.
 		{
-			name: "capability declared with empty roots",
+			name: "capability declared with empty roots on a new protocol",
 			capabilities: &mcp.ClientCapabilities{
-				RootsV2: &mcp.RootCapabilities{},
+				RootsV2: &mcp.RootCapabilities{}, //nolint:staticcheck // MCP roots are deprecated (SEP-2577) but remain functional through the deprecation window; clients still send them
 			},
-			wantListCalls: 1,
+			wantListCalls: 0,
 			wantRoot:      cwd,
 		},
 		{
-			name: "capability declared with a root",
+			name: "capability declared with a root on a new protocol",
 			capabilities: &mcp.ClientCapabilities{
-				RootsV2: &mcp.RootCapabilities{},
+				RootsV2: &mcp.RootCapabilities{}, //nolint:staticcheck // MCP roots are deprecated (SEP-2577) but remain functional through the deprecation window; clients still send them
 			},
-			root:          &mcp.Root{URI: fileURIForAbsolutePath(declaredRoot)},
-			wantListCalls: 1,
-			wantRoot:      declaredRoot,
+			root:          &mcp.Root{URI: fileURIForAbsolutePath(declaredRoot)}, //nolint:staticcheck // MCP roots are deprecated (SEP-2577) but remain functional through the deprecation window; clients still send them
+			wantListCalls: 0,
+			wantRoot:      cwd,
 		},
 	}
 
@@ -149,7 +155,7 @@ func TestDetectSessionRootOnlyListsRootsWhenClientDeclaresCapability(t *testing.
 				&mcp.ClientOptions{Capabilities: test.capabilities},
 			)
 			if test.root != nil {
-				client.AddRoots(test.root)
+				client.AddRoots(test.root) //nolint:staticcheck // MCP roots are deprecated (SEP-2577) but remain functional through the deprecation window; clients still send them
 			}
 			clientSession, err := client.Connect(context.Background(), clientTransport, nil)
 			if err != nil {
@@ -162,6 +168,32 @@ func TestDetectSessionRootOnlyListsRootsWhenClientDeclaresCapability(t *testing.
 			}
 			if got := serverTransport.count.Load(); got != test.wantListCalls {
 				t.Errorf("roots/list calls = %d, want %d", got, test.wantListCalls)
+			}
+		})
+	}
+}
+
+func TestRootsListingAllowedByProtocolVersion(t *testing.T) {
+	withRoots := &mcp.ClientCapabilities{
+		RootsV2: &mcp.RootCapabilities{}, //nolint:staticcheck // MCP roots are deprecated (SEP-2577) but remain functional through the deprecation window; clients still send them
+	}
+	tests := []struct {
+		name   string
+		params *mcp.InitializeParams
+		want   bool
+	}{
+		{name: "nil params", params: nil, want: false},
+		{name: "no capabilities", params: &mcp.InitializeParams{ProtocolVersion: "2025-11-25"}, want: false},
+		{name: "roots declared on 2025-11-25", params: &mcp.InitializeParams{ProtocolVersion: "2025-11-25", Capabilities: withRoots}, want: true},
+		{name: "roots declared on 2025-06-18", params: &mcp.InitializeParams{ProtocolVersion: "2025-06-18", Capabilities: withRoots}, want: true},
+		{name: "roots absent on 2025-11-25", params: &mcp.InitializeParams{ProtocolVersion: "2025-11-25", Capabilities: &mcp.ClientCapabilities{}}, want: false},
+		{name: "roots declared on 2026-07-28", params: &mcp.InitializeParams{ProtocolVersion: "2026-07-28", Capabilities: withRoots}, want: false},
+		{name: "roots declared on a later version", params: &mcp.InitializeParams{ProtocolVersion: "2027-01-01", Capabilities: withRoots}, want: false},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := rootsListingAllowed(test.params); got != test.want {
+				t.Errorf("rootsListingAllowed = %v, want %v", got, test.want)
 			}
 		})
 	}

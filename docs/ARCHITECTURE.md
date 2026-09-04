@@ -313,6 +313,22 @@ switch to the selected project and obtain project-bound evidence.
 
 ## Known Boundaries
 
+### MCP roots deprecation
+
+code-graph reads the client's declared MCP roots (`roots/list`) to pick a
+default project when a tool call omits `repo_path`. The MCP specification
+deprecated roots, sampling, and logging in protocol version 2026-07-28
+([SEP-2577](https://modelcontextprotocol.io/seps/2577-deprecate-roots-sampling-and-logging));
+they remain functional for at least twelve months. The replacement is
+explicit: clients pass paths through tool parameters, resource URIs, or
+configuration. code-graph already accepts `repo_path` on every project-scoped
+tool, so the roots lookup is a convenience fallback and will be removed when
+the deprecation window closes. Sessions negotiated at protocol version
+2026-07-28 or later forbid server-initiated requests altogether (SEP-2322,
+SEP-2575), so code-graph does not attempt `roots/list` on them and goes
+straight to the working-directory and single-project fallbacks. The Go SDK marks the roots types as deprecated;
+those uses carry `//nolint:staticcheck` annotations pointing here.
+
 - Precision is relationship-, language-, repository-, and tier-specific. A
   successful parser or one compiler-backed edge does not certify the graph.
 - `trace_data_flow` follows CALLS/READS/WRITES/USAGE connectivity. It does not

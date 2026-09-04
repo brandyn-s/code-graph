@@ -218,8 +218,10 @@ func isSCIPFunctionDefinition(
 	if !strings.HasPrefix(symbol, "scip-typescript ") || !strings.HasSuffix(symbol, ".") {
 		return false
 	}
-	enclosing, err := scip.NewRange(occurrence.EnclosingRange)
-	if err != nil {
+	// EnclosingSourceRange reads the typed enclosing range first and falls
+	// back to the legacy enclosing_range field that older SCIP indexers emit.
+	enclosing, ok := occurrence.EnclosingSourceRange()
+	if !ok {
 		return false
 	}
 	start := int(enclosing.Start.Line) + 1
@@ -246,8 +248,8 @@ func collectSCIPDefinitions(idx *scip.Index, spans scipFileSpans) (
 				!isSCIPFunctionDefinition(occurrence.Symbol, document.RelativePath, occurrence, spans) {
 				continue
 			}
-			symbolRange, err := scip.NewRange(occurrence.Range)
-			if err != nil {
+			symbolRange, ok := occurrence.SourceRange()
+			if !ok {
 				continue
 			}
 			line := int(symbolRange.Start.Line) + 1
@@ -339,8 +341,8 @@ func (p *Pipeline) deriveSCIPCalls(
 				continue
 			}
 			referencesSeen++
-			symbolRange, err := scip.NewRange(occurrence.Range)
-			if err != nil {
+			symbolRange, ok := occurrence.SourceRange()
+			if !ok {
 				continue
 			}
 			line := cache.line(document.RelativePath, int(symbolRange.End.Line))

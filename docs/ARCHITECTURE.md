@@ -9,7 +9,7 @@ evidence must give way to compiler, runtime, or security-analyzer evidence.
 | Dimension | State reviewed 2026-08-13 |
 |---|---|
 | Implementation baseline | `main` of `brandyn-s/code-graph` (public primary since 2026-09) |
-| Latest published release | none yet from this repository; `v0.9.0` is the first public release. Earlier `v0.8.0-redacted.N` builds were internal. |
+| Latest published release | none yet from this repository; `v0.9.0` is the first public release. Earlier builds were pre-public internal releases. |
 | Merged since the last internal build | CodeQL evidence import, assurance types, deterministic PageRank ties, incremental equivalence fixes, public rename and installer |
 | Runtime assertion | None; inspect the installed MCP process separately |
 | Registered MCP surface | 40 tools |

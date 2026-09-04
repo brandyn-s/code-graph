@@ -12,7 +12,7 @@ package tools
 //
 // Confirmed on one host by comparing three installed binaries built from
 // identical source: both local builds emitted the fields; the CI-built
-// v0.7.0-redacted.2 emitted neither. The field was therefore missing from every
+// pre-public release emitted neither. The field was therefore missing from every
 // official release while present in dev builds, and its absence read as "no
 // drift to report" rather than "cannot tell".
 //

@@ -23,10 +23,10 @@ func TestCompareVersions(t *testing.T) {
 		{"0.10.0", "0.2.0", 1}, // numeric, not string comparison
 		{"1.0.0", "0.99.99", 1},
 		{"0.0.1", "0.0.2", -1},
-		{"0.7.1-redacted.1", "0.7.0-redacted.9", 1},
-		{"0.7.0-redacted.10", "0.7.0-redacted.2", 1},
-		{"0.9.0", "0.8.0-redacted.11", 1},
-		{"0.8.0", "0.8.0-redacted.11", 1},
+		{"0.7.1-legacy.1", "0.7.0-legacy.9", 1},
+		{"0.7.0-legacy.10", "0.7.0-legacy.2", 1},
+		{"0.9.0", "0.8.0-legacy.11", 1},
+		{"0.8.0", "0.8.0-legacy.11", 1},
 	}
 	for _, tt := range tests {
 		t.Run(fmt.Sprintf("%s_vs_%s", tt.a, tt.b), func(t *testing.T) {

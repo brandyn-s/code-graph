@@ -6,7 +6,7 @@ import (
 
 func TestExtractOPAToolRefs(t *testing.T) {
 	source := `
-package redacted.slack
+package acme.slack
 
 default allow = false
 
@@ -49,8 +49,8 @@ func TestExtractOPAPackage(t *testing.T) {
 		},
 		{
 			name:   "dotted package",
-			source: "package redacted.mcp.slack\n\nimport input\n",
-			want:   "redacted.mcp.slack",
+			source: "package acme.mcp.slack\n\nimport input\n",
+			want:   "acme.mcp.slack",
 		},
 		{
 			name:   "package with comment above",

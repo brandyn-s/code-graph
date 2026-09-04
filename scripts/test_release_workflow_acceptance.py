@@ -15,7 +15,7 @@ HELPER = REPOSITORY_ROOT / "scripts" / "release_workflow.sh"
 RELEASE_VERSION = REPOSITORY_ROOT / "scripts" / "release_version.py"
 
 VERSION = "v0.9.0"
-LATEST_VERSION = "v0.8.0-redacted.11"
+LATEST_VERSION = "v0.8.0-legacy.11"
 GITHUB_SHA = "a" * 40
 OTHER_SHA = "b" * 40
 GITHUB_REPOSITORY = "brandyn-s/code-graph"

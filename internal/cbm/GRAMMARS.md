@@ -54,7 +54,7 @@ on the workflow run.
 ## Tracked languages
 
 The canary corpus initially covers the top-priority languages used
-in redacted codebases. Other languages remain untracked until either
+in the reference codebases. Other languages remain untracked until either
 (a) a regression is observed in the wild, or (b) someone adds a
 canary fixture for that language.
 
@@ -62,7 +62,7 @@ canary fixture for that language.
 |---|---|---|
 | python | `grammar_canaries/python/canary.py` | Most accuracy-fragile per confidence_band probe |
 | go | `grammar_canaries/go/canary.go` | Self-host (code-graph itself is Go) |
-| rust | `grammar_canaries/rust/canary.rs` | Heavy redacted use |
+| rust | `grammar_canaries/rust/canary.rs` | Heavy use in the reference codebases |
 | typescript | `grammar_canaries/typescript/canary.ts` | TS-MRR outlier per code-search roundtable |
 | javascript | `grammar_canaries/javascript/canary.js` | Webclient codebases |
 

@@ -19,8 +19,8 @@ package tools
 //	                  silently OMITTED from every index_health response
 //
 // Confirmed by comparing three installed binaries on one host: the two locally
-// built ones emitted grammar_versions{,_age_days}; the CI-built v0.7.0-redacted.2
-// emitted neither, with identical source for both. So the field was missing from
+// built ones emitted grammar_versions{,_age_days}; the CI-built pre-public
+// release emitted neither, with identical source for both. So the field was missing from
 // every official RELEASE while appearing in dev builds — the worst shape for a
 // staleness signal, since its absence looked like "no drift to report".
 //

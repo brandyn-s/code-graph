@@ -118,7 +118,7 @@ func resolveAsClassWithReason(name string, registry *FunctionRegistry, moduleQN 
 	}
 
 	// Step 2 (Phase A, 2026-05-08): label-aware project-wide fallback.
-	// Strip module prefix from name (e.g., "redacted_core::Foo" → "Foo",
+	// Strip module prefix from name (e.g., "acme_core::Foo" → "Foo",
 	// "obj.Method" → "Method"). Then scan registry.byName for entries
 	// with a class-like label. If exactly one match, return it.
 	//

@@ -253,7 +253,7 @@ func CompareVersions(a, b string) int {
 // comparePrerelease orders dot-separated pre-release identifiers per semver:
 // numeric identifiers compare numerically, others lexically, and a longer
 // identifier list wins when all shared identifiers are equal. This also orders
-// the legacy internal scheme (vX.Y.Z-redacted.N) by N; any plain vX.Y.Z release
+// the legacy pre-public scheme (vX.Y.Z-<word>.N) by N; any plain vX.Y.Z release
 // already compares newer than every pre-release of the same base.
 func comparePrerelease(a, b string) int {
 	aParts := strings.Split(a, ".")

@@ -58,8 +58,8 @@ func (p *Pipeline) passCommunities() {
 	// members. That is the graphify-project "oversized community" threshold —
 	// graphify triggers a second-pass Leiden split at this boundary to avoid
 	// a degenerate "everything in one giant cluster" failure mode on small
-	// graphs. Empirically on redacted fixtures (mcp-servers, mcp-infra,
-	// rmf-corsair, code-graph) the largest community is always <18% of
+	// graphs. Empirically on the reference fixtures (several service
+	// monorepos and code-graph itself) the largest community is always <18% of
 	// assigned members, so no split is needed. If that ever changes — a new
 	// repo with skewed structure, a grammar regression collapsing the call
 	// graph — this warning surfaces it in logs instead of the oversized

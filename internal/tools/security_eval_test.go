@@ -14,8 +14,7 @@ package tools
 // retrieve nodes with the planted tags.
 //
 // Verdict shape: per-role precision/recall, per-control STIG
-// precision/recall, per-flow taint classification accuracy. Numbers
-// land in PHASE_E_FINDINGS.md.
+// precision/recall, per-flow taint classification accuracy.
 
 import (
 	"testing"

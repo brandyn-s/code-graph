@@ -29,22 +29,22 @@ class ReleaseVersionTests(unittest.TestCase):
         self.assertGreater(compare_release_versions("v0.9.0", "v0.9.0-rc.7"), 0)
         self.assertLess(compare_release_versions("v0.9.0-rc.1", "v0.9.0"), 0)
         self.assertGreater(compare_release_versions("v0.9.1-rc.1", "v0.9.0"), 0)
-        self.assertGreater(compare_release_versions("v0.9.0-rc.1", "v0.8.0-redacted.11"), 0)
+        self.assertGreater(compare_release_versions("v0.9.0-rc.1", "v0.8.0-legacy.11"), 0)
 
     def test_first_public_release_is_newer_than_legacy_internal_tags(self) -> None:
         self.assertEqual(
-            parse_published_version("v0.8.0-redacted.11"), (0, 8, 0, KIND_LEGACY, 11)
+            parse_published_version("v0.8.0-legacy.11"), (0, 8, 0, KIND_LEGACY, 11)
         )
-        self.assertGreater(compare_release_versions("v0.9.0", "v0.8.0-redacted.11"), 0)
-        self.assertGreater(compare_release_versions("v0.8.0", "v0.8.0-redacted.11"), 0)
-        self.assertLess(compare_release_versions("v0.7.9", "v0.8.0-redacted.11"), 0)
+        self.assertGreater(compare_release_versions("v0.9.0", "v0.8.0-legacy.11"), 0)
+        self.assertGreater(compare_release_versions("v0.8.0", "v0.8.0-legacy.11"), 0)
+        self.assertLess(compare_release_versions("v0.7.9", "v0.8.0-legacy.11"), 0)
 
     def test_rejects_noncanonical_candidate_versions(self) -> None:
         invalid = [
             "0.9.0",
             "v0.09.0",
             "v0.9",
-            "v0.9.0-redacted.1",
+            "v0.9.0-legacy.1",
             "v0.9.0-rc.0",
             "v0.9.0-rc.01",
             "v0.9.0-beta.1",

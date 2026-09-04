@@ -601,7 +601,7 @@ def normalize_generics(qn: str) -> str:
 def normalize_impl_suffix(qn: str) -> str:
     """Strip `Impl` suffix from the penultimate segment of a dotted QN.
 
-    Rust-specific. redacted's convention (and Rust's common idiom) is
+    Rust-specific. A common Rust idiom is
     `trait Foo { fn bar() }` implemented by `struct FooImpl { ... }` with
     `impl Foo for FooImpl { fn bar() { ... } }`. Code-graph's resolver
     picks the trait form (`X.Foo.bar`) for method dispatch; the
@@ -1311,7 +1311,7 @@ def compute_metrics(
         }
 
     # Impl-normalized (Rust) match: strip `Impl` suffix on penultimate segment
-    # symmetrically on both sides. Reflects redacted's trait/impl naming
+    # symmetrically on both sides. Reflects the trait/impl naming
     # convention where code-graph resolves to trait form and oracle to impl
     # form. Measured separately so the underlying scope-aligned number is
     # preserved — this isn't goalpost shifting, it's an optional metric that

@@ -37,7 +37,7 @@
         "apid",
         "assetman"
       ],
-      "notes": "Rust fixture on real redacted monorepo. Subset picked for structural variance: tiny pure-logic (canstatd 88 LOC) -> small async (calibd 184 LOC) -> monolithic (adsbd 631 LOC) -> large async-heavy (apid 6649 LOC, 52 files) -> macro/trait-heavy largest (assetman 20022 LOC, 118 files). Read-only per feedback memory.",
+      "notes": "Rust fixture on a real private monorepo (not distributed). Subset picked for structural variance: tiny pure-logic (canstatd 88 LOC) -> small async (calibd 184 LOC) -> monolithic (adsbd 631 LOC) -> large async-heavy (apid 6649 LOC, 52 files) -> macro/trait-heavy largest (assetman 20022 LOC, 118 files). Read-only per feedback memory.",
       "edge_types_in_scope": [
         "CALLS",
         "IMPORTS"

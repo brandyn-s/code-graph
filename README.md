@@ -226,7 +226,7 @@ what changed.
 
 ## License
 
-MIT. Copyright (c) 2025 DeusData for the upstream project and (c) 2026 redacted
-Security for this fork's additions; see [LICENSE](LICENSE). Vendored
+MIT. Copyright (c) 2025 DeusData for the upstream project and (c) 2026 The
+code-graph contributors for this fork's additions; see [LICENSE](LICENSE). Vendored
 tree-sitter grammar licenses are listed in
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

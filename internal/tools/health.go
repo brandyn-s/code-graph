@@ -211,7 +211,7 @@ func (s *Server) handleIndexHealth(ctx context.Context, req *mcp.CallToolRequest
 // buildUnsupportedTelemetry splits an UnsupportedTally into two reporting
 // tiers with different signal-to-noise: cut_language_files covers extensions
 // from the 2026-06-10 grammar cut and is reported at ANY count — a single
-// Kotlin file appearing in a redacted repo is the adoption-lag signal the cut
+// Kotlin file appearing in an indexed repo is the adoption-lag signal the cut
 // created. unknown_extensions is informational: top 10 remaining extensions
 // with >= 3 files (filters one-off junk like a stray .bak). The returned
 // total counts every tallied file regardless of tier.

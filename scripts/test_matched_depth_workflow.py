@@ -149,11 +149,8 @@ class MatchedDepthWorkflowContractTests(unittest.TestCase):
             "8df0833c2c1276c5837aab923d489ab97d7654529abe759d0f59242c4978a662",
             self.workflow,
         )
-        self.assertIn("redacted_code_search-0.2.1-py3-none-any.whl", self.workflow)
-        self.assertIn(
-            "567d4caabdd3b5446bcaa789afc7104fb8cce142ff69d7fc8f1294398532e7e9",
-            self.workflow,
-        )
+        self.assertIn("code_search_mcp-0.4.0-py3-none-any.whl", self.workflow)
+        self.assertRegex(self.workflow, r"CODE_SEARCH_SHA256: [0-9a-f]{64}\n")
 
     def test_reducer_requires_exact_coverage_without_failure_swallowing(self) -> None:
         reduce_block = job_block(self.workflow, "reduce")

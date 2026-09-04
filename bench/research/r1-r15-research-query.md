@@ -15,7 +15,7 @@ Focus area: code-graph accuracy and effectiveness improvements
 Target: a Go-based code knowledge graph (tree-sitter extraction + SQLite WAL +
 Cypher subset + LSP augmentation for Go) used to feed an Opus-coordinated
 documentation pipeline over a Rust/TypeScript/Python/NixOS stack. Production
-deployment at redacted; ~80K nodes / 212K edges per indexed repo.
+the originating deployment; ~80K nodes / 212K edges per indexed repo.
 
 Current measured accuracy (with oracle-class uncertainty band ~35-40% Jaccard):
 - Python CALLS: F1 0.54-0.99 (fixture-dependent)

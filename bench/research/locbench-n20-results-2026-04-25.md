@@ -100,7 +100,7 @@ The agent often returns "the right module / class" but not the specific method. 
 
 1. **No claim to LocAgent's 92.7% file-level accuracy.** That's on 560 instances with no repo-size filter. We ran 6 instances biased toward small repos. We do not have evidence that the agent matches that number on the full benchmark.
 
-2. **Behavior on large repos (> 200 MB) is unmeasured.** Most production repos at redacted and most challenging Loc-Bench instances are larger than 200 MB.
+2. **Behavior on large repos (> 200 MB) is unmeasured.** Most production monorepos and most challenging Loc-Bench instances are larger than 200 MB.
 
 3. **Behavior on Feature Request and Security categories is unmeasured** — none successfully ran in this sample.
 

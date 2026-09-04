@@ -6,10 +6,11 @@ release candidates, ``vMAJOR.MINOR.PATCH-rc.N``. A release candidate is
 published as a GitHub prerelease and sorts below the plain release with the
 same base version, so ``v0.9.0-rc.1 < v0.9.0-rc.2 < v0.9.0``.
 
-The pre-public internal scheme ``vMAJOR.MINOR.PATCH-redacted.N`` is still
-accepted as the *current* (already published) version so the first public
-release can be validated against it; every canonical version compares newer
-than any legacy tag with the same or lower base version.
+Pre-public internal builds used a legacy scheme ``vMAJOR.MINOR.PATCH-<word>.N``
+(any lowercase identifier other than ``rc``). Such tags are still accepted as
+the *current* (already published) version so the first public release can be
+validated against them; every canonical version compares newer than any legacy
+tag with the same or lower base version.
 """
 
 from __future__ import annotations
@@ -34,13 +35,13 @@ _RC_VERSION = re.compile(
 _LEGACY_RELEASE_VERSION = re.compile(
     r"^v(0|[1-9][0-9]*)\."
     r"(0|[1-9][0-9]*)\."
-    r"(0|[1-9][0-9]*)-redacted\."
+    r"(0|[1-9][0-9]*)-(?!rc\.)[a-z][a-z0-9]*\."
     r"(0|[1-9][0-9]*)$"
 )
 
 # Comparable fields: (major, minor, patch, kind, revision).
 # kind orders the schemes that can share a base version:
-#   0 legacy internal pre-release (redacted.N)
+#   0 legacy internal pre-release (<word>.N)
 #   1 release candidate (rc.N)
 #   2 plain release
 KIND_LEGACY = 0

@@ -187,7 +187,7 @@ def main() -> None:
     args = parser.parse_args()
 
     # locbench JSON is required only when we need eval-PR exclusion
-    # (Loc-Bench corpus). For other corpora (e.g. redacted-internal mining),
+    # (Loc-Bench corpus). For other corpora (e.g. private-repo mining),
     # --repos is passed explicitly and no exclusion is needed.
     eval_prs_by_repo: dict[str, set[int]] = {}
     if args.locbench_repos_json.exists():

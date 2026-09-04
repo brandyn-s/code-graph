@@ -74,7 +74,7 @@ config is the genuine win:
 
 | Mode | File | Class | Func |
 |---|---|---|---|
-| Original v0.6.0-redacted.2 default | 81% | 31% | 44% |
+| Original internal-release default | 81% | 31% | 44% |
 | **B3 high-accuracy (read_file + open + depth 4)** | **88%** | **44%** | **81%** |
 | LocAgent published | 92.7% | n/a | ~80% |
 

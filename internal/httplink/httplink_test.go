@@ -171,7 +171,7 @@ func TestExtractURLPaths_FiltersFilesystemPaths(t *testing.T) {
 	}{
 		{
 			name: "ssh_key_path_alone",
-			text: `key = "/home/redacted/.ssh/id_ecdsa"`,
+			text: `key = "/home/acme/.ssh/id_ecdsa"`,
 			want: nil,
 		},
 		{
@@ -181,7 +181,7 @@ func TestExtractURLPaths_FiltersFilesystemPaths(t *testing.T) {
 		},
 		{
 			name: "etc_config_path",
-			text: `cfg := "/etc/redacted/config.toml"`,
+			text: `cfg := "/etc/acme/config.toml"`,
 			want: nil,
 		},
 		{
@@ -388,7 +388,7 @@ func TestIsFilesystemPath(t *testing.T) {
 		{"/etc/hosts", true},
 		{"/tmp/socket", true},
 		{"/usr/local/bin/foo", true},
-		{"/opt/redacted/bin", true},
+		{"/opt/acme/bin", true},
 		{"/dev/null", true},
 		{"/proc/cpuinfo", true},
 		{"/sys/fs/cgroup", true},

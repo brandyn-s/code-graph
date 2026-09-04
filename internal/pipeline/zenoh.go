@@ -7,7 +7,7 @@
 // Function to the Topic.
 //
 // WHY this is a separate pass, not part of CALLS:
-//   Zenoh topics are the actual inter-service boundary in redacted robotics
+//   Zenoh topics are the actual inter-service boundary in Zenoh-based robotics
 //   repos — regular CALLS edges stop at the libio API boundary and miss the
 //   pub/sub dataflow. Surfacing Topic nodes makes the service dataflow graph
 //   queryable (e.g., "who publishes to `controls/manual`?").

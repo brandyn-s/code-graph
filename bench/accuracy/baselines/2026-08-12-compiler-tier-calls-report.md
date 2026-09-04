@@ -1,6 +1,6 @@
 # Compiler-tier CALLS accuracy — 2026-08-12
 
-The released `v0.8.0-redacted.5` graph was evaluated against an independent Go
+A pre-public internal build (source revision `41b84009`) was evaluated against an independent Go
 SSA/RTA oracle. The oracle loads source with `go/packages`, builds SSA, runs RTA
 with all source functions as roots, and emits caller/callee definition
 coordinates. It does not read SCIP, a code-graph database, or code-graph output.

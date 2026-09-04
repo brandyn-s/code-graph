@@ -3,7 +3,7 @@
   "measurement_date": "2026-08-12",
   "candidate": {
     "repository": "brandyn-s/code-graph",
-    "release": "v0.8.0-redacted.5",
+    "release": "pre-public internal build",
     "source_revision": "41b8400951aa7a4da478e9d79486e47f7e4ae075"
   },
   "generator": {

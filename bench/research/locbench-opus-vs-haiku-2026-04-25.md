@@ -118,7 +118,7 @@ The parallelism win (4 workers) is real and orthogonal to model choice. It's a f
 | "Opus would help on harder benchmarks (e.g., full code generation)" | LIKELY but not measured here |
 | "Parallel-4 workers cut wall time materially" | YES (~1.7× on this size; would scale better with more instances) |
 
-## What this changes about v0.6.0-redacted.2
+## What this changes about the then-current internal release
 
 Nothing — the tag is correct. The default agent model (Haiku 4.5) is the
 right choice based on this evidence. If a user wants to spend 8× per query

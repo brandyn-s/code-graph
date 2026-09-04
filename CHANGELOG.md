@@ -6,6 +6,10 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- Removed all references to the originating organization from the tree;
+  copyright line now names the project contributors.
+
 ### Added (embedding providers)
 - OpenAI-compatible embedding provider: point `CODE_GRAPH_EMBED_BASE_URL` and
   `CODE_GRAPH_EMBED_MODEL` at OpenAI, Azure OpenAI, Gemini's OpenAI surface,
@@ -102,8 +106,9 @@ All notable changes to this project are documented here. The format follows
   `~/.cache/codebase-memory-mcp` index directory keeps being used until a
   `~/.cache/code-graph` directory exists.
 - **Plain semantic-version tags.** Releases are now `vMAJOR.MINOR.PATCH`. The
-  release validator, self-updater, and installers compare the legacy internal
-  `vX.Y.Z-redacted.N` tags as older than any plain release of the same base.
+  release validator, self-updater, and installers compare the legacy
+  pre-public `vX.Y.Z-<word>.N` tags as older than any plain release of the
+  same base.
 - **Offline by default.** When `VOYAGE_API_KEY` is unset, embedding passes are
   skipped and one `embeddings disabled` line is logged at startup instead of
   per-pass warnings. `CODE_GRAPH_SKIP_EMBEDDINGS=0` forces them on.
@@ -133,11 +138,10 @@ All notable changes to this project are documented here. The format follows
 ### Removed
 - Internal planning documents, benchmark reports, and fixtures that referenced
   private repositories were removed from the public history before the first
-  public release. Historical `v0.8.0-redacted.N` releases were internal builds
-  and are not available from this repository.
+  public release. Pre-public internal builds are not available from this
+  repository.
 
 ## Earlier history
 
-Releases `v0.7.0-redacted.1` through `v0.8.0-redacted.11` were internal
-pre-public builds of this fork. Upstream history before the fork is recorded
+Releases before `v0.9.0` were pre-public internal builds of this fork. Upstream history before the fork is recorded
 in [DeusData/codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp).

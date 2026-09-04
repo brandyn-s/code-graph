@@ -168,8 +168,8 @@ def main() -> None:
         type=str,
         default=DEFAULT_PROJECT_NAME,
         help="code-graph project name (also used in nodes.project column). "
-             "Default 'episodic-memory-locbench'. Use 'episodic-memory-redacted' "
-             "for the redacted-internal corpus, or any other namespaced corpus.",
+             "Default 'episodic-memory-locbench'. Use any other namespaced name "
+             "for a private corpus.",
     )
     parser.add_argument(
         "--root-path",

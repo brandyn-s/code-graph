@@ -121,7 +121,7 @@ const rationaleMaxTextLen = 200
 
 // Hard cap on rationale nodes emitted per file. Guards against pathological
 // cases (auto-generated tables with thousands of "// TODO" markers, etc.).
-// Per-file observed count on redacted repos: median 2, p95 ~15.
+// Per-file observed count on large production repos: median 2, p95 ~15.
 const rationalePerFileCap = 50
 
 // passRationale extracts reason-carrying comments (WHY / NOTE / HACK / ...)

@@ -70,7 +70,7 @@ def main() -> None:
         type=str,
         default=PROJECT_NAME,
         help="Project name to query against. Default 'episodic-memory-locbench'. "
-             "Use 'episodic-memory-redacted' for the redacted-internal corpus.",
+             "Use another namespaced project name for a private corpus.",
     )
     parser.add_argument(
         "--db",

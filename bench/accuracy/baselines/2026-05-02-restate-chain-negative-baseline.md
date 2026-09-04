@@ -61,4 +61,4 @@ The roundtable's Recommendation #1 specifically named Diesel, Actix, futures_uti
 - `serde` derive interactions (proc-macro generated methods)
 - Async trait impls (`async fn` in trait, `BoxFuture`, etc.)
 
-Add these only if real-world redacted code surfaces phantoms not covered by the initial four. The 7-phantom baseline already exercises every surface manifestation of the `cross-package-heuristic` class.
+Add these only if real-world code surfaces phantoms not covered by the initial four. The 7-phantom baseline already exercises every surface manifestation of the `cross-package-heuristic` class.

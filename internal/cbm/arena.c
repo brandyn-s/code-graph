@@ -33,7 +33,8 @@ static int arena_grow(CBMArena* a, size_t min_size) {
 }
 
 void* cbm_arena_alloc(CBMArena* a, size_t n) {
-    if (n == 0) {
+    // NULL-arena guard (upstream 9e2bb928): return NULL instead of dereferencing.
+    if (!a || n == 0) {
         return NULL;
     }
     // 8-byte alignment

@@ -1,6 +1,7 @@
 #include "helpers.h"
 #include "lang_specs.h"
 #include <string.h>
+#include <stdlib.h>
 #include <ctype.h>
 #include <stdio.h>
 
@@ -630,4 +631,19 @@ char* cbm_fqn_folder(CBMArena* a, const char* project, const char* rel_dir) {
     }
     *out = '\0';
     return buf;
+}
+
+// --- Bounded AST recursion (see helpers.h) ---
+int cbm_walk_max_depth(void) {
+    static int cached = 0;
+    if (cached == 0) {
+        int v = 512;
+        const char* e = getenv("CBM_MAX_WALK_DEPTH");
+        if (e && *e) {
+            int parsed = atoi(e);
+            if (parsed > 0) v = parsed;
+        }
+        cached = v;
+    }
+    return cached;
 }

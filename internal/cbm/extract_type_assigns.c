@@ -193,7 +193,14 @@ static const char* extract_constructor_type(CBMArena* a, TSNode rhs, const char*
 }
 
 // Walk AST for assignment patterns where RHS is a constructor call.
+static void walk_type_assigns_body(CBMExtractCtx* ctx, TSNode node, const CBMLangSpec* spec);
 static void walk_type_assigns(CBMExtractCtx* ctx, TSNode node, const CBMLangSpec* spec) {
+    if (!cbm_walk_enter(ctx)) return;
+    walk_type_assigns_body(ctx, node, spec);
+    cbm_walk_leave(ctx);
+}
+
+static void walk_type_assigns_body(CBMExtractCtx* ctx, TSNode node, const CBMLangSpec* spec) {
     const char* kind = ts_node_type(node);
 
     // Assignment: var = Constructor()

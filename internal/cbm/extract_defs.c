@@ -2,6 +2,7 @@
 #include "helpers.h"
 #include "lang_specs.h"
 #include <string.h>
+#include <stdlib.h>
 #include <ctype.h>
 
 // Forward declarations
@@ -1795,42 +1796,116 @@ static void extract_class_variables(CBMExtractCtx* ctx, TSNode class_node, const
 
 // --- Module node + main walk ---
 
-// Recursive definition walker using tree-sitter cursor for cache-friendliness
-static void walk_defs(CBMExtractCtx* ctx, TSNode node, const CBMLangSpec* spec) {
-    const char* kind = ts_node_type(node);
+// Definition walker. Iterative with a growable heap frame stack rather than
+// recursion, so AST depth never touches the C stack and a file with thousands
+// of top-level definitions is fully extracted. Ported from upstream
+// codebase-memory-mcp 174e56b4 (#668): the fixed 4096-frame array both
+// overflowed small thread stacks and silently dropped definitions past 4096.
+// Growth is bounded by CBM_WALK_DEFS_MAX (default 8M frames); past it the walk
+// stops descending and flags the result as depth_capped instead of dropping
+// silently.
+typedef struct {
+    TSNode* data;
+    int     top;
+    int     cap;
+    bool    capped;
+} wd_stack_t;
 
-    // Function types
-    if (cbm_kind_in_set(node, spec->function_node_types)) {
-        extract_func_def(ctx, node, spec);
-        return; // don't recurse into function bodies for nested defs
-    }
-
-    // Rust impl blocks
-    if (ctx->language == CBM_LANG_RUST && strcmp(kind, "impl_item") == 0) {
-        extract_rust_impl(ctx, node, spec);
-        return;
-    }
-
-    // Class types
-    if (cbm_kind_in_set(node, spec->class_node_types)) {
-        extract_class_def(ctx, node, spec);
-        // Config languages have nested classes (XML elements, TOML tables)
-        // — continue recursing instead of returning
-        if (ctx->language == CBM_LANG_XML || ctx->language == CBM_LANG_TOML ||
-            ctx->language == CBM_LANG_MARKDOWN) {
-            uint32_t nc = ts_node_child_count(node);
-            for (uint32_t ci = 0; ci < nc; ci++) {
-                walk_defs(ctx, ts_node_child(node, ci), spec);
-            }
+static int wd_stack_max(void) {
+    static int cached = 0;
+    if (cached == 0) {
+        int v = 8 * 1024 * 1024;
+        const char* e = getenv("CBM_WALK_DEFS_MAX");
+        if (e && *e) {
+            int parsed = atoi(e);
+            if (parsed > 0) v = parsed;
         }
-        return;
+        cached = v;
     }
+    return cached;
+}
 
-    // Recurse into children
-    uint32_t count = ts_node_child_count(node);
-    for (uint32_t i = 0; i < count; i++) {
-        walk_defs(ctx, ts_node_child(node, i), spec);
+static bool wd_push(wd_stack_t* s, TSNode node) {
+    if (s->top >= s->cap) {
+        int ncap = s->cap ? s->cap * 2 : 256;
+        if (ncap > wd_stack_max()) {
+            s->capped = true;
+            return false;
+        }
+        TSNode* nd = (TSNode*)realloc(s->data, (size_t)ncap * sizeof(TSNode));
+        if (!nd) {
+            // OOM: drain what we have and stop; extraction keeps what was emitted.
+            free(s->data);
+            s->data = NULL;
+            s->cap = 0;
+            s->top = 0;
+            s->capped = true;
+            return false;
+        }
+        s->data = nd;
+        s->cap = ncap;
     }
+    s->data[s->top++] = node;
+    return true;
+}
+
+// Push all children so they pop in source order. One O(N) cursor pass, then
+// reverse the pushed segment; ts_node_child(node, i) is O(i), so the naive
+// reverse loop is O(N^2) on wide roots.
+static void wd_push_children(wd_stack_t* s, TSNode node) {
+    int base = s->top;
+    TSTreeCursor cursor = ts_tree_cursor_new(node);
+    if (ts_tree_cursor_goto_first_child(&cursor)) {
+        do {
+            if (!wd_push(s, ts_tree_cursor_current_node(&cursor))) break;
+        } while (ts_tree_cursor_goto_next_sibling(&cursor));
+    }
+    ts_tree_cursor_delete(&cursor);
+    int lo = base, hi = s->top - 1;
+    while (lo < hi) {
+        TSNode tmp = s->data[lo];
+        s->data[lo] = s->data[hi];
+        s->data[hi] = tmp;
+        lo++;
+        hi--;
+    }
+}
+
+static void walk_defs(CBMExtractCtx* ctx, TSNode root, const CBMLangSpec* spec) {
+    wd_stack_t s = {0};
+    wd_push(&s, root);
+    while (s.top > 0) {
+        TSNode node = s.data[--s.top];
+        const char* kind = ts_node_type(node);
+
+        // Function types
+        if (cbm_kind_in_set(node, spec->function_node_types)) {
+            extract_func_def(ctx, node, spec);
+            continue; // don't descend into function bodies for nested defs
+        }
+
+        // Rust impl blocks
+        if (ctx->language == CBM_LANG_RUST && strcmp(kind, "impl_item") == 0) {
+            extract_rust_impl(ctx, node, spec);
+            continue;
+        }
+
+        // Class types
+        if (cbm_kind_in_set(node, spec->class_node_types)) {
+            extract_class_def(ctx, node, spec);
+            // Config languages have nested classes (XML elements, TOML tables)
+            // — keep descending instead of stopping
+            if (ctx->language == CBM_LANG_XML || ctx->language == CBM_LANG_TOML ||
+                ctx->language == CBM_LANG_MARKDOWN) {
+                wd_push_children(&s, node);
+            }
+            continue;
+        }
+
+        wd_push_children(&s, node);
+    }
+    if (s.capped) ctx->walk_depth_capped = true;
+    free(s.data);
 }
 
 void cbm_extract_definitions(CBMExtractCtx* ctx) {

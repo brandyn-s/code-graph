@@ -2,6 +2,7 @@
 #define CBM_HELPERS_H
 
 #include "cbm.h"
+#include <stdbool.h>
 
 // Extract text of a node from source. Returns arena-allocated string.
 char* cbm_node_text(CBMArena* a, TSNode node, const char* source);
@@ -52,5 +53,27 @@ char* cbm_fqn_module(CBMArena* a, const char* project, const char* rel_path);
 
 // Folder QN: project.dir_parts
 char* cbm_fqn_folder(CBMArena* a, const char* project, const char* rel_dir);
+
+// --- Bounded AST recursion ---
+// Every recursive walker enters through cbm_walk_enter/cbm_walk_leave so a
+// pathologically deep AST degrades to a bounded skip (flagged on the result as
+// depth_capped) instead of overflowing the C stack. Default ceiling 512
+// frames (safe on a 1 MB Windows main thread and a 512 KB macOS worker
+// thread; deeper than any real source nesting); CBM_MAX_WALK_DEPTH overrides. Ported in spirit from upstream
+// codebase-memory-mcp 174e56b4 / 40f2722d, which replaced fixed frame arrays.
+int cbm_walk_max_depth(void);
+
+static inline bool cbm_walk_enter(CBMExtractCtx* ctx) {
+    if (ctx->walk_depth >= cbm_walk_max_depth()) {
+        ctx->walk_depth_capped = true;
+        return false;
+    }
+    ctx->walk_depth++;
+    return true;
+}
+
+static inline void cbm_walk_leave(CBMExtractCtx* ctx) {
+    if (ctx->walk_depth > 0) ctx->walk_depth--;
+}
 
 #endif // CBM_HELPERS_H

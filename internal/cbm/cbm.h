@@ -237,6 +237,9 @@ typedef struct {
     const char*    error_msg;
     bool           is_test_file;
     int            imports_count;
+    // Set when any AST walk hit the recursion/frame ceiling and skipped a
+    // subtree (bounded degradation instead of a C-stack overflow).
+    bool           depth_capped;
 } CBMFileResult;
 
 // --- Enclosing function cache ---
@@ -268,6 +271,8 @@ typedef struct {
     const char*     module_qn;
     TSNode          root;
     EFCache         ef_cache;  // enclosing function cache
+    int             walk_depth;        // current recursion depth (see cbm_walk_enter)
+    bool            walk_depth_capped; // a walker hit the ceiling and skipped a subtree
 } CBMExtractCtx;
 
 // --- Public API ---

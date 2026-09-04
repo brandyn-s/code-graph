@@ -50,6 +50,10 @@ func cbmParseFileFromSource(projectName string, f discover.FileInfo, source []by
 		result.Err = err
 		return result
 	}
+	if cbmResult.DepthCapped {
+		slog.Warn("cbm.extract.depth_capped", "path", f.RelPath, "lang", f.Language,
+			"hint", "AST deeper than CBM_MAX_WALK_DEPTH; subtree skipped, file indexed partially")
+	}
 
 	result.CBMResult = cbmResult
 

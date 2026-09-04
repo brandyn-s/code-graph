@@ -42,6 +42,9 @@ type FileResult struct {
 	ModuleQN    string
 	IsTestFile  bool
 	ImportCount int
+	// DepthCapped is true when an AST walk hit the recursion ceiling and
+	// skipped a subtree; the file was indexed partially rather than crashing.
+	DepthCapped bool
 }
 
 // ImplTrait represents a Rust `impl Trait for Struct` pair.
@@ -245,6 +248,7 @@ func convertResult(r *C.CBMFileResult) *FileResult {
 		ModuleQN:    C.GoString(r.module_qn),
 		IsTestFile:  bool(r.is_test_file),
 		ImportCount: int(r.imports_count),
+		DepthCapped: bool(r.depth_capped),
 	}
 
 	// Definitions

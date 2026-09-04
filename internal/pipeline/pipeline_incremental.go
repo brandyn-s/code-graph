@@ -267,6 +267,10 @@ func (p *Pipeline) passCallsForFiles(files []discover.FileInfo) {
 			if err != nil {
 				continue
 			}
+			if cbmResult.DepthCapped {
+				slog.Warn("cbm.extract.depth_capped", "path", f.RelPath, "lang", f.Language,
+					"hint", "AST deeper than CBM_MAX_WALK_DEPTH; subtree skipped, file indexed partially")
+			}
 			ext = &cachedExtraction{Result: cbmResult, Language: f.Language}
 			p.extractionCache[f.RelPath] = ext
 		}

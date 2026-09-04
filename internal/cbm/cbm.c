@@ -275,6 +275,7 @@ CBMFileResult* cbm_extract_file(
     uint64_t t2 = now_ns();
 
     result->imports_count = result->imports.count;
+    result->depth_capped = ctx.walk_depth_capped;
 
     // Accumulate profiling counters
     atomic_fetch_add(&total_parse_ns, t1 - t0);

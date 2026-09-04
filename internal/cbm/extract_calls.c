@@ -141,7 +141,14 @@ static char* extract_callee_name(CBMArena* a, TSNode node, const char* source, C
 }
 
 // Walk AST for call nodes
+static void walk_calls_body(CBMExtractCtx* ctx, TSNode node, const CBMLangSpec* spec);
 static void walk_calls(CBMExtractCtx* ctx, TSNode node, const CBMLangSpec* spec) {
+    if (!cbm_walk_enter(ctx)) return;
+    walk_calls_body(ctx, node, spec);
+    cbm_walk_leave(ctx);
+}
+
+static void walk_calls_body(CBMExtractCtx* ctx, TSNode node, const CBMLangSpec* spec) {
     const char* kind = ts_node_type(node);
 
     if (cbm_kind_in_set(node, spec->call_node_types)) {
@@ -320,7 +327,14 @@ static void walk_calls(CBMExtractCtx* ctx, TSNode node, const CBMLangSpec* spec)
 }
 
 // Extract JSX component references (uppercase = component, lowercase = HTML)
+static void extract_jsx_refs_body(CBMExtractCtx* ctx, TSNode node);
 static void extract_jsx_refs(CBMExtractCtx* ctx, TSNode node) {
+    if (!cbm_walk_enter(ctx)) return;
+    extract_jsx_refs_body(ctx, node);
+    cbm_walk_leave(ctx);
+}
+
+static void extract_jsx_refs_body(CBMExtractCtx* ctx, TSNode node) {
     TSNode name_node = ts_node_child_by_field_name(node, "name", 4);
     if (ts_node_is_null(name_node)) return;
 

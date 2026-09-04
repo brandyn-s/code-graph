@@ -97,7 +97,14 @@ static bool is_env_var_name(const char* s) {
     return has_upper;
 }
 
+static void walk_env_accesses_body(CBMExtractCtx* ctx, TSNode node, const CBMLangSpec* spec);
 static void walk_env_accesses(CBMExtractCtx* ctx, TSNode node, const CBMLangSpec* spec) {
+    if (!cbm_walk_enter(ctx)) return;
+    walk_env_accesses_body(ctx, node, spec);
+    cbm_walk_leave(ctx);
+}
+
+static void walk_env_accesses_body(CBMExtractCtx* ctx, TSNode node, const CBMLangSpec* spec) {
     const char* kind = ts_node_type(node);
     const char* env_key = NULL;
 

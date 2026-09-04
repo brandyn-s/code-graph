@@ -6,6 +6,17 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed (0.9.1, ported from upstream codebase-memory-mcp)
+- Extractor memory safety: `walk_defs` is iterative with a growable heap frame
+  stack (upstream 174e56b4, #668), every other recursive AST walker and the Go
+  LSP resolver are bounded by `CBM_MAX_WALK_DEPTH` (default 512) and flag the
+  result as depth-capped instead of overflowing the C stack (upstream
+  40f2722d/4d844069), the vendored tree-sitter runtime caps GLR stack-merge
+  recursion at 512 (upstream da046da5), and `cbm_arena_alloc` tolerates a NULL
+  arena (upstream 9e2bb928). The pipeline logs `cbm.extract.depth_capped` for
+  partially indexed files. Regression inputs: 5000 top-level definitions,
+  20000-deep nested calls, 6000-deep arrays, 5000-deep Go blocks.
+
 ### Changed
 - Removed all references to the originating organization from the tree;
   copyright line now names the project contributors.

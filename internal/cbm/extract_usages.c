@@ -59,7 +59,14 @@ static bool is_reference_node(TSNode node, CBMLanguage lang) {
     }
 }
 
+static void walk_usages_body(CBMExtractCtx* ctx, TSNode node, const CBMLangSpec* spec);
 static void walk_usages(CBMExtractCtx* ctx, TSNode node, const CBMLangSpec* spec) {
+    if (!cbm_walk_enter(ctx)) return;
+    walk_usages_body(ctx, node, spec);
+    cbm_walk_leave(ctx);
+}
+
+static void walk_usages_body(CBMExtractCtx* ctx, TSNode node, const CBMLangSpec* spec) {
     if (is_reference_node(node, ctx->language)) {
         // Skip if inside a call (already counted as CALLS edge)
         if (is_inside_call(node, spec)) goto recurse;

@@ -213,7 +213,14 @@ static void handle_python_import_from_statement(CBMExtractCtx* ctx, TSNode node)
 // nested inside functions, conditionals, try/except blocks, etc. — the
 // pattern used heavily in mcp-servers/airlock for cross-service
 // `from shared.* import *` calls.
+static void walk_python_imports_body(CBMExtractCtx* ctx, TSNode node);
 static void walk_python_imports(CBMExtractCtx* ctx, TSNode node) {
+    if (!cbm_walk_enter(ctx)) return;
+    walk_python_imports_body(ctx, node);
+    cbm_walk_leave(ctx);
+}
+
+static void walk_python_imports_body(CBMExtractCtx* ctx, TSNode node) {
     const char* kind = ts_node_type(node);
     if (strcmp(kind, "import_statement") == 0) {
         handle_python_import_statement(ctx, node);
@@ -238,7 +245,14 @@ static void parse_python_imports(CBMExtractCtx* ctx) {
 // import X from "Y"; import {A, B} from "Y"; import * as X from "Y"
 // const X = require("Y")
 
+static void walk_es_imports_body(CBMExtractCtx* ctx, TSNode node);
 static void walk_es_imports(CBMExtractCtx* ctx, TSNode node) {
+    if (!cbm_walk_enter(ctx)) return;
+    walk_es_imports_body(ctx, node);
+    cbm_walk_leave(ctx);
+}
+
+static void walk_es_imports_body(CBMExtractCtx* ctx, TSNode node) {
     CBMArena* a = ctx->arena;
     const char* kind = ts_node_type(node);
 

@@ -124,7 +124,14 @@ static void extract_return_type_refs(CBMExtractCtx* ctx, TSNode func_node, const
 }
 
 // Walk function body for type references (casts, type assertions, local var types, generics).
+static void walk_body_type_refs_body(CBMExtractCtx* ctx, TSNode node, const char* func_qn);
 static void walk_body_type_refs(CBMExtractCtx* ctx, TSNode node, const char* func_qn) {
+    if (!cbm_walk_enter(ctx)) return;
+    walk_body_type_refs_body(ctx, node, func_qn);
+    cbm_walk_leave(ctx);
+}
+
+static void walk_body_type_refs_body(CBMExtractCtx* ctx, TSNode node, const char* func_qn) {
     const char* kind = ts_node_type(node);
 
     switch (ctx->language) {
@@ -217,7 +224,14 @@ static void walk_body_type_refs(CBMExtractCtx* ctx, TSNode node, const char* fun
 }
 
 // Walk AST for function nodes, extract type references from signatures and bodies.
+static void walk_type_refs_body(CBMExtractCtx* ctx, TSNode node, const CBMLangSpec* spec);
 static void walk_type_refs(CBMExtractCtx* ctx, TSNode node, const CBMLangSpec* spec) {
+    if (!cbm_walk_enter(ctx)) return;
+    walk_type_refs_body(ctx, node, spec);
+    cbm_walk_leave(ctx);
+}
+
+static void walk_type_refs_body(CBMExtractCtx* ctx, TSNode node, const CBMLangSpec* spec) {
     if (!spec->function_node_types || !spec->function_node_types[0]) return;
 
     if (cbm_kind_in_set(node, spec->function_node_types)) {

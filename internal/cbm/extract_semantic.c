@@ -7,7 +7,14 @@
 
 // --- Throw/Raise extraction ---
 
+static void walk_throws_body(CBMExtractCtx* ctx, TSNode node, const CBMLangSpec* spec);
 static void walk_throws(CBMExtractCtx* ctx, TSNode node, const CBMLangSpec* spec) {
+    if (!cbm_walk_enter(ctx)) return;
+    walk_throws_body(ctx, node, spec);
+    cbm_walk_leave(ctx);
+}
+
+static void walk_throws_body(CBMExtractCtx* ctx, TSNode node, const CBMLangSpec* spec) {
     const char* kind = ts_node_type(node);
 
     if (cbm_kind_in_set(node, spec->throw_node_types)) {
@@ -94,7 +101,14 @@ static void walk_throws(CBMExtractCtx* ctx, TSNode node, const CBMLangSpec* spec
 
 // --- Read/Write detection ---
 
+static void walk_readwrites_body(CBMExtractCtx* ctx, TSNode node, const CBMLangSpec* spec);
 static void walk_readwrites(CBMExtractCtx* ctx, TSNode node, const CBMLangSpec* spec) {
+    if (!cbm_walk_enter(ctx)) return;
+    walk_readwrites_body(ctx, node, spec);
+    cbm_walk_leave(ctx);
+}
+
+static void walk_readwrites_body(CBMExtractCtx* ctx, TSNode node, const CBMLangSpec* spec) {
     // Check if this is an assignment node
     if (cbm_kind_in_set(node, spec->assignment_node_types)) {
         // Left side is a write, right side contains reads

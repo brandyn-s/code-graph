@@ -28,6 +28,8 @@ typedef struct {
 
     // Debug mode (CBM_LSP_DEBUG env)
     bool debug;
+    int  walk_depth;    // recursion depth of resolve_calls_in_node (bounded)
+    bool depth_capped;  // a subtree was skipped at the ceiling
 } GoLSPContext;
 
 // Initialize a GoLSPContext for processing one file.

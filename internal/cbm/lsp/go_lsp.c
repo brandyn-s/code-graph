@@ -1101,7 +1101,21 @@ static void emit_unresolved_call(GoLSPContext* ctx, const char* expr_text, const
 
 // --- Walk call expressions and resolve them ---
 
+static void resolve_calls_in_node_body(GoLSPContext* ctx, TSNode node);
+// Bounded recursion (see cbm_walk_enter in helpers.h): the resolver recurses
+// through go_process_statement on every nested block, so a pathologically
+// deep body degrades to a flagged skip instead of a C-stack overflow.
 static void resolve_calls_in_node(GoLSPContext* ctx, TSNode node) {
+    if (ctx->walk_depth >= cbm_walk_max_depth()) {
+        ctx->depth_capped = true;
+        return;
+    }
+    ctx->walk_depth++;
+    resolve_calls_in_node_body(ctx, node);
+    ctx->walk_depth--;
+}
+
+static void resolve_calls_in_node_body(GoLSPContext* ctx, TSNode node) {
     if (ts_node_is_null(node)) return;
     const char* kind = ts_node_type(node);
 
@@ -1970,6 +1984,7 @@ void cbm_run_go_lsp(CBMArena* arena, CBMFileResult* result,
 
     // Process the file
     go_lsp_process_file(&lsp_ctx, root);
+    if (lsp_ctx.depth_capped) result->depth_capped = true;
 }
 
 // --- Cross-file LSP: parse source, build registry from defs, run LSP ---

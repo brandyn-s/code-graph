@@ -102,7 +102,7 @@ class CoreCIWorkflowContractTests(unittest.TestCase):
                     1,
                 )
 
-        baseline = "8e145eea43f188e80c7f92aba9a4627fd22b0b35"
+        baseline = "e3e0b24992929c6256a2a86fb4247a97269d78c5"
         self.assertEqual(action.count(baseline), 1)
         self.assertNotIn(baseline, self.workflow + dry_run + release)
         self.assertIn('git merge-base --is-ancestor "$baseline" "$GITHUB_SHA"', action)

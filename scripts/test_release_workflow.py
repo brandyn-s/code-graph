@@ -6,7 +6,7 @@ RELEASE_HELPER = Path("scripts/release_workflow.sh")
 RELEASE_LINT_ACTION = Path(".github/actions/release-lint/action.yml")
 SECURITY_POLICY = Path(".github/repo-security-policy.yml")
 README = Path("README.md")
-BASELINE = "8e145eea43f188e80c7f92aba9a4627fd22b0b35"
+BASELINE = "e3e0b24992929c6256a2a86fb4247a97269d78c5"
 ATTEST_ACTION = "1e69f48acb82d1966a394da916b4c1698aa569d6"
 
 

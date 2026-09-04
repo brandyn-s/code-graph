@@ -199,7 +199,7 @@ func (p *Pipeline) matchConfigKeySymbols() []*store.Edge {
 				Project:  p.ProjectName,
 				SourceID: c.node.ID,
 				TargetID: ce.node.ID,
-				Type:     "CONFIGURES",
+				Type:     store.EdgeConfigures,
 				Properties: map[string]any{
 					"strategy":        "key_symbol",
 					"confidence_tier": store.ConfidenceAmbiguous,
@@ -310,7 +310,7 @@ func (p *Pipeline) matchDependencyImports() []*store.Edge {
 				Project:  p.ProjectName,
 				SourceID: source.ID,
 				TargetID: dep.node.ID,
-				Type:     "CONFIGURES",
+				Type:     store.EdgeConfigures,
 				Properties: map[string]any{
 					"strategy":        "dependency_import",
 					"confidence_tier": store.ConfidenceAmbiguous,
@@ -408,7 +408,7 @@ func (p *Pipeline) matchConfigFileRefs() []*store.Edge {
 				Project:  p.ProjectName,
 				SourceID: sourceNode.ID,
 				TargetID: target.ID,
-				Type:     "CONFIGURES",
+				Type:     store.EdgeConfigures,
 				Properties: map[string]any{
 					"strategy":        "file_reference",
 					"confidence_tier": store.ConfidenceAmbiguous,
@@ -573,7 +573,7 @@ func (p *Pipeline) matchTerraformEnvVars() []*store.Edge {
 					Project:  p.ProjectName,
 					SourceID: sourceNode.ID,
 					TargetID: targetNode.ID,
-					Type:     "CONFIGURES",
+					Type:     store.EdgeConfigures,
 					Properties: map[string]any{
 						"strategy":        "terraform_env",
 						"confidence_tier": store.ConfidenceAmbiguous,

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/brandyn-s/code-graph/internal/config"
+	"github.com/brandyn-s/code-graph/internal/embed"
 )
 
 // Default overall timeout for the embeddings pass. Large graphs with many
@@ -82,8 +83,8 @@ func (p *Pipeline) runEmbeddingsPass(missingOnly bool) {
 		return
 	}
 
-	vc := NewVoyageClient()
-	if vc == nil {
+	vc := embed.Default()
+	if embed.IsDisabled(vc) {
 		slog.Info("pass.embeddings.skip", "reason", "VOYAGE_API_KEY not set")
 		return
 	}
@@ -165,12 +166,12 @@ func (p *Pipeline) runEmbeddingsPass(missingOnly bool) {
 
 	// Batch embed.
 	//
-	// batchSize matches voyageBatchSize so one outer iteration == one API
+	// batchSize matches embed.BatchSize so one outer iteration == one API
 	// call. This gives per-API-call progress logs (previously progress only
 	// fired per 128 nodes = 2 API calls, leaving users with no feedback
 	// between the "generating embeddings" start log and the first progress
 	// log several minutes later on stalled requests).
-	const batchSize = voyageBatchSize
+	const batchSize = embed.BatchSize
 	embedded := 0
 	var lastErr error
 batchLoop:
@@ -212,7 +213,7 @@ batchLoop:
 			nodeIDs[j] = n.id
 		}
 
-		if err := p.Store.UpsertEmbeddingBatch(nodeIDs, vc.model, vecs); err != nil {
+		if err := p.Store.UpsertEmbeddingBatch(nodeIDs, vc.Model(), vecs); err != nil {
 			slog.Warn("pass.embeddings.store.err", "batch", i, "err", err)
 			continue
 		}

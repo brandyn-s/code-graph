@@ -491,7 +491,7 @@ func (l *Linker) linkHandlerToRoute(handlerNode *store.Node, routeID int64, rout
 		Project:  l.project,
 		SourceID: handlerNode.ID,
 		TargetID: routeID,
-		Type:     "HANDLES",
+		Type:     store.EdgeHandles,
 		Properties: map[string]any{
 			"confidence_tier": store.ConfidenceInferred,
 		},
@@ -2548,7 +2548,7 @@ func (l *Linker) createRegistrationCallEdges(routes []RouteHandler) {
 			Project:  l.project,
 			SourceID: registrar.ID,
 			TargetID: handler.ID,
-			Type:     "CALLS",
+			Type:     store.EdgeCalls,
 			Properties: map[string]any{
 				"via":                 "route_registration",
 				"resolution_strategy": "route_registration",

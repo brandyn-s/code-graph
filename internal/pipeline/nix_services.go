@@ -473,7 +473,7 @@ func (p *Pipeline) insertNixRunsBinaryEdge(srcID, tgtID int64, binaryName string
 		Project:  p.ProjectName,
 		SourceID: srcID,
 		TargetID: tgtID,
-		Type:     "RUNS_BINARY",
+		Type:     store.EdgeRunsBinary,
 		Properties: map[string]any{
 			"source":           "nix",
 			"binary_name":      binaryName,

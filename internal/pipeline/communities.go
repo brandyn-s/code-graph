@@ -310,7 +310,7 @@ func (p *Pipeline) storeCommunities(communities map[int][]int64) (communityCount
 			memberEdges = append(memberEdges, pendingEdge{
 				SourceQN: memberNode.QualifiedName,
 				TargetQN: commQN,
-				Type:     "MEMBER_OF",
+				Type:     store.EdgeMemberOf,
 			})
 
 			// Also store community_id on the member node (via properties update)
@@ -342,7 +342,7 @@ func (p *Pipeline) storeCommunities(communities map[int][]int64) (communityCount
 				Project:  p.ProjectName,
 				SourceID: srcNode.ID,
 				TargetID: tgtID,
-				Type:     "MEMBER_OF",
+				Type:     store.EdgeMemberOf,
 			})
 		}
 	}

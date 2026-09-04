@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/brandyn-s/code-graph/internal/embed"
 	"github.com/brandyn-s/code-graph/internal/store"
 )
 
@@ -71,9 +72,9 @@ func countEmbeddings(t *testing.T, s *store.Store) int {
 func TestPassEmbeddingsMissing_BackfillsOnlyGaps(t *testing.T) {
 	srv, embedded := fakeVoyage(t)
 	defer srv.Close()
-	oldURL := voyageEmbedURL
-	voyageEmbedURL = srv.URL
-	defer func() { voyageEmbedURL = oldURL }()
+	oldURL := embed.VoyageEmbedURL
+	embed.VoyageEmbedURL = srv.URL
+	defer func() { embed.VoyageEmbedURL = oldURL }()
 	t.Setenv("VOYAGE_API_KEY", "test-key")
 	t.Setenv("CODE_GRAPH_SKIP_EMBEDDINGS", "")
 
@@ -111,9 +112,9 @@ func TestPassEmbeddingsMissing_BackfillsOnlyGaps(t *testing.T) {
 func TestPassEmbeddingsMissing_NoopWhenComplete(t *testing.T) {
 	srv, embedded := fakeVoyage(t)
 	defer srv.Close()
-	oldURL := voyageEmbedURL
-	voyageEmbedURL = srv.URL
-	defer func() { voyageEmbedURL = oldURL }()
+	oldURL := embed.VoyageEmbedURL
+	embed.VoyageEmbedURL = srv.URL
+	defer func() { embed.VoyageEmbedURL = oldURL }()
 	t.Setenv("VOYAGE_API_KEY", "test-key")
 	t.Setenv("CODE_GRAPH_SKIP_EMBEDDINGS", "")
 
@@ -143,9 +144,9 @@ func TestPassEmbeddingsMissing_NoopWhenComplete(t *testing.T) {
 func TestPassEmbeddings_FullStillEmbedsAll(t *testing.T) {
 	srv, embedded := fakeVoyage(t)
 	defer srv.Close()
-	oldURL := voyageEmbedURL
-	voyageEmbedURL = srv.URL
-	defer func() { voyageEmbedURL = oldURL }()
+	oldURL := embed.VoyageEmbedURL
+	embed.VoyageEmbedURL = srv.URL
+	defer func() { embed.VoyageEmbedURL = oldURL }()
 	t.Setenv("VOYAGE_API_KEY", "test-key")
 	t.Setenv("CODE_GRAPH_SKIP_EMBEDDINGS", "")
 

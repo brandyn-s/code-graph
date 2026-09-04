@@ -143,7 +143,7 @@ func (p *Pipeline) passSimilarityEdges() {
 				Project:  p.ProjectName,
 				SourceID: sourceID,
 				TargetID: c.NodeID,
-				Type:     "SEMANTICALLY_SIMILAR_TO",
+				Type:     store.EdgeSemanticallySimilarTo,
 				Properties: map[string]any{
 					"similarity_score": c.Score,
 					"confidence_tier":  store.ConfidenceInferred,

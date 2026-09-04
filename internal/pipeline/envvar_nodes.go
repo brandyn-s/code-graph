@@ -56,7 +56,7 @@ func (p *Pipeline) passEnvVarNodes() {
 				Project:  p.ProjectName,
 				SourceID: funcNode.ID,
 				TargetID: envNodeID,
-				Type:     "READS_ENV",
+				Type:     store.EdgeReadsEnv,
 			})
 			if edgeErr != nil {
 				slog.Debug("pass.envvar_nodes.edge.err", "func", funcQN, "key", envKey, "err", edgeErr)

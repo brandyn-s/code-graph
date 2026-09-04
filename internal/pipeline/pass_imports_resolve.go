@@ -348,7 +348,7 @@ func (p *Pipeline) passImports() {
 				Project:  p.ProjectName,
 				SourceID: moduleNode.ID,
 				TargetID: targetNode.ID,
-				Type:     "IMPORTS",
+				Type:     store.EdgeImports,
 				Properties: map[string]any{
 					"alias": localName,
 				},

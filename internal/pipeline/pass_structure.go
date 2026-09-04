@@ -134,7 +134,7 @@ func (p *Pipeline) buildFileNodesEdges(files []discover.FileInfo) ([]*store.Node
 		})
 
 		parentQN := p.dirQN(filepath.Dir(f.RelPath))
-		edges = append(edges, pendingEdge{SourceQN: parentQN, TargetQN: fileQN, Type: "CONTAINS_FILE"})
+		edges = append(edges, pendingEdge{SourceQN: parentQN, TargetQN: fileQN, Type: store.EdgeContainsFile})
 	}
 	return nodes, edges
 }

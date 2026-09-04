@@ -196,7 +196,7 @@ func (p *Pipeline) createCouplingEdges(couplings []ChangeCoupling) int {
 			Project:  p.ProjectName,
 			SourceID: nodeA.ID,
 			TargetID: nodeB.ID,
-			Type:     "FILE_CHANGES_WITH",
+			Type:     store.EdgeFileChangesWith,
 			Properties: map[string]any{
 				"co_change_count": c.CoChangeCount,
 				"total_changes_a": c.TotalChangesA,

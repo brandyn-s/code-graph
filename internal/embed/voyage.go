@@ -1,4 +1,4 @@
-package pipeline
+package embed
 
 import (
 	"bytes"
@@ -16,13 +16,13 @@ import (
 
 const (
 	voyageModel      = "voyage-code-3"
-	voyageBatchSize  = 64 // Voyage rate limit: 64 texts per batch is safe
+	voyageBatchSize  = BatchSize
 	voyageBatchDelay = 1 * time.Second
 )
 
-// voyageEmbedURL is the Voyage embeddings endpoint. Package-level var for
+// VoyageEmbedURL is the Voyage embeddings endpoint. Package-level var for
 // test injection (same pattern as tools.releaseURL).
-var voyageEmbedURL = "https://api.voyageai.com/v1/embeddings"
+var VoyageEmbedURL = "https://api.voyageai.com/v1/embeddings"
 
 // voyageEmbedRequest is the request body for Voyage /v1/embeddings.
 type voyageEmbedRequest struct {
@@ -42,15 +42,18 @@ type voyageEmbedResponse struct {
 	} `json:"usage"`
 }
 
-// VoyageClient embeds text via the Voyage AI API.
-type VoyageClient struct {
+// Voyage embeds text via the Voyage AI API.
+type Voyage struct {
 	apiKey string
 	model  string
 	client *http.Client
 }
 
-// NewVoyageClient creates a client. Returns nil if VOYAGE_API_KEY is not set.
-func NewVoyageClient() *VoyageClient {
+// Compile-time check that Voyage satisfies Embedder.
+var _ Embedder = (*Voyage)(nil)
+
+// NewVoyage creates a client. Returns nil if VOYAGE_API_KEY is not set.
+func NewVoyage() *Voyage {
 	key := config.Get(config.VoyageAPIKey)
 	if key == "" {
 		return nil
@@ -59,7 +62,7 @@ func NewVoyageClient() *VoyageClient {
 	if model == "" {
 		model = voyageModel
 	}
-	return &VoyageClient{
+	return &Voyage{
 		apiKey: key,
 		model:  model,
 		client: &http.Client{Timeout: 120 * time.Second},
@@ -70,13 +73,13 @@ func NewVoyageClient() *VoyageClient {
 // (VOYAGE_EMBED_MODEL or the package default). Exposed so tool responses
 // can report the real model in provenance metadata instead of a hardcoded
 // name.
-func (vc *VoyageClient) Model() string { return vc.model }
+func (vc *Voyage) Model() string { return vc.model }
 
 // EmbedBatch embeds a batch of texts and returns their vectors.
 // inputType should be "document" for indexing, "query" for search.
 // Honors ctx cancellation: returns ctx.Err() promptly instead of continuing
 // retries through batches when the caller's deadline has passed.
-func (vc *VoyageClient) EmbedBatch(ctx context.Context, texts []string, inputType string) ([][]float32, error) {
+func (vc *Voyage) EmbedBatch(ctx context.Context, texts []string, inputType string) ([][]float32, error) {
 	var allVecs [][]float32
 
 	for i := 0; i < len(texts); i += voyageBatchSize {
@@ -112,7 +115,7 @@ func (vc *VoyageClient) EmbedBatch(ctx context.Context, texts []string, inputTyp
 }
 
 // EmbedSingle embeds a single text and returns the vector.
-func (vc *VoyageClient) EmbedSingle(ctx context.Context, text string, inputType string) ([]float32, error) {
+func (vc *Voyage) EmbedSingle(ctx context.Context, text string, inputType string) ([]float32, error) {
 	vecs, err := vc.embedSingleBatch(ctx, []string{text}, inputType)
 	if err != nil {
 		return nil, err
@@ -123,7 +126,7 @@ func (vc *VoyageClient) EmbedSingle(ctx context.Context, text string, inputType 
 	return vecs[0], nil
 }
 
-func (vc *VoyageClient) embedSingleBatch(ctx context.Context, texts []string, inputType string) ([][]float32, error) {
+func (vc *Voyage) embedSingleBatch(ctx context.Context, texts []string, inputType string) ([][]float32, error) {
 	reqBody := voyageEmbedRequest{
 		Input: texts,
 		Model: vc.model,
@@ -143,7 +146,7 @@ func (vc *VoyageClient) embedSingleBatch(ctx context.Context, texts []string, in
 			return nil, err
 		}
 
-		req, err := http.NewRequestWithContext(ctx, "POST", voyageEmbedURL, bytes.NewReader(bodyBytes))
+		req, err := http.NewRequestWithContext(ctx, "POST", VoyageEmbedURL, bytes.NewReader(bodyBytes))
 		if err != nil {
 			return nil, err
 		}

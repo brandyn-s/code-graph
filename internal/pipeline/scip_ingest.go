@@ -368,7 +368,7 @@ func (p *Pipeline) deriveSCIPCalls(
 			}
 			seen[pair] = true
 			derived = append(derived, &store.Edge{
-				Project: p.ProjectName, SourceID: caller.id, TargetID: callee.id, Type: "CALLS",
+				Project: p.ProjectName, SourceID: caller.id, TargetID: callee.id, Type: store.EdgeCalls,
 				Properties: map[string]any{
 					"resolver_rule":              "scip-ingest",
 					"resolution_artifact_sha256": indexSHA256,

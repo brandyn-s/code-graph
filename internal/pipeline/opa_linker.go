@@ -138,7 +138,7 @@ func (p *Pipeline) passOPALinker() {
 					Project:  p.ProjectName,
 					SourceID: policyID,
 					TargetID: target.ID,
-					Type:     "POLICY_GATES",
+					Type:     store.EdgePolicyGates,
 					Properties: map[string]any{
 						"policy_package": pkg,
 						"tool_name":      toolName,

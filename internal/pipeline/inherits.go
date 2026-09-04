@@ -56,7 +56,7 @@ func (p *Pipeline) passInherits() {
 					Project:  p.ProjectName,
 					SourceID: n.ID,
 					TargetID: targetNode.ID,
-					Type:     "INHERITS",
+					Type:     store.EdgeInherits,
 					Properties: map[string]any{
 						"confidence_tier": store.ConfidenceInferred,
 					},

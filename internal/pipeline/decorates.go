@@ -66,7 +66,7 @@ func (p *Pipeline) processNodeDecorators(n *store.Node) int {
 			Project:    p.ProjectName,
 			SourceID:   n.ID,
 			TargetID:   targetNode.ID,
-			Type:       "DECORATES",
+			Type:       store.EdgeDecorates,
 			Properties: map[string]any{"decorator": decStr},
 		})
 		count++

@@ -571,7 +571,7 @@ func collectLSPResolvedEdges(resolvedCalls []cbm.ResolvedCall, registry *Functio
 		edges = append(edges, resolvedEdge{
 			CallerQN: rc.CallerQN,
 			TargetQN: rc.CalleeQN,
-			Type:     "CALLS",
+			Type:     store.EdgeCalls,
 			Properties: map[string]any{
 				"confidence":             float64(rc.Confidence),
 				"confidence_band":        confidenceBand(float64(rc.Confidence)),
@@ -843,7 +843,7 @@ func (p *Pipeline) resolveFileUsagesCBM(relPath string, ext *cachedExtraction) [
 		edges = append(edges, resolvedEdge{
 			CallerQN: callerQN,
 			TargetQN: result.QualifiedName,
-			Type:     "USAGE",
+			Type:     store.EdgeUsage,
 		})
 	}
 
@@ -969,7 +969,7 @@ func (p *Pipeline) resolveFileTypeRefsCBM(relPath string, ext *cachedExtraction)
 		edges = append(edges, resolvedEdge{
 			CallerQN: funcQN,
 			TargetQN: result.QualifiedName,
-			Type:     "USES_TYPE",
+			Type:     store.EdgeUsesType,
 		})
 	}
 
@@ -1006,7 +1006,7 @@ func (p *Pipeline) resolveFileConfiguresCBM(relPath string, ext *cachedExtractio
 		edges = append(edges, resolvedEdge{
 			CallerQN: funcQN,
 			TargetQN: targetModuleQN,
-			Type:     "CONFIGURES",
+			Type:     store.EdgeConfigures,
 			Properties: map[string]any{
 				"env_key": envKey,
 			},

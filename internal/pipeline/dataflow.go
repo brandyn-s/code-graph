@@ -66,7 +66,7 @@ func (p *Pipeline) passDataflow() {
 					Project:  p.ProjectName,
 					SourceID: paramNode.ID,
 					TargetID: funcNode.ID,
-					Type:     "PARAMETER_OF",
+					Type:     store.EdgeParameterOf,
 					Properties: map[string]any{
 						"index": i,
 					},

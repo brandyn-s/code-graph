@@ -163,7 +163,7 @@ func (p *Pipeline) passLockfileDeps() {
 				Project:  p.ProjectName,
 				SourceID: rootModuleID,
 				TargetID: pkgID,
-				Type:     "DEPENDS_ON",
+				Type:     store.EdgeDependsOn,
 				Properties: map[string]any{
 					"version": dep.Version,
 					"source":  sources[i],

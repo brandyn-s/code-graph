@@ -639,7 +639,7 @@ func (p *Pipeline) createNixDependsOnEdges(infras []infraFile) {
 				Project:  p.ProjectName,
 				SourceID: srcID,
 				TargetID: tgtID,
-				Type:     "DEPENDS_ON",
+				Type:     store.EdgeDependsOn,
 			})
 			edgeCount++
 		}

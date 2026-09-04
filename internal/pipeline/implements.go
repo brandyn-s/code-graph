@@ -159,7 +159,7 @@ func (p *Pipeline) matchImplements(
 				Project:  p.ProjectName,
 				SourceID: structNode.ID,
 				TargetID: iface.node.ID,
-				Type:     "IMPLEMENTS",
+				Type:     store.EdgeImplements,
 				Properties: map[string]any{
 					"confidence_tier": store.ConfidenceInferred,
 				},
@@ -200,7 +200,7 @@ func (p *Pipeline) createOverrideEdges(
 			Project:  p.ProjectName,
 			SourceID: structMethodNode.ID,
 			TargetID: ifaceMethodNode.ID,
-			Type:     "OVERRIDE",
+			Type:     store.EdgeOverride,
 			Properties: map[string]any{
 				"confidence_tier": store.ConfidenceInferred,
 			},
@@ -323,7 +323,7 @@ func (p *Pipeline) processExplicitBases(classNode *store.Node) (linkCount, overr
 			Project:  p.ProjectName,
 			SourceID: classNode.ID,
 			TargetID: ifaceNode.ID,
-			Type:     "IMPLEMENTS",
+			Type:     store.EdgeImplements,
 			Properties: map[string]any{
 				"confidence_tier": store.ConfidenceInferred,
 			},
@@ -378,7 +378,7 @@ func (p *Pipeline) createOverrideEdgesExplicit(classNode, ifaceNode *store.Node)
 			Project:  p.ProjectName,
 			SourceID: classMethodID,
 			TargetID: ifaceMethodNode.ID,
-			Type:     "OVERRIDE",
+			Type:     store.EdgeOverride,
 			Properties: map[string]any{
 				"confidence_tier": store.ConfidenceInferred,
 			},
@@ -556,7 +556,7 @@ func (p *Pipeline) implementsRust() (linkCount, overrideCount int) {
 				Project:  p.ProjectName,
 				SourceID: structDBNode.ID,
 				TargetID: traitDBNode.ID,
-				Type:     "IMPLEMENTS",
+				Type:     store.EdgeImplements,
 				Properties: map[string]any{
 					"confidence_tier": store.ConfidenceInferred,
 				},

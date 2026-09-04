@@ -196,6 +196,21 @@ The earlier "we exceed 92.7%" claim in this doc was apples-to-oranges (n=16 Loc-
 | `CODE_GRAPH_MATCH_TRACE` | unset (off) | Set to `1` to log HTTP route matches that scored above zero but below threshold (tuning aid). |
 | `VOYAGE_EMBED_MODEL` | built-in default | Voyage embedding model id used for node embeddings. |
 | `ANTHROPIC_MODEL` | built-in default | Anthropic model id used by the localization agent and rationale tools. |
+| `CODE_GRAPH_AUTO_RECOVERY` | unset (off) | Set to any non-empty value to let the store rebuild a project database automatically when SQLite reports corruption at open time; otherwise the failure is surfaced and the operator decides. |
+| `ENABLE_SIMILARITY_EDGES` | unset (off) | `1`/`true`/`yes`/`on` adds `SEMANTICALLY_SIMILAR_TO` edges after the embeddings pass (needs `VOYAGE_API_KEY`). |
+| `CODE_GRAPH_SIMILARITY_THRESHOLD` | built-in default | Minimum cosine similarity, in (0, 1], for a similarity edge. |
+| `CODE_GRAPH_SIMILARITY_TOPK` | built-in default | Nearest neighbours considered per node when building similarity edges. |
+| `CODE_GRAPH_SIMILARITY_SKIP_HOPS` | built-in default | Skip node pairs already connected within this many structural hops. |
+| `CBM_GRAMMAR_BASELINES_PATH` | embedded baseline | Override the grammar-version baseline JSON that `index_health` compares against; used by the drift-check workflow. |
+| `RESOLVER_TIER2_DEBUG` | unset (off) | Set to `1` to log one line per tier-2 receiver-type resolution decision. |
+| `RESOLVER_STATIC_DISPATCH_DEBUG` | unset (off) | Set to `1` to log static-dispatch resolution decisions for Rust. |
+| `LOCAGENT_EPISODIC_MEMORY` | unset (off) | Set to `1` to retrieve prior issue localizations from the episodic-memory project before the agent loop runs. |
+| `LOCAGENT_EPISODIC_PROJECT` | built-in default | Project name that holds episodic memory. |
+| `LOCAGENT_EPISODIC_TOP_K` | built-in default | Episodic hits retrieved per issue. |
+
+Every variable above is declared once in `internal/config`; read it through
+`config.Get`/`config.IsSet`/`config.Truthy` rather than `os.Getenv`. The
+package's tests fail when a key is undocumented here or read directly.
 
 ## Test Conventions
 

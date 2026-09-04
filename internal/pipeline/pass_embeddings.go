@@ -5,10 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/brandyn-s/code-graph/internal/config"
 )
 
 // Default overall timeout for the embeddings pass. Large graphs with many
@@ -76,7 +77,7 @@ func (p *Pipeline) passEmbeddingsMissing() {
 // every embeddable node (full-index behavior); missingOnly=true embeds only
 // nodes without an existing node_embeddings row.
 func (p *Pipeline) runEmbeddingsPass(missingOnly bool) {
-	if skip := os.Getenv("CODE_GRAPH_SKIP_EMBEDDINGS"); skip == "1" || strings.EqualFold(skip, "true") {
+	if skip := config.Get(config.SkipEmbeddings); skip == "1" || strings.EqualFold(skip, "true") {
 		slog.Info("pass.embeddings.skip", "reason", "CODE_GRAPH_SKIP_EMBEDDINGS set")
 		return
 	}
@@ -89,7 +90,7 @@ func (p *Pipeline) runEmbeddingsPass(missingOnly bool) {
 
 	// Resolve overall timeout.
 	timeout := embeddingsPassDefaultTimeout
-	if v := os.Getenv("CODE_GRAPH_EMBEDDINGS_TIMEOUT_SEC"); v != "" {
+	if v := config.Get(config.EmbeddingsTimeoutSec); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			timeout = time.Duration(n) * time.Second
 		} else {

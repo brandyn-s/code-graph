@@ -3,10 +3,10 @@ package pipeline
 import (
 	"fmt"
 	"log/slog"
-	"os"
 	"strconv"
 	"strings"
 
+	"github.com/brandyn-s/code-graph/internal/config"
 	"github.com/brandyn-s/code-graph/internal/store"
 )
 
@@ -53,9 +53,9 @@ func (p *Pipeline) passSimilarityEdges() {
 		return
 	}
 
-	threshold := envFloat("CODE_GRAPH_SIMILARITY_THRESHOLD", defaultSimilarityThreshold)
-	topK := envInt("CODE_GRAPH_SIMILARITY_TOPK", defaultSimilarityTopK)
-	skipHops := envInt("CODE_GRAPH_SIMILARITY_SKIP_HOPS", defaultSimilaritySkipHops)
+	threshold := envFloat(config.SimilarityThresh, defaultSimilarityThreshold)
+	topK := envInt(config.SimilarityTopK, defaultSimilarityTopK)
+	skipHops := envInt(config.SimilaritySkipHops, defaultSimilaritySkipHops)
 
 	embeddedIDs, err := p.Store.IterEmbeddedNodeIDs(p.ProjectName)
 	if err != nil {
@@ -236,7 +236,7 @@ func withinHopsFromMap(adj map[int64]map[int64]struct{}, a, b int64, maxHops int
 // a truthy value. Accepts the usual suspects to avoid the "but I set it
 // to true" footgun.
 func similarityEdgesEnabled() bool {
-	v := strings.TrimSpace(os.Getenv("ENABLE_SIMILARITY_EDGES"))
+	v := strings.TrimSpace(config.Get(config.SimilarityEdges))
 	switch strings.ToLower(v) {
 	case "1", "true", "yes", "on":
 		return true
@@ -244,8 +244,8 @@ func similarityEdgesEnabled() bool {
 	return false
 }
 
-func envFloat(key string, def float64) float64 {
-	if v := os.Getenv(key); v != "" {
+func envFloat(key config.Key, def float64) float64 {
+	if v := config.Get(key); v != "" {
 		if f, err := strconv.ParseFloat(v, 64); err == nil && f > 0 && f <= 1 {
 			return f
 		}
@@ -253,8 +253,8 @@ func envFloat(key string, def float64) float64 {
 	return def
 }
 
-func envInt(key string, def int) int {
-	if v := os.Getenv(key); v != "" {
+func envInt(key config.Key, def int) int {
+	if v := config.Get(key); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			return n
 		}

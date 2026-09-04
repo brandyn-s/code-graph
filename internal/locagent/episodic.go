@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"os"
 	"strconv"
 	"strings"
 
+	"github.com/brandyn-s/code-graph/internal/config"
 	"github.com/brandyn-s/code-graph/internal/pipeline"
 	"github.com/brandyn-s/code-graph/internal/store"
 )
@@ -57,17 +57,17 @@ type EpisodicHit struct {
 // to the issue text. Returns (nil, nil) when retrieval is disabled or
 // silently degraded — callers should treat that as "no episodic hint."
 func retrieveEpisodicMemory(ctx context.Context, issue string) ([]EpisodicHit, error) {
-	if os.Getenv("LOCAGENT_EPISODIC_MEMORY") != "1" {
+	if config.Get(config.LocAgentEpisodic) != "1" {
 		return nil, nil
 	}
 
-	proj := os.Getenv("LOCAGENT_EPISODIC_PROJECT")
+	proj := config.Get(config.LocAgentEpisodicProj)
 	if proj == "" {
 		proj = defaultEpisodicProject
 	}
 
 	topK := defaultEpisodicTopK
-	if v := os.Getenv("LOCAGENT_EPISODIC_TOP_K"); v != "" {
+	if v := config.Get(config.LocAgentEpisodicTopK); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n >= 1 && n <= maxEpisodicTopK {
 			topK = n
 		}

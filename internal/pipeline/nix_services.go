@@ -53,6 +53,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/brandyn-s/code-graph/internal/config"
 	"github.com/brandyn-s/code-graph/internal/discover"
 	"github.com/brandyn-s/code-graph/internal/store"
 )
@@ -220,8 +221,8 @@ func newNixPatterns(optionPrefix, pkgsPrefix string) *nixPatterns {
 // compiling each distinct prefix pair once.
 func activeNixPatterns() *nixPatterns {
 	key := [2]string{
-		sanitizeNixPrefix(os.Getenv(NixServiceOptionPrefixEnv), defaultNixServiceOptionPrefix),
-		sanitizeNixPrefix(os.Getenv(NixPkgsPrefixEnv), defaultNixPkgsPrefix),
+		sanitizeNixPrefix(config.Get(config.NixServiceOptionPfx), defaultNixServiceOptionPrefix),
+		sanitizeNixPrefix(config.Get(config.NixPkgsPrefix), defaultNixPkgsPrefix),
 	}
 	nixPatternsMu.Lock()
 	defer nixPatternsMu.Unlock()

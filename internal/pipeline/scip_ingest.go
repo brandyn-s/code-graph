@@ -35,6 +35,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/brandyn-s/code-graph/internal/config"
 	"github.com/brandyn-s/code-graph/internal/store"
 	"github.com/scip-code/scip/bindings/go/scip"
 	"google.golang.org/protobuf/proto"
@@ -90,7 +91,7 @@ type SCIPIngestStatus struct {
 // Any non-empty value other than an explicit falsey word enables it, matching
 // how the other CBM_* gates in this package read their env vars.
 func scipAutoDiscoverEnabled() bool {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv(scipAutoDiscoverEnv))) {
+	switch strings.ToLower(strings.TrimSpace(config.Get(config.SCIPAutoDiscover))) {
 	case "", "0", "false", "no", "off":
 		return false
 	default:
@@ -102,7 +103,7 @@ func scipAutoDiscoverEnabled() bool {
 // how it was found. The provenance string is logged so an auto-discovered index
 // is distinguishable from an explicitly-configured one after the fact.
 func scipIndexPath(repoRoot string) (path, source string) {
-	if env := os.Getenv(scipIndexPathEnv); env != "" {
+	if env := config.Get(config.SCIPIndexPath); env != "" {
 		return env, "env:" + scipIndexPathEnv
 	}
 	if repoRoot == "" || !scipAutoDiscoverEnabled() {

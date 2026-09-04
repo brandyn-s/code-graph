@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+
+	"github.com/brandyn-s/code-graph/internal/config"
 )
 
 // RecoveryEvent classifies what auto-recovery did, if anything.
@@ -80,7 +82,7 @@ func OpenPathWithAutoRecovery(dbPath, name string) (*Store, RecoveryEvent, error
 	if err == nil {
 		return s, RecoveryNone, nil
 	}
-	if os.Getenv(AutoRecoveryEnvVar) == "" {
+	if config.Get(config.AutoRecovery) == "" {
 		return nil, RecoveryNone, err
 	}
 	event := classifyAutoRecoverable(err)

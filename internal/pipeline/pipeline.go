@@ -26,6 +26,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/brandyn-s/code-graph/internal/cbm"
+	"github.com/brandyn-s/code-graph/internal/config"
 	"github.com/brandyn-s/code-graph/internal/discover"
 	"github.com/brandyn-s/code-graph/internal/fqn"
 	"github.com/brandyn-s/code-graph/internal/httplink"
@@ -333,7 +334,7 @@ var ErrHeapPressure = errors.New("pipeline aborted: heap pressure exceeded CODE_
 // the check (the production default). Read each call so tests can flip
 // the env without restarting the binary.
 func heapLimitBytes() uint64 {
-	raw := os.Getenv("CODE_GRAPH_HEAP_LIMIT_MB")
+	raw := config.Get(config.HeapLimitMB)
 	if raw == "" {
 		return 0
 	}
@@ -603,7 +604,7 @@ func (p *Pipeline) runPasses(files []discover.FileInfo) (bool, error) {
 // CODE_GRAPH_FULL_REINDEX_EVERY. Default 50; 0 (or unparseable) disables
 // the sentinel and lets the incremental path run indefinitely.
 func fullReindexEvery() int {
-	raw := os.Getenv("CODE_GRAPH_FULL_REINDEX_EVERY")
+	raw := config.Get(config.FullReindexEvery)
 	if raw == "" {
 		return 50
 	}
@@ -1236,7 +1237,7 @@ func (p *Pipeline) findCallerOfTargetDependents(changed, unchanged []discover.Fi
 // expanding the dependent set indefinitely; not recommended for large
 // repos).
 func incrementalCap() int {
-	raw := os.Getenv("CODE_GRAPH_INCREMENTAL_CAP")
+	raw := config.Get(config.IncrementalCap)
 	if raw == "" {
 		return 10000
 	}

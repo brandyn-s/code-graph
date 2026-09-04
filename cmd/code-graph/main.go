@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/brandyn-s/code-graph/internal/cbm"
+	"github.com/brandyn-s/code-graph/internal/config"
 	"github.com/brandyn-s/code-graph/internal/store"
 	"github.com/brandyn-s/code-graph/internal/tools"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -45,8 +46,8 @@ var version = "0.9.0-dev"
 // Returns a closer that should be called at process exit. Safe to call
 // even when no file was opened (no-op in that case).
 func configureSlogOutput() func() {
-	filePath := os.Getenv("CODE_GRAPH_LOG_FILE")
-	exclusivePath := os.Getenv("CODE_GRAPH_LOG_FILE_ONLY")
+	filePath := config.Get(config.LogFile)
+	exclusivePath := config.Get(config.LogFileOnly)
 	if filePath == "" && exclusivePath == "" {
 		return func() {}
 	}
@@ -80,6 +81,7 @@ func configureSlogOutput() func() {
 
 func main() {
 	closeLog := configureSlogOutput()
+	config.LogResolved(nil)
 	defer closeLog()
 
 	tools.SetVersion(version)

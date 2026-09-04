@@ -25,13 +25,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
 
 	"github.com/brandyn-s/code-graph/internal/anthropic"
+	"github.com/brandyn-s/code-graph/internal/config"
 	"github.com/brandyn-s/code-graph/internal/localize"
 	"github.com/brandyn-s/code-graph/internal/ranking"
 	"github.com/brandyn-s/code-graph/internal/store"
@@ -200,7 +200,7 @@ type TranscriptEntry struct {
 // Cost: scales linearly with N — 2 iterations = ~2x tokens.
 func Run(ctx context.Context, st *store.Store, project, issue string, topK int) (*Result, error) {
 	iters := 2
-	if env := os.Getenv("LOCAGENT_ITERATIONS"); env != "" {
+	if env := config.Get(config.LocAgentIterations); env != "" {
 		if n, err := strconv.Atoi(env); err == nil && n >= 1 && n <= 3 {
 			iters = n
 		}
@@ -240,7 +240,7 @@ func Run(ctx context.Context, st *store.Store, project, issue string, topK int) 
 // iter=2 deserves top-3 priority. Falsifier: ≥30% P95 wall-time
 // reduction with ≤1pp Acc@10 regression on Loc-Bench n>=20.
 func runWithConsistency(ctx context.Context, st *store.Store, project, issue string, topK, iters int) (*Result, error) {
-	if os.Getenv("LOCAGENT_PARALLEL") == "1" {
+	if config.Get(config.LocAgentParallel) == "1" {
 		return runWithConsistencyParallel(ctx, st, project, issue, topK, iters)
 	}
 	return runWithConsistencySerial(ctx, st, project, issue, topK, iters)
@@ -510,12 +510,12 @@ func runOnce(ctx context.Context, st *store.Store, project, issue string, topK i
 	// LOCAGENT_PROMPT_VARIANT=aggressive to revert to the tighter
 	// 5-turn-budget prompt. Unknown values fall back to open.
 	systemPrompt := systemPromptOpen
-	if os.Getenv("LOCAGENT_PROMPT_VARIANT") == "aggressive" {
+	if config.Get(config.LocAgentPromptVariant) == "aggressive" {
 		systemPrompt = systemPromptAggressive
 	}
 
 	maxTurns := maxTurnsDefault
-	if env := os.Getenv("LOCAGENT_MAX_TURNS"); env != "" {
+	if env := config.Get(config.LocAgentMaxTurns); env != "" {
 		if n, err := strconv.Atoi(env); err == nil && n > 0 && n <= 100 {
 			maxTurns = n
 		}
@@ -527,7 +527,7 @@ func runOnce(ctx context.Context, st *store.Store, project, issue string, topK i
 	// issues. Falls back to the original on any error. Cost is logged
 	// against the run.
 	rewrittenQuery := ""
-	if os.Getenv("LOCAGENT_REWRITE") == "1" {
+	if config.Get(config.LocAgentRewrite) == "1" {
 		rw, inTok, outTok, rerr := RewriteIssue(ctx, client, issue)
 		result.InputTokens += inTok
 		result.OutputTokens += outTok
@@ -769,7 +769,7 @@ func dispatchTool(ctx context.Context, st *store.Store, project, projectRoot, na
 			// without meaningfully increasing latency. LOCAGENT_BFS_DEPTH
 			// overrides for ablations.
 			args.Depth = 4
-			if env := os.Getenv("LOCAGENT_BFS_DEPTH"); env != "" {
+			if env := config.Get(config.LocAgentBFSDepth); env != "" {
 				if d, perr := strconv.Atoi(env); perr == nil && d >= 1 && d <= 6 {
 					args.Depth = d
 				}

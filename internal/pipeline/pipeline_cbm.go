@@ -2,11 +2,11 @@ package pipeline
 
 import (
 	"log/slog"
-	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/brandyn-s/code-graph/internal/cbm"
+	"github.com/brandyn-s/code-graph/internal/config"
 	"github.com/brandyn-s/code-graph/internal/discover"
 	"github.com/brandyn-s/code-graph/internal/fqn"
 	"github.com/brandyn-s/code-graph/internal/lang"
@@ -753,7 +753,7 @@ func (p *Pipeline) resolveCallEdge(
 	// Pseudo-caller edges are excluded from the drop — they're already
 	// classified as ResolverRuleModalPseudo above, which is not in the
 	// loose-cross-package set.
-	if isLooseCrossPackageRule(rule) && os.Getenv("RESOLVER_DROP_LOOSE_CROSS_PACKAGE") != "" {
+	if isLooseCrossPackageRule(rule) && config.Get(config.ResolverDropLooseCrossPkg) != "" {
 		return resolvedEdge{}, false
 	}
 

@@ -4,9 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 
 	"github.com/brandyn-s/code-graph/internal/anthropic"
+	"github.com/brandyn-s/code-graph/internal/config"
 	"github.com/brandyn-s/code-graph/internal/locagent"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -44,8 +44,8 @@ func stopReasonToBand(stop string) string {
 // envOrDefault returns the env var value if set, otherwise fallback.
 // Used to thread the configured ANTHROPIC_MODEL into provenance metadata
 // without re-reading env in multiple call sites.
-func envOrDefault(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
+func envOrDefault(key config.Key, fallback string) string {
+	if v := config.Get(key); v != "" {
 		return v
 	}
 	return fallback
@@ -120,7 +120,7 @@ func (s *Server) handleCodeLocalizeAgent(ctx context.Context, req *mcp.CallToolR
 	out.Metadata = NewMetadataBuilder().
 		WithFreshness(freshnessStateFromIndexedAt(indexedAt), indexedAt).
 		WithProvenance("", "graph_db").
-		WithModel(anthropic.SanitizeModelID(envOrDefault("ANTHROPIC_MODEL", "claude-haiku-4-5-20251001"))).
+		WithModel(anthropic.SanitizeModelID(envOrDefault(config.AnthropicModel, "claude-haiku-4-5-20251001"))).
 		WithConfidence(stopReasonToBand(res.StopReason), "stop_reason="+res.StopReason).
 		Build()
 

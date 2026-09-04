@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/brandyn-s/code-graph/internal/config"
 	"github.com/brandyn-s/code-graph/internal/store"
 )
 
@@ -1991,7 +1992,7 @@ func (l *Linker) matchAndLink(routes []RouteHandler, callSites []HTTPCallSite) [
 				// Set CODE_GRAPH_MATCH_TRACE=1 to surface which (caller, route)
 				// pairs scored above 0 but below threshold. Useful when tuning
 				// pathMatchScore for the partial-match-FP class (Phase E1).
-				if os.Getenv("CODE_GRAPH_MATCH_TRACE") != "" {
+				if config.Get(config.MatchTrace) != "" {
 					slog.Debug(
 						"matchAndLink.reject_below_threshold",
 						"caller", cs.SourceQualifiedName,
@@ -2007,7 +2008,7 @@ func (l *Linker) matchAndLink(routes []RouteHandler, callSites []HTTPCallSite) [
 				}
 				continue
 			}
-			if os.Getenv("CODE_GRAPH_MATCH_TRACE") != "" {
+			if config.Get(config.MatchTrace) != "" {
 				slog.Debug(
 					"matchAndLink.accept",
 					"caller", cs.SourceQualifiedName,

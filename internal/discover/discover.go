@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/brandyn-s/code-graph/internal/config"
 	"github.com/brandyn-s/code-graph/internal/lang"
 )
 
@@ -29,7 +30,7 @@ import (
 // default. Discover treats a MaxFileSize of 0 as "no limit".
 func FullModeMaxFileSize() int64 {
 	const defaultMax = 1 << 20 // 1MB
-	v := os.Getenv("CBM_MAX_FILE_BYTES")
+	v := config.Get(config.MaxFileBytes)
 	if v == "" {
 		return defaultMax
 	}

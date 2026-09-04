@@ -15,9 +15,10 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"os"
 	"strings"
 	"time"
+
+	"github.com/brandyn-s/code-graph/internal/config"
 )
 
 const (
@@ -39,11 +40,11 @@ type Client struct {
 // is not set, matching the VoyageClient nil-on-missing-key pattern so
 // callers can degrade gracefully instead of crashing.
 func NewClient() *Client {
-	key := os.Getenv("ANTHROPIC_API_KEY")
+	key := config.Get(config.AnthropicAPIKey)
 	if key == "" {
 		return nil
 	}
-	model := SanitizeModelID(os.Getenv("ANTHROPIC_MODEL"))
+	model := SanitizeModelID(config.Get(config.AnthropicModel))
 	if model == "" {
 		model = defaultModel
 	}

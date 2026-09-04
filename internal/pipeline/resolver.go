@@ -3,11 +3,11 @@ package pipeline
 import (
 	"log/slog"
 	"math"
-	"os"
 	"slices"
 	"strings"
 	"sync"
 
+	"github.com/brandyn-s/code-graph/internal/config"
 	"github.com/brandyn-s/code-graph/internal/lang"
 )
 
@@ -15,13 +15,13 @@ import (
 // Set RESOLVER_TIER2_DEBUG=1 to emit one slog.Info per call describing which
 // short-circuit path was taken. Used by Phase B of the assetman Tier-2 diagnostic
 // plan (knowledge-base PR #491) to classify the 72 ambiguous fuzzy edges.
-var tier2DebugEnabled = os.Getenv("RESOLVER_TIER2_DEBUG") != ""
+var tier2DebugEnabled = config.Get(config.ResolverTier2Debug) != ""
 
 // staticDispatchDebugEnabled gates one slog.Info per resolveViaTypeStaticDispatch
 // call. Used to classify why bucket-B FNs (Type::new constructors) drop on PSM
 // Rust — distinguishes "type not registered" from "static fn not registered as
 // child" from "reachability rejected (import binding missing)" from "ambiguous".
-var staticDispatchDebugEnabled = os.Getenv("RESOLVER_STATIC_DISPATCH_DEBUG") != ""
+var staticDispatchDebugEnabled = config.Get(config.ResolverStaticDispatchDebug) != ""
 
 // envPolicy classifies the RESOLVER_DROP_FUZZY_JANUSIAN_CHAINS env state.
 // Phase E (2026-05-14) split the policy into three states so the default
@@ -48,14 +48,14 @@ const (
 //	unset           → Python only (Phase E default)
 //	"1"/"true"/...  → on for every language (Phase A legacy behavior)
 //	"0"/"false"/... → off for every language (full opt-out)
-var fuzzyJanusianChainEnvPolicy = parseEnvPolicy("RESOLVER_DROP_FUZZY_JANUSIAN_CHAINS")
+var fuzzyJanusianChainEnvPolicy = parseEnvPolicy(config.ResolverDropFuzzyJanusian)
 
 // parseEnvPolicy reads an env var as a tri-state policy. Returns
 // envPolicyUnset when the var is unset (empty string), envPolicyForceOff
 // for values starting with "0", "f", "F", "n", or "N", and
 // envPolicyForceOn for anything else.
-func parseEnvPolicy(name string) envPolicy {
-	v := os.Getenv(name)
+func parseEnvPolicy(key config.Key) envPolicy {
+	v := config.Get(key)
 	if v == "" {
 		return envPolicyUnset
 	}
@@ -213,7 +213,7 @@ func shouldDropFuzzyJanusianChains(language lang.Language) bool {
 // regardless of the per-language default. Useful for ad-hoc adversarial
 // fixture validation on Go/TS.
 func shouldRequireImportsForLooseCrossPackage(language lang.Language) bool {
-	if os.Getenv("RESOLVER_REQUIRE_IMPORTS_FOR_LOOSE_CROSS_PACKAGE") != "" {
+	if config.Get(config.ResolverRequireImports) != "" {
 		return true
 	}
 	return language == lang.Rust
@@ -511,7 +511,7 @@ func (r *FunctionRegistry) resolveViaTypeStaticDispatch(ctx CallContext) Resolut
 		// `plans/2026-05-14-code-stack-future-arcs-abc-phase-a-pppp-2-terminal.md`.
 		if !exists && label == "Enum" &&
 			!strings.Contains(remainder, ".") &&
-			os.Getenv("RESOLVER_EMIT_ENUM_VARIANT_AS_PARENT") != "" {
+			config.Get(config.ResolverEnumVariantParent) != "" {
 			candidate = classQN
 			exists = true
 		}

@@ -17,11 +17,11 @@ package ranking
 import (
 	"context"
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/brandyn-s/code-graph/internal/config"
 	"github.com/brandyn-s/code-graph/internal/pipeline"
 	"github.com/brandyn-s/code-graph/internal/store"
 )
@@ -115,7 +115,7 @@ func MatchSeedNodesByEmbedding(ctx context.Context, st *store.Store, project, qu
 	// semantically-related code; including them as seeds amplifies through
 	// BFS into long lists of unrelated nodes.
 	threshold := embeddingSeedMinCosineDefault
-	if env := os.Getenv("EMBEDDING_SEED_MIN_COSINE"); env != "" {
+	if env := config.Get(config.SeedMinCosine); env != "" {
 		if v, perr := strconv.ParseFloat(env, 64); perr == nil && v >= 0 && v <= 1 {
 			threshold = v
 		}

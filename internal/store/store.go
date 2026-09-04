@@ -12,6 +12,8 @@ import (
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
+
+	"github.com/brandyn-s/code-graph/internal/config"
 )
 
 // Querier abstracts *sql.DB and *sql.Tx so store methods work in both contexts.
@@ -72,7 +74,7 @@ const legacyCacheDirName = "codebase-memory-mcp"
 // falling back to the legacy ~/.cache/code-graph when only the
 // legacy directory exists.
 func cacheDir() (string, error) {
-	if override := os.Getenv("CODE_GRAPH_CACHE_DIR"); override != "" {
+	if override := config.Get(config.CacheDir); override != "" {
 		// The operator chooses this directory; clean and absolutize it so the
 		// rest of the store never sees a relative or traversal-shaped path.
 		cleaned, absErr := filepath.Abs(filepath.Clean(override))

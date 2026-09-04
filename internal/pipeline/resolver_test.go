@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/brandyn-s/code-graph/internal/config"
 	"github.com/brandyn-s/code-graph/internal/lang"
 )
 
@@ -783,18 +784,18 @@ func TestApplyReceiverTypeFilter_DebugLogging(t *testing.T) {
 
 func TestParseEnvPolicy(t *testing.T) {
 	t.Setenv("TEST_POLICY_UNSET", "")
-	if got := parseEnvPolicy("TEST_POLICY_UNSET"); got != envPolicyUnset {
+	if got := parseEnvPolicy(config.Key{Name: "TEST_POLICY_UNSET"}); got != envPolicyUnset {
 		t.Errorf("empty env: got %v want envPolicyUnset", got)
 	}
 	for _, v := range []string{"0", "f", "false", "F", "FALSE", "n", "no", "N", "NO"} {
 		t.Setenv("TEST_POLICY_FALSY", v)
-		if got := parseEnvPolicy("TEST_POLICY_FALSY"); got != envPolicyForceOff {
+		if got := parseEnvPolicy(config.Key{Name: "TEST_POLICY_FALSY"}); got != envPolicyForceOff {
 			t.Errorf("value %q: got %v want envPolicyForceOff", v, got)
 		}
 	}
 	for _, v := range []string{"1", "true", "yes", "TRUE", "True", "on"} {
 		t.Setenv("TEST_POLICY_TRUTHY", v)
-		if got := parseEnvPolicy("TEST_POLICY_TRUTHY"); got != envPolicyForceOn {
+		if got := parseEnvPolicy(config.Key{Name: "TEST_POLICY_TRUTHY"}); got != envPolicyForceOn {
 			t.Errorf("value %q: got %v want envPolicyForceOn", v, got)
 		}
 	}

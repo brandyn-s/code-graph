@@ -1,8 +1,7 @@
 package pipeline
 
 import (
-	"os"
-
+	"github.com/brandyn-s/code-graph/internal/config"
 	"github.com/brandyn-s/code-graph/internal/lang"
 )
 
@@ -77,24 +76,24 @@ type LanguageResolverConfig struct {
 // test matrix.
 func ResolverConfigFor(language lang.Language) LanguageResolverConfig {
 	return LanguageResolverConfig{
-		DropLooseCrossPackage:              envFlagPresent("RESOLVER_DROP_LOOSE_CROSS_PACKAGE"),
+		DropLooseCrossPackage:              envFlagPresent(config.ResolverDropLooseCrossPkg),
 		RequireImportsForLooseCrossPackage: resolveRequireImports(language),
 		DropFuzzyJanusianChains:            resolveFuzzyJanusianChainsDrop(language),
-		EmitEnumVariantAsParent:            envFlagPresent("RESOLVER_EMIT_ENUM_VARIANT_AS_PARENT"),
+		EmitEnumVariantAsParent:            envFlagPresent(config.ResolverEnumVariantParent),
 	}
 }
 
 // envFlagPresent returns true if the env var is set to any non-empty
 // string. Mirrors the `os.Getenv(X) != ""` pattern used at every
 // presence-based read site.
-func envFlagPresent(name string) bool {
-	return os.Getenv(name) != ""
+func envFlagPresent(key config.Key) bool {
+	return config.IsSet(key)
 }
 
 // resolveRequireImports mirrors shouldRequireImportsForLooseCrossPackage
 // (resolver.go) — Rust gets true by default, env var forces all.
 func resolveRequireImports(language lang.Language) bool {
-	if envFlagPresent("RESOLVER_REQUIRE_IMPORTS_FOR_LOOSE_CROSS_PACKAGE") {
+	if envFlagPresent(config.ResolverRequireImports) {
 		return true
 	}
 	return language == lang.Rust
@@ -106,7 +105,7 @@ func resolveRequireImports(language lang.Language) bool {
 // migration in PR2 will switch the production call site between these
 // two patterns; the bit-equivalence test below verifies they agree.
 func resolveFuzzyJanusianChainsDrop(language lang.Language) bool {
-	switch parseEnvPolicy("RESOLVER_DROP_FUZZY_JANUSIAN_CHAINS") {
+	switch parseEnvPolicy(config.ResolverDropFuzzyJanusian) {
 	case envPolicyForceOn:
 		return true
 	case envPolicyForceOff:

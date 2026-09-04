@@ -9,8 +9,9 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"os"
 	"time"
+
+	"github.com/brandyn-s/code-graph/internal/config"
 )
 
 const (
@@ -50,11 +51,11 @@ type VoyageClient struct {
 
 // NewVoyageClient creates a client. Returns nil if VOYAGE_API_KEY is not set.
 func NewVoyageClient() *VoyageClient {
-	key := os.Getenv("VOYAGE_API_KEY")
+	key := config.Get(config.VoyageAPIKey)
 	if key == "" {
 		return nil
 	}
-	model := os.Getenv("VOYAGE_EMBED_MODEL")
+	model := config.Get(config.VoyageModel)
 	if model == "" {
 		model = voyageModel
 	}

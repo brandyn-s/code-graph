@@ -45,6 +45,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"time"
+
+	"github.com/brandyn-s/code-graph/internal/config"
 )
 
 // grammarBaselinesPathEnv lets an operator point at baselines.json explicitly.
@@ -158,7 +160,7 @@ func readBaselines(path string) (versions map[string]string, ageDays int, err er
 // succeeds by accident on a machine that happens to have a checkout at the
 // build path — which is exactly how this became build-machine-dependent.
 func findBaselinesPathSource() (path, source string, ok bool) {
-	if override := os.Getenv(grammarBaselinesPathEnv); override != "" {
+	if override := config.Get(config.GrammarBaselinesPath); override != "" {
 		// #nosec G703 -- the path is operator-supplied via the server's own
 		// environment, not request-derived. Anyone able to set it can already
 		// read whatever the process can; only JSON fingerprint strings are

@@ -127,11 +127,8 @@ jobs:
         include:
           - os: macos-14
             experimental: false
-          # TODO(windows): promote to experimental: false once the suite has
-          # passed on windows-latest; failures here are reported but do not
-          # block the merge gate until then.
           - os: windows-latest
-            experimental: true
+            experimental: false
     runs-on: ${{ matrix.os }}
     continue-on-error: ${{ matrix.experimental }}
     timeout-minutes: 40

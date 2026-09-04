@@ -8,7 +8,7 @@ secret is missing.
 
 | Workflow | File | Trigger | Secrets | Purpose |
 |---|---|---|---|---|
-| Core CI | `core-ci.yml` | pull_request, push to `main` | none | Lint against the reviewed baseline, `go test` on Linux and macOS (required) and Windows (advisory until the lane is green), production build and smoke test, shell lint, schema drift check, zero-cost agent contract battery, workflow structure tests |
+| Core CI | `core-ci.yml` | pull_request, push to `main` | none | Lint against the reviewed baseline, `go test` on Linux and macOS (required) and Windows (required)|
 | accuracy-regression | `accuracy-regression.yml` | pull_request and push touching extraction or `bench/accuracy` | none | Oracle comparisons on synthetic fixtures, phantom-edge negative fixtures, Cypher semantics, adversarial F1 floors |
 | ASan | `asan.yml` | pull_request, push to `main` | none | C extractors under AddressSanitizer |
 | fuzz | `fuzz.yml` | nightly schedule, workflow_dispatch | none | Native Go fuzzing of the C extractor entry points; crashers uploaded as artifacts |

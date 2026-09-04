@@ -36,7 +36,7 @@ All notable changes to this project are documented here. The format follows
 - End-to-end MCP client test (`internal/tools/mcp_e2e_test.go`): initialize,
   tools/list against the registry, indexing round trip, evidence query, and
   the stale-source refusal through the go-sdk client.
-- Core CI runs the unit suite on macOS (required) and Windows (advisory
+- Core CI runs the unit suite on macOS and Windows; both lanes are required.
   until green) in addition to Linux.
 - `FuzzExtractFile` seeds every compiled grammar from the synthetic fixtures;
   `fuzz.yml` runs it and the Cypher fuzzers nightly under AddressSanitizer.

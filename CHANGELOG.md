@@ -6,6 +6,22 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (embedding providers)
+- OpenAI-compatible embedding provider: point `CODE_GRAPH_EMBED_BASE_URL` and
+  `CODE_GRAPH_EMBED_MODEL` at OpenAI, Azure OpenAI, Gemini's OpenAI surface,
+  Ollama, vLLM, LM Studio, OpenRouter, or any gateway serving
+  `POST {base}/embeddings`. Credential via `CODE_GRAPH_EMBED_API_KEY` (falls
+  back to `OPENAI_API_KEY`; optional for self-hosted endpoints), header style
+  via `CODE_GRAPH_EMBED_AUTH_HEADER` (`bearer` or Azure's `api-key`), optional
+  width check via `CODE_GRAPH_EMBED_DIMENSION`. `CODE_GRAPH_EMBED_PROVIDER`
+  (`auto` default) selects between `voyage`, `openai`, and `off`; auto prefers
+  Voyage when its key is set, then an OpenAI-compatible base URL.
+- The startup line, `code-graph doctor` (new `provider`, `model`, `endpoint`,
+  `reachability` fields; `voyage_reachability` retained), and every
+  "embeddings unavailable" message now name the resolved provider or how to
+  configure one. Stored embedding rows record the provider's model id.
+- `docs/embeddings.md` documents each vendor's settings and what text is sent.
+
 ### Added (pre-public hardening)
 - `SECURITY.md`: private vulnerability reporting, 90-day disclosure target,
   and a threat model (what is read, where indexes live, what leaves the

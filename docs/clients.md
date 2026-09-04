@@ -7,7 +7,10 @@ auto-detects and configures all of the clients marked "auto" in one step;
 `code-graph install --dry-run` shows what it would change.
 
 Optional environment: set `VOYAGE_API_KEY` in the client config's `env` block
-to enable semantic node search. Everything else works offline.
+to enable semantic node search with Voyage, or `CODE_GRAPH_EMBED_BASE_URL` and
+`CODE_GRAPH_EMBED_MODEL` to use any OpenAI-compatible embeddings endpoint
+(OpenAI, Azure, Gemini, Ollama, vLLM, and others; see
+[embeddings.md](embeddings.md)). Everything else works offline.
 
 ## Claude Code (auto)
 

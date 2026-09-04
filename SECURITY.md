@@ -19,8 +19,10 @@ checkout. Indexing is a local operation: it parses files with vendored
 tree-sitter grammars and hand-written C extractors, optionally runs a compiler
 indexer (SCIP) you already have installed, and writes one SQLite database per
 project under `~/.cache/code-graph` (or `CODE_GRAPH_CACHE_DIR`). Nothing leaves
-the machine by default. If you set `VOYAGE_API_KEY`, selected node text and
-query text are sent to Voyage AI for embeddings; the optional research
+the machine by default. If you configure an embedding provider (`VOYAGE_API_KEY`
+for Voyage AI, or `CODE_GRAPH_EMBED_BASE_URL` for an OpenAI-compatible endpoint
+you choose, including self-hosted ones), node names, signatures, and query
+text are sent to that endpoint for embeddings; the optional research
 batteries under `bench/` call Anthropic only when you run them with
 `ANTHROPIC_API_KEY`. Query results include file paths and source line excerpts
 from the indexed tree, so treat the MCP client that receives them as trusted

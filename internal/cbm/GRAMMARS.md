@@ -104,3 +104,14 @@ in during the 38-grammar cut. The grammar has no named fields; the
 extraction fallbacks live in extract_defs.c / extract_calls.c /
 extract_unified.c / helpers.c gated on CBM_LANG_POWERSHELL, and are
 pinned by TestPowerShellExtraction.
+
+## Grammars added from the upstream manifest (0.9.1)
+
+Lua, Vue, Svelte, GraphQL, go.mod, Erlang, and Clojure were vendored at the
+commits pinned in upstream codebase-memory-mcp's `MANIFEST.md` using
+`scripts/vendor-grammar-from-manifest.sh`. They are in the default build
+(about 4 MB of parser source in total). Extraction depth today: Lua, Erlang,
+and Clojure emit functions and calls; GraphQL emits types and fields; go.mod
+emits require/replace directives; Vue and Svelte are parsed for the module
+node and branching only (embedded `<script>` blocks are not yet extracted).
+Smoke coverage: `internal/cbm/grammar_smoke_test.go`.

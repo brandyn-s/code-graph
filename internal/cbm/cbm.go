@@ -206,6 +206,13 @@ var languageToC = map[lang.Language]C.CBMLanguage{
 	lang.Makefile:   C.CBM_LANG_MAKEFILE,
 	lang.CMake:      C.CBM_LANG_CMAKE,
 	lang.Protobuf:   C.CBM_LANG_PROTOBUF,
+	lang.Lua:        C.CBM_LANG_LUA,
+	lang.Vue:        C.CBM_LANG_VUE,
+	lang.Svelte:     C.CBM_LANG_SVELTE,
+	lang.GraphQL:    C.CBM_LANG_GRAPHQL,
+	lang.GoMod:      C.CBM_LANG_GOMOD,
+	lang.Erlang:     C.CBM_LANG_ERLANG,
+	lang.Clojure:    C.CBM_LANG_CLOJURE,
 }
 
 // ParseTimeoutMicros is the default per-file parse timeout (10 seconds).

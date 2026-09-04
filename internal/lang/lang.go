@@ -34,6 +34,14 @@ const (
 	Makefile   Language = "makefile"
 	CMake      Language = "cmake"
 	Protobuf   Language = "protobuf"
+	// Vendored from upstream codebase-memory-mcp's manifest (0.9.1)
+	Lua     Language = "lua"
+	Vue     Language = "vue"
+	Svelte  Language = "svelte"
+	GraphQL Language = "graphql"
+	GoMod   Language = "gomod"
+	Erlang  Language = "erlang"
+	Clojure Language = "clojure"
 )
 
 // optionalLanguages are compiled in only with the cbm_all build tag. Their
@@ -72,6 +80,7 @@ func AllLanguages() []Language {
 		C, Bash, PowerShell, Nix, CUDA,
 		HTML, CSS, SCSS, YAML, TOML, HCL, SQL, Dockerfile,
 		JSON, XML, Markdown, Makefile, CMake, Protobuf,
+		Lua, Vue, Svelte, GraphQL, GoMod, Erlang, Clojure,
 	}
 	out := make([]Language, 0, len(all))
 	for _, l := range all {
@@ -154,6 +163,7 @@ var filenameToLanguage = map[string]Language{
 	"makefile":       Makefile,
 	"CMakeLists.txt": CMake,
 	"Dockerfile":     Dockerfile,
+	"go.mod":         GoMod,
 }
 
 // LanguageForFilename returns the Language for an exact filename match.

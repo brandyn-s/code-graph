@@ -1894,12 +1894,73 @@ static void wd_push_children(wd_stack_t* s, TSNode node) {
     }
 }
 
+
+// --- Clojure definitions ---
+// Clojure has no dedicated definition node: `(defn name [args] ...)`,
+// `(defmacro ...)`, `(def name value)` and `(defonce ...)` are list_lit forms
+// whose head symbol says what they are (upstream codebase-memory-mcp's
+// extract_lisp_def). Returns true when `node` was a definition and was emitted.
+static bool extract_clojure_def(CBMExtractCtx* ctx, TSNode node) {
+    CBMArena* a = ctx->arena;
+    TSNode head = {0};
+    TSNode name_node = {0};
+    int seen = 0;
+    uint32_t n = ts_node_named_child_count(node);
+    for (uint32_t i = 0; i < n && seen < 2; i++) {
+        TSNode child = ts_node_named_child(node, i);
+        if (strcmp(ts_node_type(child), "sym_lit") != 0) continue;
+        if (seen == 0) head = child; else name_node = child;
+        seen++;
+    }
+    if (ts_node_is_null(head) || ts_node_is_null(name_node)) return false;
+    const char* head_text = cbm_node_text(a, head, ctx->source);
+    if (!head_text) return false;
+    const char* label = NULL;
+    if (strcmp(head_text, "defn") == 0 || strcmp(head_text, "defn-") == 0 ||
+        strcmp(head_text, "defmacro") == 0 || strcmp(head_text, "defmulti") == 0 ||
+        strcmp(head_text, "defmethod") == 0) {
+        label = "Function";
+    } else if (strcmp(head_text, "def") == 0 || strcmp(head_text, "defonce") == 0) {
+        label = "Variable";
+    } else if (strcmp(head_text, "defrecord") == 0 || strcmp(head_text, "defprotocol") == 0 ||
+               strcmp(head_text, "deftype") == 0) {
+        label = "Class";
+    } else {
+        return false;
+    }
+    const char* name = cbm_node_text(a, name_node, ctx->source);
+    if (!name || !name[0]) return false;
+
+    CBMDefinition def;
+    memset(&def, 0, sizeof(def));
+    def.name = name;
+    def.qualified_name = cbm_fqn_compute(a, ctx->project, ctx->rel_path, name);
+    def.label = label;
+    def.file_path = ctx->rel_path;
+    def.start_line = ts_node_start_point(node).row + 1;
+    def.end_line = ts_node_end_point(node).row + 1;
+    def.lines = def.end_line - def.start_line + 1;
+    def.is_exported = strcmp(head_text, "defn-") != 0; // defn- is private
+    def.is_test = ctx->result->is_test_file;
+    cbm_defs_push(&ctx->result->defs, a, def);
+    return true;
+}
+
 static void walk_defs(CBMExtractCtx* ctx, TSNode root, const CBMLangSpec* spec) {
     wd_stack_t s = {0};
     wd_push(&s, root);
     while (s.top > 0) {
         TSNode node = s.data[--s.top];
         const char* kind = ts_node_type(node);
+
+        // Clojure: list_lit is both the call form and the definition form;
+        // emit def/defn forms and keep descending into everything else.
+        if (ctx->language == CBM_LANG_CLOJURE && strcmp(kind, "list_lit") == 0) {
+            if (!extract_clojure_def(ctx, node)) {
+                wd_push_children(&s, node);
+            }
+            continue;
+        }
 
         // Function types
         if (cbm_kind_in_set(node, spec->function_node_types)) {

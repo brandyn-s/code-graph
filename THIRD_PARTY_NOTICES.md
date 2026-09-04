@@ -43,5 +43,14 @@ Grammars were inherited from the upstream fork's vendoring; the pinned refs belo
 | typescript | [tree-sitter/tree-sitter-typescript](https://github.com/tree-sitter/tree-sitter-typescript) | `75b3874edb2d` | 14 | MIT |
 | xml | [tree-sitter-grammars/tree-sitter-xml](https://github.com/tree-sitter-grammars/tree-sitter-xml) | `5000ae8f22d1` | 14 | MIT |
 | yaml | [tree-sitter-grammars/tree-sitter-yaml](https://github.com/tree-sitter-grammars/tree-sitter-yaml) | `4463985dfccc` | 14 | MIT |
+| lua | [tree-sitter-grammars/tree-sitter-lua](https://github.com/tree-sitter-grammars/tree-sitter-lua) | `10fe0054734e` | 15 | MIT |
+| vue | [tree-sitter-grammars/tree-sitter-vue](https://github.com/tree-sitter-grammars/tree-sitter-vue) | `ce8011a414fd` | 15 | MIT |
+| svelte | [tree-sitter-grammars/tree-sitter-svelte](https://github.com/tree-sitter-grammars/tree-sitter-svelte) | `ae5199db4775` | 14 | MIT |
+| graphql | [bkegley/tree-sitter-graphql](https://github.com/bkegley/tree-sitter-graphql) | `5e66e961eee4` | 13 | MIT |
+| gomod | [camdencheek/tree-sitter-go-mod](https://github.com/camdencheek/tree-sitter-go-mod) | `2e886870578e` | 15 | MIT |
+| erlang | [WhatsApp/tree-sitter-erlang](https://github.com/WhatsApp/tree-sitter-erlang) | `1d78195c4fbb` | 14 | Apache-2.0 |
+| clojure | [sogaiu/tree-sitter-clojure](https://github.com/sogaiu/tree-sitter-clojure) | `e43eff80d17c` | 14 | CC0-1.0 |
 
 Refer to each directory's `LICENSE` for the full text and copyright holder.
+
+Grammars vendored from upstream codebase-memory-mcp's manifest in 0.9.1 (lua, vue, svelte, graphql, gomod, erlang, clojure) were copied at the commits that manifest pins; `scripts/vendor-grammar-from-manifest.sh` reproduces that step. tree-sitter-erlang is Apache-2.0 and tree-sitter-clojure is CC0-1.0; both are compatible with this project's MIT license and their LICENSE files ship beside the grammar sources.

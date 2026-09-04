@@ -7,6 +7,9 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added (0.9.1, ported from upstream codebase-memory-mcp)
+- Seven small grammars vendored from upstream's pinned manifest and included
+  in the default build: Lua, Vue, Svelte, GraphQL, go.mod, Erlang, Clojure
+  (`scripts/vendor-grammar-from-manifest.sh` reproduces the vendoring).
 - `CALL_REFERENCE` edge type, aligned with upstream: a callable referenced at
   a value site that resolves to exactly one Function or Method (import,
   same-module, or unique-name rule, single candidate). `USAGE` is now the

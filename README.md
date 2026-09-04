@@ -203,9 +203,9 @@ the compiled grammar list. Per-project options such as the precision tier and
 - [Client setup](docs/clients.md), [service map format](docs/service-map.md), [CodeQL evidence import](docs/codeql-evidence-import.md).
 - [Combined HTML guide](docs/index.html) for code-search and code-graph together.
 
-Supported languages (26 in release builds): Python, JavaScript, TypeScript, TSX, Go, Rust, Java,
+Supported languages (33 in release builds): Python, JavaScript, TypeScript, TSX, Go, Rust, Java,
 C, C++, CUDA, Bash, PowerShell, Nix, HTML, CSS, SCSS, YAML, TOML, HCL, SQL,
-Dockerfile, JSON, XML, Markdown, Makefile, CMake, Protobuf. Tree-sitter
+Dockerfile, JSON, XML, Markdown, Makefile, CMake, Protobuf, Lua, Vue, Svelte, GraphQL, go.mod, Erlang, Clojure. Tree-sitter
 supplies syntax; relationship quality varies by language and is not a
 compiler-precision guarantee outside the SCIP tier. CUDA is compiled in only with `make build-all` (`-tags cbm_all`); its grammar is the largest and rarest, and default builds report `.cu` files as unsupported rather than skipping them silently.
 

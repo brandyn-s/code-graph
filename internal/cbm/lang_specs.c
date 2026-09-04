@@ -29,6 +29,13 @@ extern const TSLanguage* tree_sitter_markdown(void);
 extern const TSLanguage* tree_sitter_make(void);
 extern const TSLanguage* tree_sitter_cmake(void);
 extern const TSLanguage* tree_sitter_proto(void);
+extern const TSLanguage* tree_sitter_lua(void);
+extern const TSLanguage* tree_sitter_vue(void);
+extern const TSLanguage* tree_sitter_svelte(void);
+extern const TSLanguage* tree_sitter_graphql(void);
+extern const TSLanguage* tree_sitter_gomod(void);
+extern const TSLanguage* tree_sitter_erlang(void);
+extern const TSLanguage* tree_sitter_clojure(void);
 
 // -- Empty sentinel --
 static const char* empty_types[] = {NULL};
@@ -234,6 +241,38 @@ static const char* nix_env_funcs[] = {"builtins.getEnv",NULL};
 
 // ==================== SPEC TABLE ====================
 
+
+// --- Grammars vendored from upstream codebase-memory-mcp's manifest (0.9.1) ---
+static const char* lua_func_types[] = {"function_declaration","function_definition",NULL};
+static const char* lua_module_types[] = {"chunk",NULL};
+static const char* lua_call_types[] = {"function_call",NULL};
+static const char* lua_import_types[] = {"function_call",NULL};
+static const char* lua_branch_types[] = {"if_statement","for_statement","for_in_statement","while_statement","repeat_statement",NULL};
+static const char* lua_var_types[] = {"variable_declaration",NULL};
+static const char* lua_assign_types[] = {"assignment_statement",NULL};
+static const char* lua_env_funcs[] = {"os.getenv",NULL};
+static const char* vue_module_types[] = {"document",NULL};
+static const char* svelte_module_types[] = {"document",NULL};
+static const char* svelte_branch_types[] = {"if_statement","each_statement","await_statement",NULL};
+static const char* graphql_class_types[] = {"object_type_definition","input_object_type_definition","enum_type_definition","interface_type_definition","union_type_definition","scalar_type_definition","type_definition",NULL};
+static const char* graphql_field_types[] = {"field_definition","input_value_definition",NULL};
+static const char* graphql_module_types[] = {"document",NULL};
+static const char* gomod_module_types[] = {"source_file",NULL};
+static const char* gomod_import_types[] = {"require",NULL};
+static const char* gomod_var_types[] = {"require_directive","replace_directive",NULL};
+static const char* erlang_func_types[] = {"function_clause",NULL};
+static const char* erlang_class_types[] = {"type_alias",NULL};
+static const char* erlang_module_types[] = {"source_file",NULL};
+static const char* erlang_call_types[] = {"call",NULL};
+static const char* erlang_import_types[] = {"module_attribute","import","include",NULL};
+static const char* erlang_branch_types[] = {"if_expression","case_expression","receive_expression",NULL};
+static const char* erlang_var_types[] = {"pp_define","record_decl",NULL};
+static const char* erlang_assign_types[] = {"match_expression",NULL};
+static const char* erlang_throw_types[] = {"call",NULL};
+static const char* clojure_func_types[] = {"list_lit",NULL};
+static const char* clojure_module_types[] = {"source",NULL};
+static const char* clojure_call_types[] = {"list_lit",NULL};
+
 static const CBMLangSpec lang_specs[CBM_LANG_COUNT] = {
     // CBM_LANG_GO
     {CBM_LANG_GO, go_func_types, go_class_types, go_field_types, go_module_types, go_call_types,
@@ -369,6 +408,41 @@ static const CBMLangSpec lang_specs[CBM_LANG_COUNT] = {
     {CBM_LANG_PROTOBUF, empty_types, protobuf_class_types, protobuf_field_types, protobuf_module_types, empty_types,
      protobuf_import_types, empty_types, empty_types, empty_types, empty_types,
      empty_types, NULL, empty_types, NULL, NULL},
+
+    // CBM_LANG_LUA
+    {CBM_LANG_LUA, lua_func_types, empty_types, empty_types, lua_module_types, lua_call_types,
+     lua_import_types, empty_types, lua_branch_types, lua_var_types, lua_assign_types,
+     empty_types, NULL, empty_types, lua_env_funcs, NULL},
+
+    // CBM_LANG_VUE (markup only; embedded <script> is not extracted yet)
+    {CBM_LANG_VUE, empty_types, empty_types, empty_types, vue_module_types, empty_types,
+     empty_types, empty_types, empty_types, empty_types, empty_types,
+     empty_types, NULL, empty_types, NULL, NULL},
+
+    // CBM_LANG_SVELTE (markup only; embedded <script> is not extracted yet)
+    {CBM_LANG_SVELTE, empty_types, empty_types, empty_types, svelte_module_types, empty_types,
+     empty_types, empty_types, svelte_branch_types, empty_types, empty_types,
+     empty_types, NULL, empty_types, NULL, NULL},
+
+    // CBM_LANG_GRAPHQL
+    {CBM_LANG_GRAPHQL, empty_types, graphql_class_types, graphql_field_types, graphql_module_types, empty_types,
+     empty_types, empty_types, empty_types, empty_types, empty_types,
+     empty_types, NULL, empty_types, NULL, NULL},
+
+    // CBM_LANG_GOMOD
+    {CBM_LANG_GOMOD, empty_types, empty_types, empty_types, gomod_module_types, empty_types,
+     gomod_import_types, empty_types, empty_types, gomod_var_types, empty_types,
+     empty_types, NULL, empty_types, NULL, NULL},
+
+    // CBM_LANG_ERLANG
+    {CBM_LANG_ERLANG, erlang_func_types, erlang_class_types, empty_types, erlang_module_types, erlang_call_types,
+     erlang_import_types, empty_types, erlang_branch_types, erlang_var_types, erlang_assign_types,
+     erlang_throw_types, NULL, empty_types, NULL, NULL},
+
+    // CBM_LANG_CLOJURE (list forms; defn/def head symbols are not yet special-cased)
+    {CBM_LANG_CLOJURE, clojure_func_types, empty_types, empty_types, clojure_module_types, clojure_call_types,
+     empty_types, empty_types, empty_types, empty_types, empty_types,
+     empty_types, NULL, empty_types, NULL, NULL},
 };
 
 const CBMLangSpec* cbm_lang_spec(CBMLanguage lang) {
@@ -405,6 +479,13 @@ const TSLanguage* cbm_ts_language(CBMLanguage lang) {
         case CBM_LANG_MAKEFILE:   return tree_sitter_make();
         case CBM_LANG_CMAKE:      return tree_sitter_cmake();
         case CBM_LANG_PROTOBUF:   return tree_sitter_proto();
+        case CBM_LANG_LUA:        return tree_sitter_lua();
+        case CBM_LANG_VUE:        return tree_sitter_vue();
+        case CBM_LANG_SVELTE:     return tree_sitter_svelte();
+        case CBM_LANG_GRAPHQL:    return tree_sitter_graphql();
+        case CBM_LANG_GOMOD:      return tree_sitter_gomod();
+        case CBM_LANG_ERLANG:     return tree_sitter_erlang();
+        case CBM_LANG_CLOJURE:    return tree_sitter_clojure();
         default:                  return NULL;
     }
 }

@@ -31,6 +31,13 @@ Template: `internal/tools/cycles.go` (small, read-only, one handler).
 
 ## Add a language
 
+> Shortcut: when the grammar is one upstream codebase-memory-mcp already
+> vendors, `scripts/vendor-grammar-from-manifest.sh <upstream-clone> <name>`
+> copies parser, scanner, headers, and LICENSE at the commit pinned in
+> upstream's `MANIFEST.md` and prints the THIRD_PARTY_NOTICES row. The
+> registration steps below still apply.
+
+
 Template: `internal/lang/nix.go` plus `internal/cbm/grammar_nix.c`.
 
 1. Vendor the tree-sitter grammar under

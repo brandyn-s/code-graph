@@ -70,6 +70,40 @@ Most language issues are in `internal/lang/<name>.go` (node type configuration) 
 4. Update the language spec and add/fix parity test cases
 5. Verify with a real open-source repo
 
+## Measuring an Accuracy Change
+
+Extractor and resolver changes are gated on relationship accuracy, not just
+on unit tests. CI runs three checks from `bench/accuracy/`; run the same ones
+locally before opening a PR that touches `internal/cbm`, `internal/pipeline`,
+or `internal/cypher`:
+
+```bash
+make build
+
+# 1. Phantom-edge gate: negative fixtures assert that bare-name suffix matches
+#    never produce CALLS edges to internal targets. Fails if any fixture's
+#    phantom count exceeds bench/accuracy/negative_baselines.json.
+python3 bench/accuracy/check_negative_fixtures.py --regression-gate
+
+# 2. Cypher semantics gate: pins CONTAINS element-of semantics on array
+#    properties so a query-executor refactor cannot silently regress it.
+python3 bench/accuracy/check_cypher_semantics.py
+
+# 3. Adversarial F1 gate: precision/recall of CALLS edges against a
+#    ground-truth oracle on a pinned public fixture. Check out the fixture at
+#    the SHA recorded in bench/accuracy/fixtures.json, then:
+CODE_GRAPH_FIXTURE_PATH_FLASK_ADVERSARIAL=/path/to/flask \
+  python3 bench/accuracy/check_adversarial_f1.py --fixture flask-adversarial --min-f1 0.55
+```
+
+For a broader before/after comparison on any fixture listed in
+`fixtures.json`, run `python3 bench/accuracy/compare.py <fixture-id>` on
+`main` and on your branch and put both F1 numbers in the PR description. The
+synthetic fixtures under `bench/accuracy/synthetic/` carry hand-written
+`ground_truth.json` files and are the fastest way to pin a regression for a
+specific extraction bug: add the smallest source that reproduces it, the
+expected edges, and a baseline entry.
+
 ## Pull Request Guidelines
 
 - One logical change per PR

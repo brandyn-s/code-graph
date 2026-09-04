@@ -110,9 +110,12 @@ reads require a persisted index identity that still matches the live checkout.
 This prevents an edge from being presented as current after the source moved
 under the indexer.
 
-Indexing writes `ARCHITECTURE_REPORT.md` by default. Set `skip_report=true` for
-a read-only checkout or when generated documentation is not wanted. The
-preference persists for that project.
+Indexing never writes into the checkout by default. Pass `write_report=true`
+to produce `ARCHITECTURE_REPORT.md` under `<cache>/reports/<project>/`, and
+`report_path` to place it elsewhere (including inside the repository, which
+is an explicit choice and shows up in the next identity check). The
+preference persists for that project; `skip_report` remains as the legacy
+inverse.
 
 ### 3. Discovery and Parsing
 
@@ -337,7 +340,8 @@ those uses carry `//nolint:staticcheck` annotations pointing here.
 - The SQLite-per-project design has been exercised on a very large repository,
   but its storage and warm-query profile are not class-leading and it is not a
   distributed organization service.
-- Generated architecture reports and visualizations write files. Select
-  `skip_report=true` and read-only tools when source mutation is unacceptable.
+- Generated architecture reports and visualizations write files under the
+  cache directory by default; they touch the checkout only when given an
+  explicit path there. `manage_adr` writes into the repository by design.
 - The proof/evidence model makes uncertainty inspectable. It does not turn
   incomplete input into certainty.

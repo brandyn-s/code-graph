@@ -121,7 +121,7 @@ Gemini CLI, VS Code, and Zed in one step. Per-client snippets are in
 ## Index, verify, ask
 
 ```text
-index_repository(repo_path="/absolute/repository", skip_report=true)
+index_repository(repo_path="/absolute/repository")
 index_status(project="<project-name>")
 trace_call_path(project="<project-name>", function_name="authenticate", direction="inbound", depth=2)
 ```
@@ -131,7 +131,7 @@ report a captured, live-matching index identity before relying on results.
 The same tools are available from the shell:
 
 ```bash
-code-graph cli index_repository '{"repo_path":"/absolute/repository","skip_report":true}'
+code-graph cli index_repository '{"repo_path":"/absolute/repository"}'
 code-graph cli --raw list_projects | jq .
 ```
 
@@ -194,7 +194,9 @@ Persistent settings such as the memory limit are managed with
 resolved configuration with secrets redacted, the cache directory and every
 project database with its size and format version, the embeddings mode, and
 the compiled grammar list. Per-project options such as the precision tier and
-`skip_report` are passed to `index_repository` and remembered.
+`write_report` are passed to `index_repository` and remembered. Indexing never
+writes into the checkout: reports and visualizations go to
+`<cache>/reports/<project>/` unless you pass an explicit path.
 
 ## Going deeper
 

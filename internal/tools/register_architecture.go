@@ -45,7 +45,7 @@ func (s *Server) registerArchitectureTools() {
 			DestructiveHint: boolPtr(true),
 		},
 
-		Description: "Manage the Architecture Decision Record (ADR) for a project. CRUD operations for a persistent, section-based architectural summary. Modes: get (retrieve, optional include filter), store (create/replace - all 6 sections required), update (patch sections, unmentioned preserved), delete (remove ADR - this is irreversible), auto (compute from indexed graph and store - no content arg needed). Fixed sections: PURPOSE, STACK, ARCHITECTURE, PATTERNS, TRADEOFFS, PHILOSOPHY. Max 8000 chars. Validation: store rejects missing sections; update rejects non-canonical keys. Use include=['STACK','PATTERNS'] with get to reduce token usage.",
+		Description: "Manage the Architecture Decision Record (ADR) for a project. This tool writes ADR files into the repository checkout by design and is the only code-graph tool that modifies the checkout without an explicit path argument; the change shows up in git status and in the index identity until committed. CRUD operations for a persistent, section-based architectural summary. Modes: get (retrieve, optional include filter), store (create/replace - all 6 sections required), update (patch sections, unmentioned preserved), delete (remove ADR - this is irreversible), auto (compute from indexed graph and store - no content arg needed). Fixed sections: PURPOSE, STACK, ARCHITECTURE, PATTERNS, TRADEOFFS, PHILOSOPHY. Max 8000 chars. Validation: store rejects missing sections; update rejects non-canonical keys. Use include=['STACK','PATTERNS'] with get to reduce token usage.",
 		InputSchema: json.RawMessage(`{
 			"type": "object",
 			"properties": {

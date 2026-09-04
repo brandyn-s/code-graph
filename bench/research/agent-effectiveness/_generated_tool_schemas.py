@@ -261,9 +261,19 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
             'type': 'object'},
     },
     "generate_report": {
-        "description": 'Write ARCHITECTURE_REPORT.md to the repo root — a one-page orientation doc (god nodes, communities + cohesion, cross-package boundaries, 5 suggested questions) derived from the indexed graph. Auto-runs at the end of index_repository; call manually to regenerate without reindexing. Intended to be read by coding assistants before Glob/Grep on an unfamiliar codebase.',
+        "description": 'Write ARCHITECTURE_REPORT.md — a one-page orientation doc (god nodes, communities + cohesion, cross-package boundaries, 5 suggested questions) derived from the indexed graph. By default the file goes under the code-graph cache directory (<cache>/reports/<project>/) so the indexed checkout is not modified; pass output_path to write elsewhere, including into the checkout. index_repository writes the same report only when asked (write_report=true). Intended to be read by coding assistants before Glob/Grep on an unfamiliar codebase.',
         "input_schema":
-        {   'properties': {   'project': {   'description': 'Project name (optional — uses session project '
+        {   'properties': {   'output_path': {   'description': 'Where to write the report. Default: '
+                                                                '<cache>/reports/<project>/ARCHITECTURE_REPORT.md. '
+                                                                'A relative path resolves under the '
+                                                                'project root; an absolute path must be '
+                                                                'inside the project root or the cache '
+                                                                'report directory. Writing into the '
+                                                                'checkout makes it differ from the indexed '
+                                                                'state until the file is committed or '
+                                                                'ignored.',
+                                                 'type': 'string'},
+                              'project': {   'description': 'Project name (optional — uses session project '
                                                             'if omitted)',
                                              'type': 'string'}},
             'type': 'object'},
@@ -480,18 +490,36 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
                                                               'If omitted, uses the auto-detected session '
                                                               'project root.',
                                                'type': 'string'},
+                              'report_path': {   'description': 'Where to write the report when one is '
+                                                                'requested. Default: '
+                                                                '<cache>/reports/<project>/ARCHITECTURE_REPORT.md. '
+                                                                'A relative path resolves under repo_path '
+                                                                'and an absolute path must be inside '
+                                                                'repo_path or the cache report directory; '
+                                                                'writing into the checkout is an explicit '
+                                                                'choice and makes the checkout differ from '
+                                                                'the indexed state until the file is '
+                                                                'committed or ignored.',
+                                                 'type': 'string'},
                               'scip_index_path': {   'description': 'SCIP index path for '
                                                                     "precision_tier='scip'. Relative paths "
                                                                     'resolve under repo_path. Defaults to '
                                                                     '<repo>/index.scip.',
                                                      'type': 'string'},
-                              'skip_report': {   'description': 'Skip writing ARCHITECTURE_REPORT.md to '
-                                                                'the repo root after indexing. Required '
-                                                                'when indexing read-only repos (bench '
-                                                                'fixtures, vendored code, protected paths) '
-                                                                'where any write violates policy. Default: '
-                                                                'false (report is written).',
-                                                 'type': 'boolean'}},
+                              'skip_report': {   'description': 'Legacy inverse of write_report, kept for '
+                                                                'compatibility: skip_report=false requests '
+                                                                'a report. Default: true (no report). '
+                                                                'Prefer write_report.',
+                                                 'type': 'boolean'},
+                              'write_report': {   'description': 'Write an ARCHITECTURE_REPORT.md '
+                                                                 'orientation doc after indexing. Default: '
+                                                                 'false. The report is written under the '
+                                                                 'code-graph cache directory '
+                                                                 '(<cache>/reports/<project>/) so the '
+                                                                 'indexed checkout is never modified; set '
+                                                                 'report_path to place it elsewhere. The '
+                                                                 'choice is remembered per project.',
+                                                  'type': 'boolean'}},
             'type': 'object'},
     },
     "index_status": {
@@ -541,7 +569,7 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
             'type': 'object'},
     },
     "manage_adr": {
-        "description": "Manage the Architecture Decision Record (ADR) for a project. CRUD operations for a persistent, section-based architectural summary. Modes: get (retrieve, optional include filter), store (create/replace - all 6 sections required), update (patch sections, unmentioned preserved), delete (remove ADR - this is irreversible), auto (compute from indexed graph and store - no content arg needed). Fixed sections: PURPOSE, STACK, ARCHITECTURE, PATTERNS, TRADEOFFS, PHILOSOPHY. Max 8000 chars. Validation: store rejects missing sections; update rejects non-canonical keys. Use include=['STACK','PATTERNS'] with get to reduce token usage.",
+        "description": "Manage the Architecture Decision Record (ADR) for a project. This tool writes ADR files into the repository checkout by design and is the only code-graph tool that modifies the checkout without an explicit path argument; the change shows up in git status and in the index identity until committed. CRUD operations for a persistent, section-based architectural summary. Modes: get (retrieve, optional include filter), store (create/replace - all 6 sections required), update (patch sections, unmentioned preserved), delete (remove ADR - this is irreversible), auto (compute from indexed graph and store - no content arg needed). Fixed sections: PURPOSE, STACK, ARCHITECTURE, PATTERNS, TRADEOFFS, PHILOSOPHY. Max 8000 chars. Validation: store rejects missing sections; update rejects non-canonical keys. Use include=['STACK','PATTERNS'] with get to reduce token usage.",
         "input_schema":
         {   'properties': {   'content': {   'description': 'Full ADR markdown (required for '
                                                             "mode='store'). Must contain all 6 ## SECTION "
@@ -993,9 +1021,13 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
                                                               '500, max 5000). Nodes are selected by '
                                                               'connectivity (highest degree first).',
                                                'type': 'integer'},
-                              'output_path': {   'description': 'Path for the output HTML file. Defaults '
-                                                                'to {project}-graph.html in the project '
-                                                                'root.',
+                              'output_path': {   'description': 'Path for the output HTML file. Default: '
+                                                                '<cache>/reports/<project>/<project>-graph.html, '
+                                                                'so the indexed checkout is not modified. '
+                                                                'A relative path resolves under the '
+                                                                'project root; an absolute path must be '
+                                                                'inside the project root or the cache '
+                                                                'report directory.',
                                                  'type': 'string'},
                               'project': {   'description': 'Project to visualize. Defaults to session '
                                                             'project.',

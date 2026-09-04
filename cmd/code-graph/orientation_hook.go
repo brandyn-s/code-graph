@@ -42,7 +42,15 @@ const orientationHookScript = `#!/bin/sh
 # codebase-memory-orientation hook
 
 project_dir="${CLAUDE_PROJECT_DIR:-$PWD}"
-report="$project_dir/ARCHITECTURE_REPORT.md"
+# code-graph writes reports under its cache directory by default
+# (<cache>/reports/<project>/); a report inside the checkout exists only when
+# the caller asked for one there. The project name mirrors
+# pipeline.ProjectNameFromPath: slashes and colons become dashes, runs of
+# dashes collapse, the leading dash is dropped.
+cache_dir="${CODE_GRAPH_CACHE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/code-graph}"
+project_name=$(printf '%s' "$project_dir" | tr '/:' '--' | sed -e 's/-\{2,\}/-/g' -e 's/^-//')
+report="$cache_dir/reports/$project_name/ARCHITECTURE_REPORT.md"
+[ -f "$report" ] || report="$project_dir/ARCHITECTURE_REPORT.md"
 
 if [ -f "$report" ]; then
   echo "[code-graph] This repo has an indexed ARCHITECTURE_REPORT.md at $report." >&2

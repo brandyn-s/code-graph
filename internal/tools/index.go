@@ -206,57 +206,22 @@ func (s *Server) handleIndexRepository(ctx context.Context, req *mcp.CallToolReq
 	// Add to watcher so auto-sync keeps this project fresh.
 	s.watcher.Watch(projectName, absPath)
 
-	// Refresh ARCHITECTURE_REPORT.md at the repo root so the PreToolUse hook
-	// (installed via `code-graph install`) has fresh content to
-	// surface next time Glob/Grep fires. Report generation failure must NOT
-	// fail the overall index — a stale or missing report is less bad than a
-	// failed index, and the user can regenerate manually via generate_report.
-	//
-	// skip_report=true opts out of the write entirely. Required when indexing
-	// read-only repos (bench fixtures, vendored code, protected paths) where
-	// any write — even a generated doc — violates policy. Default for a
-	// project with NO recorded preference is false so normal usage is
-	// unchanged.
-	//
-	// The choice is STICKY per project (2026-06-11): an explicitly provided
-	// skip_report is persisted to the config store, and calls that OMIT the
-	// argument inherit the recorded choice instead of silently reverting to
-	// report-writing. Before this, one explicit call without the flag — from
-	// any session, tool, or future caller — re-created the report in a repo
-	// whose owner had opted out on every prior index, and the write was
-	// unattributable after the fact. generate_report remains an explicit
-	// always-write override.
-	_, skipProvided := args["skip_report"]
-	skipReport := getBoolArg(args, "skip_report")
-	prefKey := store.ConfigReportSkipPrefix + projectName
-	if skipProvided {
-		if s.config != nil {
-			if err := s.config.Set(prefKey, strconv.FormatBool(skipReport)); err != nil {
-				slog.Warn("index.report.pref_persist_err", "project", projectName, "err", err)
-			}
-		}
-	} else if s.config != nil {
-		skipReport = s.config.GetBool(prefKey, false)
-	}
-	if skipReport {
-		reason := "skip_report=true"
-		if !skipProvided {
-			reason = "persisted_preference"
-		}
-		slog.Info("index.report.skipped", "project", projectName, "reason", reason)
-	} else if reportResult, reportErr := s.generateOrientationReport(projectName); reportErr != nil {
-		slog.Warn("index.report.err", "project", projectName, "err", reportErr)
-	} else {
-		slog.Info("index.report.ok",
-			"project", projectName,
-			"path", reportResult.Path,
-			"bytes", reportResult.Bytes)
-	}
+	// Orientation reports are opt-in and, by default, written under the cache
+	// directory (<cache>/reports/<project>/) rather than into the checkout.
+	// A default index_repository run therefore leaves `git status` exactly as
+	// it found it, and the identity captured below describes the checkout
+	// the graph was actually built from. Callers ask for a report with
+	// write_report=true (preferred) or the legacy skip_report=false; the
+	// choice is sticky per project (2026-06-11) so an omitted argument never
+	// silently flips the behaviour recorded for a repository. report_path
+	// may point inside the checkout; that write happens only after the end
+	// identity capture and is the caller's explicit, attributable choice.
+	wantReport, reportDecisionReason := s.resolveReportPreference(args, projectName)
+	reportPath := getStringArg(args, "report_path")
 
-	// Capture only after all index-related repository writes, including the
-	// orientation report. Persist an envelope only when start and end
-	// generations match, so the graph is never labeled with a checkout state
-	// it did not coherently scan.
+	// Capture the end identity before any optional report write. Persist an
+	// envelope only when start and end generations match, so the graph is
+	// never labeled with a checkout state it did not coherently scan.
 	endIdentity, endIdentityErr := captureIdentity(absPath)
 	identityErr := persistCoherentIndexIdentity(
 		st,
@@ -268,6 +233,22 @@ func (s *Server) handleIndexRepository(ctx context.Context, req *mcp.CallToolReq
 	)
 	if identityErr != nil {
 		slog.Error("index.identity.incoherent", "project", projectName, "err", identityErr)
+	}
+
+	// Optional orientation report. Report failure must NOT fail the index; a
+	// missing report is less bad than a failed index and generate_report can
+	// produce one later. Written after the identity capture so the graph's
+	// identity is never attributed to a file this tool created.
+	if !wantReport {
+		slog.Info("index.report.skipped", "project", projectName, "reason", reportDecisionReason)
+	} else if reportResult, reportErr := s.generateOrientationReport(projectName, reportPath); reportErr != nil {
+		slog.Warn("index.report.err", "project", projectName, "err", reportErr)
+	} else {
+		slog.Info("index.report.ok",
+			"project", projectName,
+			"path", reportResult.Path,
+			"bytes", reportResult.Bytes,
+			"in_checkout", writesIntoCheckout(absPath, reportResult.Path))
 	}
 
 	identityRecord, identityRecordErr := st.GetIndexIdentity(projectName)
@@ -380,4 +361,40 @@ func (s *Server) handleIndexRepository(ctx context.Context, req *mcp.CallToolReq
 	}
 
 	return jsonResult(result), nil
+}
+
+// resolveReportPreference decides whether index_repository writes an
+// orientation report and returns the reason for the decision.
+//
+// Precedence: explicit write_report, then explicit (legacy) skip_report,
+// then the per-project preference persisted from an earlier explicit call,
+// then the default of no report. Explicit choices are persisted so a later
+// call that omits both arguments inherits them instead of reverting.
+func (s *Server) resolveReportPreference(args map[string]any, projectName string) (wantReport bool, reason string) {
+	prefKey := store.ConfigReportSkipPrefix + projectName
+	persist := func(want bool) {
+		if s.config == nil {
+			return
+		}
+		if err := s.config.Set(prefKey, strconv.FormatBool(!want)); err != nil {
+			slog.Warn("index.report.pref_persist_err", "project", projectName, "err", err)
+		}
+	}
+	if _, ok := args["write_report"]; ok {
+		want := getBoolArg(args, "write_report")
+		persist(want)
+		return want, "write_report=" + strconv.FormatBool(want)
+	}
+	if _, ok := args["skip_report"]; ok {
+		want := !getBoolArg(args, "skip_report")
+		persist(want)
+		return want, "skip_report=" + strconv.FormatBool(!want)
+	}
+	if s.config != nil {
+		if raw := s.config.Get(prefKey, ""); raw != "" {
+			want := !s.config.GetBool(prefKey, true)
+			return want, "persisted_preference"
+		}
+	}
+	return false, "default"
 }

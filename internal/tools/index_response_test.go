@@ -353,7 +353,7 @@ func TestIndexRepositoryDegradesWhenCheckoutChangesWithSameGeneration(t *testing
 	}
 }
 
-func TestIndexRepositoryIncludesGeneratedReportInEndCoherenceCheck(t *testing.T) {
+func TestIndexRepositoryDefaultLeavesCheckoutUntouchedAndIdentityCoherent(t *testing.T) {
 	router, err := store.NewRouterWithDir(t.TempDir())
 	if err != nil {
 		t.Fatalf("NewRouterWithDir: %v", err)
@@ -365,21 +365,72 @@ func TestIndexRepositoryIncludesGeneratedReportInEndCoherenceCheck(t *testing.T)
 
 	indexResp := metadataResponseFromHandler(t, srv.handleIndexRepository, "index_repository",
 		map[string]any{"repo_path": repo})
-	if _, err := os.Stat(filepath.Join(repo, "ARCHITECTURE_REPORT.md")); err != nil {
-		t.Fatalf("default index did not generate ARCHITECTURE_REPORT.md: %v", err)
+	if _, err := os.Stat(filepath.Join(repo, "ARCHITECTURE_REPORT.md")); !os.IsNotExist(err) {
+		t.Fatalf("default index must not write ARCHITECTURE_REPORT.md into the checkout (stat err=%v)", err)
 	}
-	if got, _ := indexResp["status"].(string); got != "degraded" {
-		t.Errorf("index status = %q, want degraded after report changed source state", got)
+	if got := gitPorcelain(t, repo); got != "" {
+		t.Fatalf("default index left the checkout dirty:\n%s", got)
 	}
-	if got, _ := indexResp["identity_status"].(string); got != indexidentity.StatusError {
-		t.Errorf("identity_status = %q, want %q", got, indexidentity.StatusError)
+	// A healthy index carries no "status" key; only degraded runs set it.
+	if got, _ := indexResp["status"].(string); got == "degraded" {
+		t.Errorf("index status = %q after a default index of a clean checkout", got)
 	}
-	if reason, _ := indexResp["identity_reason"].(string); !strings.Contains(reason, "source_changed_during_index") {
-		t.Errorf("identity_reason = %q, want source_changed_during_index", reason)
+	if got, _ := indexResp["identity_status"].(string); got != indexidentity.StatusCaptured {
+		t.Errorf("identity_status = %q, want %q", got, indexidentity.StatusCaptured)
 	}
-	if identity := indexResp["index_identity"]; identity != nil {
-		t.Errorf("response exposed identity that omitted generated report: %v", identity)
+	if identity := indexResp["index_identity"]; identity == nil {
+		t.Error("response did not expose the coherent index identity")
 	}
+}
+
+func TestIndexRepositoryWritesRequestedReportAfterIdentityCapture(t *testing.T) {
+	router, err := store.NewRouterWithDir(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewRouterWithDir: %v", err)
+	}
+	t.Cleanup(router.CloseAll)
+	srv := NewServer(router)
+	repo := writeFixtureRepo(t)
+	initCommittedFixtureRepo(t, repo)
+
+	// Default location: the cache report directory, checkout untouched.
+	indexResp := metadataResponseFromHandler(t, srv.handleIndexRepository, "index_repository",
+		map[string]any{"repo_path": repo, "write_report": true})
+	project := pipeline.ProjectNameFromPath(repo)
+	cachedReport := filepath.Join(srv.reportsDir(project), ReportFileName)
+	if _, err := os.Stat(cachedReport); err != nil {
+		t.Fatalf("write_report=true did not write the report under the cache dir: %v", err)
+	}
+	if got := gitPorcelain(t, repo); got != "" {
+		t.Fatalf("cache-dir report dirtied the checkout:\n%s", got)
+	}
+	if got, _ := indexResp["identity_status"].(string); got != indexidentity.StatusCaptured {
+		t.Errorf("identity_status = %q, want %q", got, indexidentity.StatusCaptured)
+	}
+
+	// Explicit in-checkout path: written after the identity capture, so the
+	// index still describes the checkout it scanned, and the new file shows
+	// up in git status as the caller's change.
+	indexResp = metadataResponseFromHandler(t, srv.handleIndexRepository, "index_repository",
+		map[string]any{"repo_path": repo, "write_report": true, "report_path": "docs/ARCHITECTURE_REPORT.md", "force": true})
+	if _, err := os.Stat(filepath.Join(repo, "docs", "ARCHITECTURE_REPORT.md")); err != nil {
+		t.Fatalf("explicit report_path inside the checkout was not written: %v", err)
+	}
+	if got, _ := indexResp["identity_status"].(string); got != indexidentity.StatusCaptured {
+		t.Errorf("identity_status after in-checkout report = %q, want %q (report is written after capture)", got, indexidentity.StatusCaptured)
+	}
+	if got := gitPorcelain(t, repo); !strings.Contains(got, "docs/ARCHITECTURE_REPORT.md") {
+		t.Errorf("git status should show the requested report as an untracked change, got:\n%s", got)
+	}
+}
+
+func gitPorcelain(t *testing.T, repo string) string {
+	t.Helper()
+	out, err := exec.CommandContext(t.Context(), "git", "-C", repo, "status", "--porcelain", "--untracked-files=all").Output()
+	if err != nil {
+		t.Fatalf("git status: %v", err)
+	}
+	return strings.TrimSpace(string(out))
 }
 
 func TestWatcherIncrementalReindexRefreshesIndexIdentity(t *testing.T) {

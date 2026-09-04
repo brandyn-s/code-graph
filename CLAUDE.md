@@ -92,7 +92,7 @@ go test ./internal/pipeline/ -run TestIncrementalMatchesCleanAcrossChangeClasses
 | `visualize` | `internal/tools/visualize.go` | HTML graph visualization of node neighborhoods |
 | `diff_graph` | `internal/tools/graph_diff.go` | Symbol-level delta between two arbitrary git revisions |
 | `find_rationale` | `internal/tools/tools.go` | Extract WHY/NOTE/HACK/SAFETY/TODO annotations as graph nodes |
-| `generate_report` | `internal/tools/orientation_report.go` | Write ARCHITECTURE_REPORT.md orientation doc from indexed graph |
+| `generate_report` | `internal/tools/orientation_report.go` | Write ARCHITECTURE_REPORT.md orientation doc (cache dir by default; explicit `output_path` to write elsewhere) |
 
 ### Code Localization & Ranking Tools
 | Tool | Source File | Purpose |

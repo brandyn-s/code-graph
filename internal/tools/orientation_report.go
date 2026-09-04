@@ -13,9 +13,11 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// ReportFileName is the name of the markdown report written to the repo root
-// by generateOrientationReport. Callers (e.g. the PreToolUse hook shell script)
-// reference this name, so it is exported for cross-language consistency.
+// ReportFileName is the name of the markdown orientation report written by
+// generateOrientationReport. By default it lives under
+// <cache>/reports/<project>/; callers may request a path inside the checkout
+// explicitly. The PreToolUse hook shell script references this name, so it is
+// exported for cross-language consistency.
 const ReportFileName = "ARCHITECTURE_REPORT.md"
 
 // orientationReportResult is the structured return value of generate_report.
@@ -31,10 +33,9 @@ type orientationReportResult struct {
 	Metadata map[string]any `json:"_metadata,omitempty"`
 }
 
-// handleGenerateReport is the generate_report MCP tool handler. Regenerates
-// ARCHITECTURE_REPORT.md without re-indexing — useful when the user wants a
-// fresh report after manual edits to the graph, or when index_repository was
-// called on an older binary that did not auto-generate the report.
+// handleGenerateReport is the generate_report MCP tool handler. Generates
+// ARCHITECTURE_REPORT.md without re-indexing. The report is written under the
+// cache directory unless output_path explicitly points into the checkout.
 func (s *Server) handleGenerateReport(_ context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	args, err := parseArgs(req)
 	if err != nil {
@@ -47,7 +48,7 @@ func (s *Server) handleGenerateReport(_ context.Context, req *mcp.CallToolReques
 		return errResult("project is required (pass `project` explicitly or call from a session with a resolved project)"), nil
 	}
 
-	result, err := s.generateOrientationReport(project)
+	result, err := s.generateOrientationReport(project, getStringArg(args, "output_path"))
 	if err != nil {
 		return errResult(fmt.Sprintf("generate report: %v", err)), nil
 	}
@@ -59,13 +60,16 @@ func (s *Server) handleGenerateReport(_ context.Context, req *mcp.CallToolReques
 	}, nil
 }
 
-// generateOrientationReport builds ARCHITECTURE_REPORT.md for a project and
-// writes it to the repo root. The report is a one-page orientation doc
-// intended for coding assistants to read BEFORE running Glob/Grep on an
-// unfamiliar codebase; a PreToolUse hook (installed via the `install`
-// subcommand) nudges the agent toward this file when file-exploration tools
-// fire.
-func (s *Server) generateOrientationReport(projectName string) (*orientationReportResult, error) {
+// generateOrientationReport builds ARCHITECTURE_REPORT.md for a project. With
+// requestedPath == "" it is written to <cache>/reports/<project>/, which never
+// touches the indexed checkout. A relative path (resolved under the repo
+// root) or an absolute path inside the repo writes into the checkout; that is
+// an explicit choice by the caller, and it makes the checkout differ from the
+// indexed state until the file is committed or ignored. The report is a
+// one-page orientation doc intended for coding assistants to read BEFORE
+// running Glob/Grep on an unfamiliar codebase; a PreToolUse hook (installed
+// via the `install` subcommand) nudges the agent toward it.
+func (s *Server) generateOrientationReport(projectName, requestedPath string) (*orientationReportResult, error) {
 	st, err := s.router.ForProject(projectName)
 	if err != nil {
 		return nil, fmt.Errorf("resolve store: %w", err)
@@ -105,8 +109,13 @@ func (s *Server) generateOrientationReport(projectName string) (*orientationRepo
 
 	md := renderOrientationReport(projectName, nodeCount, edgeCount, arch)
 
-	outPath := filepath.Join(rootPath, ReportFileName)
-	if err := os.WriteFile(outPath, []byte(md), 0o644); err != nil {
+	outPath, err := s.resolveGeneratedOutputPath(
+		rootPath, projectName, requestedPath,
+		filepath.Join(s.reportsDir(projectName), ReportFileName), ".md")
+	if err != nil {
+		return nil, err
+	}
+	if err := os.WriteFile(outPath, []byte(md), 0o600); err != nil { //nolint:gosec // operator-chosen path, containment-checked above
 		return nil, fmt.Errorf("write report: %w", err)
 	}
 

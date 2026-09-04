@@ -16,5 +16,7 @@
   agent one persistent, evidence-carrying structural view.
 - Runtime trace ingestion confirms observed HTTP relationships; lack of an
   observation does not prove a relationship cannot occur.
-- Generated reports and visualizations are writes. Use `skip_report=true` and
-  read-only tools when the source checkout must remain untouched.
+- Generated reports and visualizations are writes, but by default they land
+  under `<cache>/reports/<project>/`, never in the checkout. Only an explicit
+  `report_path`/`output_path` inside the repository, or `manage_adr` (which
+  exists to write ADRs into the repository), modifies the checkout.

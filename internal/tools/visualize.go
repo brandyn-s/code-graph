@@ -37,7 +37,7 @@ func (s *Server) registerVisualizeTool() {
 				},
 				"output_path": {
 					"type": "string",
-					"description": "Path for the output HTML file. Defaults to {project}-graph.html in the project root."
+					"description": "Path for the output HTML file. Default: <cache>/reports/<project>/<project>-graph.html, so the indexed checkout is not modified. A relative path resolves under the project root; an absolute path must be inside the project root or the cache report directory."
 				},
 				"file_pattern": {
 					"type": "string",
@@ -215,38 +215,16 @@ func (s *Server) handleVisualize(_ context.Context, req *mcp.CallToolRequest) (*
 	page = strings.Replace(page, "/*NODE_COUNT*/", fmt.Sprintf("%d", len(vizNodes)), 1)
 	page = strings.Replace(page, "/*EDGE_COUNT*/", fmt.Sprintf("%d", len(vizEdges)), 1)
 
-	// Determine output path
-	outputPath := getStringArg(args, "output_path")
-	if outputPath == "" {
-		if proj.RootPath != "" {
-			outputPath = filepath.Join(proj.RootPath, projName+"-graph.html")
-		} else {
-			outputPath = projName + "-graph.html"
-		}
-	} else {
-		if proj.RootPath == "" {
-			return errResult("output_path requires a project with a root path"), nil
-		}
-		if filepath.IsAbs(outputPath) {
-			rel, relErr := filepath.Rel(proj.RootPath, outputPath)
-			if relErr != nil {
-				// filepath.Rel fails across Windows drives; that is an escape too.
-				return errResult(fmt.Sprintf("output_path rejected: path %q escapes project root %q (%v)", outputPath, proj.RootPath, relErr)), nil
-			}
-			outputPath = rel
-		}
-		safe, pathErr := safePath(proj.RootPath, outputPath)
-		if pathErr != nil {
-			return errResult(fmt.Sprintf("output_path rejected: %v", pathErr)), nil
-		}
-		outputPath = safe
+	// Determine output path: the cache report directory by default, the
+	// checkout only when the caller asks for it explicitly.
+	outputPath, pathErr := s.resolveGeneratedOutputPath(
+		proj.RootPath, projName, getStringArg(args, "output_path"),
+		filepath.Join(s.reportsDir(projName), projName+"-graph.html"), ".html")
+	if pathErr != nil {
+		return errResult(fmt.Sprintf("output_path rejected: %v", pathErr)), nil
 	}
 
-	if strings.ToLower(filepath.Ext(outputPath)) != ".html" {
-		return errResult("output_path must have a .html extension"), nil
-	}
-
-	if writeErr := os.WriteFile(outputPath, []byte(page), 0o644); writeErr != nil { //nolint:gosec // output path from trusted tool input
+	if writeErr := os.WriteFile(outputPath, []byte(page), 0o600); writeErr != nil { //nolint:gosec // operator-chosen path, containment-checked above
 		return errResult(fmt.Sprintf("write file: %v", writeErr)), nil
 	}
 

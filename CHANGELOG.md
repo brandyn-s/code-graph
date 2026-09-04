@@ -6,6 +6,25 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed (0.9.2)
+- `index_repository` no longer writes into the indexed checkout by default.
+  Orientation reports are opt-in (`write_report=true`; the legacy
+  `skip_report` is kept as the inverse and now defaults to `true`) and are
+  written under `<cache>/reports/<project>/`. A `report_path` may point inside
+  the checkout; that write happens after the identity capture and is the
+  caller's explicit choice. `generate_report` and `visualize` default to the
+  same cache location and require an explicit path to write into the
+  checkout. A default index therefore leaves `git status` untouched, ends
+  with a coherent identity, and its team artifact imports without
+  `--allow-stale`. `manage_adr` is documented as the one tool that writes
+  into the repository by design. The PreToolUse orientation hook looks in the
+  cache directory first.
+- Migration: callers that relied on `ARCHITECTURE_REPORT.md` appearing at the
+  repository root after indexing should pass `write_report=true,
+  report_path="ARCHITECTURE_REPORT.md"` (and commit or ignore the file), or
+  read the report from `<cache>/reports/<project>/ARCHITECTURE_REPORT.md`.
+  Callers that already passed `skip_report=true` are unaffected.
+
 ### Added (0.9.1, ported from upstream codebase-memory-mcp)
 - Team-shared graph artifacts: `code-graph export-artifact` writes a
   project's graph database as a zstd-compressed `.cgraph.zst` file with a

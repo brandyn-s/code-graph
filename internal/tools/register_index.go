@@ -38,9 +38,17 @@ func (s *Server) registerIndexAndTraceTool() {
 					"type": "boolean",
 					"description": "Force full re-index, ignoring cached file hashes. Use after deploying new enrichment features to ensure all post-flush passes run. Default: false."
 				},
+				"write_report": {
+					"type": "boolean",
+					"description": "Write an ARCHITECTURE_REPORT.md orientation doc after indexing. Default: false. The report is written under the code-graph cache directory (<cache>/reports/<project>/) so the indexed checkout is never modified; set report_path to place it elsewhere. The choice is remembered per project."
+				},
 				"skip_report": {
 					"type": "boolean",
-					"description": "Skip writing ARCHITECTURE_REPORT.md to the repo root after indexing. Required when indexing read-only repos (bench fixtures, vendored code, protected paths) where any write violates policy. Default: false (report is written)."
+					"description": "Legacy inverse of write_report, kept for compatibility: skip_report=false requests a report. Default: true (no report). Prefer write_report."
+				},
+				"report_path": {
+					"type": "string",
+					"description": "Where to write the report when one is requested. Default: <cache>/reports/<project>/ARCHITECTURE_REPORT.md. A relative path resolves under repo_path and an absolute path must be inside repo_path or the cache report directory; writing into the checkout is an explicit choice and makes the checkout differ from the indexed state until the file is committed or ignored."
 				},
 				"precision_tier": {
 					"type": "string",

@@ -1,6 +1,6 @@
 package tools
 
-// Sticky per-project skip_report preference (2026-06-11).
+// Sticky per-project report preference (2026-06-11; write_report/skip_report).
 //
 // Incident: a repo indexed with skip_report=true on every explicit call
 // grew an ARCHITECTURE_REPORT.md anyway — some later index_repository
@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/brandyn-s/code-graph/internal/pipeline"
 	"github.com/brandyn-s/code-graph/internal/store"
 )
 
@@ -27,7 +28,7 @@ func indexArgs(repo string, extra map[string]any) map[string]any {
 	return args
 }
 
-func TestSkipReportPreferenceIsSticky(t *testing.T) {
+func TestReportPreferenceIsSticky(t *testing.T) {
 	router, err := store.NewRouterWithDir(t.TempDir())
 	if err != nil {
 		t.Fatalf("NewRouterWithDir: %v", err)
@@ -41,47 +42,66 @@ func TestSkipReportPreferenceIsSticky(t *testing.T) {
 	srv := NewServer(router, WithConfig(cfg))
 
 	repo := writeFixtureRepo(t)
-	reportPath := filepath.Join(repo, "ARCHITECTURE_REPORT.md")
-	reportExists := func() bool {
-		_, statErr := os.Stat(reportPath)
+	project := pipeline.ProjectNameFromPath(repo)
+	cachedReport := filepath.Join(srv.reportsDir(project), ReportFileName)
+	repoReport := filepath.Join(repo, ReportFileName)
+	exists := func(path string) bool {
+		_, statErr := os.Stat(path)
 		return statErr == nil
 	}
 
-	// 1. Explicit skip: no report, preference recorded.
+	// 1. Explicit opt-in (preferred spelling): report under the cache dir,
+	// never in the checkout, preference recorded.
 	metadataResponseFromHandler(t, srv.handleIndexRepository, "index_repository",
-		indexArgs(repo, map[string]any{"skip_report": true, "force": true}))
-	if reportExists() {
-		t.Fatal("explicit skip_report=true wrote a report")
+		indexArgs(repo, map[string]any{"write_report": true, "force": true}))
+	if !exists(cachedReport) {
+		t.Fatal("write_report=true did not write a report under the cache dir")
+	}
+	if exists(repoReport) {
+		t.Fatal("write_report=true wrote into the checkout without report_path")
 	}
 
-	// 2. Arg OMITTED: the recorded skip must hold — this is the incident case.
-	metadataResponseFromHandler(t, srv.handleIndexRepository, "index_repository",
-		indexArgs(repo, map[string]any{"force": true}))
-	if reportExists() {
-		t.Fatal("omitted skip_report reverted to report-writing despite persisted skip preference")
-	}
-
-	// 3. Explicit opposite: report written, preference flipped.
-	metadataResponseFromHandler(t, srv.handleIndexRepository, "index_repository",
-		indexArgs(repo, map[string]any{"skip_report": false, "force": true}))
-	if !reportExists() {
-		t.Fatal("explicit skip_report=false did not write a report")
-	}
-
-	// 4. Omitted again: now inherits the want-report choice (refresh).
-	if err := os.Remove(reportPath); err != nil {
+	// 2. Arg OMITTED: the recorded want-report choice holds (refresh).
+	if err := os.Remove(cachedReport); err != nil {
 		t.Fatalf("remove report: %v", err)
 	}
 	metadataResponseFromHandler(t, srv.handleIndexRepository, "index_repository",
 		indexArgs(repo, map[string]any{"force": true}))
-	if !reportExists() {
-		t.Fatal("omitted skip_report did not inherit the persisted want-report preference")
+	if !exists(cachedReport) {
+		t.Fatal("omitted arguments did not inherit the persisted want-report preference")
+	}
+
+	// 3. Legacy spelling flips it off and is persisted.
+	if err := os.Remove(cachedReport); err != nil {
+		t.Fatalf("remove report: %v", err)
+	}
+	metadataResponseFromHandler(t, srv.handleIndexRepository, "index_repository",
+		indexArgs(repo, map[string]any{"skip_report": true, "force": true}))
+	if exists(cachedReport) {
+		t.Fatal("explicit skip_report=true wrote a report")
+	}
+
+	// 4. Omitted again: now inherits the skip choice — the original incident case.
+	metadataResponseFromHandler(t, srv.handleIndexRepository, "index_repository",
+		indexArgs(repo, map[string]any{"force": true}))
+	if exists(cachedReport) || exists(repoReport) {
+		t.Fatal("omitted arguments reverted to report-writing despite persisted skip preference")
+	}
+
+	// 5. Legacy skip_report=false still means "write" and lands in the cache dir.
+	metadataResponseFromHandler(t, srv.handleIndexRepository, "index_repository",
+		indexArgs(repo, map[string]any{"skip_report": false, "force": true}))
+	if !exists(cachedReport) {
+		t.Fatal("explicit skip_report=false did not write a report")
+	}
+	if exists(repoReport) {
+		t.Fatal("skip_report=false wrote into the checkout")
 	}
 }
 
-func TestSkipReportDefaultUnchangedWithoutPreference(t *testing.T) {
-	// No config store attached (CLI/test shape) + omitted arg = the
-	// pre-existing default: write the report.
+func TestReportDefaultWritesNothingWithoutPreference(t *testing.T) {
+	// No config store attached (CLI/test shape) + omitted args = no report
+	// anywhere: not in the checkout, not in the cache dir.
 	router, err := store.NewRouterWithDir(t.TempDir())
 	if err != nil {
 		t.Fatalf("NewRouterWithDir: %v", err)
@@ -92,7 +112,11 @@ func TestSkipReportDefaultUnchangedWithoutPreference(t *testing.T) {
 	repo := writeFixtureRepo(t)
 	metadataResponseFromHandler(t, srv.handleIndexRepository, "index_repository",
 		indexArgs(repo, nil))
-	if _, statErr := os.Stat(filepath.Join(repo, "ARCHITECTURE_REPORT.md")); statErr != nil {
-		t.Fatalf("default (no preference, nil config) should write the report: %v", statErr)
+	if _, statErr := os.Stat(filepath.Join(repo, ReportFileName)); !os.IsNotExist(statErr) {
+		t.Fatalf("default index wrote a report into the checkout (stat err=%v)", statErr)
+	}
+	project := pipeline.ProjectNameFromPath(repo)
+	if _, statErr := os.Stat(filepath.Join(srv.reportsDir(project), ReportFileName)); !os.IsNotExist(statErr) {
+		t.Fatalf("default index wrote a report without being asked (stat err=%v)", statErr)
 	}
 }

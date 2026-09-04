@@ -125,11 +125,11 @@ Point a stdio MCP server at the binary with no arguments:
 ## First run
 
 ```text
-index_repository(repo_path="/absolute/repository", skip_report=true)
+index_repository(repo_path="/absolute/repository")
 index_status(project="<project-name>")
 ```
 
-Indexing writes only to the cache directory (`~/.cache/code-graph`) unless you
-omit `skip_report`, in which case an `ARCHITECTURE_REPORT.md` is written into
-the repository. Large repositories can take minutes; `index_status` reports
+Indexing writes only to the cache directory (`~/.cache/code-graph`); the
+checkout is never modified unless you ask for a report or visualization at a
+path inside it. Large repositories can take minutes; `index_status` reports
 progress and the captured index identity.

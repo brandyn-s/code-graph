@@ -249,24 +249,28 @@ func (s *Server) registerCodeLocalizeAgentTool() {
 }
 
 // registerGenerateReportTool adds the generate_report MCP tool — writes
-// ARCHITECTURE_REPORT.md to the repo root for always-on orientation via
-// the PreToolUse hook installed by `code-graph install`.
+// ARCHITECTURE_REPORT.md under the cache directory (or an explicit path) for
+// orientation via the PreToolUse hook installed by `code-graph install`.
 func (s *Server) registerGenerateReportTool() {
 	s.addTool(&mcp.Tool{
 		Name: "generate_report",
 		Annotations: &mcp.ToolAnnotations{
-			ReadOnlyHint:    false, // writes a file to the repo root
+			ReadOnlyHint:    false, // writes a file (cache dir by default, checkout only on request)
 			IdempotentHint:  true,
 			OpenWorldHint:   boolPtr(false),
 			DestructiveHint: boolPtr(false),
 		},
-		Description: "Write ARCHITECTURE_REPORT.md to the repo root — a one-page orientation doc (god nodes, communities + cohesion, cross-package boundaries, 5 suggested questions) derived from the indexed graph. Auto-runs at the end of index_repository; call manually to regenerate without reindexing. Intended to be read by coding assistants before Glob/Grep on an unfamiliar codebase.",
+		Description: "Write ARCHITECTURE_REPORT.md — a one-page orientation doc (god nodes, communities + cohesion, cross-package boundaries, 5 suggested questions) derived from the indexed graph. By default the file goes under the code-graph cache directory (<cache>/reports/<project>/) so the indexed checkout is not modified; pass output_path to write elsewhere, including into the checkout. index_repository writes the same report only when asked (write_report=true). Intended to be read by coding assistants before Glob/Grep on an unfamiliar codebase.",
 		InputSchema: json.RawMessage(`{
 			"type": "object",
 			"properties": {
 				"project": {
 					"type": "string",
 					"description": "Project name (optional — uses session project if omitted)"
+				},
+				"output_path": {
+					"type": "string",
+					"description": "Where to write the report. Default: <cache>/reports/<project>/ARCHITECTURE_REPORT.md. A relative path resolves under the project root; an absolute path must be inside the project root or the cache report directory. Writing into the checkout makes it differ from the indexed state until the file is committed or ignored."
 				}
 			}
 		}`),

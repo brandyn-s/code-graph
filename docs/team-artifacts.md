@@ -49,13 +49,14 @@ captured and compared with the header:
   replaces it with a fresh index (incremental mode reuses the file hashes).
 - An existing local index for the project is kept unless `--force`.
 
-Note on the identity of exported indexes: by design, `index_repository`
-treats the `ARCHITECTURE_REPORT.md` it writes into the repository root as a
-source change, so a default index of a repository that does not commit that
-file ends with `identity_status = error` (`source_changed_during_index`) and
-its artifact can only be imported with `--allow-stale`. Index with
-`skip_report: true` (the choice is remembered per project) or commit the
-report before exporting an artifact meant to import as coherent.
+Note on the identity of exported indexes: a default `index_repository` run
+does not write anything into the checkout (reports go to
+`<cache>/reports/<project>/`), so its identity is coherent and the artifact
+imports without `--allow-stale`. If you ask for a report inside the checkout
+(`write_report: true` with a `report_path` under the repository), it is
+written after the identity capture; the checkout then differs from the indexed
+state until you commit or ignore that file, and an artifact exported in that
+window imports only with `--allow-stale`.
 
 The artifact contains everything in the project's database, including
 `.env`-derived environment variable names and code snippets in docstrings.

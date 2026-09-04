@@ -17,8 +17,7 @@ edges, inspect the exact source, and search for counterexamples.
 {
   "repo_path": "/absolute/repository",
   "precision_tier": "scip",
-  "scip_index_path": "index.scip",
-  "skip_report": true
+  "scip_index_path": "index.scip"
 }
 ```
 

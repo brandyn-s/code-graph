@@ -81,8 +81,9 @@ func runInstall(args []string) int {
 
 	fmt.Println()
 
-	// PreToolUse orientation hook — nudges Claude Code to read
-	// ARCHITECTURE_REPORT.md before Glob/Grep on indexed repos.
+	// PreToolUse orientation hook — nudges Claude Code to read the
+	// ARCHITECTURE_REPORT.md (cache dir by default) before Glob/Grep on
+	// indexed repos.
 	installOrientationHook(cfg)
 
 	fmt.Println("\nDone. Restart your editor/CLI to activate.")

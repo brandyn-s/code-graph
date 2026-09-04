@@ -79,3 +79,9 @@ bench-react-fetch: build  ## Regression gate for TS/JSX fetch URL shapes (litera
 
 bench-handler-resolution: build  ## Adversarial gate for Phase D1 handler resolution (HandlerRef + crate-locality vs name-collision decoy)
 	python bench/accuracy/check_handler_resolution.py
+
+homebrew-formula:  ## Render the Homebrew formula for TAG (e.g. make homebrew-formula TAG=v0.9.0)
+	scripts/update-homebrew-formula.sh $(TAG)
+
+server-json:  ## Render server.json for the MCP registry from TAG
+	scripts/update-server-json.sh $(TAG)

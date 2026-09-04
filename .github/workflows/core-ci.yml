@@ -54,7 +54,7 @@ jobs:
       - name: Lint shell installers
         run: |
           bash -n install.sh scripts/setup.sh scripts/smoke-test.sh scripts/release_workflow.sh
-          shellcheck install.sh scripts/setup.sh scripts/smoke-test.sh
+          shellcheck install.sh scripts/setup.sh scripts/smoke-test.sh scripts/update-homebrew-formula.sh scripts/update-server-json.sh
 
   agent-contract:
     runs-on: ubuntu-latest

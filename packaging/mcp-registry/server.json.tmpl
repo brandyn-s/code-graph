@@ -1,0 +1,48 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.brandyn-s/code-graph",
+  "description": "Persistent code knowledge graph MCP server: callers, callees, implementations, change impact, with source-backed evidence bound to an exact checkout.",
+  "repository": {
+    "url": "https://github.com/@REPO@",
+    "source": "github"
+  },
+  "version": "@VERSION@",
+  "websiteUrl": "https://github.com/@REPO@#readme",
+  "packages": [
+    {
+      "registryType": "mcpb",
+      "identifier": "https://github.com/@REPO@/releases/download/v@VERSION@/code-graph-darwin-arm64.tar.gz",
+      "fileSha256": "@SHA256_DARWIN_ARM64@",
+      "version": "@VERSION@",
+      "transport": { "type": "stdio" }
+    },
+    {
+      "registryType": "mcpb",
+      "identifier": "https://github.com/@REPO@/releases/download/v@VERSION@/code-graph-darwin-amd64.tar.gz",
+      "fileSha256": "@SHA256_DARWIN_AMD64@",
+      "version": "@VERSION@",
+      "transport": { "type": "stdio" }
+    },
+    {
+      "registryType": "mcpb",
+      "identifier": "https://github.com/@REPO@/releases/download/v@VERSION@/code-graph-linux-arm64.tar.gz",
+      "fileSha256": "@SHA256_LINUX_ARM64@",
+      "version": "@VERSION@",
+      "transport": { "type": "stdio" }
+    },
+    {
+      "registryType": "mcpb",
+      "identifier": "https://github.com/@REPO@/releases/download/v@VERSION@/code-graph-linux-amd64.tar.gz",
+      "fileSha256": "@SHA256_LINUX_AMD64@",
+      "version": "@VERSION@",
+      "transport": { "type": "stdio" }
+    },
+    {
+      "registryType": "mcpb",
+      "identifier": "https://github.com/@REPO@/releases/download/v@VERSION@/code-graph-windows-amd64.zip",
+      "fileSha256": "@SHA256_WINDOWS_AMD64@",
+      "version": "@VERSION@",
+      "transport": { "type": "stdio" }
+    }
+  ]
+}

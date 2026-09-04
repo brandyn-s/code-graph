@@ -35,6 +35,11 @@ All notable changes to this project are documented here. The format follows
   directory and per-project database sizes and format versions, embeddings
   mode and Voyage reachability, compiled and excluded grammars, toolset.
 
+- Distribution: `flake.nix`, a Homebrew formula template with
+  `scripts/update-homebrew-formula.sh`, an MCP registry `server.json`
+  template with `scripts/update-server-json.sh`, and `docs/install.md` /
+  `docs/registry.md`.
+
 ### Changed (maintainability pass)
 - README opens with a real `get_relationship_evidence` result and the
   stale-index refusal, plus a comparison against grep and the upstream.

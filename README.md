@@ -40,6 +40,8 @@ With Go 1.26+ and a C compiler:
 go install github.com/brandyn-s/code-graph/cmd/code-graph@latest
 ```
 
+Homebrew tap and Nix flake instructions are in [docs/install.md](docs/install.md).
+
 The installer downloads the release archive for your platform, verifies its
 SHA-256 against the release's `checksums.txt`, installs `code-graph` into
 `~/.local/bin`, and prints the MCP registration line. If the GitHub CLI is

@@ -128,7 +128,5 @@ path for several modes.
 
 ## Cross-references
 
-- Plan: `~/Documents/knowledge-base/plans/2026-05-05-codegraph-and-cross-tool-recommendations.md` Phase D3
-- Roundtable single-source finding: `~/Documents/roundtables/2026-05-05-code-graph/results/META_SYNTHESIS.md` (Grok's "incremental indexing semantic drift")
 - Existing watcher: `internal/watcher/watcher.go`
 - Hash library: blake3 is the right primitive; not currently a dependency. Adding it would be a tiny incremental cost (single Go module).

@@ -117,7 +117,5 @@ store-layer fix ships.
 
 ## Cross-references
 
-- Plan: `~/Documents/knowledge-base/plans/2026-05-05-codegraph-and-cross-tool-recommendations.md` Phase D1
-- Roundtable single-source finding: `~/Documents/roundtables/2026-05-05-code-graph/results/META_SYNTHESIS.md` (Opus's "Multi-DB router has no quota / disk-pressure handling")
 - Existing: `internal/store/RECOVERY_TAXONOMY.md` "Out of scope" table
 - mattn/go-sqlite3 error codes: https://pkg.go.dev/github.com/mattn/go-sqlite3#ErrNo

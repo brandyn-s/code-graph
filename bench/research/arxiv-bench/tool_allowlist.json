@@ -55,7 +55,7 @@
   },
   "mapping_notes": {
     "all_14_present_in_our_fork": true,
-    "verified_via": "~/Documents/GitHub/code-graph/bin/codebase-memory-mcp.exe cli (2026-05-12) — all 14 names appear in our CLI tool list",
+    "verified_via": "code-graph cli (2026-05-12) — all 14 names appear in our CLI tool list",
     "semantic_drift_risks": [
       "trace_call_path: upstream accepts depth param; verify our impl supports same depth range",
       "query_graph: both implement Cypher subset; verify Cypher feature parity (we support recursive CTE; upstream uses BFS via SQLite CTE per paper)",

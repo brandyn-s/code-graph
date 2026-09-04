@@ -1,6 +1,6 @@
 # code-graph setup script (Windows)
-# INTERNAL: requires an authenticated GitHub CLI session with access to the
-# brandyn-s/code-graph repository.
+# Verified install path: requires an authenticated GitHub CLI session to check
+# release membership and build provenance for brandyn-s/code-graph before installing.
 # Default: download pre-built native Windows binary
 # -FromSource: build from source inside WSL (requires Go + gcc in WSL)
 
@@ -154,10 +154,10 @@ function Set-PrivateSourceRemote {
 
     if (-not $currentOrigin) {
         Invoke-WSL "git -C $SourceDir remote add origin $expectedOrigin" | Out-Null
-        Write-Ok "Source remote configured for private repository $Repo"
+        Write-Ok "Source remote configured for $Repo"
     } elseif ($currentOrigin -ne $expectedOrigin) {
         Invoke-WSL "git -C $SourceDir remote set-url origin $expectedOrigin" | Out-Null
-        Write-Ok "Source remote configured for private repository $Repo"
+        Write-Ok "Source remote configured for $Repo"
     }
 }
 
@@ -169,7 +169,7 @@ if ($Help) {
     Write-Host ""
     Write-Host "  Default:      Download pre-built Windows binary"
     Write-Host "  -FromSource:  Build from source inside WSL (requires Go 1.23+ and gcc in WSL)"
-    Write-Host "  Both modes require GitHub CLI authentication for the private repository."
+    Write-Host "  Both modes require GitHub CLI authentication for provenance verification."
     Write-Host ""
     exit 0
 }
@@ -327,7 +327,7 @@ if ($FromSource) {
     $tag = & gh release view --repo $Repo --json tagName --jq ".tagName"
 
     if ($LASTEXITCODE -ne 0 -or -not $tag) {
-        Write-Fail "Could not determine latest release for private repository $Repo."
+        Write-Fail "Could not determine latest release for $Repo."
         exit 1
     }
     $tag = ($tag | Out-String).Trim()

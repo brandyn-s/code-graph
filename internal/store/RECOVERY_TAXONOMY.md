@@ -176,7 +176,6 @@ go test ./internal/... -count=1
 
 ## Cross-references
 
-- Plan: `~/Documents/knowledge-base/plans/2026-05-05-code-graph-corrupt-state-recovery.md`
 - Detection tool: `~/.claude/scripts/verify-indexes.py`
 - Existing recovery code: `internal/store/store.go:134` (`recoverStaleSHM`)
 - Recovery procedure: `internal/store/router.go:235` (`DeleteProject`)

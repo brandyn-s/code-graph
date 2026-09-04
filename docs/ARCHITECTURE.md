@@ -8,16 +8,16 @@ evidence must give way to compiler, runtime, or security-analyzer evidence.
 
 | Dimension | State reviewed 2026-08-13 |
 |---|---|
-| Implementation baseline | `4d7d103` on `main` |
-| Latest published release | `v0.8.0-redacted.11` at `45250f8` |
-| Merged after that release | PR #457: CodeQL evidence import, assurance types, deterministic PageRank ties, incremental equivalence fixes |
+| Implementation baseline | `main` of `brandyn-s/code-graph` (public primary since 2026-09) |
+| Latest published release | none yet from this repository; `v0.9.0` is the first public release. Earlier `v0.8.0-redacted.N` builds were internal. |
+| Merged since the last internal build | CodeQL evidence import, assurance types, deterministic PageRank ties, incremental equivalence fixes, public rename and installer |
 | Runtime assertion | None; inspect the installed MCP process separately |
 | Registered MCP surface | 40 tools |
 | Parser registry | 27 languages |
 
 Source, release, and runtime are different states. This document describes the
 reviewed source baseline. A capability listed as merged after `.11` is not a
-claim that the published archive or any installed server contains it.
+claim that any installed server contains it.
 
 ## Design Intent
 

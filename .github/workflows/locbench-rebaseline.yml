@@ -6,7 +6,7 @@ name: locbench-rebaseline
 # instances. This restores a defensible figure for the 86.0/84.5/73.5 baseline,
 # which is currently flagged historical (CLAUDE.md / the 2026-05-12
 # unreachable-tail finding). See
-# docs/plans/2026-05-30-locbench-rebaseline-and-swerank-runbook.md.
+# the locbench rebaseline runbook (kept with the bench tooling).
 #
 # Pipeline: build binaries -> download Loc-Bench parquet -> pin the reachable
 # subset (GITHUB_TOKEN) -> run the localizer on the pinned subset (budget

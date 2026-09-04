@@ -12,7 +12,7 @@ default allow = false
 
 allow {
 	input.tool_name == "conversations_add_message"
-	input.user_email == "admin@redacted.example"
+	input.user_email == "admin@example.com"
 }
 
 allow {

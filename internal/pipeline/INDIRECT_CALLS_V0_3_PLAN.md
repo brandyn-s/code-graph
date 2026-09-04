@@ -8,7 +8,7 @@ for Flask `app.before_request(fn)` family hook registrations, and
 (stretch) for `@app.route('/path')` route decorators with args, so
 `trace_call_path` returns non-empty inbound traces on the affected
 target functions. The flask-tiny baseline (PR #607 on
-`redacted-org/claude-knowledge-base`) is the regression gate:
+a private Markdown knowledge-base repo) is the regression gate:
 F004 (`@app.before_request` inbound) must move from recall=0.0 to ≥0.5
 without regressing F001/F002 sanity-checks.
 
@@ -38,7 +38,7 @@ demonstrates the multi-pattern emission strategy. v0.3 extends both —
 no new types, no new passes.
 
 **Regression gate (flask-tiny):** Documented at
-`redacted-org/claude-knowledge-base` →
+a private Markdown knowledge-base repo →
 `harness/baselines/2026-05-23-code-graph-flask-tiny-baseline.md`
 (PR #607, merged 2026-05-23). Re-running
 `harness/runners/run_code_graph_trace.py` against the v0.3 build is
@@ -585,8 +585,8 @@ existing convention uses inline sources).
 - Go-side tag/confidence wiring:
   `internal/pipeline/pipeline_cbm.go:432-479`
 - Regression gate baseline:
-  `redacted-org/claude-knowledge-base` →
+  a private Markdown knowledge-base repo →
   `harness/baselines/2026-05-23-code-graph-flask-tiny-baseline.md`
 - Regression-gate runner:
-  `redacted-org/claude-knowledge-base` →
+  a private Markdown knowledge-base repo →
   `harness/runners/run_code_graph_trace.py`

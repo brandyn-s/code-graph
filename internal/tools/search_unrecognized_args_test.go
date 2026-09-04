@@ -5,7 +5,7 @@ package tools
 // declared search_graph parameter (the tool filters on name_pattern /
 // qn_pattern), so passing it yields a response ranked purely by node degree
 // with nothing indicating the intended filter never applied. Observed live on
-// tunnl @ 2026-07-27: query="authentication token validation" and query="token"
+// Observed live on a Go service repo (2026-07-27): query="authentication token validation" and query="token"
 // returned byte-identical top hits (Cargo.toml variables, markdown files),
 // while name_pattern="token" correctly returned 50 token nodes.
 //

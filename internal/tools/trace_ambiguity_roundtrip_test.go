@@ -11,7 +11,7 @@ package tools
 // It was not held. findNodeAcrossProjects looked candidates up via
 // FindNodesByName, which matches the `name` column; a dotted QN never appears
 // there, so the advertised retry returned "function not found" for every
-// ambiguous symbol. Reproduced live on tunnl @ 2026-07-27 for both
+// ambiguous symbol. Reproduced live on a Go service repo (2026-07-27) for both
 // `AppConfig.validate` (3 candidates) and `make_token` (5 candidates) using
 // the tool's own verbatim suggestions.
 //
@@ -34,7 +34,7 @@ import (
 
 // seedAmbiguousFunctions adds two Functions that share the bare name
 // "validate" in different modules, plus a caller for each so the trace has an
-// inbound edge to walk. Mirrors the real-world shape (tunnl's `validate` x3,
+// inbound edge to walk. Mirrors the real-world shape (one repo's `validate` x3,
 // `make_token` x5) that the guard exists to disambiguate.
 func seedAmbiguousFunctions(t *testing.T, st *store.Store, projectName string) {
 	t.Helper()

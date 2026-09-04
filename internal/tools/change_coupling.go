@@ -215,7 +215,7 @@ func (s *Server) handleChangeCoupling(_ context.Context, req *mcp.CallToolReques
 // E.g., "doomper/src/recorder.rs" -> "doomper"
 //
 //	"ship-os/src/components/layout/Navigation.tsx" -> "ship-os"
-//	"redacted-platform-terraform/core/modules/environment/main.tf" -> "redacted-platform-terraform"
+//	"platform-terraform/core/modules/environment/main.tf" -> "platform-terraform"
 func extractTopLevelCrate(path string) string {
 	path = strings.ReplaceAll(path, "\\", "/")
 	idx := strings.Index(path, "/")

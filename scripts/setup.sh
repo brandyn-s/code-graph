@@ -165,11 +165,11 @@ download_binary() {
     echo "${BOLD}Fetching latest release...${RESET}"
     local tag
     if ! tag=$(gh release view --repo "$REPO" --json tagName --jq .tagName); then
-        die "Could not read releases for private repository ${REPO}. Confirm your GitHub access."
+        die "Could not read releases for ${REPO}. Confirm GitHub CLI authentication."
     fi
 
     if [ -z "$tag" ]; then
-        die "Could not determine latest release for private repository ${REPO}."
+        die "Could not determine latest release for ${REPO}."
     fi
     ok "Latest release: $tag"
 
@@ -221,7 +221,7 @@ build_from_source() {
         echo "${BOLD}Updating source...${RESET}"
         gh auth setup-git
         ensure_private_source_remote
-        ok "Source remote configured for private repository ${REPO}"
+        ok "Source remote configured for ${REPO}"
         git -C "$SOURCE_DIR" pull --ff-only
     else
         echo "${BOLD}Cloning repository...${RESET}"

@@ -7,7 +7,7 @@
 ## Measured failure mode (2026-05-23)
 
 The flask-tiny baseline
-(`redacted-org/claude-knowledge-base` →
+(a private Markdown knowledge-base repo →
 `harness/baselines/2026-05-23-code-graph-flask-tiny-baseline.md`,
 PR #607) ran `trace_call_path` against a small synthetic Flask app
 and measured the actual response shape for decorator-dispatched
@@ -270,7 +270,7 @@ note replaces it.
 ## Cross-references
 
 - Flask hook-registration baseline + v0.3 regression gate:
-  `redacted-org/claude-knowledge-base` →
+  a private Markdown knowledge-base repo →
   `harness/baselines/2026-05-23-code-graph-flask-tiny-baseline.md`
   (PR #607, 2026-05-23)
 - v0.3 implementation plan: `INDIRECT_CALLS_V0_3_PLAN.md` (this directory)

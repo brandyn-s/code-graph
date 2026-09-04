@@ -186,7 +186,7 @@ func TestExtractURLPaths_FiltersFilesystemPaths(t *testing.T) {
 		},
 		{
 			name: "var_log",
-			text: `log_path = "/var/log/sartv.log"`,
+			text: `log_path = "/var/log/relay.log"`,
 			want: nil,
 		},
 		{

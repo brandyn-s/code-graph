@@ -13,7 +13,7 @@ func TestExtractTopLevelCrate(t *testing.T) {
 	}{
 		{"doomper/src/recorder.rs", "doomper"},
 		{"ship-os/src/components/layout/Navigation.tsx", "ship-os"},
-		{"redacted-platform-terraform/core/modules/environment/main.tf", "redacted-platform-terraform"},
+		{"platform-terraform/core/modules/environment/main.tf", "platform-terraform"},
 		{"standalone.rs", "standalone.rs"},    // no slash → return full path
 		{"svc-api/src/handler.rs", "svc-api"}, // standard crate
 		{"", ""},                              // empty

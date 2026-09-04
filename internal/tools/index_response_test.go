@@ -133,6 +133,11 @@ func requireCleanIndexIdentity(t *testing.T, resp map[string]any, repo, revision
 	if err != nil {
 		t.Fatalf("Abs(repo): %v", err)
 	}
+	// Production derives checkout_id from the symlink-resolved path (macOS
+	// /tmp -> /private/tmp), so the expectation must resolve it too.
+	if resolved, evalErr := filepath.EvalSymlinks(absRepo); evalErr == nil {
+		absRepo = resolved
+	}
 	repositoryID := hexSHA256("remote:https://github.com/example/fixture")
 	checkoutID := hexSHA256("path:" + filepath.ToSlash(absRepo))
 	generation := hexSHA256(repositoryID + "\x00" + revision + "\x00clean")

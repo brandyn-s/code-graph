@@ -1,5 +1,5 @@
 {
-  "description": "20-question standard suite. Q1-Q12 extend the existing BENCHMARK.md methodology. Q13-Q20 are capability probes for the 7 feature PRs — pre-merge they return N/A; post-merge the harness captures the first real value.",
+  "description": "20-question standard suite. Q1-Q12 extend the existing docs/benchmarks.md methodology. Q13-Q20 are capability probes for the 7 feature PRs — pre-merge they return N/A; post-merge the harness captures the first real value.",
   "questions": [
     {
       "id": "Q1",
@@ -108,7 +108,7 @@
       "args": {"query": "MATCH (f:Function) RETURN f.name, f.params LIMIT 5"},
       "expect_min_results": 0,
       "feature_pr": null,
-      "note": "known gap per BENCHMARK.md — params extracted for some langs only. '<>' not supported by current Cypher parser, so we return raw and let result inspection reveal empty vs filled params"
+      "note": "known gap per docs/benchmarks.md — params extracted for some langs only. '<>' not supported by current Cypher parser, so we return raw and let result inspection reveal empty vs filled params"
     },
     {
       "id": "Q11",
@@ -152,10 +152,10 @@
       "category": "orientation",
       "tool": "_file_check",
       "args_per_repo": {
-        "mcp-servers": {"path": "~/Documents/GitHub/mcp-servers/ARCHITECTURE_REPORT.md"},
-        "rmf-corsair": {"path": "~/Documents/GitHub/rmf-corsair/ARCHITECTURE_REPORT.md"},
-        "mcp-infra": {"path": "~/Documents/GitHub/mcp-infra/ARCHITECTURE_REPORT.md"},
-        "code-graph": {"path": "~/Documents/GitHub/code-graph/ARCHITECTURE_REPORT.md"}
+        "mcp-servers": {"path": "<repo-root>/mcp-servers/ARCHITECTURE_REPORT.md"},
+        "example-app": {"path": "<repo-root>/example-app/ARCHITECTURE_REPORT.md"},
+        "mcp-infra": {"path": "<repo-root>/mcp-infra/ARCHITECTURE_REPORT.md"},
+        "code-graph": {"path": "<repo-root>/code-graph/ARCHITECTURE_REPORT.md"}
       },
       "feature_pr": "PR3",
       "post_merge_criterion": "file exists; contains 'God Nodes', 'Communities', 'Suggested Questions' sections"

@@ -22,7 +22,7 @@ import (
 //
 // References:
 //   - RepoMem (arXiv 2510.01003): the architecture this implements
-//   - knowledge-base/research/2026-05-04-c1-issue-corpus-strategy.md:
+//   - Issue-corpus strategy note (2026-05-04):
 //     corpus design and contamination guards
 //   - bench/research/ingest_locbench_issues.py: corpus ingestion script
 //

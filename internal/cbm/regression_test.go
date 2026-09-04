@@ -169,6 +169,9 @@ func TestCppClass_Regression(t *testing.T) {
 
 // --- CUDA ---
 func TestCUDAKernel_Regression(t *testing.T) {
+	if !lang.BuildIncludes(lang.CUDA) {
+		t.Skip("CUDA grammar is behind the cbm_all build tag")
+	}
 	src := []byte("__global__ void vectorAdd(float *a, float *b, float *c, int n) {\n    int i = blockIdx.x * blockDim.x + threadIdx.x;\n    if (i < n) c[i] = a[i] + b[i];\n}\nint main() { return 0; }\n")
 	r, err := ExtractFile(src, lang.CUDA, "t", "vector.cu")
 	if err != nil {

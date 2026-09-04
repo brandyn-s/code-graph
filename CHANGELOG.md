@@ -6,6 +6,23 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed (maintainability pass)
+- README opens with a real `get_relationship_evidence` result and the
+  stale-index refusal, plus a comparison against grep and the upstream.
+- `internal/config` is the single inventory of the 41 environment variables;
+  tests fail on undocumented keys or direct `os.Getenv` reads of product
+  keys. Eleven previously undocumented variables are now in CLAUDE.md.
+- `pipeline.go` and `tools.go` split by pass and by area (pure moves);
+  `internal/tools` coverage 49% -> 65% via table-driven handler tests.
+- `internal/embed` defines the `Embedder` interface with a `Disabled`
+  provider; `internal/store/edge_types.go` declares every edge kind, and
+  `docs/edge-types.md` is generated from it.
+- `docs/extending.md` (tool, language, edge type, provider recipes) and
+  `docs/upstream.md` (hard-fork stance, what to diff against upstream).
+- The CUDA grammar moved behind the `cbm_all` build tag; `make build-all`
+  includes it. Release archives shrink accordingly and `.cu` files are
+  reported as unsupported in default builds.
+
 ### Changed (review pass)
 - Embedded Claude Code skills renamed from `codebase-memory-*` to
   `code-graph-*`; `install` removes the old skill directories and

@@ -37,6 +37,11 @@ build:
 # which stripping cannot touch — per-language build tags would be the next
 # size lever. Keep `make build` for development (stack traces keep symbols
 # either way in Go, but debuggers want the DWARF from the default build).
+# Every vendored grammar, including the ones behind the cbm_all build tag
+# (currently CUDA). Default builds leave them out to keep the binary small.
+build-all:
+	CGO_ENABLED=1 go build -tags cbm_all $(BUILD_LDFLAGS) -o bin/$(BINARY)$(BINARY_EXT) ./cmd/code-graph/
+
 release:
 	CGO_ENABLED=1 go build -trimpath $(RELEASE_LDFLAGS) -o bin/$(BINARY)$(BINARY_EXT) ./cmd/code-graph/
 

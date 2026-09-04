@@ -36,14 +36,50 @@ const (
 	Protobuf   Language = "protobuf"
 )
 
-// AllLanguages returns all supported languages.
+// optionalLanguages are compiled in only with the cbm_all build tag. Their
+// grammars are large relative to how often they appear in repositories, so
+// default builds leave them out; files in these languages are reported as
+// unsupported extensions by index_health instead of being skipped silently.
+var optionalLanguages = []Language{CUDA}
+
+// BuildIncludes reports whether this binary can parse l.
+func BuildIncludes(l Language) bool {
+	if optionalGrammarsEnabled {
+		return true
+	}
+	for _, o := range optionalLanguages {
+		if o == l {
+			return false
+		}
+	}
+	return true
+}
+
+// ExcludedFromBuild lists languages left out of this binary.
+func ExcludedFromBuild() []Language {
+	if optionalGrammarsEnabled {
+		return nil
+	}
+	out := make([]Language, len(optionalLanguages))
+	copy(out, optionalLanguages)
+	return out
+}
+
+// AllLanguages returns all languages this binary supports.
 func AllLanguages() []Language {
-	return []Language{
+	all := []Language{
 		Python, JavaScript, TypeScript, TSX, Go, Rust, Java, CPP,
 		C, Bash, PowerShell, Nix, CUDA,
 		HTML, CSS, SCSS, YAML, TOML, HCL, SQL, Dockerfile,
 		JSON, XML, Markdown, Makefile, CMake, Protobuf,
 	}
+	out := make([]Language, 0, len(all))
+	for _, l := range all {
+		if BuildIncludes(l) {
+			out = append(out, l)
+		}
+	}
+	return out
 }
 
 // LanguageSpec defines the tree-sitter node types for a language.

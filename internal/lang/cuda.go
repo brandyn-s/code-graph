@@ -1,6 +1,9 @@
 package lang
 
 func init() {
+	if !BuildIncludes(CUDA) {
+		return
+	}
 	Register(&LanguageSpec{
 		Language:       CUDA,
 		FileExtensions: []string{".cu", ".cuh"},

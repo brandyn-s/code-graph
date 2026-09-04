@@ -199,7 +199,7 @@ CBMFileResult* cbm_extract_file(
     const TSLanguage* ts_lang = cbm_ts_language(language);
     if (!ts_lang) {
         result->has_error = true;
-        result->error_msg = cbm_arena_strdup(a, "no tree-sitter grammar");
+        result->error_msg = cbm_arena_strdup(a, "grammar not compiled into this build (rebuild with -tags cbm_all)");
         return result;
     }
 

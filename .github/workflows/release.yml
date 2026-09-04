@@ -115,6 +115,8 @@ jobs:
         run: |
           # Strip leading 'v' — version var should be bare semver (e.g. 0.4.0)
           CLEAN_VERSION="${VERSION#v}"
+          # Default build: grammars behind the cbm_all tag (CUDA) are excluded
+          # to keep release archives small. See docs/upstream.md.
           CGO_ENABLED=1 go build \
             -ldflags "-X main.version=$CLEAN_VERSION" \
             -o code-graph \

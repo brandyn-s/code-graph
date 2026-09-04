@@ -27,7 +27,13 @@ product superiority.
 - **Graph-only conceptual localization:** on frozen public LocBench `n=80`, a
   seed-quality change improved Acc@1 from `0.175` to `0.200` and MRR@10 from
   `0.219` to `0.260`. This remains a weak operating point; use `code-search`
-  for conceptual discovery.
+  for conceptual discovery. The n=80 case list and preserved inputs are not
+  in this repository, so treat it as an internal paired replay; see
+  [`bench/public/locbench/README.md`](../bench/public/locbench/README.md).
+- **Agent localization (reproducible):** the n=200 `code_localize_agent`
+  baseline (file/class/function Acc@10 86.0 / 84.5 / 73.5) runs from a pinned
+  instance list with [`bench/public/locbench/run.sh`](../bench/public/locbench/run.sh);
+  budget about $50 and 4 hours.
 - **Incremental equivalence:** the test matrix covers modification, deletion,
   TypeScript re-export, call relationships, and no-op lifecycle cases against
   clean rebuilds. See

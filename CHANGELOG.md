@@ -40,6 +40,10 @@ All notable changes to this project are documented here. The format follows
   template with `scripts/update-server-json.sh`, and `docs/install.md` /
   `docs/registry.md`.
 
+- `bench/public/locbench/`: reproducible n=200 Loc-Bench agent run (pinned
+  instances, provenance record, budget cap) and an explicit statement that the
+  n=80 graph-only replay's inputs are not in the repository.
+
 ### Changed (maintainability pass)
 - README opens with a real `get_relationship_evidence` result and the
   stale-index refusal, plus a comparison against grep and the upstream.

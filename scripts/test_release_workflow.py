@@ -146,6 +146,10 @@ class ReleaseWorkflowContractTests(unittest.TestCase):
             release_job,
         )
         self.assertGreaterEqual(self.release_helper.count("--draft"), 2)
+        # Release candidates must be published as prereleases, decided by the
+        # same validator that orders versions.
+        self.assertIn('release_version.py" --is-prerelease "$VERSION"', self.release_helper)
+        self.assertEqual(self.release_helper.count('${prerelease_flag[@]+"${prerelease_flag[@]}"}'), 2)
         self.assertIn(
             'gh release upload "$VERSION"',
             self.release_helper,

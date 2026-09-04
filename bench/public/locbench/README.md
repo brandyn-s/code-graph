@@ -29,8 +29,8 @@ export VOYAGE_API_KEY=...           # optional, enables embedding seeds
 bench/public/locbench/run.sh --budget-usd 60 --out /tmp/locbench-n200
 ```
 
-`run.sh` verifies the pin's digest, derives the plain instance-id list the
-harness consumes (`pin-ids.json` in the output directory), builds `code-graph`
+`run.sh` verifies the pin's digest, writes the instance-id list the harness
+consumes (`pin-ids.json` in the output directory), builds `code-graph`
 and the `eval_rank_localize` harness, downloads the parquet, and runs
 `bench/research/eval_locbench_batch.py --instances pin-ids.json`.
 Expected outputs in `--out`: `report.md` with the three Acc@10 rows and a

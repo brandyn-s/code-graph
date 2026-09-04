@@ -57,6 +57,7 @@ var (
 	MatchTrace           = Key{Name: "CODE_GRAPH_MATCH_TRACE", Default: "off", Doc: "Log HTTP route matches that scored below threshold"}
 	ServiceMap           = Key{Name: "CODE_GRAPH_SERVICE_MAP", Default: "~/.config/code-graph/service_map.json", Doc: "JSON domain-to-pattern table used by service_map and diff_services"}
 	NixServiceOptionPfx  = Key{Name: "CODE_GRAPH_NIX_SERVICE_OPTION_PREFIX", Default: "services", Doc: "Option-set prefix for Nix service extraction"}
+	UpdateChannel        = Key{Name: "CODE_GRAPH_UPDATE_CHANNEL", Default: "stable", Doc: "stable follows GitHub's latest non-prerelease; rc also considers vX.Y.Z-rc.N prereleases"}
 	Toolset              = Key{Name: "CODE_GRAPH_TOOLSET", Default: "core", Doc: "Which tools the MCP server advertises: core (the plugin, benchmark, and everyday set) or full (every registered tool)"}
 	NixPkgsPrefix        = Key{Name: "CODE_GRAPH_NIX_PKGS_PREFIX", Default: "pkgs", Doc: "Package-set prefix for Nix RUNS_BINARY detection"}
 )
@@ -104,7 +105,7 @@ func All() []Key {
 		VoyageAPIKey, VoyageModel, AnthropicAPIKey, AnthropicModel,
 		SkipEmbeddings, EmbeddingsTimeoutSec, CacheDir, LogFile, LogFileOnly,
 		HeapLimitMB, FullReindexEvery, IncrementalCap, AutoRecovery, MatchTrace,
-		ServiceMap, NixServiceOptionPfx, NixPkgsPrefix, Toolset,
+		ServiceMap, NixServiceOptionPfx, NixPkgsPrefix, Toolset, UpdateChannel,
 		SimilarityEdges, SimilarityThresh, SimilarityTopK, SimilaritySkipHops, SeedMinCosine,
 		MaxFileBytes, SCIPIndexPath, SCIPAutoDiscover, GrammarBaselinesPath,
 		ResolverTier2Debug, ResolverStaticDispatchDebug, ResolverDropFuzzyJanusian,

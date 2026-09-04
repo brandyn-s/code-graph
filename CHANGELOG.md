@@ -44,6 +44,11 @@ All notable changes to this project are documented here. The format follows
   instances, provenance record, budget cap) and an explicit statement that the
   n=80 graph-only replay's inputs are not in the repository.
 
+- Release candidates: `vX.Y.Z-rc.N` tags are accepted by the release
+  workflow and published as GitHub prereleases; `code-graph update` ignores
+  them unless `CODE_GRAPH_UPDATE_CHANNEL=rc`. `docs/RELEASE_REHEARSAL.md`
+  walks through a throwaway `v0.9.0-rc.1`.
+
 ### Changed (maintainability pass)
 - README opens with a real `get_relationship_evidence` result and the
   stale-index refusal, plus a comparison against grep and the upstream.

@@ -51,8 +51,10 @@ var runGitHubCLI = func(ctx context.Context, args ...string) ([]byte, error) {
 
 // Release holds parsed GitHub release metadata.
 type Release struct {
-	TagName string  `json:"tag_name"`
-	Assets  []Asset `json:"assets"`
+	TagName    string  `json:"tag_name"`
+	Assets     []Asset `json:"assets"`
+	Prerelease bool    `json:"prerelease"`
+	Draft      bool    `json:"draft"`
 }
 
 // Asset holds a single release artifact.
@@ -65,6 +67,60 @@ type Asset struct {
 // FetchLatestRelease fetches release metadata from GitHub.
 func FetchLatestRelease(ctx context.Context) (*Release, error) {
 	return FetchRelease(ctx, ReleaseURL)
+}
+
+// ReleaseListURL lists recent releases including prereleases. Exported for
+// test injection. Used only on the "rc" update channel.
+var ReleaseListURL = "https://api.github.com/repos/brandyn-s/code-graph/releases?per_page=20"
+
+// Update channels. GitHub's /releases/latest already excludes prereleases, so
+// the stable channel needs no filtering; the rc channel scans the release list
+// and accepts release candidates.
+const (
+	ChannelStable = "stable"
+	ChannelRC     = "rc"
+)
+
+// NormalizeChannel maps a raw CODE_GRAPH_UPDATE_CHANNEL value to a channel.
+// Unknown values fall back to stable so a typo never opts into prereleases.
+func NormalizeChannel(raw string) string {
+	if strings.EqualFold(strings.TrimSpace(raw), ChannelRC) {
+		return ChannelRC
+	}
+	return ChannelStable
+}
+
+// FetchNewestRelease returns the newest release visible on the channel:
+// GitHub's latest non-prerelease on stable, or the highest version among
+// published (non-draft) releases including release candidates on rc.
+func FetchNewestRelease(ctx context.Context, channel string) (*Release, error) {
+	if NormalizeChannel(channel) != ChannelRC {
+		return FetchLatestRelease(ctx)
+	}
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	body, err := fetchReleaseHTTP(ctx, ReleaseListURL)
+	if err != nil {
+		return nil, err
+	}
+	var releases []Release
+	if err := json.Unmarshal(body, &releases); err != nil {
+		return nil, fmt.Errorf("parse json: %w", err)
+	}
+	var newest *Release
+	for i := range releases {
+		r := &releases[i]
+		if r.Draft || r.TagName == "" {
+			continue
+		}
+		if newest == nil || CompareVersions(r.TagName, newest.TagName) > 0 {
+			newest = r
+		}
+	}
+	if newest == nil {
+		return nil, fmt.Errorf("no published releases found on the %s channel", ChannelRC)
+	}
+	return newest, nil
 }
 
 // FetchRelease fetches release metadata, authenticating access

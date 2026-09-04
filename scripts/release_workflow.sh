@@ -231,6 +231,14 @@ publish_release() {
     # shellcheck disable=SC2153  # RELEASE_STATE is validated dynamically above.
     local release_state_input="$RELEASE_STATE"
 
+    # Release candidates (vX.Y.Z-rc.N) publish as GitHub prereleases so
+    # /releases/latest, install.sh, and self-update on the stable channel
+    # never pick them up.
+    local prerelease_flag=()
+    if [ "$(python3 "$SCRIPT_DIR/release_version.py" --is-prerelease "$VERSION")" = "true" ]; then
+        prerelease_flag=(--prerelease)
+    fi
+
     case "$release_state_input" in
         "absent")
             if [ -n "${RELEASE_NOTES:-}" ]; then
@@ -238,12 +246,14 @@ publish_release() {
                     --repo "$GITHUB_REPOSITORY" \
                     --verify-tag \
                     --draft \
+                    ${prerelease_flag[@]+"${prerelease_flag[@]}"} \
                     --notes "$RELEASE_NOTES"
             else
                 gh release create "$VERSION" \
                     --repo "$GITHUB_REPOSITORY" \
                     --verify-tag \
                     --draft \
+                    ${prerelease_flag[@]+"${prerelease_flag[@]}"} \
                     --generate-notes
             fi
             ;;

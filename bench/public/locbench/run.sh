@@ -32,9 +32,8 @@ echo "== verifying pin"
 expected="$(cut -d' ' -f1 "$PIN.sha256")"
 actual="$(shasum -a 256 "$PIN" | cut -d' ' -f1)"
 [ "$expected" = "$actual" ] || { echo "pin digest mismatch: $actual != $expected" >&2; exit 1; }
-# The canonical pin records one object per instance (id, repo, base_commit,
-# category); the batch harness consumes a plain list of instance ids, so derive
-# that list next to the results and keep the canonical digest in provenance.
+# Write the harness input next to the results so the run directory is
+# self-contained; the canonical pin's digest goes into provenance.json.
 python3 - "$PIN" "$OUT/pin-ids.json" <<'PY'
 import json, sys
 pin = json.load(open(sys.argv[1]))

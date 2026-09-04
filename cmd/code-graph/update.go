@@ -15,6 +15,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/brandyn-s/code-graph/internal/config"
 	"github.com/brandyn-s/code-graph/internal/selfupdate"
 )
 
@@ -45,7 +46,11 @@ func runUpdate(args []string) int {
 
 	ctx := context.Background()
 
-	release, err := selfupdate.FetchLatestRelease(ctx)
+	channel := selfupdate.NormalizeChannel(config.Get(config.UpdateChannel))
+	if channel != selfupdate.ChannelStable {
+		fmt.Printf("Update channel: %s (release candidates included)\n", channel)
+	}
+	release, err := selfupdate.FetchNewestRelease(ctx, channel)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: fetch release: %v\n", err)
 		return 1

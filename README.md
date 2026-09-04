@@ -176,6 +176,7 @@ limits) are documented in [CLAUDE.md](CLAUDE.md#resolver-and-runtime-env-vars).
 | `CODE_GRAPH_SERVICE_MAP` | `~/.config/code-graph/service_map.json` if present | JSON `{"domain": ["pattern", ...]}` table that `service_map` and `diff_services` use to group services into domains. See [docs/service-map.md](docs/service-map.md). |
 | `CODE_GRAPH_NIX_SERVICE_OPTION_PREFIX` | `services` | Option-set prefix for Nix service extraction (`options.<prefix>.<name>`). Set e.g. `acme.services` for namespaced modules. |
 | `CODE_GRAPH_NIX_PKGS_PREFIX` | `pkgs` | Package-set prefix for detecting the binary a Nix service runs (`${<prefix>.<pkg>}/bin/<binary>`). |
+| `CODE_GRAPH_UPDATE_CHANNEL` | `stable` | `rc` lets `code-graph update` install release candidates; stable ignores them. |
 | `CODE_GRAPH_TOOLSET` | `core` | `core` advertises the 26 tools listed under Tools; `full` advertises all 40 over MCP. |
 | `CODE_GRAPH_LOG_FILE`, `CODE_GRAPH_LOG_FILE_ONLY` | unset | Tee or redirect structured logs to a file. |
 | `ANTHROPIC_API_KEY` | unset | Only used by `code_localize_agent`. |

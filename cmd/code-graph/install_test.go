@@ -248,18 +248,51 @@ func TestDetectShellRC_BashWithBashrc(t *testing.T) {
 	}
 }
 
-func TestDryRun(t *testing.T) {
-	cfg := installConfig{}
-	for _, a := range []string{"--dry-run", "--force"} {
-		switch a {
-		case "--dry-run":
-			cfg.dryRun = true
-		case "--force":
-			cfg.force = true
-		}
+func TestParseSubcommandFlags(t *testing.T) {
+	flags := func(cfg *installConfig) map[string]*bool {
+		return map[string]*bool{"--dry-run": &cfg.dryRun, "--force": &cfg.force}
+	}
+
+	var cfg installConfig
+	if code := parseSubcommandFlags("install", installUsage, []string{"--dry-run", "--force"}, flags(&cfg)); code != -1 {
+		t.Fatalf("known flags: exit %d, want -1 (proceed)", code)
 	}
 	if !cfg.dryRun || !cfg.force {
 		t.Fatal("expected both dryRun and force to be true")
+	}
+
+	cfg = installConfig{}
+	if code := parseSubcommandFlags("install", installUsage, nil, flags(&cfg)); code != -1 {
+		t.Fatalf("no args: exit %d, want -1 (proceed)", code)
+	}
+
+	for _, help := range []string{"--help", "-h", "help"} {
+		cfg = installConfig{}
+		if code := parseSubcommandFlags("install", installUsage, []string{help, "--force"}, flags(&cfg)); code != 0 {
+			t.Errorf("%s: exit %d, want 0", help, code)
+		}
+	}
+
+	cfg = installConfig{}
+	if code := parseSubcommandFlags("install", installUsage, []string{"--bogus"}, flags(&cfg)); code != 1 {
+		t.Errorf("unknown flag: exit %d, want 1", code)
+	}
+}
+
+func TestClientInstalled(t *testing.T) {
+	home := t.TempDir()
+	present := filepath.Join(home, ".cursor", "mcp.json")
+	if err := os.MkdirAll(filepath.Dir(present), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if !clientInstalled(present) {
+		t.Error("existing config dir should count as installed even without the file")
+	}
+	if clientInstalled(filepath.Join(home, ".gemini", "settings.json")) {
+		t.Error("missing config dir should not count as installed")
+	}
+	if clientInstalled("") {
+		t.Error("empty path should not count as installed")
 	}
 }
 

@@ -175,6 +175,76 @@ func TestCLI_InstallAndUninstall(t *testing.T) {
 	}
 }
 
+func TestCLI_InstallHelpDoesNotInstall(t *testing.T) {
+	home := t.TempDir()
+	emptyPath := t.TempDir()
+
+	for _, sub := range []string{"install", "uninstall", "update"} {
+		cmd := testCmd(t, sub, "--help")
+		cmd.Env = testEnvWithHome(home, "PATH="+emptyPath, "SHELL=/bin/zsh")
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("%s --help failed: %v\n%s", sub, err, out)
+		}
+		if !strings.Contains(string(out), "Usage: code-graph "+sub) {
+			t.Fatalf("%s --help: expected usage text, got: %s", sub, out)
+		}
+
+		cmd = testCmd(t, sub, "--bogus")
+		cmd.Env = testEnvWithHome(home, "PATH="+emptyPath, "SHELL=/bin/zsh")
+		out, err = cmd.CombinedOutput()
+		if err == nil {
+			t.Fatalf("%s --bogus should fail, got: %s", sub, out)
+		}
+		if !strings.Contains(string(out), "Unknown "+sub+" flag: --bogus") {
+			t.Fatalf("%s --bogus: expected unknown-flag error, got: %s", sub, out)
+		}
+	}
+
+	// Neither help nor a rejected flag may have installed anything.
+	if _, err := os.Stat(filepath.Join(home, ".claude")); !os.IsNotExist(err) {
+		t.Fatal("install --help / --bogus must not create ~/.claude")
+	}
+	if _, err := os.Stat(filepath.Join(home, ".zshrc")); !os.IsNotExist(err) {
+		t.Fatal("install --help / --bogus must not touch shell rc files")
+	}
+}
+
+func TestCLI_InstallSkipsAbsentEditors(t *testing.T) {
+	home := t.TempDir()
+	emptyPath := t.TempDir()
+
+	cmd := testCmd(t, "install")
+	cmd.Env = testEnvWithHome(home, "PATH="+emptyPath, "SHELL=/bin/zsh")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("install failed: %v\n%s", err, out)
+	}
+	for _, name := range []string{"Cursor", "Windsurf", "Gemini CLI", "VS Code", "Zed"} {
+		if !strings.Contains(string(out), "["+name+"] not found") {
+			t.Errorf("expected %s to be reported as not found, got:\n%s", name, out)
+		}
+	}
+	for _, dir := range []string{".cursor", ".codeium", ".gemini", filepath.Join(".config", "zed")} {
+		if _, err := os.Stat(filepath.Join(home, dir)); !os.IsNotExist(err) {
+			t.Errorf("install created %s for an absent client", dir)
+		}
+	}
+
+	// A client whose config directory exists is configured.
+	if err := os.MkdirAll(filepath.Join(home, ".cursor"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	cmd = testCmd(t, "install")
+	cmd.Env = testEnvWithHome(home, "PATH="+emptyPath, "SHELL=/bin/zsh")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("second install failed: %v\n%s", err, out)
+	}
+	if _, err := os.Stat(filepath.Join(home, ".cursor", "mcp.json")); err != nil {
+		t.Fatalf("expected Cursor mcp.json once ~/.cursor exists: %v", err)
+	}
+}
+
 func TestCLI_InstallRemovesOldSkill(t *testing.T) {
 	home := t.TempDir()
 	emptyPath := t.TempDir()

@@ -26,12 +26,20 @@ var verifyReleaseArchive = selfupdate.VerifyReleaseAsset
 
 const releaseVerificationSuccessMessage = "Release verification passed."
 
+const updateUsage = `Usage: code-graph update [--dry-run]
+
+Download, verify, and install the latest release for this platform.
+CODE_GRAPH_UPDATE_CHANNEL=rc also accepts release candidates.
+
+  --dry-run  Report the available version without installing it
+`
+
 func runUpdate(args []string) int {
 	dryRun := false
-	for _, a := range args {
-		if a == "--dry-run" {
-			dryRun = true
-		}
+	if code := parseSubcommandFlags("update", updateUsage, args, map[string]*bool{
+		"--dry-run": &dryRun,
+	}); code >= 0 {
+		return code
 	}
 
 	currentVersion := strings.TrimPrefix(strings.TrimSuffix(version, "-dev"), "v")

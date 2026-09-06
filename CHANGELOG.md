@@ -6,6 +6,18 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+- `code-graph install --help`, `uninstall --help`, and `update --help` print
+  usage instead of running the command. Unknown flags now exit with an error;
+  previously the flag loop ignored them, so `install --help` performed a full
+  install.
+- `code-graph install` registers with Cursor, Windsurf, Gemini CLI, VS Code,
+  and Zed only when the client's config directory already exists. It no longer
+  creates `~/.cursor`, `~/.codeium`, `~/.gemini`, `~/.config/zed`, or the
+  VS Code user directory for applications that are not installed.
+- Binaries built with `go install .../cmd/code-graph@vX.Y.Z` report the module
+  version from Go build info instead of `0.9.0-dev`.
+
 ### Changed (0.9.2)
 - `index_repository` no longer writes into the indexed checkout by default.
   Orientation reports are opt-in (`write_report=true`; the legacy

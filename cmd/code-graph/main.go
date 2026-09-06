@@ -21,9 +21,34 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// version is stamped by the build (-X main.version=...). The fallback names
-// the release line so unstamped builds still identify themselves.
-var version = "0.9.0-dev"
+// unstampedVersion names the release line so builds without a -X stamp
+// still identify themselves.
+const unstampedVersion = "0.9.0-dev"
+
+// version is stamped by the build (-X main.version=...). When the stamp is
+// absent, init falls back to the module version Go records for
+// `go install github.com/brandyn-s/code-graph/cmd/code-graph@vX.Y.Z`.
+var version = unstampedVersion
+
+func init() {
+	if info, ok := debug.ReadBuildInfo(); ok {
+		version = resolveVersion(version, info.Main.Version)
+	}
+}
+
+// resolveVersion prefers an explicit -X stamp, then a real module version
+// from build info, then the unstamped default. Source builds report
+// "(devel)" and stay on the default.
+func resolveVersion(stamped, moduleVersion string) string {
+	if stamped != unstampedVersion {
+		return stamped
+	}
+	v := strings.TrimPrefix(moduleVersion, "v")
+	if v == "" || v == "(devel)" {
+		return stamped
+	}
+	return v
+}
 
 // configureSlogOutput routes slog to a file when CODE_GRAPH_LOG_FILE is
 // set. Without this, slog writes to stderr, which Claude Code's MCP

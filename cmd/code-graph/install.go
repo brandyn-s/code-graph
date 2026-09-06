@@ -18,15 +18,66 @@ type installConfig struct {
 	force  bool
 }
 
-func runInstall(args []string) int {
-	cfg := installConfig{}
+const installUsage = `Usage: code-graph install [--dry-run] [--force]
+
+Add code-graph to PATH, install the Claude Code skills, and register the MCP
+server with every detected client (Claude Code, Codex CLI, Cursor, Windsurf,
+Gemini CLI, VS Code, Zed). Editors count as detected when their config
+directory already exists; nothing is created for clients that are absent.
+
+  --dry-run  Print what would change without writing anything
+  --force    Overwrite customized skill files
+`
+
+const uninstallUsage = `Usage: code-graph uninstall [--dry-run]
+
+Remove the Claude Code skills, the orientation hook, and the MCP registration
+from every client that has one.
+
+  --dry-run  Print what would change without writing anything
+`
+
+// parseSubcommandFlags handles the boolean flags of install, uninstall, and
+// update. Each recognized flag sets its target; --help prints usage. It
+// returns -1 when the subcommand should proceed, otherwise the exit code.
+// Unknown arguments stop the subcommand: `install --help` used to run a full
+// install because the flag loop ignored anything it did not recognize.
+func parseSubcommandFlags(name, usage string, args []string, flags map[string]*bool) int {
 	for _, a := range args {
 		switch a {
-		case "--dry-run":
-			cfg.dryRun = true
-		case "--force":
-			cfg.force = true
+		case "--help", "-h", "help":
+			fmt.Print(usage)
+			return 0
 		}
+		target, ok := flags[a]
+		if !ok {
+			fmt.Fprintf(os.Stderr, "Unknown %s flag: %s\n\n%s", name, a, usage)
+			return 1
+		}
+		*target = true
+	}
+	return -1
+}
+
+// clientInstalled reports whether an editor's config directory already
+// exists. Install only writes into clients the user has set up; creating
+// ~/.cursor, ~/.gemini, or ~/.config/zed for apps that are not there left
+// stray directories behind.
+func clientInstalled(configPath string) bool {
+	if configPath == "" {
+		return false
+	}
+	info, err := os.Stat(filepath.Dir(configPath))
+	return err == nil && info.IsDir()
+}
+
+func runInstall(args []string) int {
+	cfg := installConfig{}
+	if code := parseSubcommandFlags("install", installUsage, args, map[string]*bool{
+		"--dry-run": &cfg.dryRun,
+		"--force":   &cfg.force,
+	}); code >= 0 {
+		return code
 	}
 
 	binaryPath, err := detectBinaryPath()
@@ -64,20 +115,28 @@ func runInstall(args []string) int {
 
 	fmt.Println()
 
-	// Cursor
-	installEditorMCP(binaryPath, cursorConfigPath(), "Cursor", cfg)
-
-	// Windsurf
-	installEditorMCP(binaryPath, windsurfConfigPath(), "Windsurf", cfg)
-
-	// Gemini CLI (same mcpServers format as Cursor/Windsurf)
-	installEditorMCP(binaryPath, geminiConfigPath(), "Gemini CLI", cfg)
-
-	// VS Code Copilot (uses "servers" key with "type" field)
-	installVSCodeMCP(binaryPath, vscodeConfigPath(), cfg)
-
-	// Zed (uses "context_servers" key with "source" field)
-	installZedMCP(binaryPath, zedConfigPath(), cfg)
+	// Editors: Cursor, Windsurf, and Gemini CLI share the mcpServers format;
+	// VS Code uses "servers" with a "type" field; Zed uses "context_servers"
+	// with a "source" field. Only clients whose config directory exists are
+	// touched.
+	editors := []struct {
+		name    string
+		path    string
+		install func(binaryPath, configPath string, cfg installConfig)
+	}{
+		{"Cursor", cursorConfigPath(), func(b, p string, c installConfig) { installEditorMCP(b, p, "Cursor", c) }},
+		{"Windsurf", windsurfConfigPath(), func(b, p string, c installConfig) { installEditorMCP(b, p, "Windsurf", c) }},
+		{"Gemini CLI", geminiConfigPath(), func(b, p string, c installConfig) { installEditorMCP(b, p, "Gemini CLI", c) }},
+		{"VS Code", vscodeConfigPath(), installVSCodeMCP},
+		{"Zed", zedConfigPath(), installZedMCP},
+	}
+	for _, ed := range editors {
+		if !clientInstalled(ed.path) {
+			fmt.Printf("[%s] not found — skipping\n", ed.name)
+			continue
+		}
+		ed.install(binaryPath, ed.path, cfg)
+	}
 
 	fmt.Println()
 
@@ -92,10 +151,10 @@ func runInstall(args []string) int {
 
 func runUninstall(args []string) int {
 	cfg := installConfig{}
-	for _, a := range args {
-		if a == "--dry-run" {
-			cfg.dryRun = true
-		}
+	if code := parseSubcommandFlags("uninstall", uninstallUsage, args, map[string]*bool{
+		"--dry-run": &cfg.dryRun,
+	}); code >= 0 {
+		return code
 	}
 
 	fmt.Printf("\ncode-graph %s — uninstall\n\n", version)

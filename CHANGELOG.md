@@ -6,7 +6,7 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-### Fixed
+### Fixed (0.9.3)
 - `code-graph install --help`, `uninstall --help`, and `update --help` print
   usage instead of running the command. Unknown flags now exit with an error;
   previously the flag loop ignored them, so `install --help` performed a full

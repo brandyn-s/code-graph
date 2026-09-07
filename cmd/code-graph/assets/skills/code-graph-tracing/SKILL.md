@@ -123,3 +123,51 @@ Returns changed files, changed symbols, and impacted callers with risk classific
 - `search_graph(relationship="HTTP_CALLS")` filters nodes by degree — it does NOT return edges. Use `query_graph` with Cypher to see actual edges with properties.
 - Results are capped at 200 nodes per trace.
 - `detect_changes` requires git in PATH.
+
+## Examples
+
+**Example 1: exact name discovered before tracing**
+User says: "Who calls the order processor?"
+Actions:
+1. `trace_call_path` needs an exact name, so discover it first (Step 1):
+   `search_graph(name_pattern=".*Order.*", label="Function")` → `ProcessOrder`.
+2. `trace_call_path(function_name="ProcessOrder", direction="inbound",
+   depth=1)` — start shallow.
+3. Increase to `depth=3` only because hop 1 had a single caller.
+Result: the caller chain, without a guessed name silently returning nothing.
+
+**Example 2: sizing a risky change**
+User says: "What breaks if I change this signature?"
+Actions:
+1. `trace_call_path(function_name="ProcessOrder", direction="inbound",
+   depth=3, risk_labels=true)`.
+2. Read `impact_summary`: hop 1 = CRITICAL, hop 2 = HIGH, and so on.
+3. Check the edge types — an `HTTP_CALLS` or `ASYNC_CALLS` caller is a
+   different deploy unit and will not fail at compile time.
+Result: the blast radius is ranked by hop distance, and cross-service callers
+are called out as the ones a type checker cannot catch.
+
+**Example 3: the trace looks empty but isn't**
+User says: "Nothing calls this, so it's unused."
+Actions:
+1. Note that `CALLS` alone misses indirect reachability.
+2. Re-check `USAGE` (stored in a variable, passed as a callback) and
+   `OVERRIDE` (satisfies an interface) edges.
+3. Use `query_graph` with Cypher to list the actual edges — a
+   `search_graph(relationship=...)` filter counts degree and returns no edges.
+Result: an empty `CALLS` trace is a statement about one edge type, not about
+reachability.
+
+## Success Criteria
+
+- The exact function name is resolved with `search_graph` before any
+  `trace_call_path` call; no exact name is guessed.
+- Traces start at `depth=1` and deepen only when the shallow result requires
+  it, staying within the max of 5.
+- Every "nothing calls this" conclusion is checked against `USAGE` and
+  `OVERRIDE` edges, not `CALLS` alone.
+- Cross-service (`HTTP_CALLS`) and async (`ASYNC_CALLS`) callers are reported
+  distinctly, since they are separately deployed and fail at runtime.
+- Edge listings come from `query_graph` Cypher; `search_graph(relationship=)`
+  is never presented as returning edges.
+- A trace at the 200-node cap is reported as truncated rather than complete.

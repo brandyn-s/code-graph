@@ -7,9 +7,9 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"testing"
 
 	"github.com/brandyn-s/code-graph/internal/tools"
-	"testing"
 )
 
 // setTestHome overrides the home directory for both Unix (HOME) and Windows (USERPROFILE).

@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"time"
 )
@@ -20,13 +21,19 @@ type installConfig struct {
 
 const installUsage = `Usage: code-graph install [--dry-run] [--force]
 
-Add code-graph to PATH, install the Claude Code skills, and register the MCP
-server with every detected client (Claude Code, Codex CLI, Cursor, Windsurf,
-Gemini CLI, VS Code, Zed). Editors count as detected when their config
-directory already exists; nothing is created for clients that are absent.
+Add code-graph to PATH and register the MCP server with every detected client
+(Claude Code, Codex CLI, Cursor, Windsurf, Gemini CLI, VS Code, Zed). Editors
+count as detected when their config directory already exists; nothing is
+created for clients that are absent.
+
+The Claude Code skills are NOT installed by this command. They ship as a
+plugin, so install only clears the loose copies written by 0.9.3 and earlier:
+
+  /plugin marketplace add brandyn-s/code-graph
+  /plugin install code-graph-skills@code-graph
 
   --dry-run  Print what would change without writing anything
-  --force    Overwrite customized skill files
+  --force    Re-apply registrations that already exist
 `
 
 const uninstallUsage = `Usage: code-graph uninstall [--dry-run]
@@ -92,8 +99,10 @@ func runInstall(args []string) int {
 	// PATH check
 	ensurePATH(binaryPath, cfg)
 
-	// Skills (always installed — no CLI dependency)
-	installSkills(cfg)
+	// Skills ship as a Claude Code PLUGIN, not as loose files. install only
+	// cleans up the loose copies an earlier release wrote and prints how to
+	// add the marketplace.
+	migrateLooseSkills(cfg)
 
 	// Claude Code MCP registration
 	if claudePath := findCLI("claude"); claudePath != "" {
@@ -301,8 +310,33 @@ func legacySkillDirNames() []string {
 	return names
 }
 
-// installSkills writes the 4 skill files to ~/.claude/skills/ and removes old monolithic skill.
-func installSkills(cfg installConfig) {
+// migrateLooseSkills removes skill directories that earlier releases wrote
+// directly into ~/.claude/skills/ and tells the operator how to install the
+// plugin instead.
+//
+// Up to 0.9.3 this function was installSkills(): it wrote four SKILL.md files
+// straight into the user's skills directory. That had two problems no amount
+// of content fixing addressed.
+//
+// First, it put files this repository owns into a directory another tool also
+// owns, and resolved the conflict by DELETING the other tool's directories —
+// legacySkillDirNames() removes the `codebase-memory-*` names on every run.
+// Two installers silently fighting over one directory is not a contract.
+//
+// Second, loose files sit outside every quality gate. The four skills reached
+// 0.9.3 with no Examples, no Success Criteria and no allowed-tools declaration
+// (fixed in #5 and #6) precisely because nothing checked them; a plugin has a
+// manifest, a version, and a marketplace that can be validated.
+//
+// The plugin root is ./cmd/code-graph/assets, which is the SAME directory that
+// the embed directives in assets.go read. There is deliberately no generated
+// copy of the SKILL.md files: one file serves both the embedded CLI assets and
+// the published plugin, so the two cannot drift.
+//
+// (That preceding line avoids starting with the embed directive spelled out:
+// staticcheck reads a comment opening with "// go:" as a malformed compiler
+// directive, SA9009.)
+func migrateLooseSkills(cfg installConfig) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		fmt.Printf("  ⚠ Cannot determine home directory: %v\n", err)
@@ -311,50 +345,42 @@ func installSkills(cfg installConfig) {
 
 	fmt.Println("[Skills]")
 
-	// Remove skills installed under earlier names: the upstream monolithic
-	// skill and the four pre-rename `codebase-memory-*` skills.
-	for _, legacy := range legacySkillDirNames() {
-		oldSkillDir := filepath.Join(home, ".claude", "skills", legacy)
-		info, err := os.Stat(oldSkillDir)
+	// Every directory an earlier release may have written: the four current
+	// names, the pre-rename codebase-memory-* names, and the upstream
+	// monolithic skill.
+	names := make([]string, 0, len(skillFiles)+5)
+	for name := range skillFiles {
+		names = append(names, name)
+	}
+	names = append(names, legacySkillDirNames()...)
+	sort.Strings(names)
+
+	removed := 0
+	for _, name := range names {
+		skillDir := filepath.Join(home, ".claude", "skills", name)
+		info, err := os.Stat(skillDir)
 		if err != nil || !info.IsDir() {
 			continue
 		}
 		if cfg.dryRun {
-			fmt.Printf("  [dry-run] Would remove old skill: %s\n", oldSkillDir)
+			fmt.Printf("  [dry-run] Would remove loose skill: %s\n", skillDir)
+			removed++
 			continue
 		}
-		if err := os.RemoveAll(oldSkillDir); err == nil {
-			fmt.Printf("  ✓ Removed old skill: %s\n", oldSkillDir)
+		if err := os.RemoveAll(skillDir); err != nil {
+			fmt.Printf("  ⚠ remove %s: %v\n", skillDir, err)
+			continue
 		}
+		fmt.Printf("  ✓ Removed loose skill: %s\n", skillDir)
+		removed++
+	}
+	if removed == 0 {
+		fmt.Println("  ✓ No loose skill directories to clean up")
 	}
 
-	// Write 4 skill files
-	for name, content := range skillFiles {
-		skillDir := filepath.Join(home, ".claude", "skills", name)
-		skillFile := filepath.Join(skillDir, "SKILL.md")
-
-		if !cfg.force {
-			if _, err := os.Stat(skillFile); err == nil {
-				fmt.Printf("  ✓ Skill exists (skip): %s\n", skillFile)
-				continue
-			}
-		}
-
-		if cfg.dryRun {
-			fmt.Printf("  [dry-run] Would write: %s\n", skillFile)
-			continue
-		}
-
-		if err := os.MkdirAll(skillDir, 0o750); err != nil {
-			fmt.Printf("  ⚠ mkdir %s: %v\n", skillDir, err)
-			continue
-		}
-		if err := os.WriteFile(skillFile, []byte(content), 0o600); err != nil {
-			fmt.Printf("  ⚠ write %s: %v\n", skillFile, err)
-			continue
-		}
-		fmt.Printf("  ✓ Skill: %s\n", skillFile)
-	}
+	fmt.Println("  Skills now ship as a plugin. Install them with:")
+	fmt.Println("    /plugin marketplace add brandyn-s/code-graph")
+	fmt.Println("    /plugin install code-graph-skills@code-graph")
 }
 
 // registerClaudeCodeMCP registers the MCP server with Claude Code CLI.
@@ -464,7 +490,10 @@ func removeCodexSection(text, header string) string {
 	return text[:idx] + strings.TrimLeft(rest[endIdx:], "\n")
 }
 
-// removeClaudeSkills removes all 4 skill directories.
+// removeClaudeSkills removes any loose skill directories an earlier release
+// wrote. Since 0.9.4 the skills ship as a plugin, which this cannot uninstall
+// — the operator removes that with `/plugin uninstall`, so the reminder below
+// prevents a silent half-uninstall.
 func removeClaudeSkills(cfg installConfig) {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -492,6 +521,9 @@ func removeClaudeSkills(cfg installConfig) {
 			}
 		}
 	}
+	fmt.Println("  Note: the code-graph-skills PLUGIN is installed separately and")
+	fmt.Println("  is not removed by this command. Remove it with:")
+	fmt.Println("    /plugin uninstall code-graph-skills@code-graph")
 }
 
 // deregisterMCP removes the MCP server registration from a CLI.

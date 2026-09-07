@@ -1,0 +1,9 @@
+{
+  "name": "code-graph-skills",
+  "description": "Four skills for querying a code-graph knowledge graph: orientation, call-chain tracing, dead-code and fan-out analysis, and a tool/Cypher reference.",
+  "version": "0.9.3",
+  "author": {
+    "name": "The code-graph contributors",
+    "url": "https://github.com/brandyn-s/code-graph"
+  }
+}

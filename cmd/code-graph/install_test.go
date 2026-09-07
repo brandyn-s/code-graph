@@ -29,104 +29,117 @@ func exeSuffix() string {
 	return ""
 }
 
-func TestInstallSkillCreation(t *testing.T) {
+// The three tests these replace -- TestInstallSkillCreation,
+// TestInstallIdempotent and TestUninstallRemovesSkills -- never called the
+// production functions. Each one did its own os.MkdirAll + os.WriteFile (or
+// os.RemoveAll) and then asserted on what the TEST had just written, so they
+// verified the author's model of the installer rather than the installer. The
+// proof: all three still PASSED after installSkills() was deleted outright.
+// The replacements below invoke migrateLooseSkills / removeClaudeSkills for
+// real, and each carries a vacuity floor so an empty fixture cannot pass.
+
+// TestMigrateLooseSkillsRemovesEveryLegacyDirectory covers the upgrade path:
+// a host installed by <=0.9.3 has loose skill directories, and install must
+// clear ALL of them -- the four current names, the four pre-rename
+// codebase-memory-* names, and the upstream monolithic skill.
+func TestMigrateLooseSkillsRemovesEveryLegacyDirectory(t *testing.T) {
 	home := t.TempDir()
 	setTestHome(t, home)
+	skillsDir := filepath.Join(home, ".claude", "skills")
 
-	claudeSkillsDir := filepath.Join(home, ".claude", "skills")
-
-	for name, content := range skillFiles {
-		skillDir := filepath.Join(claudeSkillsDir, name)
-		skillFile := filepath.Join(skillDir, "SKILL.md")
-
-		if err := os.MkdirAll(skillDir, 0o750); err != nil {
-			t.Fatalf("mkdir %s: %v", skillDir, err)
+	seeded := make([]string, 0, len(skillFiles)+5)
+	for name := range skillFiles {
+		seeded = append(seeded, name)
+	}
+	seeded = append(seeded, legacySkillDirNames()...)
+	for _, name := range seeded {
+		dir := filepath.Join(skillsDir, name)
+		if err := os.MkdirAll(dir, 0o750); err != nil {
+			t.Fatalf("seed %s: %v", dir, err)
 		}
-		if err := os.WriteFile(skillFile, []byte(content), 0o600); err != nil {
-			t.Fatalf("write %s: %v", skillFile, err)
+		if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte("---\nname: x\n---\n"), 0o600); err != nil {
+			t.Fatalf("seed %s: %v", dir, err)
 		}
 	}
-
-	expectedSkills := []string{
-		"code-graph-exploring",
-		"code-graph-tracing",
-		"code-graph-quality",
-		"code-graph-reference",
+	// Vacuity floor: an empty seed set would make the assertions below trivial.
+	if len(seeded) < 5 {
+		t.Fatalf("seeded only %d directories; the check would be near-vacuous", len(seeded))
 	}
 
-	for _, name := range expectedSkills {
-		skillFile := filepath.Join(claudeSkillsDir, name, "SKILL.md")
-		data, err := os.ReadFile(skillFile)
-		if err != nil {
-			t.Fatalf("read %s: %v", skillFile, err)
-		}
-		if len(data) == 0 {
-			t.Fatalf("skill file %s is empty", skillFile)
-		}
-		normalized := strings.ReplaceAll(string(data), "\r\n", "\n")
-		if !strings.HasPrefix(normalized, "---\n") {
-			t.Fatalf("skill %s missing YAML frontmatter", name)
-		}
-		if !strings.Contains(string(data), "name: "+name) {
-			t.Fatalf("skill %s doesn't contain correct name field", name)
+	migrateLooseSkills(installConfig{})
+
+	for _, name := range seeded {
+		dir := filepath.Join(skillsDir, name)
+		if _, err := os.Stat(dir); !os.IsNotExist(err) {
+			t.Errorf("loose skill dir %s survived migrateLooseSkills", dir)
 		}
 	}
 }
 
-func TestInstallIdempotent(t *testing.T) {
+// TestMigrateLooseSkillsWritesNothing is the load-bearing assertion for the
+// 0.9.4 change: skills ship as a plugin, so install must not create a single
+// directory under ~/.claude/skills/. A regression here silently reintroduces
+// the two-installers-one-directory conflict with the harness.
+func TestMigrateLooseSkillsWritesNothing(t *testing.T) {
 	home := t.TempDir()
 	setTestHome(t, home)
 
-	claudeSkillsDir := filepath.Join(home, ".claude", "skills")
+	migrateLooseSkills(installConfig{})
 
-	for round := 0; round < 2; round++ {
-		for name, content := range skillFiles {
-			skillDir := filepath.Join(claudeSkillsDir, name)
-			skillFile := filepath.Join(skillDir, "SKILL.md")
-			if err := os.MkdirAll(skillDir, 0o750); err != nil {
-				t.Fatalf("round %d: mkdir %s: %v", round, skillDir, err)
-			}
-			if err := os.WriteFile(skillFile, []byte(content), 0o600); err != nil {
-				t.Fatalf("round %d: write %s: %v", round, skillFile, err)
-			}
+	skillsDir := filepath.Join(home, ".claude", "skills")
+	entries, err := os.ReadDir(skillsDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return // never created it at all: the strongest form of the property
 		}
+		t.Fatalf("read %s: %v", skillsDir, err)
 	}
-
-	for name := range skillFiles {
-		skillFile := filepath.Join(claudeSkillsDir, name, "SKILL.md")
-		if _, err := os.Stat(skillFile); err != nil {
-			t.Fatalf("skill %s missing after idempotent install: %v", name, err)
-		}
+	for _, e := range entries {
+		t.Errorf("install created %s under ~/.claude/skills/; skills ship as a plugin now", e.Name())
 	}
 }
 
-func TestUninstallRemovesSkills(t *testing.T) {
+// TestMigrateLooseSkillsDryRunRemovesNothing keeps --dry-run honest: it must
+// report what it would delete without deleting it.
+func TestMigrateLooseSkillsDryRunRemovesNothing(t *testing.T) {
 	home := t.TempDir()
 	setTestHome(t, home)
-
-	claudeSkillsDir := filepath.Join(home, ".claude", "skills")
-
-	for name, content := range skillFiles {
-		skillDir := filepath.Join(claudeSkillsDir, name)
-		if err := os.MkdirAll(skillDir, 0o750); err != nil {
-			t.Fatalf("mkdir: %v", err)
-		}
-		if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(content), 0o600); err != nil {
-			t.Fatalf("write: %v", err)
-		}
+	dir := filepath.Join(home, ".claude", "skills", "code-graph-exploring")
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		t.Fatalf("seed: %v", err)
 	}
 
+	migrateLooseSkills(installConfig{dryRun: true})
+
+	if _, err := os.Stat(dir); err != nil {
+		t.Fatalf("--dry-run deleted %s: %v", dir, err)
+	}
+}
+
+// TestUninstallRemovesLooseSkills exercises removeClaudeSkills itself.
+func TestUninstallRemovesLooseSkills(t *testing.T) {
+	home := t.TempDir()
+	setTestHome(t, home)
+	skillsDir := filepath.Join(home, ".claude", "skills")
+
+	seeded := 0
 	for name := range skillFiles {
-		skillDir := filepath.Join(claudeSkillsDir, name)
-		if err := os.RemoveAll(skillDir); err != nil {
-			t.Fatalf("remove %s: %v", skillDir, err)
+		dir := filepath.Join(skillsDir, name)
+		if err := os.MkdirAll(dir, 0o750); err != nil {
+			t.Fatalf("seed %s: %v", dir, err)
 		}
+		seeded++
+	}
+	if seeded == 0 {
+		t.Fatal("seeded 0 directories; the check would be vacuous")
 	}
 
+	removeClaudeSkills(installConfig{})
+
 	for name := range skillFiles {
-		skillDir := filepath.Join(claudeSkillsDir, name)
-		if _, err := os.Stat(skillDir); !os.IsNotExist(err) {
-			t.Fatalf("skill dir %s should not exist after uninstall", skillDir)
+		dir := filepath.Join(skillsDir, name)
+		if _, err := os.Stat(dir); !os.IsNotExist(err) {
+			t.Errorf("%s survived removeClaudeSkills", dir)
 		}
 	}
 }

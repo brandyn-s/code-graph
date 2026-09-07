@@ -6,6 +6,16 @@ description: >
   "show dependencies", "what depends on", "trace call path",
   "find all references to", "impact analysis", or needs to understand
   function call relationships and dependency chains.
+when_to_use: >
+  Use when following relationships between specific symbols: who calls a
+  function, what it calls, the chain between two functions, cross-service HTTP
+  and async edges, interface implementations, and the blast radius of a git
+  diff. Do NOT use for module-level orientation (use code-graph-exploring),
+  for dead-code or fan-out metrics (use code-graph-quality), for tool syntax
+  (use code-graph-reference), or for variable-level taint — these are symbol-
+  level reachability edges, not dataflow on individual values.
+allowed-tools: mcp__code-graph__detect_changes mcp__code-graph__get_code_snippet mcp__code-graph__query_graph mcp__code-graph__search_graph mcp__code-graph__trace_call_path
+effort: low
 ---
 
 # Call Chain Tracing via Knowledge Graph

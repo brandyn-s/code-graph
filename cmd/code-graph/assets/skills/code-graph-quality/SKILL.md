@@ -99,3 +99,52 @@ search_graph(
 - Use `file_pattern` to scope analysis to specific directories: `file_pattern="**/services/**"`.
 - Dead code detection works best after a full index — run `index_repository` if the project was recently set up.
 - Paginate results with `limit` and `offset` — check `has_more` in the response.
+
+## Examples
+
+**Example 1: dead code, then verified before deletion**
+User says: "Find dead code we can delete."
+Actions:
+1. `search_graph(label="Function", relationship="CALLS", direction="inbound",
+   max_degree=0, exclude_entry_points=true)` — 23 candidates.
+2. For each, `trace_call_path(function_name=..., direction="inbound",
+   depth=1)` to confirm no callers.
+3. `query_graph` for `USAGE` edges to catch callbacks and functions stored in
+   variables, which have no CALLS edge.
+Result: 23 candidates became 9 safe deletions. The 14 that survived were
+reachable through a callback or a route the CALLS view does not show.
+
+**Example 2: choosing a refactor target**
+User says: "What should we break up first?"
+Actions:
+1. `search_graph(label="Function", relationship="CALLS",
+   direction="outbound", min_degree=10)` for fan-out.
+2. Cross-check fan-in (`direction="inbound"`) — a high-fan-out function that
+   is also high-fan-in is riskier to change than one nothing calls.
+3. `get_code_snippet` on the top candidate to size the work.
+Result: the target is chosen from measured connectivity, not from a hunch
+about which file feels messy.
+
+**Example 3: a hidden dependency**
+User says: "Why do these two folders always change together?"
+Actions:
+1. Query change coupling to get file pairs that co-occur in commits.
+2. Confirm with `search_graph`/`query_graph` whether a structural edge exists.
+3. Coupling with no edge is the finding: an implicit contract, not an import.
+Result: a shared serialization format nothing declared, which is why no
+import graph showed it.
+
+## Success Criteria
+
+- `exclude_entry_points=true` is set on every dead-code query, so route
+  handlers, `main()`, and framework-registered functions are not reported as
+  unreachable.
+- No deletion is recommended from a `max_degree=0` result alone; each candidate
+  is verified with `trace_call_path` AND a `USAGE`-edge check for callbacks and
+  variable references.
+- Fan-out findings are paired with fan-in before a refactor is proposed, so
+  blast radius is part of the recommendation.
+- Change-coupling findings state whether a structural edge also exists; a
+  coupling with no edge is reported as an implicit contract.
+- Counts name what they measured — inbound vs outbound, and which labels were
+  excluded — rather than being presented as a bare total.

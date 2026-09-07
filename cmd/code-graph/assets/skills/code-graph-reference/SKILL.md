@@ -7,9 +7,16 @@ description: >
   documentation for the codebase knowledge graph tools.
 ---
 
-# Codebase Memory MCP — Tool Reference
+# code-graph MCP — Tool Reference
 
-## Tools (14 total)
+## Tools
+
+The exposed set depends on the configured toolset: the `core` toolset
+registers 26 tools and `full` registers more. Ask the live surface
+rather than trusting a count here — the authoritative list is whatever
+`mcp__code-graph__*` tools your session actually has.
+
+The table below documents the most-used subset, not the whole toolset.
 
 | Tool | Purpose |
 |------|---------|
@@ -24,9 +31,11 @@ description: >
 | `query_graph` | Cypher-like graph queries (200-row cap) |
 | `get_graph_schema` | Node/edge counts, relationship patterns |
 | `get_code_snippet` | Read source code by qualified name |
-| `read_file` | Read any file from indexed project |
-| `list_directory` | List files/directories with glob filter |
 | `ingest_traces` | Ingest OpenTelemetry traces to validate HTTP_CALLS edges |
+
+For file reads and directory listings use the host's native `Read` and
+`Glob`. `read_file` and `list_directory` are NOT MCP tools — they exist
+only as a CLI subcommand and inside the localization agent's own loop.
 
 ## Edge Types
 
@@ -152,3 +161,47 @@ search_code(pattern="(?i)(POST|PUT).*\\/api\\/v[0-9]\\/orders", regex=true)
 | Impact of local changes | `detect_changes()` |
 | Risk-classified trace | `trace_call_path(risk_labels=true)` |
 | Text search | `search_code` or Grep |
+
+## Examples
+
+**Example 1: picking the right tool for an edge question**
+User says: "Show me every cross-service HTTP call with its URL."
+Actions:
+1. Check the Decision Matrix: this needs *edges with properties*, not a node
+   count.
+2. Reject `search_graph(relationship="HTTP_CALLS")` — it filters nodes by
+   degree and returns no edges (Critical Pitfalls).
+3. Use `query_graph` with Cypher over `HTTP_CALLS`, returning the URL property.
+Result: the right tool on the first call, because the pitfall is documented.
+
+**Example 2: a qualified name that will not resolve**
+User says: `get_code_snippet` returned `status='ambiguous'`.
+Actions:
+1. Re-read Qualified Name Format — a short name matches many nodes.
+2. Recover the full QN from the prior `search_graph` result.
+3. Re-call with the exact QN, or pass `auto_resolve` when 2 or fewer
+   candidates and the best match is acceptable.
+Result: an exact read instead of a guess between candidates.
+
+**Example 3: a tool that is not on this surface**
+User says: "Use `list_directory` to show me src/."
+Actions:
+1. Note that `read_file` and `list_directory` are not MCP tools here.
+2. Probe the live surface if unsure, rather than trusting any list.
+3. Use the host's `Glob` and `Read` instead.
+Result: no call against a tool that does not exist, which would return an
+error that reads like an empty directory.
+
+## Success Criteria
+
+- Tool choice is made from the Decision Matrix, and no node-degree filter is
+  used to answer a question about edges.
+- Cypher usage stays inside the documented subset; unsupported clauses are not
+  attempted.
+- Qualified names come from a prior search result; an `ambiguous` status is
+  resolved by supplying the full QN rather than retrying the short name.
+- Tool availability is confirmed against the live `mcp__code-graph__*` surface,
+  not against any count or table in this file.
+- Documented pitfalls are checked before a query is called broken.
+- This table is treated as a most-used subset; a tool missing from it is not
+  concluded to be absent from the server.

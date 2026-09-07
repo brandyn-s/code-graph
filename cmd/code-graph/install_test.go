@@ -4,8 +4,11 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
+
+	"github.com/brandyn-s/code-graph/internal/tools"
 	"testing"
 )
 
@@ -331,7 +334,7 @@ func TestSkillFilesContent(t *testing.T) {
 		"code-graph-exploring": {"explore the codebase", "search_graph", "get_graph_schema"},
 		"code-graph-tracing":   {"who calls this function", "trace_call_path", "direction", "risk_labels", "detect_changes"},
 		"code-graph-quality":   {"find dead code", "max_degree=0", "exclude_entry_points"},
-		"code-graph-reference": {"edge types", "query_graph", "Cypher", "detect_changes", "14 total"},
+		"code-graph-reference": {"edge types", "query_graph", "Cypher", "detect_changes", "toolset"},
 	}
 
 	for name, expectedPhrases := range expectations {
@@ -343,6 +346,46 @@ func TestSkillFilesContent(t *testing.T) {
 			if !strings.Contains(strings.ToLower(content), strings.ToLower(phrase)) {
 				t.Errorf("skill %q missing phrase %q", name, phrase)
 			}
+		}
+	}
+}
+
+// TestReferenceSkillOnlyNamesRegisteredTools guards the reference skill against
+// documenting tools the server does not expose.
+//
+// It replaces an assertion that pinned the literal "14 total" against a doc
+// heading. That literal was WRONG -- the core toolset registers 26 tools -- and
+// pinning it meant a green test protected the stale number. Worse, the same doc
+// carried table rows for `read_file` and `list_directory`, which are a CLI
+// subcommand and a locagent-internal tool respectively and are registered
+// through addTool by neither. A count literal cannot catch that; a derived
+// membership check can.
+func TestReferenceSkillOnlyNamesRegisteredTools(t *testing.T) {
+	content, ok := skillFiles["code-graph-reference"]
+	if !ok {
+		t.Fatal("missing skill: code-graph-reference")
+	}
+
+	registered := make(map[string]bool)
+	for _, name := range tools.CoreToolNames() {
+		registered[name] = true
+	}
+	// Vacuity floor: an empty registry would make every row below pass.
+	if len(registered) == 0 {
+		t.Fatal("CoreToolNames() returned nothing; the check would be vacuous")
+	}
+
+	// Only inspect the tool table's first column: `| `tool_name` | ... |`.
+	rowTool := regexp.MustCompile("(?m)^\\|\\s*`([a-z_]{4,})`\\s*\\|")
+	matches := rowTool.FindAllStringSubmatch(content, -1)
+	if len(matches) == 0 {
+		t.Fatal("found no tool rows in the reference table; the regex or the doc changed")
+	}
+
+	for _, m := range matches {
+		if name := m[1]; !registered[name] {
+			t.Errorf("reference skill documents %q, which is not a registered tool "+
+				"(see tools.CoreToolNames()); remove the row or register the tool", name)
 		}
 	}
 }

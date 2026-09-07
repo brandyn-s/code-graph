@@ -144,7 +144,7 @@ func TestCLI_InstallAndUninstall(t *testing.T) {
 		t.Fatalf("install failed: %v\n%s", err, out)
 	}
 
-	// Verify skills were created
+	// Since 0.9.4 install must NOT create these; the skills ship as a plugin.
 	expectedSkills := []string{
 		"code-graph-exploring",
 		"code-graph-tracing",
@@ -152,9 +152,9 @@ func TestCLI_InstallAndUninstall(t *testing.T) {
 		"code-graph-reference",
 	}
 	for _, name := range expectedSkills {
-		skillFile := filepath.Join(home, ".claude", "skills", name, "SKILL.md")
-		if _, err := os.Stat(skillFile); err != nil {
-			t.Fatalf("skill %s not found after install: %v", name, err)
+		skillDir := filepath.Join(home, ".claude", "skills", name)
+		if _, err := os.Stat(skillDir); !os.IsNotExist(err) {
+			t.Fatalf("install created %s; skills ship as a plugin now", skillDir)
 		}
 	}
 
@@ -268,8 +268,18 @@ func TestCLI_InstallRemovesOldSkill(t *testing.T) {
 	if _, err := os.Stat(oldDir); !os.IsNotExist(err) {
 		t.Fatal("old monolithic skill dir should be removed")
 	}
-	if _, err := os.Stat(filepath.Join(home, ".claude", "skills", "code-graph-exploring", "SKILL.md")); err != nil {
-		t.Fatal("new exploring skill should exist")
+	// Inverted for 0.9.4: install used to WRITE the four skills here. They ship
+	// as a plugin now, so install must leave ~/.claude/skills/ alone -- writing
+	// into a directory the harness also owns is the conflict this change exists
+	// to end. This assertion is the end-to-end counterpart of
+	// TestMigrateLooseSkillsWritesNothing.
+	if _, err := os.Stat(filepath.Join(home, ".claude", "skills", "code-graph-exploring")); !os.IsNotExist(err) {
+		t.Fatal("install must not create ~/.claude/skills/code-graph-exploring; skills ship as a plugin")
+	}
+	// And the operator must be told where the skills went, or the removal above
+	// reads as the tool silently dropping a feature.
+	if !strings.Contains(string(out), "/plugin marketplace add brandyn-s/code-graph") {
+		t.Fatalf("install did not print the plugin migration command:\n%s", out)
 	}
 }
 
@@ -286,47 +296,50 @@ func TestCLI_InstallIdempotent(t *testing.T) {
 		}
 	}
 
-	skillFile := filepath.Join(home, ".claude", "skills", "code-graph-exploring", "SKILL.md")
-	if _, err := os.Stat(skillFile); err != nil {
-		t.Fatal("skill missing after idempotent install")
+	// Idempotence now means "still writes nothing", not "the file is still there".
+	skillDir := filepath.Join(home, ".claude", "skills", "code-graph-exploring")
+	if _, err := os.Stat(skillDir); !os.IsNotExist(err) {
+		t.Fatal("repeated install created a loose skill dir; skills ship as a plugin")
 	}
 }
 
-func TestCLI_InstallForceOverwrites(t *testing.T) {
-	home := t.TempDir()
-	emptyPath := t.TempDir()
+// TestCLI_InstallClearsCustomizedLooseSkills replaces
+// TestCLI_InstallForceOverwrites, whose premise was that install writes skill
+// files and --force decides whether to clobber a customized one. Nothing is
+// written any more, so there is nothing to overwrite.
+//
+// The behaviour that MATTERS on the same path is the upgrade: a user of <=0.9.3
+// may have hand-edited a loose skill, and install removes it. That is a real
+// (small) data loss, so it must be deliberate, announced, and true with or
+// without --force -- leaving an edited copy behind would reintroduce exactly the
+// duplicate-skill collision this change removes.
+func TestCLI_InstallClearsCustomizedLooseSkills(t *testing.T) {
+	for _, args := range [][]string{{"install"}, {"install", "--force"}} {
+		home := t.TempDir()
+		emptyPath := t.TempDir()
 
-	cmd := testCmd(t, "install")
-	cmd.Env = testEnvWithHome(home, "PATH="+emptyPath, "SHELL=/bin/zsh")
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("first install failed: %v\n%s", err, out)
-	}
+		skillDir := filepath.Join(home, ".claude", "skills", "code-graph-exploring")
+		if err := os.MkdirAll(skillDir, 0o750); err != nil {
+			t.Fatal(err)
+		}
+		skillFile := filepath.Join(skillDir, "SKILL.md")
+		if err := os.WriteFile(skillFile, []byte("custom content"), 0o600); err != nil {
+			t.Fatal(err)
+		}
 
-	skillFile := filepath.Join(home, ".claude", "skills", "code-graph-exploring", "SKILL.md")
-	if err := os.WriteFile(skillFile, []byte("custom content"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+		cmd := testCmd(t, args...)
+		cmd.Env = testEnvWithHome(home, "PATH="+emptyPath, "SHELL=/bin/zsh")
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("%v failed: %v\n%s", args, err, out)
+		}
 
-	cmd = testCmd(t, "install")
-	cmd.Env = testEnvWithHome(home, "PATH="+emptyPath, "SHELL=/bin/zsh")
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("second install failed: %v\n%s", err, out)
-	}
-	data, _ := os.ReadFile(skillFile)
-	if string(data) != "custom content" {
-		t.Fatal("install without --force should not overwrite customized skills")
-	}
-
-	cmd = testCmd(t, "install", "--force")
-	cmd.Env = testEnvWithHome(home, "PATH="+emptyPath, "SHELL=/bin/zsh")
-	out, err = cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("force install failed: %v\n%s", err, out)
-	}
-	data, _ = os.ReadFile(skillFile)
-	if string(data) == "custom content" {
-		t.Fatal("install --force should overwrite customized skills")
+		if _, err := os.Stat(skillDir); !os.IsNotExist(err) {
+			t.Fatalf("%v left the loose skill dir in place: %v", args, err)
+		}
+		if !strings.Contains(string(out), "Removed loose skill") {
+			t.Fatalf("%v removed the directory without saying so:\n%s", args, out)
+		}
 	}
 }
 

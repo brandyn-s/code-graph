@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "code-graph",
+  "owner": {
+    "name": "The code-graph contributors",
+    "url": "https://github.com/brandyn-s/code-graph"
+  },
+  "description": "The Claude Code skills for the code-graph MCP server: codebase orientation, call-chain tracing, dead-code and fan-out analysis, and a tool/Cypher reference. Versioned with the server that serves them.",
+  "plugins": [
+    {
+      "name": "code-graph-skills",
+      "source": "./cmd/code-graph/assets",
+      "description": "Four skills for querying a code-graph knowledge graph: code-graph-exploring (structure and orientation), code-graph-tracing (call chains, cross-service edges, git-diff blast radius), code-graph-quality (dead code, fan-out, refactor candidates), and code-graph-reference (tool surface, Cypher subset, edge types, pitfalls).",
+      "version": "0.9.3",
+      "license": "GPL-3.0-or-later",
+      "repository": "https://github.com/brandyn-s/code-graph",
+      "keywords": ["code-graph", "mcp", "knowledge-graph", "cypher", "dead-code", "call-graph"]
+    }
+  ]
+}

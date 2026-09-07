@@ -6,6 +6,48 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed (0.9.4) — BREAKING for the skills install path
+- The four Claude Code skills now ship as a **plugin** instead of being written
+  as loose files into `~/.claude/skills/`. Install them with:
+
+  ```
+  /plugin marketplace add brandyn-s/code-graph
+  /plugin install code-graph-skills@code-graph
+  ```
+
+  `code-graph install` no longer creates those directories. It removes the
+  loose copies an earlier release wrote (including the pre-rename
+  `codebase-memory-*` names and the upstream monolithic skill) and prints the
+  two commands above. A hand-edited loose skill IS deleted by this cleanup,
+  with or without `--force`, and the removal is announced per directory.
+
+  Two reasons. Writing into `~/.claude/skills/` put files this repository owns
+  into a directory another tool also owns, and the conflict was being resolved
+  by deleting the other tool's directories — `legacySkillDirNames()` removed
+  the `codebase-memory-*` names on every run. Two installers silently competing
+  for one directory is not a contract. And loose files sit outside every
+  quality gate: these four reached 0.9.3 with no Examples, no Success Criteria
+  and no `allowed-tools` declaration precisely because nothing checked them.
+
+  The plugin root is `./cmd/code-graph/assets`, the same directory the
+  `go:embed` directives read, so there is no second copy of any `SKILL.md` and
+  the embedded CLI assets cannot drift from the published plugin. Two tests
+  hold that: `TestPluginSourceIsTheEmbeddedAssetsDirectory` and
+  `TestEveryEmbeddedSkillIsPublishedByThePlugin`.
+
+  `--force` no longer refers to skill files; it re-applies registrations.
+
+### Fixed (0.9.4)
+- Four tests that appeared to cover the skill install path did not.
+  `TestInstallSkillCreation`, `TestInstallIdempotent` and
+  `TestUninstallRemovesSkills` each performed their own `os.MkdirAll` +
+  `os.WriteFile` (or `os.RemoveAll`) and then asserted on what the test itself
+  had written, never calling the production function — all three still passed
+  after `installSkills()` was deleted outright. Replaced with tests that invoke
+  `migrateLooseSkills` / `removeClaudeSkills` directly, each with a vacuity
+  floor so an empty fixture cannot pass.
+
+
 ### Fixed (0.9.3)
 - `code-graph install --help`, `uninstall --help`, and `update --help` print
   usage instead of running the command. Unknown flags now exit with an error;

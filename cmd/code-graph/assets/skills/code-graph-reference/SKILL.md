@@ -5,6 +5,14 @@ description: >
   "graph query syntax", "Cypher query examples", "edge types",
   "how to use search_graph", "query_graph examples", or needs reference
   documentation for the codebase knowledge graph tools.
+when_to_use: >
+  Use when you need the code-graph tool surface itself: which tools exist, the
+  Cypher subset query_graph accepts, edge types, node labels, qualified-name
+  format, and the known pitfalls. This is lookup material, not a workflow. Do
+  NOT use to actually explore, trace or audit a codebase — those are code-
+  graph-exploring, code-graph-tracing and code-graph-quality respectively.
+allowed-tools: mcp__code-graph__delete_project mcp__code-graph__detect_changes mcp__code-graph__get_code_snippet mcp__code-graph__get_graph_schema mcp__code-graph__index_repository mcp__code-graph__index_status mcp__code-graph__ingest_traces mcp__code-graph__list_projects mcp__code-graph__query_graph mcp__code-graph__search_code mcp__code-graph__search_graph mcp__code-graph__trace_call_path
+effort: low
 ---
 
 # code-graph MCP — Tool Reference

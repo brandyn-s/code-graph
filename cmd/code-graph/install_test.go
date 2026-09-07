@@ -390,6 +390,55 @@ func TestReferenceSkillOnlyNamesRegisteredTools(t *testing.T) {
 	}
 }
 
+// TestSkillAllowedToolsOnlyNamesRegisteredTools guards the `allowed-tools`
+// frontmatter the same way TestReferenceSkillOnlyNamesRegisteredTools guards
+// the reference table: by DERIVING membership from tools.CoreToolNames()
+// rather than pinning a literal.
+//
+// An allowed-tools grant naming a tool the server does not register is worse
+// than an absent grant. allowed-tools is a whitelist, so a stale entry is
+// silently inert -- the skill appears pre-authorized and every call still
+// falls through to the permission prompt. That is exactly how the retired
+// `codebase-memory-mcp` names survived in consumer skills for months.
+func TestSkillAllowedToolsOnlyNamesRegisteredTools(t *testing.T) {
+	registered := make(map[string]bool)
+	for _, name := range tools.CoreToolNames() {
+		registered[name] = true
+	}
+	// Vacuity floor: an empty registry would make every grant below pass.
+	if len(registered) == 0 {
+		t.Fatal("CoreToolNames() returned nothing; the check would be vacuous")
+	}
+
+	grant := regexp.MustCompile(`(?m)^allowed-tools:\s*(.+)$`)
+	checked := 0
+	for name, content := range skillFiles {
+		m := grant.FindStringSubmatch(content)
+		if m == nil {
+			t.Errorf("skill %q declares no allowed-tools; a skill that calls MCP "+
+				"tools must declare them or every call hits the permission flow", name)
+			continue
+		}
+		for _, tok := range strings.Fields(m[1]) {
+			const prefix = "mcp__code-graph__"
+			if !strings.HasPrefix(tok, prefix) {
+				// Host-native tools (Read, Glob, Grep) need no registry entry.
+				continue
+			}
+			bare := strings.TrimPrefix(tok, prefix)
+			checked++
+			if !registered[bare] {
+				t.Errorf("skill %q grants %q, which is not a registered tool "+
+					"(see tools.CoreToolNames()); the grant is inert", name, tok)
+			}
+		}
+	}
+	// Second vacuity floor: prove the loop actually inspected grants.
+	if checked == 0 {
+		t.Fatal("inspected 0 mcp__code-graph__ grants; the regex or the skills changed")
+	}
+}
+
 func TestEditorMCPInstall(t *testing.T) {
 	home := t.TempDir()
 	setTestHome(t, home)

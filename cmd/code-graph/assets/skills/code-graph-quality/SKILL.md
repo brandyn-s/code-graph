@@ -8,6 +8,15 @@ description: >
   "code quality audit", "find functions nobody calls",
   "reduce codebase size", "refactor candidates", "cleanup candidates",
   or needs code quality analysis.
+when_to_use: >
+  Use when hunting dead code, unused or unreachable functions, high fan-out
+  refactor candidates, or running a structural code-quality pass. Do NOT use
+  for general codebase orientation (use code-graph-exploring), for tracing a
+  specific call chain (use code-graph-tracing), for tool syntax (use code-
+  graph-reference), or as a substitute for running the project's own linters
+  and coverage tools — this reads graph structure, not runtime behaviour.
+allowed-tools: mcp__code-graph__get_code_snippet mcp__code-graph__index_repository mcp__code-graph__query_graph mcp__code-graph__search_graph mcp__code-graph__trace_call_path
+effort: low
 ---
 
 # Code Quality Analysis via Knowledge Graph

@@ -5,6 +5,17 @@ description: >
   "understand the architecture", "what functions exist", "show me the structure",
   "how is the code organized", "find functions matching", "search for classes",
   "list all routes", "show API endpoints", or needs codebase orientation.
+when_to_use: >
+  Use when orienting in an unfamiliar or large codebase: what modules,
+  functions, classes and HTTP routes exist, and how the code is organized.
+  Answers structural questions from the graph in roughly 500 tokens where
+  grep-based exploration costs tens of thousands. Do NOT use for call chains
+  or blast radius (use code-graph-tracing), for dead code and fan-out metrics
+  (use code-graph-quality), for tool syntax or Cypher reference (use code-
+  graph-reference), or for finding a string literal, error message or filename
+  — that is the host's Grep and Glob.
+allowed-tools: mcp__code-graph__get_code_snippet mcp__code-graph__get_graph_schema mcp__code-graph__index_repository mcp__code-graph__list_projects mcp__code-graph__search_code mcp__code-graph__search_graph
+effort: low
 ---
 
 # Codebase Exploration via Knowledge Graph
